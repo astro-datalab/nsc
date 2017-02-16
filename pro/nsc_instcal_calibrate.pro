@@ -117,6 +117,8 @@ filterlong = sxpar(head,'filter')
 if strmid(filterlong,0,2) eq 'VR' then filter='VR' else filter=strmid(filterlong,0,1)
 exptime = sxpar(head,'exptime')
 dateobs = sxpar(head,'date-obs')
+printlog,logf,'FILTER = ',filter
+printlog,logf,'EXPTIME = ',stringize(exptime,ndec=2),' sec.'
 
 ; Step 2. Load the reference catalogs
 ;------------------------------------
@@ -232,6 +234,7 @@ For i=0,nchips-1 do begin
   cat1.dec = dec2
   ; Stuff back into the main structure
   cat[chind2] = cat1
+  chstr[i].gaianmatch = ngmatch
   chstr[i].rarms = rarms
   chstr[i].racoef = racoef
   chstr[i].decrms = decrms
@@ -243,8 +246,9 @@ Endfor
 ; Do it on the exposure level
 printlog,logf,'' & printlog,logf,'Step 4. Photometric calibration'
 printlog,logf,'-------------------------------'
-expstr = {file:fluxfile,base:base,filter:filter,exptime:exptime,nsources:long(ncat),$
+expstr = {file:fluxfile,base:base,dateobs:dateobs,mjd:0.0d,filter:filter,exptime:exptime,nsources:long(ncat),$
           fwhm:0.0,zpterm:0.0,zptermerr:0.0,zptermsig:0.0,nrefmatch:0L}
+expstr.mjd = photred_getmjd('','CTIO',dateobs=dateobs)
 
 CASE filter of
 ; ---- u-band ----

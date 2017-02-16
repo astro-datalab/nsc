@@ -147,11 +147,11 @@ if __name__ == "__main__":
     # 3) Run Sextractor on all subimages
     rootLogger.info("Step #3: Running SExtractor on all subimages")
     head0 = fits.getheader("bigflux.fits.fz",0)
-    fwhmpix = head0.get("fwhm")
-    if fwhmpix is None:
-        fwhm = 1.5
-    else:
-        fwhm = fwhmpix*0.27
+    #fwhmpix = head0.get("fwhm")
+    #if fwhmpix is None:
+    #    fwhm = 1.5
+    #else:
+    #    fwhm = fwhmpix*0.27
     dateobs = head0.get("DATE-OBS")
     night = dateobs[0:4]+dateobs[5:7]+dateobs[8:10]
 
@@ -163,6 +163,7 @@ if __name__ == "__main__":
         os.mkdir("/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base)
         rootLogger.info("  Making output directory: /datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base)
 
+    # LOOP through the HDUs/chips
     for i in xrange(1,nhdu):
         rootLogger.info(" Processing subimage "+str(i))
         try:
@@ -175,6 +176,13 @@ if __name__ == "__main__":
         # Use CCDNUM
         ccdnum = fhead['ccdnum']
         rootLogger.info("  CCDNUM = "+str(ccdnum))
+
+        # FWHM values are ONLY in the extension headers
+        fwhmpix = fhead.get("fwhm")
+        if fwhmpix is None:
+            fwhm = 1.5
+        else:
+            fwhm = fwhmpix*0.27
 
         # 3a) Make subimages for flux, weight, mask
 
