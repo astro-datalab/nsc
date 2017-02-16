@@ -1,11 +1,11 @@
-pro nsc_instcal_main
+pro nsc_instcal_main,redo=redo
 
 ; Main NOAO DECam source catalog
 dir = "/datalab/users/dnidever/decamcatalog/"
 
 ; Log file
 ;------------------
-; format is nds_main_laf.DATETIME.log
+; format is nsc_main_laf.DATETIME.log
 jd = systime(/julian)
 caldat,jd,month,day,year,hour,minute,second
 smonth = strtrim(month,2)
@@ -103,25 +103,57 @@ for i=0,ngdexp-1 do begin
   fluxfile = str[gdexp[i]].mssfilename
   wtfile = repstr(fluxfile,'ooi','oow')
   maskfile = repstr(fluxfile,'ooi','ood')
+  base = file_basename(fluxfile)
+
+  ; No wtfile in the same directory
+  if file_test(wtfile) eq 0  then begin
+    MATCH,mss.base,file_basename(wtfile),ind1,ind2,/sort,count=nmatch
+    if nmatch eq 0 then begin
+      print,'Weight file missing for ',fluxfile
+      goto,BOMB
+    endif
+    wtfile = mss[ind1[0]].filename
+  endif
+
+  ; No maskfile in the same directory
+  if file_test(maskfile) eq 0  then begin
+    MATCH,mss.base,file_basename(maskfile),ind1,ind2,/sort,count=nmatch
+    if nmatch eq 0 then begin
+      print,'Mask file missing for ',fluxfile
+      goto,BOMB
+    endif
+    maskfile = mss[ind1[0]].filename
+  endif
+
+  ; Check if the output already exists.
+  fhead = headfits(fluxfile,exten=0)
+  dateobs = sxpar(fhead,'DATE-OBS')
+  night = strmid(dateobs,0,4)+strmid(dateobs,5,2)+strmid(dateobs,8,2)
+  baseroot = file_basename(base,'.fits.fz')
+  outfile = '/datalab/users/dnidever/decamcatalog/instcal/'+night+'/'+baseroot+'/'+baseroot+'_'+strtrim(1,2)+'.fits'
+  if (file_test(outfile) eq 1 or file_test(outfile+'.gz') eq 1) and not keyword_set(redo) then begin
+    print,outfile,' EXISTS and /redo NOT set'
+    goto,BOMB
+  endif
 
   if file_test(fluxfile) eq 1 and file_test(wtfile) eq 1 and file_test(maskfile) eq 1 then begin
-    base = file_basename(fluxfile)
     push,cmd,'/home/dnidever/projects/noaodecamsurvey/python/nsc_instcal.py '+fluxfile+' '+wtfile+' '+maskfile
     push,dir,'/data0/dnidever/decamcatalog/instcal/tmp/'
     ; Run nsc_fullstack.py
-   ;   retcode = subprocess.call(["nds_fullstack.py",fluxfile,wtfile,maskfile])
+   ;   retcode = subprocess.call(["nsc_fullstack.py",fluxfile,wtfile,maskfile])
     ;retcode = subprocess.call(["sex","flux.fits","-c","default.config"],stdout=sf,stderr=subprocess.STDOUT)
   endif else begin
     print,'Not all three flux/wt/mask files found for ',fluxfile
-    ;stop
   endelse
-
+  BOMB:
 endfor
+
+stop
 
 ; Run PBS_DAEMON
 ; this works
-PBS_DAEMON,cmd,dir,/hyperthread,prefix='nds',wait=10,nmulti=30
-;PBS_DAEMON,cmd,dir,/hyperthread,prefix='nds',wait=10,nmulti=20
+PBS_DAEMON,cmd,dir,/hyperthread,prefix='nsc',wait=10,nmulti=30
+;PBS_DAEMON,cmd,dir,/hyperthread,prefix='nsc',wait=10,nmulti=20
 
 ; End logfile
 ;------------
