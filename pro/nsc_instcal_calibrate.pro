@@ -258,6 +258,7 @@ CASE filter of
   SRCMATCH,galex.raj2000,galex.dej2000,cat.ra,cat.dec,0.5,aind1,aind2,/sph,count=namatch
   if namatch gt 0 then index[aind2,2] = aind1
   gd = where(total(index gt -1,2) eq 3,ngd)
+  printlog,logf,strtrim(ngd,2),' matches to GAIA, 2MASS and GALEX'
   if ngd eq 0 then begin
     printlog,logf,'No matches to GAIA, 2MASS and GALEX'
     return
@@ -319,6 +320,7 @@ end
   SRCMATCH,apass.raj2000,apass.dej2000,cat.ra,cat.dec,0.5,aind1,aind2,/sph,count=namatch
   if namatch gt 0 then index[aind2,2] = aind1
   gd = where(total(index gt -1,2) eq 3,ngd)
+  printlog,logf,strtrim(ngd,2),' matches to GAIA, 2MASS and APASS'
   if ngd eq 0 then begin
     printlog,logf,'No matches to GAIA, 2MASS and APASS'
     return
@@ -380,6 +382,7 @@ end
   SRCMATCH,apass.raj2000,apass.dej2000,cat.ra,cat.dec,0.5,aind1,aind2,/sph,count=namatch
   if namatch gt 0 then index[aind2,2] = aind1
   gd = where(total(index gt -1,2) eq 3,ngd)
+  printlog,logf,strtrim(ngd,2),' matches to GAIA, 2MASS and APASS'
   if ngd eq 0 then begin
     printlog,logf,'No matches to GAIA, 2MASS and APASS'
     return
@@ -439,6 +442,7 @@ end
   SRCMATCH,tmass.raj2000,tmass.dej2000,cat.ra,cat.dec,0.5,tind1,tind2,/sph,count=ntmatch
   if ntmatch gt 0 then index[tind2,1] = tind1
   gd = where(total(index gt -1,2) eq 2,ngd)
+  printlog,logf,strtrim(ngd,2),' matches to GAIA and 2MASS'
   if ngd eq 0 then begin
     printlog,logf,'No matches to GAIA and 2MASS'
     return
@@ -500,6 +504,7 @@ end
   SRCMATCH,tmass.raj2000,tmass.dej2000,cat.ra,cat.dec,0.5,tind1,tind2,/sph,count=ntmatch
   if ntmatch gt 0 then index[tind2,1] = tind1
   gd = where(total(index gt -1,2) eq 2,ngd)
+  printlog,logf,strtrim(ngd,2),' matches to GAIA and 2MASS'
   if ngd eq 0 then begin
     printlog,logf,'No matches to GAIA and 2MASS'
     return
@@ -561,6 +566,7 @@ end
   SRCMATCH,tmass.raj2000,tmass.dej2000,cat.ra,cat.dec,0.5,tind1,tind2,/sph,count=ntmatch
   if ntmatch gt 0 then index[tind2,1] = tind1
   gd = where(total(index gt -1,2) eq 2,ngd)
+  printlog,logf,strtrim(ngd,2),' matches to GAIA and 2MASS'
   if ngd eq 0 then begin
     printlog,logf,'No matches to GAIA and 2MASS'
     return
@@ -619,6 +625,7 @@ end
   SRCMATCH,tmass.raj2000,tmass.dej2000,cat.ra,cat.dec,0.5,tind1,tind2,/sph,count=ntmatch
   if ntmatch gt 0 then index[tind2,1] = tind1
   gd = where(total(index gt -1,2) eq 2,ngd)
+  printlog,logf,strtrim(ngd,2),' matches to GAIA and 2MASS'
   if ngd eq 0 then begin
     printlog,logf,'No matches to GAIA and 2MASS'
     return
