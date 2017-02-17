@@ -14,10 +14,12 @@ Here's the current thinking on the processing steps, where each step is run over
 
 ## 2) Calibration & QA metrics (loop over exposure)
 
-    nsc_instcal_calibrate_main.pro (wrapper) and nsc_instcal_calibrate.pro (core program, runs on one exposure)
+    - nsc_instcal_calibrate_main.pro: wrapper
+    - nsc_instcal_calibrate.pro: core program, runs on one exposure
 
 ## 3) Enforce QA cuts, cross-matching, averaging (loop over healpix)
 
-    nsc_instcal_combine_main.pro (wrapper) and nsc_instcal_combine.pro (core program, runs on one Healpix pixel)
+    - nsc_instcal_combine_main.pro: wrapper
+    - nsc_instcal_combine.pro: core program, runs on one Healpix pixel
 
 ## 4) Load database (loop over exposure and healpix)
