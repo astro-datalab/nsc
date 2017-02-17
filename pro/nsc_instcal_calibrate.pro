@@ -43,12 +43,12 @@ printlog,logf,strtrim(ncatfiles,2),' catalogs found'
 ; Figure out the number of sources
 ncat = 0L
 for i=0,ncatfiles-1 do begin
-  head = headfits(catfiles[i],exten=1)
+  head = headfits(catfiles[i],exten=2)
   ncat += sxpar(head,'NAXIS2')
 endfor
 printlog,logf,strtrim(ncat,2),' total sources'
-; Create structure
-cat1 = MRDFITS(catfiles[0],1,/silent)
+; Create structure, exten=1 has header now
+cat1 = MRDFITS(catfiles[0],2,/silent)
 schema = cat1[0]
 STRUCT_ASSIGN,{dum:''},schema   ; blank everything out
 add_tag,schema,'CCDNUM',0L,schema
@@ -66,7 +66,7 @@ cnt = 0LL
 for i=0,ncatfiles-1 do begin
   dum = strsplit(file_basename(catfiles[i],'.fits'),'_',/extract)
   ccdnum = long(first_el(dum,/last))
-  cat1 = MRDFITS(catfiles[i],1,/silent)
+  cat1 = MRDFITS(catfiles[i],2,/silent)
   ncat1 = n_elements(cat1)
   temp = cat[cnt:cnt+ncat1-1]
   STRUCT_ASSIGN,cat1,temp,/nozero
@@ -115,6 +115,7 @@ fluxfile = strmid(line,lo)
 head = headfits(fluxfile,exten=0)
 filterlong = sxpar(head,'filter')
 if strmid(filterlong,0,2) eq 'VR' then filter='VR' else filter=strmid(filterlong,0,1)
+expnum = sxpar(head,'expnum')
 exptime = sxpar(head,'exptime')
 dateobs = sxpar(head,'date-obs')
 printlog,logf,'FILTER = ',filter
@@ -241,14 +242,26 @@ For i=0,nchips-1 do begin
   chstr[i].deccoef = deccoef
 Endfor
 
+; Measure median seeing FWHM
+gdcat = where(cat.mag_auto lt 50 and cat.magerr_auto lt 0.05 and cat.class_star gt 0.8,ngdcat)
+medfwhm = median(cat[gdcat].fwhm_world*3600.)
+print,'FWHM = ',stringize(medfwhm,ndec=2),' arcsec'
+
+
 ; Step 4. Photometric calibration
 ;--------------------------------
 ; Do it on the exposure level
 printlog,logf,'' & printlog,logf,'Step 4. Photometric calibration'
 printlog,logf,'-------------------------------'
-expstr = {file:fluxfile,base:base,dateobs:dateobs,mjd:0.0d,filter:filter,exptime:exptime,nsources:long(ncat),$
-          fwhm:0.0,zpterm:0.0,zptermerr:0.0,zptermsig:0.0,nrefmatch:0L}
+expstr = {file:fluxfile,base:base,expnum:long(expnum),ra:0.0d0,dec:0.0d0,dateobs:dateobs,mjd:0.0d,filter:filter,exptime:exptime,$
+          nsources:long(ncat),fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,gaianmatch:0L,zpterm:0.0,zptermerr:0.0,zptermsig:0.0,nrefmatch:0L}
+expstr.ra = cenra
+expstr.dec = cendec
 expstr.mjd = photred_getmjd('','CTIO',dateobs=dateobs)
+expstr.nchips = nchips
+expstr.rarms = median(chstr.rarms)
+expstr.decrms = median(chstr.decrms)
+expstr.gaianmatch = median(chstr.gaianmatch)
 
 CASE filter of
 ; ---- u-band ----
@@ -273,27 +286,21 @@ CASE filter of
   tmass1 = tmass[index[gd,1]]
   galex1 = galex[index[gd,2]]
   ; Make quality and error cuts
-  gmagerr = 2.5*alog10(1.0+gaia.e__fg_/gaia._fg_)
-  gdcat1 = where(cat1.mag_aper lt 50 and cat1.magerr_aper lt 0.05 and cat1.class_star gt 0.8 and $
-                 gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and tmass1.e_jmag lt 0.05 and $
-                 finite(galex1.nuv) eq 1,ngdcat1)
-  if ngdcat1 eq 0 then begin
+  gmagerr = 2.5*alog10(1.0+gaia1.e__fg_/gaia1._fg_)
+  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
+                tmass1.e_jmag lt 0.05 and finite(galex1.nuv) eq 1,ngdcat)
+  if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     return
   endif
-  ; Estimate seeing fwhm
-  medfwhm = median(cat1[gdcat1].fwhm_world*3600.)
-  ;  add a FWHM constraint
-  gdcat = where(cat1.mag_aper lt 50 and cat1.magerr_aper lt 0.05 and cat1.class_star gt 0.8 and $
-                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05 and finite(galex1.nuv) eq 1,ngdcat)
   cat2 = cat1[gdcat]
   gaia2 = gaia1[gdcat]
   tmass2 = tmass1[gdcat]
   galex2 = galex1[gdcat]
   ; Fit zpterm using color-color relation
-  mag = cat2.mag_aper + 2.5*alog10(exptime)  ; correct for the exposure time
-  err = sqrt(cat2.magerr_aper^2 + galex2.e_nuv^2)
+  mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
+  err = sqrt(cat2.magerr_auto^2 + galex2.e_nuv^2)
   diff = galex2.nuv-mag
   col = gaia2._gmag_ - tmass2.jmag
   ; Make a sigma cut
@@ -309,9 +316,9 @@ CASE filter of
   expstr.nrefmatch = ngdcat
   expstr.fwhm = medfwhm
   ; Apply the zero-point to the full catalogs
-  gdcatmag = where(cat.mag_aper lt 50,ngd)
-  cat[gdcatmag].cmag = cat[gdcatmag].mag_aper + 2.5*alog10(exptime) + zpterm
-  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_aper^2 + zptermerr^2)  ; add calibration error in quadrature
+  gdcatmag = where(cat.mag_auto lt 50,ngd)
+  cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
+  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + zptermerr^2)  ; add calibration error in quadrature
 end
 ;- --- g-band ----
 'g': begin
@@ -335,27 +342,21 @@ end
   tmass1 = tmass[index[gd,1]]
   apass1 = apass[index[gd,2]]
   ; Make quality and error cuts
-  gmagerr = 2.5*alog10(1.0+gaia.e__fg_/gaia._fg_)
-  gdcat1 = where(cat1.mag_aper lt 50 and cat1.magerr_aper lt 0.05 and cat1.class_star gt 0.8 and $
-                 gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and tmass1.e_jmag lt 0.05 and $
-                 apass1.e_g_mag lt 0.1,ngdcat1)
-  if ngdcat1 eq 0 then begin
+  gmagerr = 2.5*alog10(1.0+gaia1.e__fg_/gaia1._fg_)
+  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
+                tmass1.e_jmag lt 0.05 and apass1.e_g_mag lt 0.1,ngdcat)
+  if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     return
   endif
-  ; Estimate seeing fwhm
-  medfwhm = median(cat1[gdcat1].fwhm_world*3600.)
-  ;  add a FWHM constraint
-  gdcat = where(cat1.mag_aper lt 50 and cat1.magerr_aper lt 0.05 and cat1.class_star gt 0.8 and $
-                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05 and apass1.e_g_mag lt 0.1,ngdcat)
   cat2 = cat1[gdcat]
   gaia2 = gaia1[gdcat]
   tmass2 = tmass1[gdcat]
   apass2 = apass1[gdcat]
   ; Take a robust mean relative to APASS GMAG
-  mag = cat2.mag_aper + 2.5*alog10(exptime)  ; correct for the exposure time
-  err = sqrt(cat2.magerr_aper^2 + apass2.e_g_mag^2)
+  mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
+  err = sqrt(cat2.magerr_auto^2 + apass2.e_g_mag^2)
   diff = apass2.g_mag-mag
   ; Make a sigma cut
   med = median(diff)
@@ -371,9 +372,9 @@ end
   expstr.nrefmatch = ngdcat
   expstr.fwhm = medfwhm
   ; Apply the zero-point to the full catalogs
-  gdcatmag = where(cat.mag_aper lt 50,ngd)
-  cat[gdcatmag].cmag = cat[gdcatmag].mag_aper + 2.5*alog10(exptime) + zpterm
-  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_aper^2 + zptermerr^2)  ; add calibration error in quadrature
+  gdcatmag = where(cat.mag_auto lt 50,ngd)
+  cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
+  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + zptermerr^2)  ; add calibration error in quadrature
 end
 ; ---- r-band ----
 'r': begin
@@ -397,27 +398,21 @@ end
   tmass1 = tmass[index[gd,1]]
   apass1 = apass[index[gd,2]]
   ; Make quality and error cuts
-  gmagerr = 2.5*alog10(1.0+gaia.e__fg_/gaia._fg_)
-  gdcat1 = where(cat1.mag_aper lt 50 and cat1.magerr_aper lt 0.05 and cat1.class_star gt 0.8 and $
-                 gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and tmass1.e_jmag lt 0.05 and $
-                 apass1.e_r_mag lt 0.1,ngdcat1)
-  if ngdcat1 eq 0 then begin
+  gmagerr = 2.5*alog10(1.0+gaia1.e__fg_/gaia1._fg_)
+  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
+                tmass1.e_jmag lt 0.05 and apass1.e_r_mag lt 0.1,ngdcat)
+  if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     return
   endif
-  ; Estimate seeing fwhm
-  medfwhm = median(cat1[gdcat1].fwhm_world*3600.)
-  ;  add a FWHM constraint
-  gdcat = where(cat1.mag_aper lt 50 and cat1.magerr_aper lt 0.05 and cat1.class_star gt 0.8 and $
-                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05 and apass1.e_r_mag lt 0.1,ngdcat)
   cat2 = cat1[gdcat]
   gaia2 = gaia1[gdcat]
   tmass2 = tmass1[gdcat]
   apass2 = apass1[gdcat]
   ; Take a robust mean relative to APASS GMAG
-  mag = cat2.mag_aper + 2.5*alog10(exptime)  ; correct for the exposure time
-  err = sqrt(cat2.magerr_aper^2 + apass2.e_r_mag^2)
+  mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
+  err = sqrt(cat2.magerr_auto^2 + apass2.e_r_mag^2)
   diff = apass2.r_mag-mag
   ; Make a sigma cut
   med = median(diff)
@@ -433,9 +428,9 @@ end
   expstr.nrefmatch = ngdcat
   expstr.fwhm = medfwhm
   ; Apply the zero-point to the full catalogs
-  gdcatmag = where(cat.mag_aper lt 50,ngd)
-  cat[gdcatmag].cmag = cat[gdcatmag].mag_aper + 2.5*alog10(exptime) + zpterm
-  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_aper^2 + zptermerr^2)  ; add calibration error in quadrature
+  gdcatmag = where(cat.mag_auto lt 50,ngd)
+  cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
+  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + zptermerr^2)  ; add calibration error in quadrature
 end
 ; ---- i-band ----
 'i': begin
@@ -456,27 +451,22 @@ end
   gaia1 = gaia[index[gd,0]]
   tmass1 = tmass[index[gd,1]]
   ; Make quality and error cuts
-  gmagerr = 2.5*alog10(1.0+gaia.e__fg_/gaia._fg_)
-  gdcat1 = where(cat1.mag_aper lt 50 and cat1.magerr_aper lt 0.05 and cat1.class_star gt 0.8 and $
-                 gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and tmass1.e_jmag lt 0.05,ngdcat1)
-  if ngdcat1 eq 0 then begin
+  gmagerr = 2.5*alog10(1.0+gaia1.e__fg_/gaia1._fg_)
+  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
+                tmass1.e_jmag lt 0.05,ngdcat)
+  if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     return
   endif
-  ; Estimate seeing fwhm
-  medfwhm = median(cat1[gdcat1].fwhm_world*3600.)
-  ;  add a FWHM constraint
-  gdcat = where(cat1.mag_aper lt 50 and cat1.magerr_aper lt 0.05 and cat1.class_star gt 0.8 and $
-                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05,ngdcat)
   cat2 = cat1[gdcat]
   gaia2 = gaia1[gdcat]
   gmagerr2 = gmagerr[gdcat]
   tmass2 = tmass1[gdcat]
   ; Fit zpterm using color-color relations
   coef =  [-0.238064, 0.311685] ; G-i vs. G-J
-  mag = cat2.mag_aper + 2.5*alog10(exptime)  ; correct for the exposure time
-  err = sqrt(cat2.magerr_aper^2 + gmagerr2^2)
+  mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
+  err = sqrt(cat2.magerr_auto^2 + gmagerr2^2)
   col = gaia2._gmag_ - tmass2.jmag
   diff = gaia2._gmag_ - mag
   ; Subtract the known trend
@@ -495,9 +485,9 @@ end
   expstr.nrefmatch = ngdcat
   expstr.fwhm = medfwhm
   ; Apply the zero-point to the full catalogs
-  gdcatmag = where(cat.mag_aper lt 50,ngd)
-  cat[gdcatmag].cmag = cat[gdcatmag].mag_aper + 2.5*alog10(exptime) + zpterm
-  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_aper^2 + zptermerr^2)  ; add calibration error in quadrature
+  gdcatmag = where(cat.mag_auto lt 50,ngd)
+  cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
+  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + zptermerr^2)  ; add calibration error in quadrature
 end
 ; ---- z-band ----
 'z': begin
@@ -518,27 +508,22 @@ end
   gaia1 = gaia[index[gd,0]]
   tmass1 = tmass[index[gd,1]]
   ; Make quality and error cuts
-  gmagerr = 2.5*alog10(1.0+gaia.e__fg_/gaia._fg_)
-  gdcat1 = where(cat1.mag_aper lt 50 and cat1.magerr_aper lt 0.05 and cat1.class_star gt 0.8 and $
-                 gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and tmass1.e_jmag lt 0.05,ngdcat1)
-  if ngdcat1 eq 0 then begin
+  gmagerr = 2.5*alog10(1.0+gaia1.e__fg_/gaia1._fg_)
+  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
+                tmass1.e_jmag lt 0.05,ngdcat)
+  if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     return
   endif
-  ; Estimate seeing fwhm
-  medfwhm = median(cat1[gdcat1].fwhm_world*3600.)
-  ;  add a FWHM constraint
-  gdcat = where(cat1.mag_aper lt 50 and cat1.magerr_aper lt 0.05 and cat1.class_star gt 0.8 and $
-                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05,ngdcat)
   cat2 = cat1[gdcat]
   gaia2 = gaia1[gdcat]
   gmagerr2 = gmagerr[gdcat]
   tmass2 = tmass1[gdcat]
   ; Fit zpterm using color-color relations
   coef = [ -0.534314, 0.644711 ] ; G-z vs. G-J
-  mag = cat2.mag_aper + 2.5*alog10(exptime)  ; correct for the exposure time
-  err = sqrt(cat2.magerr_aper^2 + gmagerr2^2)
+  mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
+  err = sqrt(cat2.magerr_auto^2 + gmagerr2^2)
   col = gaia2._gmag_ - tmass2.jmag
   diff = gaia2._gmag_ - mag
   ; Subtract the known trend
@@ -557,9 +542,9 @@ end
   expstr.nrefmatch = ngdcat
   expstr.fwhm = medfwhm
   ; Apply the zero-point to the full catalogs
-  gdcatmag = where(cat.mag_aper lt 50,ngd)
-  cat[gdcatmag].cmag = cat[gdcatmag].mag_aper + 2.5*alog10(exptime) + zpterm
-  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_aper^2 + zptermerr^2)  ; add calibration error in quadrature
+  gdcatmag = where(cat.mag_auto lt 50,ngd)
+  cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
+  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + zptermerr^2)  ; add calibration error in quadrature
 end
 ; ---- Y-band ----
 'Y': begin
@@ -580,27 +565,22 @@ end
   gaia1 = gaia[index[gd,0]]
   tmass1 = tmass[index[gd,1]]
   ; Make quality and error cuts
-  gmagerr = 2.5*alog10(1.0+gaia.e__fg_/gaia._fg_)
-  gdcat1 = where(cat1.mag_aper lt 50 and cat1.magerr_aper lt 0.05 and cat1.class_star gt 0.8 and $
-                 gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and tmass1.e_jmag lt 0.05,ngdcat1)
-  if ngdcat1 eq 0 then begin
+  gmagerr = 2.5*alog10(1.0+gaia1.e__fg_/gaia1._fg_)
+  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
+                tmass1.e_jmag lt 0.05,ngdcat)
+  if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     return
   endif
-  ; Estimate seeing fwhm
-  medfwhm = median(cat1[gdcat1].fwhm_world*3600.)
-  ;  add a FWHM constraint
-  gdcat = where(cat1.mag_aper lt 50 and cat1.magerr_aper lt 0.05 and cat1.class_star gt 0.8 and $
-                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05,ngdcat)
   cat2 = cat1[gdcat]
   gaia2 = gaia1[gdcat]
   gmagerr2 = gmagerr[gdcat]
   tmass2 = tmass1[gdcat]
   ; Take a robust mean relative to 2MASS JMAG
 ; NEED THE COLOR TERM!!!
-  mag = cat2.mag_aper + 2.5*alog10(exptime)  ; correct for the exposure time
-  err = sqrt(cat2.magerr_aper^2 + tmass2.e_jmag^2)
+  mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
+  err = sqrt(cat2.magerr_auto^2 + tmass2.e_jmag^2)
   diff = tmass2.jmag - mag
   ; Make a sigma cut
   med = median(diff)
@@ -616,9 +596,9 @@ end
   expstr.nrefmatch = ngdcat
   expstr.fwhm = medfwhm
   ; Apply the zero-point to the full catalogs
-  gdcatmag = where(cat.mag_aper lt 50,ngd)
-  cat[gdcatmag].cmag = cat[gdcatmag].mag_aper + 2.5*alog10(exptime) + zpterm
-  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_aper^2 + zptermerr^2)  ; add calibration error in quadrature
+  gdcatmag = where(cat.mag_auto lt 50,ngd)
+  cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
+  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + zptermerr^2)  ; add calibration error in quadrature
 end
 ; ---- VR-band ----
 'VR': begin
@@ -639,26 +619,21 @@ end
   gaia1 = gaia[index[gd,0]]
   tmass1 = tmass[index[gd,1]]
   ; Make quality and error cuts
-  gmagerr = 2.5*alog10(1.0+gaia.e__fg_/gaia._fg_)
-  gdcat1 = where(cat1.mag_aper lt 50 and cat1.magerr_aper lt 0.05 and cat1.class_star gt 0.8 and $
-                 gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and tmass1.e_jmag lt 0.05,ngdcat1)
-  if ngdcat1 eq 0 then begin
+  gmagerr = 2.5*alog10(1.0+gaia1.e__fg_/gaia1._fg_)
+  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
+                tmass1.e_jmag lt 0.05,ngdcat)
+  if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     return
   endif
-  ; Estimate seeing fwhm
-  medfwhm = median(cat1[gdcat1].fwhm_world*3600.)
-  ;  add a FWHM constraint
-  gdcat = where(cat1.mag_aper lt 50 and cat1.magerr_aper lt 0.05 and cat1.class_star gt 0.8 and $
-                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05,ngdcat)
   cat2 = cat1[gdcat]
   gaia2 = gaia1[gdcat]
   gmagerr2 = gmagerr[gdcat]
   tmass2 = tmass1[gdcat]
   ; Take a robust mean relative to GAIA GMAG
-  mag = cat2.mag_aper + 2.5*alog10(exptime)  ; correct for the exposure time
-  err = sqrt(cat2.magerr_aper^2 + gmagerr2^2)
+  mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
+  err = sqrt(cat2.magerr_auto^2 + gmagerr2^2)
   diff = gaia2._gmag_ - mag
   ; Make a sigma cut
   med = median(diff)
@@ -674,9 +649,9 @@ end
   expstr.nrefmatch = ngdcat
   expstr.fwhm = medfwhm
   ; Apply the zero-point to the full catalogs
-  gdcatmag = where(cat.mag_aper lt 50,ngd)
-  cat[gdcatmag].cmag = cat[gdcatmag].mag_aper + 2.5*alog10(exptime) + zpterm
-  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_aper^2 + zptermerr^2)  ; add calibration error in quadrature
+  gdcatmag = where(cat.mag_auto lt 50,ngd)
+  cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
+  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + zptermerr^2)  ; add calibration error in quadrature
 end
 else: begin
   printlog,logf,filter,' not currently supported'

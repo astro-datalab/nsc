@@ -44,6 +44,8 @@ str = str[ind2]
 
 ; Use dtacqnam to get EXPNUM
 
+; You can get EXPNUM from the pimary header
+
 ; Use Date-OBS to find unique exposures
 ; and use PLVER to get the most recent one
 dateobs = str.date_obs
@@ -62,8 +64,6 @@ for i=0,ndbl-1 do begin
 endfor
 ; removing duplicate entires
 remove,torem,str
-
-
 
 
 ;sra = str[ui].ra
@@ -137,8 +137,8 @@ for i=0,ngdexp-1 do begin
   endif
 
   if file_test(fluxfile) eq 1 and file_test(wtfile) eq 1 and file_test(maskfile) eq 1 then begin
-    push,cmd,'/home/dnidever/projects/noaodecamsurvey/python/nsc_instcal.py '+fluxfile+' '+wtfile+' '+maskfile
-    push,dir,'/data0/dnidever/decamcatalog/instcal/tmp/'
+    push,cmd,'/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal.py '+fluxfile+' '+wtfile+' '+maskfile
+    push,dirs,'/data0/dnidever/decamcatalog/instcal/tmp/'
     ; Run nsc_fullstack.py
    ;   retcode = subprocess.call(["nsc_fullstack.py",fluxfile,wtfile,maskfile])
     ;retcode = subprocess.call(["sex","flux.fits","-c","default.config"],stdout=sf,stderr=subprocess.STDOUT)
@@ -148,17 +148,17 @@ for i=0,ngdexp-1 do begin
   BOMB:
 endfor
 
-stop
+;stop
 
 ; Run PBS_DAEMON
 ; this works
-PBS_DAEMON,cmd,dir,/hyperthread,prefix='nsc',wait=10,nmulti=30
-;PBS_DAEMON,cmd,dir,/hyperthread,prefix='nsc',wait=10,nmulti=20
+PBS_DAEMON,cmd,dirs,/hyperthread,prefix='nsc',wait=10,nmulti=30
+;PBS_DAEMON,cmd,dirs,/hyperthread,prefix='nsc',wait=10,nmulti=20
 
 ; End logfile
 ;------------
 JOURNAL
 
-;stop
+stop
 
 end
