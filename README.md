@@ -1,14 +1,16 @@
-# noaosourcecatalog
-Source catalog of all NOAO imaging data
+# NOAO Source Catalog
+
+Software to create a source catalog of all NOAO imaging data.
 
 # Processing Steps
 
-Here's the current thinking on the processing step, where each step is run over the entirety of the data
+Here's the current thinking on the processing steps, where each step is run over the entirety of the data
 (with a wrapper) before the next step is started.
 
 ## 1) Measurement (loop over exposure)
 
-    nsc_instcal_main.pro (wrapper) and nsc_instcal.py (core program, runs on one exposure)
+    - nsc_instcal_main.pro: wrapper
+    - nsc_instcal.py: core program, runs on one exposure
 
 ## 2) Calibration & QA metrics (loop over exposure)
 
