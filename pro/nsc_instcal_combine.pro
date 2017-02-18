@@ -61,6 +61,15 @@ for i=0,nlist-1 do begin
   ncat1 = n_elements(cat1)
   print,'  ',strtrim(ncat1,2),' sources'
 
+  ; Remove sources near bad pixels
+  bdcat = where(cat1.imaflags_iso gt 10,nbdcat)
+  if nbadcat gt 0 then begin
+    print,'  Removing ',strtrim(nbdcat,2),' sources contaminated by bad pixels.'
+    if nbdcat eq ncat1 then goto,BOMB
+    REMOVE,bdcat,cat1
+    ncat1 = n_elements(cat1)
+  endif
+
   metafile = repstr(list[i].file,'_cat','_meta')
   meta = MRDFITS(metafile,1,/silent)
   ;head = headfits(list[i].file,exten=0)
