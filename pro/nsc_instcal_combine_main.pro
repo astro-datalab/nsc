@@ -18,7 +18,29 @@ str.base = strtrim(str.base,2)
 
 ; APPLY QA CUTS IN ZEROPOINT AND SEEING
 print,'APPLY QA CUTS IN ZEROPOINT AND SEEING'
-;stop
+fwhmthresh = 3.0  ; arcsec
+filters = ['u','g','r','i','z','Y','VR']
+nfilters = n_elements(filters)
+zpthresh = [1.0,1.0,1.0,1.0,1.0,1.0,1.0]
+badmask = lonarr(n_elements(str))
+for i=0,nfilters-1 do begin
+  ind = where(str.filter eq filters[i],nind)
+  print,filters[i],' ',strtrim(nind,2),' exposures'
+  if nind gt 0 then begin
+    medzp = median(str[ind].zpterm)
+    sigzp = mad(str[ind].zpterm)
+    ; We are using ADDITIVE zpterm 
+    ;  calmag = instmag + zpterm
+    ; if there are clouds then instmag is larger/fainter
+    ;  and zpterm is smaller (more negative)
+    bdind = where(str[ind].zpterm-medzp lt -zpthresh[i],nbdind)
+    print,'  ',strtrim(nbdind,2),' exposures with ZPTERM below the threshold'    
+    if nbdind gt 0 then badmask[ind[bdind]] = 1
+  endif
+endfor
+bdexp = where(str.fwhm gt fwhmthresh or badmask eq 1,nbdexp)
+print,'QA cuts remove ',strtrim(nbdexp,2),' exposures'
+REMOVE,bdexp,str]
 
 ; Which healpix pixels have data
 print,'Finding the Healpix pixels with data'
