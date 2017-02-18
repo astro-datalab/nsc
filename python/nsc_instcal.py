@@ -190,6 +190,13 @@ if __name__ == "__main__":
             os.remove("flux.fits")
         fits.writeto("flux.fits",flux,header=fhead,output_verify='warn')
 
+        # Mask bad pixels
+        #  set wt=0 for mask>0 pixels
+        #wt *= (mask == 0)
+        #wt[mask > 0] = 1e-40
+        wt[mask > 0] = 1e-7
+        #wt[mask > 0] = -2
+
         # I think we might need to set the weight map pixels 
         #  that are "bad" to 5e30
         # I think wt=0 for bad pixels

@@ -34,7 +34,7 @@ printlog,logf,'' & printlog,logf,'Step 1. Read in the catalogs'
 printlog,logf,'-----------------------------'
 catfiles1 = file_search(expdir+'/'+base+'_[1-9].fits',count=ncatfiles1)
 if ncatfiles1 gt 0 then push,catfiles,catfiles1
-catfiles2 = file_search(expdir+'/'+base+'_[0-9][1-9].fits',count=ncatfiles2)
+catfiles2 = file_search(expdir+'/'+base+'_[0-9][0-9].fits',count=ncatfiles2)
 if ncatfiles2 gt 0 then push,catfiles,catfiles2
 ncatfiles = n_elements(catfiles)
 nchips = ncatfiles
