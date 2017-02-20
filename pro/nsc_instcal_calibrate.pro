@@ -118,6 +118,7 @@ if strmid(filterlong,0,2) eq 'VR' then filter='VR' else filter=strmid(filterlong
 expnum = sxpar(head,'expnum')
 exptime = sxpar(head,'exptime')
 dateobs = sxpar(head,'date-obs')
+airmass = sxpar(head,'airmass')
 printlog,logf,'FILTER = ',filter
 printlog,logf,'EXPTIME = ',stringize(exptime,ndec=2),' sec.'
 
@@ -254,11 +255,13 @@ print,'FWHM = ',stringize(medfwhm,ndec=2),' arcsec'
 printlog,logf,'' & printlog,logf,'Step 4. Photometric calibration'
 printlog,logf,'-------------------------------'
 expstr = {file:fluxfile,base:base,expnum:long(expnum),ra:0.0d0,dec:0.0d0,dateobs:dateobs,mjd:0.0d,filter:filter,exptime:exptime,$
-          nsources:long(ncat),fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,gaianmatch:0L,zpterm:0.0,zptermerr:0.0,zptermsig:0.0,nrefmatch:0L}
+          airmass:0.0,nsources:long(ncat),fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,gaianmatch:0L,zpterm:0.0,zptermerr:0.0,$
+          zptermsig:0.0,nrefmatch:0L}
 expstr.ra = cenra
 expstr.dec = cendec
 expstr.mjd = photred_getmjd('','CTIO',dateobs=dateobs)
 expstr.nchips = nchips
+expstr.airmass = airmass
 expstr.rarms = median(chstr.rarms)
 expstr.decrms = median(chstr.decrms)
 expstr.gaianmatch = median(chstr.gaianmatch)
