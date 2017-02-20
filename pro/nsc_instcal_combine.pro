@@ -27,6 +27,8 @@ if file_test(listfile) eq 0 then begin
   return
 endif
 healstr = MRDFITS(listfile,1,/silent)
+healstr.file = strtrim(healstr.file,2)
+healstr.base = strtrim(healstr.base,2)
 index = MRDFITS(listfile,2,/silent)
 ; Find our pixel
 ind = where(index.pix eq pix,nind)
@@ -42,11 +44,18 @@ print,'Combining InstCal SExtractor catalogs or Healpix pixel = ',strtrim(pix,2)
 print,strtrim(nlist,2),' overlapping exposure(s)'
 
 ; Initialize the object structure
-schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,ndet:0L,umag:0.0,uerr:0.0,ndetu:0,gmag:0.0,$
-              gerr:0.0,ndetg:0,rmag:0.0,rerr:0.0,ndetr:0,imag:99.9,ierr:0.0,ndeti:0,$
-              zmag:0.0,zerr:0.0,ndetz:0,ymag:0.0,yerr:0.0,ndety:0,vrmag:0.0,vrerr:0.0,$
-              ndetvr:0,x2:0.0,y2:0.0,xy:0.0,cxx:0.0,cxy:0.0,cyy:0.0,asemi:0.0,bsemi:0.0,theta:0.0,$
-              elongation:0.0,ellipticity:0.0,fwhm:0.0,flags:0,class_star:0.0,ebv:0.0}
+schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,ndet:0L,$
+              ndetu:0,nphotu:0,umag:0.0,uerr:0.0,uasemi:0.0,ubsemi:0.0,utheta:0.0,$
+              ndetg:0,nphotg:0,gmag:0.0,gerr:0.0,gasemi:0.0,gbsemi:0.0,gtheta:0.0,$
+              ndetr:0,nphotr:0,rmag:0.0,rerr:0.0,rasemi:0.0,rbsemi:0.0,rtheta:0.0,$
+              ndeti:0,nphoti:0,imag:99.9,ierr:0.0,iasemi:0.0,ibsemi:0.0,itheta:0.0,$
+              ndetz:0,nphotz:0,zmag:0.0,zerr:0.0,zasemi:0.0,zbsemi:0.0,ztheta:0.0,$
+              ndety:0,nphoty:0,ymag:0.0,yerr:0.0,yasemi:0.0,ybsemi:0.0,ytheta:0.0,$
+              ndetvr:0,nphotvr:0,vrmag:0.0,vrerr:0.0,vrasemi:0.0,vrbsemi:0.0,vrtheta:0.0,$
+              x2:0.0,x2err:0.0,y2:0.0,y2err:0.0,xy:0.0,xyerr:0.0,cxx:0.0,cxxerr:0.0,$
+              cxy:0.0,cxyerr:0.0,cyy:0.0,cyyerr:0.0,asemi:0.0,asemierr:0.0,bsemi:0.0,$
+              bsemierr:0.0,theta:0.0,thetaerr:0.0,elongation:0.0,$
+              ellipticity:0.0,fwhm:0.0,flags:0,class_star:0.0,ebv:0.0}
 tags = tag_names(schema_obj)
 obj = replicate(schema_obj,1e5)
 nobj = n_elements(obj)
@@ -63,7 +72,7 @@ for i=0,nlist-1 do begin
 
   ; Remove sources near bad pixels
   bdcat = where(cat1.imaflags_iso gt 10,nbdcat)
-  if nbadcat gt 0 then begin
+  if nbdcat gt 0 then begin
     print,'  Removing ',strtrim(nbdcat,2),' sources contaminated by bad pixels.'
     if nbdcat eq ncat1 then goto,BOMB
     REMOVE,bdcat,cat1
@@ -91,9 +100,15 @@ for i=0,nlist-1 do begin
   cat = cat1[ind1]
   ncat = nmatch
 
+  ; NDETX is good "detection" and morphology for this filter
+  ; NPHOTX is good "photometry" for this filter
+  detind = where(tags eq 'NDET'+strupcase(meta.filter),ndetind)
   magind = where(tags eq strupcase(meta.filter)+'MAG',nmagind)
   errind = where(tags eq strupcase(meta.filter)+'ERR',nerrind)
-  detind = where(tags eq 'NDET'+strupcase(meta.filter),ndetind)
+  detphind = where(tags eq 'NPHOT'+strupcase(meta.filter),nphotind)
+  asemiind = where(tags eq strupcase(meta.filter)+'ASEMI',nasemiind)
+  bsemiind = where(tags eq strupcase(meta.filter)+'BSEMI',nbsemiind)
+  thetaind = where(tags eq strupcase(meta.filter)+'THETA',nthetaind)
 
   ; Combine the data
   ;-----------------
@@ -107,22 +122,36 @@ for i=0,nlist-1 do begin
     newexp.ra = cat.ra
     newexp.dec = cat.dec
     newexp.ndet = 1
+    ; Detection and morphology parameters for this FILTER
+    newexp.(detind) = 1
+    newexp.(asemiind) = cat.a_world
+    newexp.(bsemiind) = cat.b_world
+    newexp.(thetaind) = cat.theta_world
+    ; Good photometry for this FILTER
     gdmag = where(cat.cmag lt 50,ngdmag)
-    ;print,ngdmag,' good phot'
     if ngdmag gt 0 then begin
       newexp[gdmag].(magind) = 2.5118864d^cat[gdmag].cmag * (1.0d0/cat[gdmag].cerr^2)
       newexp[gdmag].(errind) = 1.0d0/cat[gdmag].cerr^2
-      newexp[gdmag].(detind) = 1
+      newexp[gdmag].(detphind) = 1
     endif
     newexp.x2 = cat.x2_world
+    newexp.x2err = cat.errx2_world^2
     newexp.y2 = cat.y2_world
+    newexp.y2err = cat.erry2_world^2
     newexp.xy = cat.xy_world
+    newexp.xyerr = cat.errxy_world^2
     newexp.cxx = cat.cxx_world
+    newexp.cxxerr = cat.errcxx_world^2
     newexp.cyy = cat.cyy_world
+    newexp.cyyerr = cat.errcyy_world^2
     newexp.cxy = cat.cxy_world
+    newexp.cxyerr = cat.errcxy_world^2
     newexp.asemi = cat.a_world
+    newexp.asemierr = cat.erra_world^2
     newexp.bsemi = cat.b_world
+    newexp.bsemierr = cat.errb_world^2
     newexp.theta = cat.theta_world
+    newexp.thetaerr = cat.errtheta_world^2
     newexp.elongation = cat.elongation
     newexp.ellipticity = cat.ellipticity
     newexp.fwhm = cat.fwhm_world*3600  ; in arcsec
@@ -146,23 +175,37 @@ for i=0,nlist-1 do begin
       cmb = obj[ind1]
       cmb.ndet++
       newcat = cat[ind2]
+      ; Detection and morphology parameters for this FILTER
+      cmb.(detind)++
+      cmb.(asemiind) += newcat.a_world
+      cmb.(bsemiind) += newcat.b_world
+      cmb.(thetaind) += newcat.theta_world
+      ; Good photometry for this FILTER
       gdmag = where(newcat.cmag lt 50,ngdmag)
-      ;print,ngdmag,' good phot'
       if ngdmag gt 0 then begin
         cmb[gdmag].(magind) = 2.5118864d^newcat[gdmag].cmag * (1.0d0/newcat[gdmag].cerr^2)
         cmb[gdmag].(errind) = 1.0d0/newcat[gdmag].cerr^2
-        cmb[gdmag].(detind) += 1
-        ; NDETX means good PHOT detection
+        cmb[gdmag].(detphind) += 1
+        ; NPHOTX means good PHOT detection
       endif
       cmb.x2 += newcat.x2_world
+      cmb.x2err += newcat.errx2_world^2
       cmb.y2 += newcat.y2_world
+      cmb.y2err += newcat.erry2_world^2
       cmb.xy += newcat.xy_world
+      cmb.xyerr += newcat.errxy_world^2
       cmb.cxx += newcat.cxx_world
+      cmb.cxxerr += newcat.errcxx_world^2
       cmb.cyy += newcat.cyy_world
+      cmb.cyyerr += newcat.errcyy_world^2
       cmb.cxy += newcat.cxy_world
+      cmb.cxyerr += newcat.errcxy_world^2
       cmb.asemi += newcat.a_world
+      cmb.asemierr += newcat.erra_world^2
       cmb.bsemi += newcat.b_world
+      cmb.bsemierr += newcat.errb_world^2
       cmb.theta += newcat.theta_world
+      cmb.thetaerr += newcat.errtheta_world^2
       cmb.elongation += newcat.elongation
       cmb.ellipticity += newcat.ellipticity
       cmb.fwhm += newcat.fwhm_world*3600  ; in arcsec
@@ -195,22 +238,35 @@ for i=0,nlist-1 do begin
       newexp.ra = cat.ra
       newexp.dec = cat.dec
       newexp.ndet = 1
+      ; Detection and morphology parameters for this FILTER
+      newexp.(detind) = 1
+      newexp.(asemiind) = cat.a_world
+      newexp.(bsemiind) = cat.b_world
+      newexp.(thetaind) = cat.theta_world
       gdmag = where(cat.cmag lt 50,ngdmag)
-      ;print,ngdmag,' good phot'
       if ngdmag gt 0 then begin
         newexp[gdmag].(magind) = 2.5118864d^cat[gdmag].cmag * (1.0d0/cat[gdmag].cerr^2)
         newexp[gdmag].(errind) = 1.0d0/cat[gdmag].cerr^2
-        newexp[gdmag].(detind) = 1
+        newexp[gdmag].(detphind) = 1
       endif
       newexp.x2 = cat.x2_world
+      newexp.x2err = cat.errx2_world^2
       newexp.y2 = cat.y2_world
+      newexp.y2err = cat.erry2_world^2
       newexp.xy = cat.xy_world
+      newexp.xyerr = cat.errxy_world^2
       newexp.cxx = cat.cxx_world
+      newexp.cxxerr = cat.errcxx_world^2
       newexp.cyy = cat.cyy_world
+      newexp.cyyerr = cat.errcyy_world^2
       newexp.cxy = cat.cxy_world
+      newexp.cxyerr = cat.errcxy_world^2
       newexp.asemi = cat.a_world
+      newexp.asemierr = cat.erra_world^2
       newexp.bsemi = cat.b_world
+      newexp.bsemierr = cat.errb_world^2
       newexp.theta = cat.theta_world
+      newexp.thetaerr = cat.errtheta_world^2
       newexp.elongation = cat.elongation
       newexp.ellipticity = cat.ellipticity
       newexp.fwhm = cat.fwhm_world*3600  ; in arcsec
@@ -234,12 +290,19 @@ nobj = n_elements(obj)
 print,strtrim(nobj,2),' final objects'
 
 ; Convert totalwt and totalfluxwt to MAG and ERR
+;  and average the morphology parameters PER FILTER
 filters = ['u','g','r','i','z','y','vr']
 nfilters = n_elements(filters)
 for i=0,nfilters-1 do begin
+  ; NDETX is good "detection" and morphology for this filter
+  ; NPHOTX is good "photometry" for this filter
+  detind = where(tags eq 'NDET'+strupcase(filters[i]),ndetind)
   magind = where(tags eq strupcase(filters[i])+'MAG',nmagind)
   errind = where(tags eq strupcase(filters[i])+'ERR',nerrind)
-  detind = where(tags eq 'NDET'+strupcase(filters[i]),ndetind)
+  detphind = where(tags eq 'NPHOT'+strupcase(filters[i]),nphotind)
+  asemiind = where(tags eq strupcase(filters[i])+'ASEMI',nasemiind)
+  bsemiind = where(tags eq strupcase(filters[i])+'BSEMI',nbsemiind)
+  thetaind = where(tags eq strupcase(filters[i])+'THETA',nthetaind)
   
   newflux = obj.(magind) / obj.(errind)
   newmag = 2.50*alog10(newflux)
@@ -251,18 +314,40 @@ for i=0,nfilters-1 do begin
     obj[bdmag].(magind) = 99.99
     obj[bdmag].(errind) = 9.99
   endif
+
+  ; Average the morphology parameters PER FILTER
+  gdet = where(obj.(detind) gt 0,ngdet,comp=bdet,ncomp=nbdet)
+  if ngdet gt 0 then begin
+    obj[gdet].(asemiind) /= obj[gdet].(detind)
+    obj[gdet].(bsemiind) /= obj[gdet].(detind)
+    obj[gdet].(thetaind) /= obj[gdet].(detind)
+  endif
+  if nbdet gt 0 then begin
+    obj[bdet].(asemiind) = 99.99
+    obj[bdet].(bsemiind) = 99.99
+    obj[bdet].(thetaind) = 99.99
+  endif
 endfor
 
-; do we use NDET for the morphology paramters???
-
-; Average the morphology paramters, Need a separate counter for that maybe?
+; Average the morphology parameters, Need a separate counter for that maybe?
 mtags = ['x2','y2','xy','cxx','cyy','cxy','asemi','bsemi','theta','elongation','ellipticity','fwhm','class_star']
 nmtags = n_elements(mtags)
+gdet = where(obj.ndet gt 0,ngdet,comp=bdet,ncomp=nbdet)
 for i=0,nmtags-1 do begin
   ind = where(tags eq strupcase(mtags[i]),nind)
   ; Divide by the number of detections
-  gdet = where(obj.ndet gt 0,ngdet)
   if ngdet gt 0 then obj[gdet].(ind) /= obj[gdet].ndet
+  if nbdet gt 0 then obj[bdet].(ind) = 99.99   ; no good detections
+endfor
+
+; Get the average error
+metags = ['x2err','y2err','xyerr','cxxerr','cyyerr','cxyerr','asemierr','bsemierr','thetaerr']
+nmetags = n_elements(metags)
+for i=0,nmetags-1 do begin
+  ind = where(tags eq strupcase(metags[i]),nind)
+  ; Just take the sqrt to complete the addition in quadrature
+  if ngdet gt 0 then obj[gdet].(ind) = sqrt(obj[gdet].(ind))
+  if nbdet gt 0 then obj[bdet].(ind) = 99.99
 endfor
 
 ; Add E(B-V)
