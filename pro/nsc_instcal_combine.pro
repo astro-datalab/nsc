@@ -3,7 +3,9 @@ pro nsc_instcal_combine,pix,nside=nside,redo=redo,stp=stp
 ; Combine all the exposures that fall in this healpix pixel
 ;nside = 256
 if n_elements(nside) eq 0 then nside = 128
-dir = '/datalab/users/dnidever/decamcatalog/instcal/'
+NSC_ROOTDIRS,dldir,mssdir,localdir
+dir = dldir+'users/dnidever/nsc/instcal/'
+;dir = '/datalab/users/dnidever/decamcatalog/instcal/'
 radeg = 180.0d0 / !dpi
 
 ; Not enough inputs

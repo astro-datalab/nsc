@@ -1,7 +1,9 @@
 pro nsc_instcal_main,redo=redo
 
 ; Main NOAO DECam source catalog
-dir = "/datalab/users/dnidever/decamcatalog/"
+NSC_ROOTDIRS,dldir,mssdir,localdir
+;dir = "/datalab/users/dnidever/decamcatalog/"
+dir = dldir+'users/dnidever/nsc/'
 
 ; Log file
 ;------------------
@@ -136,6 +138,7 @@ ngdexp = n_elements(gdexp)
 ;stop
 
 ; Use jobs_daemon to run on all the unique stacks.
+done = lonarr(ngdexp)
 ;for i=0,ngroups-1 do begin
 for i=0,ngdexp-1 do begin
 
@@ -172,7 +175,9 @@ for i=0,ngdexp-1 do begin
   dateobs = str[gdexp[i]].date_obs
   night = strmid(dateobs,0,4)+strmid(dateobs,5,2)+strmid(dateobs,8,2)
   baseroot = file_basename(base,'.fits.fz')
-  outfile = '/datalab/users/dnidever/decamcatalog/instcal/'+night+'/'+baseroot+'/'+baseroot+'_'+strtrim(1,2)+'.fits'
+  outfile = dldir+'users/dnidever/decamcatalog/instcal/'+night+'/'+baseroot+'/'+baseroot+'_'+strtrim(1,2)+'.fits'
+  ;outfile = '/datalab/users/dnidever/decamcatalog/instcal/'+night+'/'+baseroot+'/'+baseroot+'_'+strtrim(1,2)+'.fits'
+  if file_test(outfile) eq 1 or file_test(outfile+'.gz') eq 1 then done[i]=1
   if (file_test(outfile) eq 1 or file_test(outfile+'.gz') eq 1) and not keyword_set(redo) then begin
     print,outfile,' EXISTS and /redo NOT set'
     goto,BOMB
@@ -180,7 +185,8 @@ for i=0,ngdexp-1 do begin
 
   if file_test(fluxfile) eq 1 and file_test(wtfile) eq 1 and file_test(maskfile) eq 1 then begin
     push,cmd,'/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal.py '+fluxfile+' '+wtfile+' '+maskfile
-    push,dirs,'/data0/dnidever/decamcatalog/instcal/tmp/'
+    push,dirs,localdir+'dnidever/nsc/instcal/tmp/'
+    ;push,dirs,'/data0/dnidever/decamcatalog/instcal/tmp/'
     ; Run nsc_fullstack.py
    ;   retcode = subprocess.call(["nsc_fullstack.py",fluxfile,wtfile,maskfile])
     ;retcode = subprocess.call(["sex","flux.fits","-c","default.config"],stdout=sf,stderr=subprocess.STDOUT)
@@ -190,7 +196,7 @@ for i=0,ngdexp-1 do begin
   BOMB:
 endfor
 
-;stop
+stop
 
 ; Run PBS_DAEMON
 ; this works

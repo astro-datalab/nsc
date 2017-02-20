@@ -1,11 +1,12 @@
 pro nsc_instcal_combine_main
 
 ; Combine all of the data
-
-dir = '/datalab/users/dnidever/decamcatalog/instcal/'
+NSC_ROOTDIRS,dldir,mssdir,localdir
+dir = dldir+'users/dnidever/decamcatalog/instcal/'
+;dir = '/datalab/users/dnidever/decamcatalog/instcal/'
 ;nside = 256
 nside = 128
-nmulti = 10
+nmulti = 20
 radeg = 180.0d0 / !dpi
 
 ; Restore the calibration summary file
@@ -13,15 +14,18 @@ str0 = mrdfits(dir+'nsc_instcal_calibrate.fits',1,/silent)
 gd = where(str0.success eq 1,ngd)
 str = str0[gd]
 nstr = n_elements(str)
+str.expdir = strtrim(str.expdir,2)
+str.metafile = strtrim(str.metafile,2)
 str.file = strtrim(str.file,2)
 str.base = strtrim(str.base,2)
+str.filter = strtrim(str.filter,2)
 
 ; APPLY QA CUTS IN ZEROPOINT AND SEEING
 print,'APPLY QA CUTS IN ZEROPOINT AND SEEING'
 fwhmthresh = 3.0  ; arcsec
 filters = ['u','g','r','i','z','Y','VR']
 nfilters = n_elements(filters)
-zpthresh = [1.0,1.0,1.0,1.0,1.0,1.0,1.0]
+zpthresh = [2.0,2.0,2.0,2.0,2.0,2.0,2.0]
 badmask = lonarr(n_elements(str))
 for i=0,nfilters-1 do begin
   ind = where(str.filter eq filters[i],nind)
@@ -40,7 +44,8 @@ for i=0,nfilters-1 do begin
 endfor
 bdexp = where(str.fwhm gt fwhmthresh or badmask eq 1,nbdexp)
 print,'QA cuts remove ',strtrim(nbdexp,2),' exposures'
-REMOVE,bdexp,str]
+REMOVE,bdexp,str
+nstr = n_elements(str)
 
 ; Which healpix pixels have data
 print,'Finding the Healpix pixels with data'
@@ -117,16 +122,25 @@ MWRFITS,index,dir+'combine/healpix_list.fits',/silent
 ; Now run the combination program on each healpix pixel
 cmd = "nsc_instcal_combine,'"+strtrim(upix,2)+"',nside="+strtrim(nside,2)
 if keyword_set(redo) then cmd+=',/redo'
-dirs = strarr(nupix)+'/data0/dnidever/decamcatalog/tmp/'
+dirs = strarr(nupix)+localdir+'dnidever/nsc/instcal/tmp/'
+;dirs = strarr(nupix)+'/data0/dnidever/decamcatalog/tmp/'
 ;stop
-;PBS_DAEMON,cmd,dirs,/hyperthread,/idle,prefix='nsccmb',jobs=jobs,nmulti=nmulti,wait=10
+PBS_DAEMON,cmd,dirs,/hyperthread,/idle,prefix='nsccmb',jobs=jobs,nmulti=nmulti,wait=1
 
 ; Combine everything
-schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,ndet:0L,umag:0.0,uerr:0.0,ndetu:0,gmag:0.0,$
-              gerr:0.0,ndetg:0,rmag:0.0,rerr:0.0,ndetr:0,imag:99.9,ierr:0.0,ndeti:0,$
-              zmag:0.0,zerr:0.0,ndetz:0,ymag:0.0,yerr:0.0,ndety:0,vrmag:0.0,vrerr:0.0,$
-              ndetvr:0,x2:0.0,y2:0.0,xy:0.0,cxx:0.0,cxy:0.0,cyy:0.0,asemi:0.0,bsemi:0.0,theta:0.0,$
-              elongation:0.0,ellipticity:0.0,fwhm:0.0,flags:0,class_star:0.0,ebv:0.0}
+print,'' & print,'Combining all of the data into one file'
+schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,ndet:0L,$
+              ndetu:0,nphotu:0,umag:0.0,uerr:0.0,uasemi:0.0,ubsemi:0.0,utheta:0.0,$
+              ndetg:0,nphotg:0,gmag:0.0,gerr:0.0,gasemi:0.0,gbsemi:0.0,gtheta:0.0,$
+              ndetr:0,nphotr:0,rmag:0.0,rerr:0.0,rasemi:0.0,rbsemi:0.0,rtheta:0.0,$
+              ndeti:0,nphoti:0,imag:99.9,ierr:0.0,iasemi:0.0,ibsemi:0.0,itheta:0.0,$
+              ndetz:0,nphotz:0,zmag:0.0,zerr:0.0,zasemi:0.0,zbsemi:0.0,ztheta:0.0,$
+              ndety:0,nphoty:0,ymag:0.0,yerr:0.0,yasemi:0.0,ybsemi:0.0,ytheta:0.0,$
+              ndetvr:0,nphotvr:0,vrmag:0.0,vrerr:0.0,vrasemi:0.0,vrbsemi:0.0,vrtheta:0.0,$
+              x2:0.0,x2err:0.0,y2:0.0,y2err:0.0,xy:0.0,xyerr:0.0,cxx:0.0,cxxerr:0.0,$
+              cxy:0.0,cxyerr:0.0,cyy:0.0,cyyerr:0.0,asemi:0.0,asemierr:0.0,bsemi:0.0,$
+              bsemierr:0.0,theta:0.0,thetaerr:0.0,elongation:0.0,$
+              ellipticity:0.0,fwhm:0.0,flags:0,class_star:0.0,ebv:0.0}
 obj = replicate(schema_obj,1e7)
 nobj = n_elements(obj)
 cnt = 0LL

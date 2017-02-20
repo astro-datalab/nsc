@@ -1,7 +1,9 @@
 pro nsc_instcal_calibrate_main,redo=redo
 
 ; Main NOAO DECam source catalog
-dir = "/datalab/users/dnidever/decamcatalog/"
+NSC_ROOTDIRS,dldir,mssdir,localdir
+dir = dldir+"users/dnidever/decamcatalog/"
+;dir = "/datalab/users/dnidever/decamcatalog/"
 
 ; Log file
 ;------------------
@@ -32,7 +34,8 @@ print,strtrim(nexpdirs,2),' exposure directories'
 
 cmd = 'nsc_instcal_calibrate,"'+expdirs+'"'
 if keyword_set(redo) then cmd+=',/redo'
-dirs = strarr(nexpdirs)+'/data0/dnidever/decamcatalog/instcal/tmp/'
+dirs = strarr(nexpdirs)+localdir+'/dnidever/nsc/instcal/tmp/'
+;dirs = strarr(nexpdirs)+'/data0/dnidever/decamcatalog/instcal/tmp/'
 
 
 ; Run PBS_DAEMON

@@ -2,6 +2,8 @@ pro nsc_instcal_calibrate,expdir,redo=redo,stp=stp
 
 ; Calibrate catalogs for one exposure
 
+NSC_ROOTDIRS,dldir,mssdir,localdir
+
 ; Not enough inputs
 if n_elements(expdir) eq 0 then begin
   print,'Syntax - nsc_instcal_calibrate,expdir'
@@ -24,7 +26,7 @@ printlog,logf,'Calibrate catalogs for exposure ',base,' in ',expdir
 
 ; Check for output file
 if file_test(outfile) eq 1 and not keyword_set(redo) then begin
-  printlog,logf,outfile,' already exsits and /redo not set.'
+  printlog,logf,outfile,' already exists and /redo not set.'
   return
 endif
 
