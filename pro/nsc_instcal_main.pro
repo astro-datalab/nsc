@@ -3,7 +3,7 @@ pro nsc_instcal_main,redo=redo,nmulti=nmulti,maxjobs=maxjobs,silent=silent
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
 ;dir = "/datalab/users/dnidever/decamcatalog/"
-dir = dldir+'users/dnidever/nsc/'
+dir = dldir+'users/dnidever/nsc/instcal/logs/'
 if n_elements(maxjobs) eq 0 then maxjobs=4e4
 if n_elements(nmulti) eq 0 then nmulti=30
 
