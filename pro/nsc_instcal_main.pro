@@ -116,6 +116,7 @@ print, "Running SExtractor on the DECam InstCal Images"
 ;MWRFITS,str,dir+'decam_instcal_list.fits',/create
 str = MRDFITS(dir+'decam_instcal_list.fits',1)
 nstr = n_elements(str)
+print,strtrim(nstr,2),' DECam InstCal images'
 
 ;stop
 
@@ -171,11 +172,9 @@ exptime = str.exposure
 gdexp = lindgen(nstr)
 ngdexp = nstr
 
-;stop
-
-; Use jobs_daemon to run on all the unique stacks.
+; Check the exposures
+print,'Checking on the exposures'
 expstr = replicate({fluxfile:'',wtfile:'',maskfile:'',allexist:0,outfile:'',done:0,locked:0,torun:0,cmd:'',cmddir:'',submitted:0},ngdexp)
-;for i=0,ngroups-1 do begin
 for i=0,ngdexp-1 do begin
 
   fluxfile = strtrim(str[gdexp[i]].fluxfile,2)
@@ -194,35 +193,11 @@ for i=0,ngdexp-1 do begin
   expstr[i].wtfile = wtfile
   expstr[i].maskfile = maskfile
 
-
-  ;; No wtfile in the same directory
-  ;if file_test(wtfile) eq 0  then begin
-  ;  MATCH,mss.base,file_basename(wtfile),ind1,ind2,/sort,count=nmatch
-  ;  if nmatch eq 0 then begin
-  ;    print,'Weight file missing for ',fluxfile
-  ;    goto,BOMB
-  ;  endif
-  ;  wtfile = mss[ind1[0]].filename
-  ;endif
-  ;
-  ;; No maskfile in the same directory
-  ;if file_test(maskfile) eq 0  then begin
-  ;  MATCH,mss.base,file_basename(maskfile),ind1,ind2,/sort,count=nmatch
-  ;  if nmatch eq 0 then begin
-  ;    print,'Mask file missing for ',fluxfile
-  ;    goto,BOMB
-  ;  endif
-  ;  maskfile = mss[ind1[0]].filename
-  ;endif
-
   ; Check if the output already exists.
-  ;fhead = headfits(fluxfile,exten=0)
-  ;dateobs = sxpar(fhead,'DATE-OBS')
   dateobs = str[gdexp[i]].date_obs
   night = strmid(dateobs,0,4)+strmid(dateobs,5,2)+strmid(dateobs,8,2)
   baseroot = file_basename(base,'.fits.fz')
   outfile = dldir+'users/dnidever/decamcatalog/instcal/'+night+'/'+baseroot+'/'+baseroot+'_'+strtrim(1,2)+'.fits'
-  ;outfile = '/datalab/users/dnidever/decamcatalog/instcal/'+night+'/'+baseroot+'/'+baseroot+'_'+strtrim(1,2)+'.fits'
   expstr[i].outfile = outfile
 
   ; Do all three files exist?
@@ -248,7 +223,6 @@ for i=0,ngdexp-1 do begin
     expstr[i].cmd = '/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal.py '+fluxfile+' '+wtfile+' '+maskfile
     expstr[i].cmddir = localdir+'dnidever/nsc/instcal/tmp/'
     expstr[i].torun = 0
-    ;push,dirs,'/data0/dnidever/decamcatalog/instcal/tmp/'
   ; Lock file exists
   endif else begin
     expstr[i].locked = 1
