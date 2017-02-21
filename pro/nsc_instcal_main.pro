@@ -1,10 +1,11 @@
-pro nsc_instcal_main,redo=redo,maxjobs=maxjobs
+pro nsc_instcal_main,redo=redo,nmulti=nmulti,maxjobs=maxjobs,silent=silent
 
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
 ;dir = "/datalab/users/dnidever/decamcatalog/"
 dir = dldir+'users/dnidever/nsc/'
 if n_elements(maxjobs) eq 0 then maxjobs=4e4
+if n_elements(nmulti) eq 0 then nmulti=30
 
 ; Log file
 ;------------------
@@ -139,7 +140,7 @@ ngdexp = n_elements(gdexp)
 ;stop
 
 ; Use jobs_daemon to run on all the unique stacks.
-done = lonarr(ngdexp)
+expstr = replicate({fluxfile:'',wtfile:'',maskfile:'',allexist:0,outfile:'',done:0,locked:0,torun:0,cmd:'',cmddir:'',submitted:0},ngdexp)
 ;for i=0,ngroups-1 do begin
 for i=0,ngdexp-1 do begin
 
@@ -155,6 +156,10 @@ for i=0,ngdexp-1 do begin
   fluxfile = mssdir+strmid(fluxfile,10)
   wtfile = mssdir+strmid(wtfile,10)
   maskfile = mssdir+strmid(maskfile,10)
+  expstr[i].fluxfile = fluxfile
+  expstr[i].wtfile = wtfile
+  expstr[i].maskfile = maskfile
+
 
   ;; No wtfile in the same directory
   ;if file_test(wtfile) eq 0  then begin
@@ -184,42 +189,64 @@ for i=0,ngdexp-1 do begin
   baseroot = file_basename(base,'.fits.fz')
   outfile = dldir+'users/dnidever/decamcatalog/instcal/'+night+'/'+baseroot+'/'+baseroot+'_'+strtrim(1,2)+'.fits'
   ;outfile = '/datalab/users/dnidever/decamcatalog/instcal/'+night+'/'+baseroot+'/'+baseroot+'_'+strtrim(1,2)+'.fits'
-  if file_test(outfile) eq 1 or file_test(outfile+'.gz') eq 1 then done[i]=1
-  if (file_test(outfile) eq 1 or file_test(outfile+'.gz') eq 1) and not keyword_set(redo) then begin
-    print,outfile,' EXISTS and /redo NOT set'
+  expstr[i].outfile = outfile
+
+  ; Do all three files exist?
+  if file_test(fluxfile) eq 1 and file_test(wtfile) eq 1 and file_test(maskfile) eq 1 then expstr[i].allexist=1
+  ; Does the output file exist
+  if file_test(outfile) eq 1 or file_test(outfile+'.gz') eq 1 then expstr[i].done = 1
+
+  ; Not all three files exist
+  if expstr[i].allexist eq 0 then begin
+    if not keyword_set(silent) then print,'Not all three flux/wt/mask files found for ',fluxfile
     goto,BOMB
   endif
 
-  if file_test(fluxfile) eq 1 and file_test(wtfile) eq 1 and file_test(maskfile) eq 1 then begin
-    lock = djs_lockfile(outfile)
-    ; No lock file
-    if lock eq 1 then begin
-      push,cmd,'/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal.py '+fluxfile+' '+wtfile+' '+maskfile
-      push,dirs,localdir+'dnidever/nsc/instcal/tmp/'
-      ;push,dirs,'/data0/dnidever/decamcatalog/instcal/tmp/'
-    ; Lock file exists
-    endif else begin
-      print,'Lock file exists ',outfile+'.lock'
-    endelse
+  ; Already done
+  if (expstr[i].done eq 1) and not keyword_set(redo) then begin
+    if not keyword_set(silent) then print,outfile,' EXISTS and /redo NOT set'
+    goto,BOMB
+  endif
+
+  lock = djs_lockfile(outfile)
+  ; No lock file
+  if lock eq 1 then begin
+    expstr[i].cmd = '/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal.py '+fluxfile+' '+wtfile+' '+maskfile
+    expstr[i].cmddir = localdir+'dnidever/nsc/instcal/tmp/'
+    expstr[i].torun = 0
+    ;push,dirs,'/data0/dnidever/decamcatalog/instcal/tmp/'
+  ; Lock file exists
   endif else begin
-    print,'Not all three flux/wt/mask files found for ',fluxfile
+    expstr[i].locked = 1
+    if not keyword_set(silent) then print,'Lock file exists ',outfile+'.lock'
   endelse
   BOMB:
 endfor
 
-; More than MAXJOBS jobs to run
-if n_elements(cmd) gt maxjobs then begin
-  print,'More jobs than MAXJOBS.  Cutting down to ',strtrim(maxjobs,2),' jobs'
-  cmd = cmd[0:maxjobs-1]
-  dirs = dirs[0:maxjobs-1]
+torun = where(expstr.torun eq 1,ntorun)
+if ntorun eq 0 then begin
+  print,'No exposures to process.'
+  return
 endif
+
+; Pick the jobs to run
+; MAXJOBS
+if ntorun gt maxjobs then begin
+  print,'More jobs than MAXJOBS.  Cutting down to ',strtrim(maxjobs,2),' jobs'
+  expstr[torun[0:maxjobs-1]].submitted = 1
+endif else expstr[torun].submitted = 1
+tosubmit = where(expstr.submitted eq 1,ntosubmit)
+cmd = expstr[tosubmit].cmd
+cmddir = expstr[tosubmit].cmddir
 
 stop
 
 ; Run PBS_DAEMON
-; this works
-PBS_DAEMON,cmd,dirs,/hyperthread,prefix='nsc',wait=10,nmulti=30
-;PBS_DAEMON,cmd,dirs,/hyperthread,prefix='nsc',wait=10,nmulti=20
+PBS_DAEMON,cmd,cmddir,/hyperthread,prefix='nsc',wait=10,nmulti=nmulti
+
+; Unlocking files
+print,'Unlocking processed files'
+for i=0,ntosubmit-1 do djs_unlockfile,expstr[tosubmit[i]].outfile
 
 ; End logfile
 ;------------
