@@ -119,13 +119,33 @@ MWRFITS,index,dir+'combine/healpix_list.fits',/silent
 ;  ;MWRFITS,healstr1,dir+'combine/lists/'+strtrim(upix[i],2)+'.fits',/create
 ;endfor
 
-; Now run the combination program on each healpix pixel
+; Make the commands
 cmd = "nsc_instcal_combine,'"+strtrim(upix,2)+"',nside="+strtrim(nside,2)
 if keyword_set(redo) then cmd+=',/redo'
-dirs = strarr(nupix)+localdir+'dnidever/nsc/instcal/tmp/'
+cmddir = strarr(nupix)+localdir+'dnidever/nsc/instcal/tmp/'
 ;dirs = strarr(nupix)+'/data0/dnidever/decamcatalog/tmp/'
-;stop
-PBS_DAEMON,cmd,dirs,/hyperthread,/idle,prefix='nsccmb',jobs=jobs,nmulti=nmulti,wait=1
+
+; Check if the output file exists
+if not keyword_set(redo) then begin
+  outfiles = dir+'combine/'+strtrim(upix,2)+'.fits'
+  test = file_test(outfiles)
+  gd = where(test eq 0,ngd,comp=bd,ncomp=nbd)
+  if nbd gt 0 then begin
+    print,strtrim(nbd,2),' files already exist and /redo not set.'
+  endif 
+  if ngd eq 0 then begin
+    print,'No files to process'
+    return
+  endif
+  print,strtrim(ngd,2),' files left to process'
+  cmd = cmd[gd]
+  cmddir = cmddir[gd]
+endif
+
+stop
+
+; Now run the combination program on each healpix pixel
+PBS_DAEMON,cmd,cmddir,/hyperthread,/idle,prefix='nsccmb',jobs=jobs,nmulti=nmulti,wait=1
 
 ; Combine everything
 print,'' & print,'Combining all of the data into one file'
