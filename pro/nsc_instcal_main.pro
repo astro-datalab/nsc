@@ -1,9 +1,10 @@
-pro nsc_instcal_main,redo=redo
+pro nsc_instcal_main,redo=redo,maxjobs=maxjobs
 
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
 ;dir = "/datalab/users/dnidever/decamcatalog/"
 dir = dldir+'users/dnidever/nsc/'
+if n_elements(maxjobs) eq 0 then maxjobs=4e4
 
 ; Log file
 ;------------------
@@ -149,6 +150,12 @@ for i=0,ngdexp-1 do begin
   ;maskfile = repstr(fluxfile,'ooi','ood')
   base = file_basename(fluxfile)
 
+  ; Change the root directory name
+  ;  /net/mss1/blah/blah/
+  fluxfile = mssdir+strmid(fluxfile,10)
+  wtfile = mssdir+strmid(wtfile,10)
+  maskfile = mssdir+strmid(maskfile,10)
+
   ;; No wtfile in the same directory
   ;if file_test(wtfile) eq 0  then begin
   ;  MATCH,mss.base,file_basename(wtfile),ind1,ind2,/sort,count=nmatch
@@ -184,17 +191,28 @@ for i=0,ngdexp-1 do begin
   endif
 
   if file_test(fluxfile) eq 1 and file_test(wtfile) eq 1 and file_test(maskfile) eq 1 then begin
-    push,cmd,'/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal.py '+fluxfile+' '+wtfile+' '+maskfile
-    push,dirs,localdir+'dnidever/nsc/instcal/tmp/'
-    ;push,dirs,'/data0/dnidever/decamcatalog/instcal/tmp/'
-    ; Run nsc_fullstack.py
-   ;   retcode = subprocess.call(["nsc_fullstack.py",fluxfile,wtfile,maskfile])
-    ;retcode = subprocess.call(["sex","flux.fits","-c","default.config"],stdout=sf,stderr=subprocess.STDOUT)
+    lock = djs_lockfile(outfile)
+    ; No lock file
+    if lock eq 1 then begin
+      push,cmd,'/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal.py '+fluxfile+' '+wtfile+' '+maskfile
+      push,dirs,localdir+'dnidever/nsc/instcal/tmp/'
+      ;push,dirs,'/data0/dnidever/decamcatalog/instcal/tmp/'
+    ; Lock file exists
+    endif else begin
+      print,'Lock file exists ',outfile+'.lock'
+    endelse
   endif else begin
     print,'Not all three flux/wt/mask files found for ',fluxfile
   endelse
   BOMB:
 endfor
+
+; More than MAXJOBS jobs to run
+if n_elements(cmd) gt maxjobs then begin
+  print,'More jobs than MAXJOBS.  Cutting down to ',strtrim(maxjobs,2),' jobs'
+  cmd = cmd[0:maxjobs-1]
+  dirs = dirs[0:maxjobs-1]
+endif
 
 stop
 
