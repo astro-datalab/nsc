@@ -176,6 +176,7 @@ ngdexp = nstr
 print,'Checking on the exposures'
 expstr = replicate({fluxfile:'',wtfile:'',maskfile:'',allexist:0,outfile:'',done:0,locked:0,torun:0,cmd:'',cmddir:'',submitted:0},ngdexp)
 for i=0,ngdexp-1 do begin
+  if i mod 5000 eq 0 then print,i
 
   fluxfile = strtrim(str[gdexp[i]].fluxfile,2)
   wtfile = strtrim(str[gdexp[i]].wtfile,2)
@@ -217,15 +218,23 @@ for i=0,ngdexp-1 do begin
     goto,BOMB
   endif
 
-  lock = djs_lockfile(outfile)
+  ;lock = djs_lockfile(outfile)
+  lockfile = outfile+'.lock'
+  testlock = file_test(lockfile)
+  
   ; No lock file
-  if lock eq 1 or keyword_set(unlock) then begin
+  ;if lock eq 1 or keyword_set(unlock) then begin
+  if testlock eq 0 or keyword_set(unlock) then begin
+    ;dum = djs_lockfile(outfile)  ; this is slow
+    if file_test(file_dirname(outfile),/directory) eq 0 then file_mkdir,file_dirname(outfile)  ; make directory
+    if testlock eq 0 then touchzero,outfile+'.lock'  ; this is fast
     expstr[i].cmd = '/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal.py '+fluxfile+' '+wtfile+' '+maskfile
     expstr[i].cmddir = localdir+'dnidever/nsc/instcal/tmp/'
-    expstr[i].torun = 0
+    expstr[i].torun = 1
   ; Lock file exists
   endif else begin
     expstr[i].locked = 1
+    expstr[i].torun = 0
     if not keyword_set(silent) then print,'Lock file exists ',outfile+'.lock'
   endelse
   BOMB:
