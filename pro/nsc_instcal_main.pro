@@ -1,11 +1,40 @@
-pro nsc_instcal_main,redo=redo,nmulti=nmulti,maxjobs=maxjobs,silent=silent
+;+
+;
+; NSC_INSTCAL_MAIN
+;
+; This runs SExtractor on the DECam InstCal images.
+; This is a wrapper around nsc_instcal.py which runs
+; on one individual exposure.
+;
+; INPUTS:
+;  =redo     Rerun on exposures that were previously processed.
+;  =nmulti   The number of simultaneously jobs to run. Default is 30.
+;  =maxjobs  The maximum number of exposures to attempt to process.
+;              The default is 40,000.
+;  /silent   Don't print much to the screen.
+;  /unlock   Ignore the lock the files.
+;
+; OUTPUTS:
+;  A log "journal" file is put in ROOTDIR+users/dnidever/nsc/instcal/logs/
+;  as well as a structure with information on the jobs that were run.
+;  The individual catalogs are put in ROOTDIR+users/dnidever/nsc/instcal/NIGHT/EXPOSURENAME/.
+;
+; USAGE:
+;  IDL>nsc_instcal_main
+;
+; By D.Nidever  Feb 2017
+;-
+
+pro nsc_instcal_main,redo=redo,nmulti=nmulti,maxjobs=maxjobs,silent=silent,unlock=unlock
 
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
 ;dir = "/datalab/users/dnidever/decamcatalog/"
-dir = dldir+'users/dnidever/nsc/instcal/logs/'
+dir = dldir+'users/dnidever/nsc/instcal/'
 if n_elements(maxjobs) eq 0 then maxjobs=4e4
 if n_elements(nmulti) eq 0 then nmulti=30
+
+t0 = systime(1)
 
 ; Log file
 ;------------------
@@ -23,7 +52,8 @@ sminute = strtrim(minute,2)
 if minute lt 10 then sminute='0'+sminute
 ssecond = strtrim(round(second),2)
 if second lt 10 then ssecond='0'+ssecond
-logfile = dir+'nsc_instcal_main.'+smonth+sday+syear+shour+sminute+ssecond+'.log'
+logtime = smonth+sday+syear+shour+sminute+ssecond
+logfile = dir+'logs/nsc_instcal_main.'+logtime+'.log'
 JOURNAL,logfile
 
 print, "Running SExtractor on the DECam InstCal Images"
@@ -85,6 +115,7 @@ print, "Running SExtractor on the DECam InstCal Images"
 ;str = str[gd3]
 ;MWRFITS,str,dir+'decam_instcal_list.fits',/create
 str = MRDFITS(dir+'decam_instcal_list.fits',1)
+nstr = n_elements(str)
 
 ;stop
 
@@ -114,28 +145,31 @@ exptime = str.exposure
 ;rmonth long(strmid(str.release_date,5,2))
 ;public = (ryear lt 2017 or (ryear eq 2017 and rmonth le 2))
 
-; Stripe82, -60<RA<60 and -1.26 < DEC < 1.26
-gdexp82 = where((str.ra lt 61 or str.ra gt 259) and (str.dec ge -1.5 and str.dec le 1.5) and $
-                exptime ge 30,ngdexp82)
-print,strtrim(ngdexp82,2),' Stripe82 exposures'
+;; Stripe82, -60<RA<60 and -1.26 < DEC < 1.26
+;;gdexp82 = where((str.ra lt 61 or str.ra gt 259) and (str.dec ge -1.5 and str.dec le 1.5) and $
+;                exptime ge 30,ngdexp82)
+;print,strtrim(ngdexp82,2),' Stripe82 exposures';
+;
+;; COSMOS field
+;;; RA +150.11916667 (10:00:28.600)
+;; DEC +2.20583333 (+02:12:21.00)
+;; covers a 2 square degree region around this center,
+;gdexpcos = where((str.ra ge 148 and str.ra le 152) and (str.dec ge 0.0 and str.dec le 4.0) and $
+;                 exptime ge 30,ngdexpcos)
+;print,strtrim(ngdexpcos,2),' COSMOS exposures'
+;
+;; LAF region
+;gdexplaf = where(mlon ge 40 and mlon le 80 and mlat ge -50 and mlat le 30 and $
+;                 (filt eq 'g' or filt eq 'i') and exptime gt 30,ngdexplaf)
+;;              (filt eq 'g' or filt eq 'i') and (public eq 1) and str.exposure gt 50,ngdgrp)
+;print,strtrim(ngdexplaf,2),' LAF exposures'
+;
+;; Combine them
+;gdexp = [gdexp82, gdexpcos, gdexplaf]
+;ngdexp = n_elements(gdexp)
 
-; COSMOS field
-; RA +150.11916667 (10:00:28.600)
-; DEC +2.20583333 (+02:12:21.00)
-; covers a 2 square degree region around this center,
-gdexpcos = where((str.ra ge 148 and str.ra le 152) and (str.dec ge 0.0 and str.dec le 4.0) and $
-                 exptime ge 30,ngdexpcos)
-print,strtrim(ngdexpcos,2),' COSMOS exposures'
-
-; LAF region
-gdexplaf = where(mlon ge 40 and mlon le 80 and mlat ge -50 and mlat le 30 and $
-                 (filt eq 'g' or filt eq 'i') and exptime gt 30,ngdexplaf)
-;              (filt eq 'g' or filt eq 'i') and (public eq 1) and str.exposure gt 50,ngdgrp)
-print,strtrim(ngdexplaf,2),' LAF exposures'
-
-; Combine them
-gdexp = [gdexp82, gdexpcos, gdexplaf]
-ngdexp = n_elements(gdexp)
+gdexp = lindgen(nstr)
+ngdexp = nstr
 
 ;stop
 
@@ -210,7 +244,7 @@ for i=0,ngdexp-1 do begin
 
   lock = djs_lockfile(outfile)
   ; No lock file
-  if lock eq 1 then begin
+  if lock eq 1 or keyword_set(unlock) then begin
     expstr[i].cmd = '/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal.py '+fluxfile+' '+wtfile+' '+maskfile
     expstr[i].cmddir = localdir+'dnidever/nsc/instcal/tmp/'
     expstr[i].torun = 0
@@ -239,14 +273,20 @@ tosubmit = where(expstr.submitted eq 1,ntosubmit)
 cmd = expstr[tosubmit].cmd
 cmddir = expstr[tosubmit].cmddir
 
-stop
+; Saving the structure of jobs to run
+runfile = dir+'logs/nsc_instcal_main.'+logtime+'_run.fits'
+print,'Writing running information to ',runfile
+MWRFITS,expstr,runfile,/create
 
 ; Run PBS_DAEMON
+a = '' & read,a,prompt='Press RETURN to start'
 PBS_DAEMON,cmd,cmddir,/hyperthread,prefix='nsc',wait=10,nmulti=nmulti
 
 ; Unlocking files
 print,'Unlocking processed files'
 for i=0,ntosubmit-1 do djs_unlockfile,expstr[tosubmit[i]].outfile
+
+print,'dt=',stringize(systime(1)-t0,ndec=2),' sec'
 
 ; End logfile
 ;------------
