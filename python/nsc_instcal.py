@@ -21,14 +21,26 @@ import re
 import subprocess
 import glob
 import logging
+import socket
 
 if __name__ == "__main__":
 
 
 # Run SExtractor on one FULL DECam stacked image
 
-    dir = "/datalab/users/dnidever/decamcatalog/instcal/"
-    tmproot = "/data0/dnidever/decamcatalog/instcal/tmp/"
+    hostname = socket.gethostname()
+    host = hostname.split('.')[0]
+
+    #dir = "/datalab/users/dnidever/decamcatalog/instcal/"
+    #tmproot = "/data0/dnidever/decamcatalog/instcal/tmp/"
+    # on thing/hulk use
+    if (host == "thing") | (host == "hulk"):
+        dir = "/dl1/users/dnidever/nsc/instcal/"
+        tmpdir = "/d0/dnidever/nsc/instcal/tmp/"
+    # on gp09 use
+    if (host == "gp09"):
+        dir = "/net/dl1/users/dnidever/nsc/instcal/"
+        tmpdir = "/data0/dnidever/nsc/instcal/tmp/"
 
     t0 = time.time()
 
@@ -157,11 +169,16 @@ if __name__ == "__main__":
 
 
     # Make final output directory
-    if not os.path.exists("/datalab/users/dnidever/decamcatalog/instcal/"+night):
-        os.mkdir("/datalab/users/dnidever/decamcatalog/instcal/"+night)
-    if not os.path.exists("/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base):
-        os.mkdir("/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base)
-        rootLogger.info("  Making output directory: /datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base)
+    if not os.path.exists(dir+night):
+        os.mkdir(dir+night)
+    if not os.path.exists(dir+night+"/"+base):
+        os.mkdir(dir+night+"/"+base)
+        rootLogger.info("  Making output directory: "+dir+night+"/"+base)
+    #if not os.path.exists("/datalab/users/dnidever/decamcatalog/instcal/"+night):
+    #    os.mkdir("/datalab/users/dnidever/decamcatalog/instcal/"+night)
+    #if not os.path.exists("/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base):
+    #    os.mkdir("/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base)
+    #    rootLogger.info("  Making output directory: /datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base)
 
     # LOOP through the HDUs/chips
     for i in xrange(1,nhdu):
@@ -217,7 +234,8 @@ if __name__ == "__main__":
 
         # fix gain, rdnoise in header
         # Read in the SExtractor config file and change gain
-        f = open('/datalab/users/dnidever/decamcatalog/instcal/default.config', 'r') # 'r' = read
+        f = open(dir+'default.config', 'r') # 'r' = read
+        #f = open('/datalab/users/dnidever/decamcatalog/instcal/default.config', 'r') # 'r' = read
         lines = f.readlines()
         f.close()
 
@@ -299,7 +317,8 @@ if __name__ == "__main__":
         # 3d) Load the catalog (and logfile) and write final output file
         # Move the file to final locaation
         if os.path.exists("cat.fits"):
-            outcatfile = "/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".fits"
+            outcatfile = dir+night+"/"+base+"/"+base+"_"+str(ccdnum)+".fits"
+            #outcatfile = "/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".fits"
             # Clobber if it already exists
             if os.path.exists(outcatfile):
                 os.remove(outcatfile)
@@ -323,7 +342,8 @@ if __name__ == "__main__":
     # Move the log file
     #os.rename(logfile,"/datalab/users/dnidever/decamcatalog/"+night+"/"+base+"/"+base+".log")
     # The above rename gave an error on gp09, OSError: [Errno 18] Invalid cross-device link
-    shutil.move(logfile,"/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base+"/"+base+".log")
+    shutil.move(logfile,dir+night+"/"+base+"/"+base+".log")
+    #shutil.move(logfile,"/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base+"/"+base+".log")
 
     # Delete temporary files and directory
     #rootLogger.info("Deleting all temporary files")
