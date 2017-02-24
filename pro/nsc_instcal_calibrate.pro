@@ -54,6 +54,7 @@ cat1 = MRDFITS(catfiles[0],2,/silent)
 schema = cat1[0]
 STRUCT_ASSIGN,{dum:''},schema   ; blank everything out
 add_tag,schema,'CCDNUM',0L,schema
+add_tag,schema,'EBV',0.0,schema
 add_tag,schema,'RA',0.0d0,schema
 add_tag,schema,'DEC',0.0d0,schema
 add_tag,schema,'CMAG',99.99,schema
@@ -253,6 +254,7 @@ print,'FWHM = ',stringize(medfwhm,ndec=2),' arcsec'
 ; Get reddening
 glactc,cat.ra,cat.dec,2000.0,glon,glat,1,/deg
 ebv = dust_getval(glon,glat,/noloop,/interp)
+cat.ebv = ebv
 
 ; Step 4. Photometric calibration
 ;--------------------------------
@@ -296,9 +298,12 @@ CASE filter of
   galex1 = galex[index[gd,2]]
   ; Make quality and error cuts
   gmagerr = 2.5*alog10(1.0+gaia1.e__fg_/gaia1._fg_)
+  ; (G-J)o = G-J-1.12*EBV
+  col = gaia._gmag_ - tmass.jmag - 1.12*cat.ebv
   gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05 and finite(galex1.nuv) eq 1,ngdcat)
+                tmass1.e_jmag lt 0.05 and finite(galex1.nuv) eq 1 and col ge 0.7 and col le 1.1,ngdcat)
+  ; could also make cuts on GMAG, JMAG, NUVERR
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     return
@@ -307,16 +312,23 @@ CASE filter of
   gaia2 = gaia1[gdcat]
   tmass2 = tmass1[gdcat]
   galex2 = galex1[gdcat]
+  gmagerr2 = gmagerr[gdcat]
+  col2 = col[gdcat]
   ; Fit zpterm using color-color relation
   mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
-  err = sqrt(cat2.magerr_auto^2 + galex2.e_nuv^2)
-  diff = galex2.nuv-mag
-  col = gaia2._gmag_ - tmass2.jmag
+  err = sqrt(cat2.magerr_auto^2 + galex2.e_nuv^2 + gmagerr2^2)
+  ;diff = galex2.nuv-mag
+  ; see nsc_color_relations_smashuband.pro
+  ; u = 0.30874*NUV + 0.6955*G + 0.424*EBV + 0.0930  ; for 0.7<GJ0<1.1
+  model_mag = 0.30874*galex2.nuv + 0.6955*gaia2._gmag_ + 0.424*cat2.ebv + 0.0930
+  diff = model_mag - mag
+  ;col = gaia2._gmag_ - tmass2.jmag
   ; Make a sigma cut
   med = median(diff)
   sig = mad(diff)
   gd = where(abs(diff-med) lt 3*sig,ngd)
-  zpterm = dln_poly_fit(col[gd],diff[gd],1,measure_errors=err[gd],sigma=zptermerr,yerror=yerror,status=status,yfit=yfit1,/bootstrap)
+  zpterm = dln_poly_fit(col2[gd],diff[gd],0,measure_errors=err[gd],sigma=zptermerr,yerror=yerror,status=status,yfit=yfit1,/bootstrap)
+  ;zpterm = dln_poly_fit(col[gd],diff[gd],1,measure_errors=err[gd],sigma=zptermerr,yerror=yerror,status=status,yfit=yfit1,/bootstrap)
   zpterm = zpterm[0] & zptermerr=zptermerr[0]
   ; Save in exposure structure
   expstr.zpterm = zpterm
@@ -352,9 +364,10 @@ end
   apass1 = apass[index[gd,2]]
   ; Make quality and error cuts
   gmagerr = 2.5*alog10(1.0+gaia1.e__fg_/gaia1._fg_)
+  col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
   gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05 and apass1.e_g_mag lt 0.1,ngdcat)
+                tmass1.e_jmag lt 0.05 and apass1.e_g_mag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     return
@@ -363,10 +376,16 @@ end
   gaia2 = gaia1[gdcat]
   tmass2 = tmass1[gdcat]
   apass2 = apass1[gdcat]
-  ; Take a robust mean relative to APASS GMAG
+  gmagerr2 = gmagerr[gdcat]
+  col2 = col[gdcat]
+  ; Take a robust mean relative to model GMAG
   mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
-  err = sqrt(cat2.magerr_auto^2 + apass2.e_g_mag^2)
-  diff = apass2.g_mag-mag
+  err = sqrt(cat2.magerr_auto^2 + apass2.e_g_mag^2)  ; leave off JK error for now
+  ; see nsc_color_relations_stripe82_superposition.pro
+  ; g = APASS_G - 0.1433*JK0 - 0.05*EBV - 0.0138
+  model_mag = apass2.g_mag - 0.1433*col2 - 0.05*cat2.ebv - 0.0138
+  diff = model_mag - mag
+  ;diff = apass2.g_mag-mag
   ; Make a sigma cut
   med = median(diff)
   sig = mad(diff)
@@ -408,6 +427,7 @@ end
   apass1 = apass[index[gd,2]]
   ; Make quality and error cuts
   gmagerr = 2.5*alog10(1.0+gaia1.e__fg_/gaia1._fg_)
+  col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
   gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
                 tmass1.e_jmag lt 0.05 and apass1.e_r_mag lt 0.1,ngdcat)
@@ -419,10 +439,14 @@ end
   gaia2 = gaia1[gdcat]
   tmass2 = tmass1[gdcat]
   apass2 = apass1[gdcat]
-  ; Take a robust mean relative to APASS GMAG
+  ; Take a robust mean relative to model RMAG
   mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
-  err = sqrt(cat2.magerr_auto^2 + apass2.e_r_mag^2)
-  diff = apass2.r_mag-mag
+  err = sqrt(cat2.magerr_auto^2 + apass2.e_r_mag^2)  ; leave off JK error for now
+  ; see nsc_color_relations_stripe82_superposition.pro
+  ; r = APASS_r + 0.00740*JK0 + 0.0*EBV + 0.000528
+  model_mag = apass2.r_mag + 0.00740*col2 + 0.000528
+  diff = model_mag - mag
+  ;diff = apass2.r_mag-mag
   ; Make a sigma cut
   med = median(diff)
   sig = mad(diff)
@@ -461,9 +485,10 @@ end
   tmass1 = tmass[index[gd,1]]
   ; Make quality and error cuts
   gmagerr = 2.5*alog10(1.0+gaia1.e__fg_/gaia1._fg_)
+  col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
   gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05,ngdcat)
+                tmass1.e_jmag lt 0.05 and col ge 0.3 and col le 0.7,ngdcat)
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     return
@@ -471,15 +496,15 @@ end
   cat2 = cat1[gdcat]
   gaia2 = gaia1[gdcat]
   gmagerr2 = gmagerr[gdcat]
+  col2 = col[gdcat]
   tmass2 = tmass1[gdcat]
-  ; Fit zpterm using color-color relations
-  coef =  [-0.238064, 0.311685] ; G-i vs. G-J
+  ; Take a robust mean relative to model IMAG
   mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
-  err = sqrt(cat2.magerr_auto^2 + gmagerr2^2)
-  col = gaia2._gmag_ - tmass2.jmag
-  diff = gaia2._gmag_ - mag
-  ; Subtract the known trend
-  diff -= poly(col,coef)
+  err = sqrt(cat2.magerr_auto^2 + gmagerr2^2)  ; leave off the JK error for now
+  ; see nsc_color_relations_stripe82_superposition.pro
+  ; i = G - 0.4587*JK0 - 0.276*EBV + 0.0967721
+  model_mag = gaia2._gmag_ - 0.4587*col2 - 0.276*cat2.ebv + 0.0967721
+  diff = model_mag - mag
   ; Make a sigma cut
   med = median(diff)
   sig = mad(diff)
@@ -518,9 +543,10 @@ end
   tmass1 = tmass[index[gd,1]]
   ; Make quality and error cuts
   gmagerr = 2.5*alog10(1.0+gaia1.e__fg_/gaia1._fg_)
+  col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
   gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05,ngdcat)
+                tmass1.e_jmag lt 0.05 and col ge 0.3 and col le 0.7,ngdcat)
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     return
@@ -528,15 +554,15 @@ end
   cat2 = cat1[gdcat]
   gaia2 = gaia1[gdcat]
   gmagerr2 = gmagerr[gdcat]
+  col2 = col[gdcat]
   tmass2 = tmass1[gdcat]
-  ; Fit zpterm using color-color relations
-  coef = [ -0.534314, 0.644711 ] ; G-z vs. G-J
+  ; Take a robust mean relative to model ZMAG
   mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
-  err = sqrt(cat2.magerr_auto^2 + gmagerr2^2)
-  col = gaia2._gmag_ - tmass2.jmag
-  diff = gaia2._gmag_ - mag
-  ; Subtract the known trend
-  diff -= poly(col,coef)
+  err = sqrt(cat2.magerr_auto^2 + tmass2.jerr^2)
+  ; see nsc_color_relations_stripe82_superposition.pro
+  ; z = J + 0.765720*JK0 + 0.40*EBV +  0.605658
+  model_mag = tmass2.jmag + 0.765720*col2 + 0.40*cat2.ebv +  0.605658
+  diff = model_mag - mag
   ; Make a sigma cut
   med = median(diff)
   sig = mad(diff)
@@ -575,9 +601,10 @@ end
   tmass1 = tmass[index[gd,1]]
   ; Make quality and error cuts
   gmagerr = 2.5*alog10(1.0+gaia1.e__fg_/gaia1._fg_)
+  col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
   gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05,ngdcat)
+                tmass1.e_jmag lt 0.05 and col ge 0.3 and col le 0.7,ngdcat)
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     return
@@ -585,12 +612,15 @@ end
   cat2 = cat1[gdcat]
   gaia2 = gaia1[gdcat]
   gmagerr2 = gmagerr[gdcat]
+  col2 = col[gdcat]
   tmass2 = tmass1[gdcat]
-  ; Take a robust mean relative to 2MASS JMAG
-; NEED THE COLOR TERM!!!
-  mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
+  ; Take a robust mean relative to model YMAG
+  mag = cat2.mag_auto + 2.5*alog10(exptime) ; correct for the exposure time
   err = sqrt(cat2.magerr_auto^2 + tmass2.e_jmag^2)
-  diff = tmass2.jmag - mag
+  ; see nsc_color_relations_stripe82_superposition.pro
+  ; Y = J + 0.54482*JK0 + 0.20*EBV + 0.663380
+  model_mag = tmass2.jmag + 0.54482*col2 + 0.20*cat2.ebv + 0.663380
+  diff = model_mag - mag
   ; Make a sigma cut
   med = median(diff)
   sig = mad(diff)
@@ -629,9 +659,10 @@ end
   tmass1 = tmass[index[gd,1]]
   ; Make quality and error cuts
   gmagerr = 2.5*alog10(1.0+gaia1.e__fg_/gaia1._fg_)
+  col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
   gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05,ngdcat)
+                tmass1.e_jmag lt 0.05 and col ge 0.3 and col le 0.7,ngdcat)
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     return
@@ -639,6 +670,7 @@ end
   cat2 = cat1[gdcat]
   gaia2 = gaia1[gdcat]
   gmagerr2 = gmagerr[gdcat]
+  col2 = col[gdcat]
   tmass2 = tmass1[gdcat]
   ; Take a robust mean relative to GAIA GMAG
   mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
