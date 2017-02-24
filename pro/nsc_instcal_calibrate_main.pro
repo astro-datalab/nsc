@@ -43,7 +43,7 @@ PBS_DAEMON,cmd,dirs,/hyperthread,/idle,prefix='nsccalib',wait=10,nmulti=nmulti
 
 ; Load all the summary/metadata files
 expstr = replicate({expdir:'',metafile:'',success:0,file:'',base:'',expnum:0L,ra:0.0d0,dec:0.0d,dateobs:'',mjd:0.0d0,filter:'',exptime:0.0,$
-                    airmass:0.0,nsources:0L,fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,gaianmatch:0L,zpterm:0.0,zptermerr:0.0,zptermsig:0.0,$
+                    airmass:0.0,nsources:0L,fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,zpterm:0.0,zptermerr:0.0,zptermsig:0.0,$
                     nrefmatch:0L},nexpdirs)
 expstr.expdir = expdirs
 for i=0,nexpdirs-1 do begin

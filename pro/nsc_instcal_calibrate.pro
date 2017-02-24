@@ -250,6 +250,9 @@ gdcat = where(cat.mag_auto lt 50 and cat.magerr_auto lt 0.05 and cat.class_star 
 medfwhm = median(cat[gdcat].fwhm_world*3600.)
 print,'FWHM = ',stringize(medfwhm,ndec=2),' arcsec'
 
+; Get reddening
+glactc,cat.ra,cat.dec,2000.0,glon,glat,1,/deg
+ebv = dust_getval(glon,glat,/noloop,/interp)
 
 ; Step 4. Photometric calibration
 ;--------------------------------
@@ -257,7 +260,7 @@ print,'FWHM = ',stringize(medfwhm,ndec=2),' arcsec'
 printlog,logf,'' & printlog,logf,'Step 4. Photometric calibration'
 printlog,logf,'-------------------------------'
 expstr = {file:fluxfile,base:base,expnum:long(expnum),ra:0.0d0,dec:0.0d0,dateobs:dateobs,mjd:0.0d,filter:filter,exptime:exptime,$
-          airmass:0.0,nsources:long(ncat),fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,gaianmatch:0L,zpterm:0.0,zptermerr:0.0,$
+          airmass:0.0,nsources:long(ncat),fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,zpterm:0.0,zptermerr:0.0,$
           zptermsig:0.0,nrefmatch:0L}
 expstr.ra = cenra
 expstr.dec = cendec
@@ -266,6 +269,7 @@ expstr.nchips = nchips
 expstr.airmass = airmass
 expstr.rarms = median(chstr.rarms)
 expstr.decrms = median(chstr.decrms)
+expstr.ebv = median(ebv)
 expstr.gaianmatch = median(chstr.gaianmatch)
 
 CASE filter of
