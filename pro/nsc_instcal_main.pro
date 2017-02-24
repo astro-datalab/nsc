@@ -279,7 +279,8 @@ PBS_DAEMON,cmd,cmddir,/hyperthread,prefix='nsc',wait=10,nmulti=nmulti
 
 ; Unlocking files
 print,'Unlocking processed files'
-for i=0,ntosubmit-1 do djs_unlockfile,expstr[tosubmit[i]].outfile
+for i=0,ntosubmit-1 do file_delete,expstr[tosubmit[i]].outfile+'.lock',/allow
+;for i=0,ntosubmit-1 do djs_unlockfile,expstr[tosubmit[i]].outfile
 
 print,'dt=',stringize(systime(1)-t0,ndec=2),' sec'
 
