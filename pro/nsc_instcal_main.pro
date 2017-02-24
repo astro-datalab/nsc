@@ -220,14 +220,14 @@ for i=0,ngdexp-1 do begin
 
   ;lock = djs_lockfile(outfile)
   lockfile = outfile+'.lock'
-  testlock = file_test(lockfile)
-  
+  testlock = file_test(lockfile)  
+
   ; No lock file
   ;if lock eq 1 or keyword_set(unlock) then begin
-  if testlock eq 0 or keyword_set(unlock) then begin
+  if (testlock eq 0 or keyword_set(unlock)) then begin
     ;dum = djs_lockfile(outfile)  ; this is slow
-    if file_test(file_dirname(outfile),/directory) eq 0 then file_mkdir,file_dirname(outfile)  ; make directory
-    if testlock eq 0 then touchzero,outfile+'.lock'  ; this is fast
+    ;if file_test(file_dirname(outfile),/directory) eq 0 then file_mkdir,file_dirname(outfile)  ; make directory
+    ;if testlock eq 0 then touchzero,outfile+'.lock'  ; this is fast
     expstr[i].cmd = '/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal.py '+fluxfile+' '+wtfile+' '+maskfile
     expstr[i].cmddir = localdir+'dnidever/nsc/instcal/tmp/'
     expstr[i].torun = 1
@@ -256,12 +256,24 @@ tosubmit = where(expstr.submitted eq 1,ntosubmit)
 cmd = expstr[tosubmit].cmd
 cmddir = expstr[tosubmit].cmddir
 
+; Lock the files that will be submitted
+print,'Locking files to be submitted'
+for i=0,ntosubmit-1 do begin
+  outfile = expstr[tosubmit[i]].outfile
+  if file_test(file_dirname(outfile),/directory) eq 0 then file_mkdir,file_dirname(outfile)  ; make directory
+  lockfile = outfile+'.lock'
+  testlock = file_test(lockfile)
+  if testlock eq 0 then touchzero,outfile+'.lock'  ; this is fast
+  expstr[tosubmit[i]].locked = 1
+endfor
+
 ; Saving the structure of jobs to run
 runfile = dir+'logs/nsc_instcal_main.'+logtime+'_run.fits'
 print,'Writing running information to ',runfile
 MWRFITS,expstr,runfile,/create
 
 ; Run PBS_DAEMON
+stop
 a = '' & read,a,prompt='Press RETURN to start'
 PBS_DAEMON,cmd,cmddir,/hyperthread,prefix='nsc',wait=10,nmulti=nmulti
 
