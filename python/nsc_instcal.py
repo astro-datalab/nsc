@@ -36,11 +36,11 @@ if __name__ == "__main__":
     # on thing/hulk use
     if (host == "thing") | (host == "hulk"):
         dir = "/dl1/users/dnidever/nsc/instcal/"
-        tmpdir = "/d0/dnidever/nsc/instcal/tmp/"
+        tmproot = "/d0/dnidever/nsc/instcal/tmp/"
     # on gp09 use
     if (host == "gp09"):
         dir = "/net/dl1/users/dnidever/nsc/instcal/"
-        tmpdir = "/data0/dnidever/nsc/instcal/tmp/"
+        tmproot = "/data0/dnidever/nsc/instcal/tmp/"
 
     t0 = time.time()
 
