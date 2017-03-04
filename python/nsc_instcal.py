@@ -38,7 +38,7 @@ if __name__ == "__main__":
         dir = "/dl1/users/dnidever/nsc/instcal/"
         tmproot = "/d0/dnidever/nsc/instcal/tmp/"
     # on gp09 use
-    if (host == "gp09"):
+    if (host == "gp09") | (host == "gp08") | (host == "gp07"):
         dir = "/net/dl1/users/dnidever/nsc/instcal/"
         tmproot = "/data0/dnidever/nsc/instcal/tmp/"
 
