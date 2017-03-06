@@ -215,22 +215,26 @@ for i=0,nrefcat-1 do begin
         cols = 'source_id as source,ra as ra_icrs,ra_error as e_ra_icrs,dec as de_icrs,dec_error as e_de_icrs,'+$
                'phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,phot_g_mean_mag as gmag'
       endelse
-      declow = stringize(cendec-0.5*decrange*1.1,ndec=3)
-      dechi = stringize(cendec+0.5*decrange*1.1,ndec=3)
+      sdeclow = stringize(cendec-0.5*decrange*1.1,ndec=3)
+      sdechi = stringize(cendec+0.5*decrange*1.1,ndec=3)
       ; RA=0 WRAP
       if rawrap eq 1 then begin
-        ralow = stringize(cenra-0.5*rarange*1.1/cos(cendec/!radeg),ndec=3)    ; ~359 deg
-        rahi = stringize(cenra-360+0.5*rarange*1.1/cos(cendec/!radeg),ndec=3) ; ~1 deg
+        ralow = cenra-0.5*rarange*1.1/cos(cendec/!radeg)
+        if ralow lt 0 then ralow+=360
+        rahi = cenra+0.5*rarange*1.1/cos(cendec/!radeg)
+        if rahi gt 360 then rahi-=360
+        sralow = stringize(ralow,ndec=3)    ; ~359 deg
+        srahi = stringize(rahi,ndec=3)      ; ~1 deg
         cmd = "stilts tapquery tapurl='http://dldb1.sdm.noao.edu/tap' adql="+'"SELECT '+cols+' FROM '+tablename+$
-              ' WHERE (ra>'+ralow+' OR ra<'+rahi+') AND dec>'+declow+' AND dec<'+dechi+'" out='+refcatfile
+              ' WHERE (ra>'+sralow+' OR ra<'+srahi+') AND dec>'+sdeclow+' AND dec<'+sdechi+'" out='+refcatfile
         file_delete,refcatfile,/allow
         spawn,cmd,out,outerr
       ; Normal, no wrap
       endif else begin
-        ralow = stringize(cenra-0.5*rarange*1.1/cos(cendec/!radeg),ndec=3)
-        rahi = stringize(cenra+0.5*rarange*1.1/cos(cendec/!radeg),ndec=3)
+        sralow = stringize(cenra-0.5*rarange*1.1/cos(cendec/!radeg),ndec=3)
+        srahi = stringize(cenra+0.5*rarange*1.1/cos(cendec/!radeg),ndec=3)
         cmd = "stilts tapquery tapurl='http://dldb1.sdm.noao.edu/tap' adql="+'"SELECT '+cols+' FROM '+tablename+$
-              ' WHERE ra>'+ralow+' AND ra<'+rahi+' AND dec>'+declow+' AND dec<'+dechi+'" out='+refcatfile
+              ' WHERE ra>'+sralow+' AND ra<'+srahi+' AND dec>'+sdeclow+' AND dec<'+sdechi+'" out='+refcatfile
         file_delete,refcatfile,/allow
         spawn,cmd,out,outerr
       endelse
