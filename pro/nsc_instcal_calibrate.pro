@@ -1,4 +1,4 @@
-pro nsc_instcal_calibrate,expdir,redo=redo,stp=stp
+pro nsc_instcal_calibrate,expdir,redo=redo,ncpu=ncpu,stp=stp
 
 ; Calibrate catalogs for one exposure
 
@@ -17,6 +17,10 @@ if file_test(expdir,/directory) eq 0 then begin
 endif
 
 t00 = systime(1)
+
+; Setting pool thread values
+if n_elements(ncpu) eq 0 then ncpu=1
+CPU, TPOOL_NTHREADS = ncpu
 
 base = file_basename(expdir)
 logf = expdir+'/'+base+'_calib.log'
@@ -104,7 +108,8 @@ if range(minmax(chstr.cenra)) gt 100 then begin
  cenra = mean(minmax(ra))
  if cenra lt 0 then cenra+=360
  rarange = range(ra)*cos(cendec/!radeg)
-endif
+ rawrap = 1
+endif else rawrap=0
 
 ; Load the logfile and get absolute flux filename
 READLINE,expdir+'/'+base+'.log',loglines
@@ -167,6 +172,17 @@ else: begin
 end
 ENDCASE
 
+
+; Do a small test query
+;   TAP is slower for regular parts of the sky but MUCH faster
+;   if the density is high
+testqry = QUERYVIZIER('2MASS-PSC',[cenra,cendec],[10,10],/cfa)
+tmdensity = n_elements(testqry)*36.0  ; density per deg^2
+print,'2MASS density = ',strtrim(long(tmdensity),2),' sources per deg^2'
+densthresh = 4000.
+if tmdensity gt densthresh then usetap=1 else usetap=0
+usetap = 0 ; don't use tap right now
+
 ; Load the necessary catalogs
 nrefcat = n_elements(refcat)
 printlog,logf,'  ',strtrim(nrefcat,2),' reference catalogs to load'
@@ -179,20 +195,85 @@ for i=0,nrefcat-1 do begin
   if varname eq 'GAIA/GAIA' then varname='GAIA'
   refcatfile = expdir+'/'+base+'_'+varname+'.fits'
   ;if file_test(refcatfile) eq 1 and not keyword_set(redo) then begin
+  ; Loading previously loaded file
   if file_test(refcatfile) eq 1 then begin
     printlog,logf,'  Loading previously-saved file ',refcatfile
     (SCOPE_VARFETCH(varname,/enter)) = MRDFITS(refcatfile,1,/silent)
     ref = SCOPE_VARFETCH(varname)
+
+  ; Do the Query
+  ;--------------
   endif else begin
-    ref = QUERYVIZIER(refcat[i],[cenra,cendec],[rarange*1.1*60,decrange*1.1*60])
-    (SCOPE_VARFETCH(varname,/enter)) = ref
-    ; Save the file
-    MWRFITS,ref,refcatfile,/create
+
+    ; Use DataLab TAP service for Gaia and 2MASS if density is high
+    if (varname eq 'TMASS' or varname eq 'GAIA') and keyword_set(usetap) then begin
+      if varname eq 'TMASS' then begin
+        tablename = 'twomass.psc'
+        cols = 'designation,ra as raj2000,dec as dej2000,j_m as jmag,j_cmsig as e_jmag,h_m as hmag,h_cmsig as e_hmag,k_m as kmag,k_cmsig as e_kmag,ph_qual as qflg'
+      endif else begin
+        tablename = 'gaia_dr1.gaia_source'
+        cols = 'source_id as source,ra as ra_icrs,ra_error as e_ra_icrs,dec as de_icrs,dec_error as e_de_icrs,'+$
+               'phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,phot_g_mean_mag as gmag'
+      endelse
+      declow = stringize(cendec-0.5*decrange*1.1,ndec=3)
+      dechi = stringize(cendec+0.5*decrange*1.1,ndec=3)
+      ; RA=0 WRAP
+      if rawrap eq 1 then begin
+        ralow = stringize(cenra-0.5*rarange*1.1/cos(cendec/!radeg),ndec=3)    ; ~359 deg
+        rahi = stringize(cenra-360+0.5*rarange*1.1/cos(cendec/!radeg),ndec=3) ; ~1 deg
+        cmd = "stilts tapquery tapurl='http://dldb1.sdm.noao.edu/tap' adql="+'"SELECT '+cols+' FROM '+tablename+$
+              ' WHERE (ra>'+ralow+' OR ra<'+rahi+') AND dec>'+declow+' AND dec<'+dechi+'" out='+refcatfile
+        file_delete,refcatfile,/allow
+        spawn,cmd,out,outerr
+      ; Normal, no wrap
+      endif else begin
+        ralow = stringize(cenra-0.5*rarange*1.1/cos(cendec/!radeg),ndec=3)
+        rahi = stringize(cenra+0.5*rarange*1.1/cos(cendec/!radeg),ndec=3)
+        cmd = "stilts tapquery tapurl='http://dldb1.sdm.noao.edu/tap' adql="+'"SELECT '+cols+' FROM '+tablename+$
+              ' WHERE ra>'+ralow+' AND ra<'+rahi+' AND dec>'+declow+' AND dec<'+dechi+'" out='+refcatfile
+        file_delete,refcatfile,/allow
+        spawn,cmd,out,outerr
+      endelse
+      ; Load the file
+      ref = MRDFITS(refcatfile,1,/silent)
+      (SCOPE_VARFETCH(varname,/enter)) = ref
+
+    ; Use QUERYVIZIER
+    ;   for low density with 2MASS/GAIA and always for GALEX and APASS
+    endif else begin
+      ref = QUERYVIZIER(refcat[i],[cenra,cendec],[rarange*1.1*60,decrange*1.1*60],/cfa)
+
+      ; Fix/homogenize the GAIA tags
+      if varname eq 'GAIA' then begin
+        nref = n_elements(ref)
+        orig = ref
+        ref = replicate({source:0LL,ra_icrs:0.0d0,e_ra_icrs:0.0d0,de_icrs:0.0d0,e_de_icrs:0.0d0,fg:0.0d0,e_fg:0.0d0,gmag:0.0d0},nref)
+        struct_assign,orig,ref
+        ref.fg = orig._fg_
+        ref.e_fg = orig.e__fg_
+        ref.gmag = orig._gmag_
+        undefine,orig
+      endif
+      ; Fix/homogenize the 2MASS tags
+      if varname eq 'TMASS' then begin
+        nref = n_elements(ref)
+        orig = ref
+        ref = replicate({designation:'',raj2000:0.0d0,dej2000:0.0d0,jmag:0.0,e_jmag:0.0,hmag:0.0,e_hmag:0.0,kmag:0.0,e_kmag:0.0,qflg:''},nref)
+        struct_assign,orig,ref
+        ref.designation = orig._2mass
+        undefine,orig
+      endif
+
+      (SCOPE_VARFETCH(varname,/enter)) = ref
+      ; Save the file
+      MWRFITS,ref,refcatfile,/create
+    endelse
   endelse
   nref = n_elements(ref)
   dt = systime(1)-t0
   printlog,logf,'  ',strtrim(nref,2),' sources   dt=',stringize(dt,ndec=1),' sec.'
 endfor
+
 
 ; Step 3. Astrometric calibration
 ;----------------------------------
@@ -299,9 +380,9 @@ CASE filter of
   tmass1 = tmass[index[gd,1]]
   galex1 = galex[index[gd,2]]
   ; Make quality and error cuts
-  gmagerr = 2.5*alog10(1.0+gaia1.e__fg_/gaia1._fg_)
+  gmagerr = 2.5*alog10(1.0+gaia1.e_fg/gaia1.fg)
   ; (G-J)o = G-J-1.12*EBV
-  col = gaia1._gmag_ - tmass1.jmag - 1.12*cat1.ebv
+  col = gaia1.gmag - tmass1.jmag - 1.12*cat1.ebv
   gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
                 tmass1.e_jmag lt 0.05 and finite(galex1.nuv) eq 1 and col ge 0.7 and col le 1.1,ngdcat)
@@ -327,9 +408,9 @@ CASE filter of
   ;diff = galex2.nuv-mag
   ; see nsc_color_relations_smashuband.pro
   ; u = 0.30874*NUV + 0.6955*G + 0.424*EBV + 0.0930  ; for 0.7<GJ0<1.1
-  model_mag = 0.30874*galex2.nuv + 0.6955*gaia2._gmag_ + 0.424*cat2.ebv + 0.0930
+  model_mag = 0.30874*galex2.nuv + 0.6955*gaia2.gmag + 0.424*cat2.ebv + 0.0930
   diff = model_mag - mag
-  ;col = gaia2._gmag_ - tmass2.jmag
+  ;col = gaia2.gmag - tmass2.jmag
   ; Make a sigma cut
   med = median(diff)
   sig = mad(diff)
@@ -496,7 +577,7 @@ end
   gaia1 = gaia[index[gd,0]]
   tmass1 = tmass[index[gd,1]]
   ; Make quality and error cuts
-  gmagerr = 2.5*alog10(1.0+gaia1.e__fg_/gaia1._fg_)
+  gmagerr = 2.5*alog10(1.0+gaia1.e_fg/gaia1.fg)
   col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
   gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
@@ -521,7 +602,7 @@ end
   err = sqrt(cat2.magerr_auto^2 + gmagerr2^2)  ; leave off the JK error for now
   ; see nsc_color_relations_stripe82_superposition.pro
   ; i = G - 0.4587*JK0 - 0.276*EBV + 0.0967721
-  model_mag = gaia2._gmag_ - 0.4587*col2 - 0.276*cat2.ebv + 0.0967721
+  model_mag = gaia2.gmag - 0.4587*col2 - 0.276*cat2.ebv + 0.0967721
   diff = model_mag - mag
   ; Make a sigma cut
   med = median(diff)
@@ -679,7 +760,7 @@ end
   gaia1 = gaia[index[gd,0]]
   tmass1 = tmass[index[gd,1]]
   ; Make quality and error cuts
-  gmagerr = 2.5*alog10(1.0+gaia1.e__fg_/gaia1._fg_)
+  gmagerr = 2.5*alog10(1.0+gaia1.e_fg/gaia1.fg)
   col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
   gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
@@ -702,7 +783,7 @@ end
   ; Take a robust mean relative to GAIA GMAG
   mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
   err = sqrt(cat2.magerr_auto^2 + gmagerr2^2)
-  diff = gaia2._gmag_ - mag
+  diff = gaia2.gmag - mag
   ; Make a sigma cut
   med = median(diff)
   sig = mad(diff)
