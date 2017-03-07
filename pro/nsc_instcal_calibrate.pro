@@ -191,7 +191,7 @@ for i=0,nrefcat-1 do begin
   refcatfile = expdir+'/'+base+'_'+varname+'.fits'
 
   ; Search radius
-  radius = sqrt( (0.5*rarange)^2 + (0.5*decrange)^2 )  
+  radius = 1.1 * sqrt( (0.5*rarange)^2 + (0.5*decrange)^2 )  
 
   ;if file_test(refcatfile) eq 1 and not keyword_set(redo) then begin
   ; Loading previously loaded file
@@ -232,7 +232,8 @@ for i=0,nrefcat-1 do begin
     ; Use QUERYVIZIER
     ;   for low density with 2MASS/GAIA and always for GALEX and APASS
     endif else begin
-      ref = QUERYVIZIER(refcat[i],[cenra,cendec],[rarange*1.1*60,decrange*1.1*60],/cfa)
+      ;ref = QUERYVIZIER(refcat[i],[cenra,cendec],[rarange*1.1*60,decrange*1.1*60],/cfa)
+      ref = QUERYVIZIER(refcat[i],[cenra,cendec],radius*60,/cfa)
 
       ; Fix/homogenize the GAIA tags
       if varname eq 'GAIA' then begin
