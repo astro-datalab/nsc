@@ -21,6 +21,8 @@ if file_test(outfile) eq 1 and not keyword_set(redo) then begin
   return
 endif
 
+print,'Combining InstCal SExtractor catalogs or Healpix pixel = ',strtrim(pix,2)
+
 ; Load the list
 listfile = dir+'combine/healpix_list.fits'
 ;listfile = dir+'combine/lists/'+strtrim(pix,2)+'.fits'
@@ -42,8 +44,60 @@ ind = ind[0]
 list = healstr[index[ind].lo:index[ind].hi]
 nlist = n_elements(list)
 
-print,'Combining InstCal SExtractor catalogs or Healpix pixel = ',strtrim(pix,2)
-print,strtrim(nlist,2),' overlapping exposure(s)'
+; GET EXPOSURES FOR NEIGHBORING PIXELS AS WELL
+;  so we can deal with the edge cases
+NEIGHBOURS_RING,nside,pix,neipix,nneipix
+for i=0,nneipix-1 do begin
+  ind = where(index.pix eq neipix[i],nind)
+  if nind gt 0 then begin
+    ind = ind[0]
+    list1 = healstr[index[ind].lo:index[ind].hi]
+    push,list,list1
+  endif
+endfor
+; Get unique values
+ui = uniq(list.file,sort(list.file))
+list = list[ui]
+nlist = n_elements(list)
+print,strtrim(nlist,2),' exposures that overlap this pixel and neighbors'
+
+; Get the boundary coordinates
+;   healpy.boundaries but not sure how to do it in IDL
+;   pix2vec_ring/nest can optionally return vertices but only 4
+;     maybe subsample myself between the vectors
+; Expand the boundary to include a "buffer" zone
+;  to deal with edge cases
+;PIX2VEC_RING,nside,pix,vec,vertex
+
+; Use python code to get the boundary
+;  this takes ~2s mostly from import statements
+tempfile = MKTEMP('bnd')
+file_delete,tempfile+'.fits',/allow
+step = 100
+pylines = 'python -c "from healpy import boundaries; from astropy.io import fits;'+$
+          ' v=boundaries('+strtrim(nside,2)+','+strtrim(pix,2)+',step='+strtrim(step,2)+');'+$
+          " fits.writeto('"+tempfile+".fits'"+',v)"'
+spawn,pylines,out,errout
+vecbound = MRDFITS(tempfile+'.fits',0,/silent)
+file_delete,[tempfile,tempfile+'.fits'],/allow
+VEC2ANG,vecbound,theta,phi
+rabound = phi*radeg
+decbound = 90-theta*radeg
+
+; Expand the boundary by the buffer size
+PIX2ANG_RING,nside,pix,centheta,cenphi
+cenra = cenphi*radeg
+cendec = 90-centheta*radeg
+; reproject onto tangent plane
+ROTSPHCEN,rabound,decbound,cenra,cendec,lonbound,latbound,/gnomic
+; expand by a fraction, it's not an extact boundary but good enough
+buffsize = 10.0/3600. ; in deg
+radbound = sqrt(lonbound^2+latbound^2)
+frac = 1.0 + 1.5*max(buffsize/radbound)
+lonbuff = lonbound*frac
+latbuff = latbound*frac
+buffer = {cenra:cenra,cendec:cendec,lon:lonbuff,lat:latbuff}
+
 
 ; Initialize the object structure
 schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,ndet:0L,$
@@ -89,11 +143,19 @@ for i=0,nlist-1 do begin
   ;exptime = sxpar(head,'exptime')
   print,'  FILTER=',meta.filter,'  EXPTIME=',stringize(meta.exptime,ndec=1),' sec'
 
+  ; Only include sources inside Boundary+Buffer zone
+  ;  -use ROI_CUT
+  ;  -reproject to tangent plane first so we don't have to deal
+  ;     with RA=0 wrapping or pol issues
+  ROTSPHCEN,cat1.ra,cat1.dec,buffer.cenra,buffer.cendec,lon,lat,/gnomic
+  ROI_CUT,buffer.lon,buffer.lat,lon,lat,ind0,ind1,fac=100
+  nmatch = n_elements(ind1)
+
   ; Only want source inside this pixel
-  theta = (90-cat1.dec)/radeg
-  phi = cat1.ra/radeg
-  ANG2PIX_RING,nside,theta,phi,ipring
-  MATCH,ipring,pix,ind1,ind2,/sort,count=nmatch
+  ;theta = (90-cat1.dec)/radeg
+  ;phi = cat1.ra/radeg
+  ;ANG2PIX_RING,nside,theta,phi,ipring
+  ;MATCH,ipring,pix,ind1,ind2,/sort,count=nmatch
   if nmatch eq 0 then begin
     print,'  No sources inside this pixel'
     goto,BOMB
@@ -356,6 +418,19 @@ endfor
 print,'Getting E(B-V)'
 glactc,obj.ra,obj.dec,2000.0,glon,glat,1,/deg
 obj.ebv = DUST_GETVAL(glon,glat,/noloop,/interp)
+
+; ONLY INCLUDE OBJECTS WITH AVERAGE RA/DEC
+; WITHIN THE BOUNDARY OF THE HEALPIX PIXEL!!!
+theta = (90-obj.dec)/radeg
+phi = obj.ra/radeg
+ANG2PIX_RING,nside,theta,phi,ipring
+MATCH,ipring,pix,ind1,ind2,/sort,count=nmatch
+if nmatch eq 0 then begin
+  print,'None of the final objects fall inside the pixel'
+  return
+endif
+obj = obj[ind1]
+print,strtrim(nmatch,2),' final objects fall inside the pixel'
 
 ; Write the output file
 print,'Writing combined catalog to ',outfile
