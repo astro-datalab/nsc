@@ -133,7 +133,8 @@ spawn,['epstopdf',file+'.eps'],/noshell
 file = 'stripe82_iband_magdiff_ebv'
 ps_open,file,/color,thick=4,/encap
 device,/inches,xsize=8.5,ysize=9.5
-hess,allcat[gd].ebv,model_mag[gd]-allcat[gd].cmag,dx=0.01,dy=0.02,xr=[0,0.8],yr=[-1,1],/log,xtit='E(B-V)',ytit='Model-Mag',tit='i-band'
+gd2 = where(allcat.class_star gt 0.8 and alltmass.qflg eq 'AAA' and allcat.fwhm_world*3600 lt 2.0 and jk0 lt 0.6,ngd2)
+hess,allcat[gd2].ebv,model_mag[gd2]-allcat[gd2].cmag,dx=0.01,dy=0.02,xr=[0,0.8],yr=[-1,1],/log,xtit='E(B-V)',ytit='Model-Mag',tit='i-band'
 oplot,[-1,3],[0,0],linestyle=2,co=255
 ps_close
 ps2png,file+'.eps',/eps
