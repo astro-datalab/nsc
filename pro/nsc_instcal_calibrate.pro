@@ -377,12 +377,12 @@ CASE filter of
   col = gaia1.gmag - tmass1.jmag - 1.12*cat1.ebv
   gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05 and finite(galex1.nuv) eq 1 and col ge 0.7 and col le 1.1,ngdcat)
+                tmass1.e_jmag lt 0.05 and finite(galex1.nuv) eq 1 and col ge 0.8 and col le 1.1,ngdcat)
   ;  if the seeing is bad then class_star sometimes doens't work well
   if medfwhm gt 2 and ngdcat lt 100 then begin
     gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                  tmass1.e_jmag lt 0.05 and finite(galex1.nuv) eq 1 and col ge 0.7 and col le 1.1,ngdcat)
+                  tmass1.e_jmag lt 0.05 and finite(galex1.nuv) eq 1 and col ge 0.8 and col le 1.1,ngdcat)
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
@@ -400,7 +400,10 @@ CASE filter of
   ;diff = galex2.nuv-mag
   ; see nsc_color_relations_smashuband.pro
   ; u = 0.30874*NUV + 0.6955*G + 0.424*EBV + 0.0930  ; for 0.7<GJ0<1.1
-  model_mag = 0.30874*galex2.nuv + 0.6955*gaia2.gmag + 0.424*cat2.ebv + 0.0930
+  ;model_mag = 0.30874*galex2.nuv + 0.6955*gaia2.gmag + 0.424*cat2.ebv + 0.0930
+  ; ADJUSTED EQUATION
+  ; u = 0.2469*NUV + 0.7501*G + 0.5462*GJ0 + 0.6809*EBV + 0.0052  ; for 0.8<GJ0<1.1
+  model_mag = 0.2469*galex2.nuv + 0.7501*gaia2.gmag + 0.5462*col2 + 0.6809*cat2.ebv + 0.0052
   diff = model_mag - mag
   ;col = gaia2.gmag - tmass2.jmag
   ; Make a sigma cut
@@ -464,7 +467,10 @@ end
   err = sqrt(cat2.magerr_auto^2 + apass2.e_g_mag^2)  ; leave off JK error for now
   ; see nsc_color_relations_stripe82_superposition.pro
   ; g = APASS_G - 0.1433*JK0 - 0.05*EBV - 0.0138
-  model_mag = apass2.g_mag - 0.1433*col2 - 0.05*cat2.ebv - 0.0138
+  ;model_mag = apass2.g_mag - 0.1433*col2 - 0.05*cat2.ebv - 0.0138
+  ; ADJUSTED EQUATION
+  ; g = APASS_G - 0.0421*JK0 - 0.05*EBV - 0.0620
+  model_mag = apass2.g_mag - 0.0421*col2 - 0.05*cat2.ebv - 0.0620
   diff = model_mag - mag
   ;diff = apass2.g_mag-mag
   ; Make a sigma cut
@@ -528,7 +534,10 @@ end
   err = sqrt(cat2.magerr_auto^2 + apass2.e_r_mag^2)  ; leave off JK error for now
   ; see nsc_color_relations_stripe82_superposition.pro
   ; r = APASS_r + 0.00740*JK0 + 0.0*EBV + 0.000528
-  model_mag = apass2.r_mag + 0.00740*col2 + 0.000528
+  ;model_mag = apass2.r_mag + 0.00740*col2 + 0.000528
+  ; ADJUSTED EQUATION
+  ; r = APASS_r - 0.0861884*JK0 + 0.0*EBV + 0.0548607
+  model_mag = apass2.r_mag - 0.0861884*col2 + 0.0548607
   diff = model_mag - mag
   ;diff = apass2.r_mag-mag
   ; Make a sigma cut
@@ -573,12 +582,12 @@ end
   col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
   gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05 and col ge 0.3 and col le 0.7,ngdcat)
+                tmass1.e_jmag lt 0.05 and col ge 0.25 and col le 0.65,ngdcat)
   ;  if the seeing is bad then class_star sometimes doens't work well
   if medfwhm gt 2 and ngdcat lt 100 then begin
     gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                  tmass1.e_jmag lt 0.05 and col ge 0.3 and col le 0.7,ngdcat)
+                  tmass1.e_jmag lt 0.05 and col ge 0.25 and col le 0.65,ngdcat)
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
@@ -634,12 +643,12 @@ end
   col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
   gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05 and col ge 0.3 and col le 0.7,ngdcat)
+                tmass1.e_jmag lt 0.05 and col ge 0.4 and col le 0.65,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
   if medfwhm gt 2 and ngdcat lt 100 then begin
     gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
-                  tmass1.e_jmag lt 0.05 and col ge 0.3 and col le 0.7,ngdcat)
+                  tmass1.e_jmag lt 0.05 and col ge 0.4 and col le 0.65,ngdcat)
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
@@ -693,12 +702,12 @@ end
   col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
   gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05 and col ge 0.3 and col le 0.7,ngdcat)
+                tmass1.e_jmag lt 0.05 and col ge 0.4 and col le 0.7,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
   if medfwhm gt 2 and ngdcat lt 100 then begin
     gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
-                  tmass1.e_jmag lt 0.05 and col ge 0.3 and col le 0.7,ngdcat)
+                  tmass1.e_jmag lt 0.05 and col ge 0.4 and col le 0.7,ngdcat)
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
@@ -756,12 +765,12 @@ end
   col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
   gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05 and col ge 0.3 and col le 0.7,ngdcat)
+                tmass1.e_jmag lt 0.05 and col ge 0.2 and col le 0.6,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
   if medfwhm gt 2 and ngdcat lt 100 then begin
     gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                  tmass1.e_jmag lt 0.05 and col ge 0.3 and col le 0.7,ngdcat)
+                  tmass1.e_jmag lt 0.05 and col ge 0.2 and col le 0.6,ngdcat)
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
