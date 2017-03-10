@@ -1,4 +1,4 @@
-pro combine_stripe82_gband
+pro combine_stripe82_uband
 
 ; Combine together the exposure catalogs in Stripe82 for a single band
 
@@ -109,6 +109,9 @@ alltmass = alltmass[0:cnt-1]
 allgalex = allgalex[0:cnt-1]
 ; Maybe match to PS1 as well
 
+; Save the matched catalogs
+;save,allcat,allgaia,alltmass,allgalex,file='combine_stripe82_uband.dat'
+
 ; Make the plot
 !p.font = 0
 setdisp
@@ -117,37 +120,67 @@ ps_open,file,/color,thick=4,/encap
 device,/inches,xsize=8.5,ysize=9.5
 gj0 = allgaia.gmag - alltmass.jmag - 1.12*allcat.ebv
 model_mag = 0.30874*allgalex.nuv + 0.6955*allgaia.gmag + 0.424*allcat.ebv + 0.0930
-hess,gj0,model_mag-allcat.cmag,dx=0.02,dy=0.02,xr=[-0.1,1.3],yr=[-1,1],/log,xtit='(J-Ks)o',ytit='Model-Mag',tit='u-band'
-bindata,gj0,model_mag-allcat.cmag,xbin,ybin,binsize=0.05,/med,gdind=gdind,min=0,max=1.2
-oplot,xbin[gdind],ybin[gdind],ps=-1,co=255
-gd = where(xbin ge 0.2 and xbin le 0.8,ngd)
-coef = robust_poly_fitq(xbin[gd],ybin[gd],1)
+;gd = where(mobj.tmass_qflg eq 'AAA' and mobj.gaia_gmag lt 15 and mobj.tmass_jmag lt 14 and $
+;           mobj.uerr lt 0.1 and mobj.galex_nuverr lt 0.1 and mobj.ebv lt 0.05,ngd)
+gd = where(allcat.class_star ge 0.8 and allcat.fwhm_world*3600 lt 2.0,ngd)
+hess,gj0[gd],model_mag[gd]-allcat[gd].cmag,dx=0.02,dy=0.02,xr=[-0.5,2.0],yr=[-1,1],/log,xtit='(G-J)o',ytit='Model-Mag',tit='u-band'
+bindata,gj0[gd],model_mag[gd]-allcat[gd].cmag,xbin,ybin,binsize=0.05,/med,min=0.5,max=1.5
+oplot,xbin,ybin,ps=-1,co=255
+gdbin = where(xbin ge 0.7 and xbin le 1.2,ngdbin)
+coef = robust_poly_fitq(xbin[gdbin],ybin[gdbin],1)
+;  0.16465859     -0.21008923
 xx = scale_vector(findgen(100),-1,3)
 oplot,xx,poly(xx,coef),co=250
 oplot,[-1,3],[0,0],linestyle=2,co=255
-oplot,[0.3,0.3],[-2,2],linestyle=1,co=255
-oplot,[0.7,0.7],[-2,2],linestyle=1,co=255
-al_legend,[stringize(coef[1],ndec=3)+'*(J-Ks)!dn0!n+'+stringize(coef[0],ndec=3)],textcolor=[250],/top,/left,charsize=1.4
+oplot,[0.8,0.8],[-2,2],linestyle=1,co=255
+oplot,[1.1,1.1],[-2,2],linestyle=1,co=255
+al_legend,[stringize(coef[1],ndec=3)+'*(G-J)!d0!n+'+stringize(coef[0],ndec=3)],textcolor=[250],/top,/left,charsize=1.4
 ps_close
 ps2png,file+'.eps',/eps
 spawn,['epstopdf',file+'.eps'],/noshell
 
+; There's currently no color term, so maybe just leave it as is??
+
+
+; Get extinction part
+gd1 = where(allcat.class_star ge 0.8 and allcat.fwhm_world*3600 lt 2.0 and gj0 ge 0.8 and gj0 lt 1.1 and allcat.ebv gt 0.15,ngd1)
+a = dblarr(4,ngd1)
+a[0,*] = allgalex[gd1].nuv 
+a[1,*] = allgaia[gd1].gmag
+a[2,*] = allcat[gd1].ebv
+a[3,*] = 1
+b=allcat[gd1].cmag
+SVDC, A, W, U, V
+factor = SVSOL(U, W, V, B)
+print,factor
+;   0.29502717      0.71885104      0.68088568     0.016572659
+
+; Now nail down extinction and get the other terms
+gd1 = where(allcat.class_star ge 0.8 and allcat.fwhm_world*3600 lt 2.0 and gj0 ge 0.8 and gj0 lt 1.1 and allcat.ebv lt 0.1,ngd1)
+a = dblarr(4,ngd1)
+a[0,*] = allgalex[gd1].nuv
+a[1,*] = allgaia[gd1].gmag
+a[2,*] = gj0[gd1]
+a[3,*] = 1
+b=allcat[gd1].cmag-0.6809*allcat[gd1].ebv
+SVDC, A, W, U, V
+factor = SVSOL(U, W, V, B)
+print,factor
+; 0.24944322      0.74857540      0.53397358     0.026554812
+
 ; This is the "corrected" relation!!!
-;model_mag = 0.30874*allgalex.nuv + 0.6955*allgaia.gmag + 0.424*allcat.ebv + 0.0930
+model_mag2 = 0.2469*allgalex.nuv + 0.7501*allgaia.gmag + 0.5462*gj0 + 0.6809*allcat.ebv + 0.0052
+;model_mag2 = 0.2830*allgalex.nuv + 0.7240*allgaia.gmag + 0.6809*allcat.ebv + 0.2299
+
+; Use color range of 0.8<GJ0<1.1
 
 ; versus EBV
 file = 'stripe82_uband_magdiff_ebv'
 ps_open,file,/color,thick=4,/encap
 device,/inches,xsize=8.5,ysize=9.5
-hess,allcat.ebv,model_mag-allcat.cmag,dx=0.02,dy=0.02,xr=[0,0.8],yr=[-1,1],/log,xtit='E(B-V)',ytit='Model-Mag',tit='u-band'
-;bindata,jk0,model_mag-allcat.cmag,xbin,ybin,binsize=0.05,/med,gdind=gdind,min=0,max=1.2
-;oplot,xbin[gdind],ybin[gdind],ps=-1,co=255
-;gd = where(xbin ge 0.2 and xbin le 0.8,ngd)
-;coef = robust_poly_fitq(xbin[gd],ybin[gd],1)
-;xx = scale_vector(findgen(100),-1,3)
-;oplot,xx,poly(xx,coef),co=250
+gd2 = where(allcat.class_star ge 0.8 and allcat.fwhm_world*3600 lt 2.0 and gj0 lt 1.2,ngd2)
+hess,allcat[gd2].ebv,model_mag[gd2]-allcat[gd2].cmag,dx=0.01,dy=0.02,xr=[0,0.8],yr=[-1,1],/log,xtit='E(B-V)',ytit='Model-Mag',tit='u-band'
 oplot,[-1,3],[0,0],linestyle=2,co=255
-;al_legend,[stringize(coef[1],ndec=3)+'*(J-Ks)!dn0!n+'+stringize(coef[0],ndec=3)],textcolor=[250],/top,/left,charsize=1.4
 ps_close
 ps2png,file+'.eps',/eps
 spawn,['epstopdf',file+'.eps'],/noshell

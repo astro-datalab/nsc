@@ -109,6 +109,9 @@ alltmass = alltmass[0:cnt-1]
 allapass = allapass[0:cnt-1]
 ; Maybe match to PS1 as well
 
+; Save the matched catalogs
+;save,allcat,allgaia,alltmass,allapass,file='combine_stripe82_rband.dat'
+
 ; Make the plot
 !p.font = 0
 setdisp
@@ -121,30 +124,32 @@ gd = where(allcat.class_star gt 0.8 and alltmass.qflg eq 'AAA' and allcat.fwhm_w
 hess,jk0[gd],model_mag[gd]-allcat[gd].cmag,dx=0.02,dy=0.02,xr=[-0.1,1.3],yr=[-1,1],/log,xtit='(J-Ks)o',ytit='Model-Mag',tit='r-band'
 bindata,jk0[gd],model_mag[gd]-allcat[gd].cmag,xbin,ybin,binsize=0.05,/med,min=0,max=1.2
 oplot,xbin,ybin,ps=-1,co=255
-gdbin = where(xbin ge 0.2 and xbin le 0.8,ngdbin)
+gdbin = where(xbin ge 0.3 and xbin le 0.7,ngdbin)
 coef = robust_poly_fitq(xbin[gdbin],ybin[gdbin],1)
+;   -0.0543327    0.0935884
 xx = scale_vector(findgen(100),-1,3)
 oplot,xx,poly(xx,coef),co=250
 oplot,[-1,3],[0,0],linestyle=2,co=255
 oplot,[0.3,0.3],[-2,2],linestyle=1,co=255
 oplot,[0.7,0.7],[-2,2],linestyle=1,co=255
-al_legend,[stringize(coef[1],ndec=3)+'*(J-Ks)!dn0!n+'+stringize(coef[0],ndec=3)],textcolor=[250],/top,/left,charsize=1.4
+al_legend,[stringize(coef[1],ndec=3)+'*(J-Ks)!d0!n+'+stringize(coef[0],ndec=3)],textcolor=[250],/top,/left,charsize=1.4
 ps_close
 ps2png,file+'.eps',/eps
 spawn,['epstopdf',file+'.eps'],/noshell
 
 ; This is the "corrected" relation!!!
-;model_mag = allapass.r_mag + 0.00740*jk0 + 0.000528
+model_mag2 = allapass.r_mag -0.0861884*jk0 + 0.0548607
 
 ; versus EBV
 file = 'stripe82_rband_magdiff_ebv'
 ps_open,file,/color,thick=4,/encap
 device,/inches,xsize=8.5,ysize=9.5
-hess,allcat[gd].ebv,model_mag[gd]-allcat[gd].cmag,dx=0.02,dy=0.02,xr=[0,0.8],yr=[-1,1],/log,xtit='E(B-V)',ytit='Model-Mag',tit='r-band'
+hess,allcat[gd].ebv,model_mag[gd]-allcat[gd].cmag,dx=0.01,dy=0.02,xr=[0,0.8],yr=[-1,1],/log,xtit='E(B-V)',ytit='Model-Mag',tit='r-band'
 oplot,[-1,3],[0,0],linestyle=2,co=255
 ps_close
 ps2png,file+'.eps',/eps
 spawn,['epstopdf',file+'.eps'],/noshell
+
 
 stop
 

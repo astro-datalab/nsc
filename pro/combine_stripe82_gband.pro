@@ -109,6 +109,9 @@ alltmass = alltmass[0:cnt-1]
 allapass = allapass[0:cnt-1]
 ; Maybe match to PS1 as well
 
+; Save the matched catalogs
+;save,allcat,allgaia,alltmass,allapass,file='combine_stripe82_gband.dat'
+
 ; Make the plot
 !p.font = 0
 setdisp
@@ -142,14 +145,11 @@ model_mag2 = allapass.g_mag - 0.0421*jk0 - 0.05*allcat.ebv - 0.0620
 file = 'stripe82_gband_magdiff_ebv'
 ps_open,file,/color,thick=4,/encap
 device,/inches,xsize=8.5,ysize=9.5
-hess,allcat[gd].ebv,model_mag[gd]-allcat[gd].cmag,dx=0.02,dy=0.02,xr=[0,0.8],yr=[-1,1],/log,xtit='E(B-V)',ytit='Model-Mag',tit='g-band'
+hess,allcat[gd].ebv,model_mag[gd]-allcat[gd].cmag,dx=0.01,dy=0.02,xr=[0,0.8],yr=[-1,1],/log,xtit='E(B-V)',ytit='Model-Mag',tit='g-band'
 oplot,[-1,3],[0,0],linestyle=2,co=255
 ps_close
 ps2png,file+'.eps',/eps
 spawn,['epstopdf',file+'.eps'],/noshell
-
-; Save the matched catalogs
-;save,allcat,allgaia,alltmass,allapass,file='combine_stripe82_gband.dat'
 
 stop
 

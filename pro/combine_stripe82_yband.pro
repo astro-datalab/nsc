@@ -44,7 +44,7 @@ for i=0,nind-1 do begin
   index = lonarr(ncat)-1
   dcr = 1.0
   SRCMATCH,tmass.raj2000,tmass.dej2000,cat.ra,cat.dec,dcr,tind1,tind2,/sph,count=ntmatch
-  if ntmatch gt 0 then index[tind2,1] = tind1
+  if ntmatch gt 0 then index[tind2] = tind1
   gd = where(index gt -1,ngd)
   print,'  ',strtrim(ngd,2),' matches to 2MASS'
   if ngd eq 0 then begin
@@ -52,15 +52,15 @@ for i=0,nind-1 do begin
     goto,BOMB
   endif
   cat1 = cat[gd]
-  tmass1 = tmass[index[gd,1]]
+  tmass1 = tmass[index[gd]]
 
   if n_elements(allcat) eq 0 then begin
     cat0 = cat[0]
     struct_assign,{dum:''},cat0
-    allcat = replicate(cat0,5e6)
+    allcat = replicate(cat0,7e6)
     tmass0 = tmass[0]
     struct_assign,{dum:''},tmass0
-    alltmass = replicate(tmass0,5e6)
+    alltmass = replicate(tmass0,7e6)
     cnt = 0LL
   endif
   tempcat = allcat[cnt:cnt+ngd-1]
@@ -79,6 +79,8 @@ allcat = allcat[0:cnt-1]
 alltmass = alltmass[0:cnt-1]
 ; Maybe match to PS1 as well
 
+;save,allcat,alltmass,file='combine_stripe82_yband.dat' 
+
 ; Make the plot
 !p.font = 0
 setdisp
@@ -87,37 +89,34 @@ ps_open,file,/color,thick=4,/encap
 device,/inches,xsize=8.5,ysize=9.5
 jk0 = alltmass.jmag-alltmass.kmag-0.17*allcat.ebv
 model_mag = alltmass.jmag + 0.54482*jk0 + 0.20*allcat.ebv + 0.663380
-hess,jk0,model_mag-allcat.cmag,dx=0.02,dy=0.02,xr=[-0.1,1.3],yr=[-1,1],/log,xtit='(J-Ks)o',ytit='Model-Mag',tit='Y-band'
-bindata,jk0,model_mag-allcat.cmag,xbin,ybin,binsize=0.05,/med,gdind=gdind,min=0,max=1.2
-oplot,xbin[gdind],ybin[gdind],ps=-1,co=255
-gd = where(xbin ge 0.2 and xbin le 0.8,ngd)
-coef = robust_poly_fitq(xbin[gd],ybin[gd],1)
+gd = where(allcat.class_star gt 0.8 and alltmass.qflg eq 'AAA' and allcat.fwhm_world*3600 lt 2.0,ngd)
+hess,jk0[gd],model_mag[gd]-allcat[gd].cmag,dx=0.02,dy=0.02,xr=[-0.1,1.3],yr=[-1,1],/log,xtit='(J-Ks)o',ytit='Model-Mag',tit='Y-band'
+bindata,jk0[gd],model_mag[gd]-allcat[gd].cmag,xbin,ybin,binsize=0.05,/med,min=0,max=1.2
+oplot,xbin,ybin,ps=-1,co=255
+gdbin = where(xbin ge 0.4 and xbin le 0.7,ngdbin)
+coef = robust_poly_fitq(xbin[gdbin],ybin[gdbin],1)
+;   0.00169113   0.00573150
 xx = scale_vector(findgen(100),-1,3)
 oplot,xx,poly(xx,coef),co=250
 oplot,[-1,3],[0,0],linestyle=2,co=255
-oplot,[0.3,0.3],[-2,2],linestyle=1,co=255
+oplot,[0.4,0.4],[-2,2],linestyle=1,co=255
 oplot,[0.7,0.7],[-2,2],linestyle=1,co=255
-al_legend,[stringize(coef[1],ndec=3)+'*(J-Ks)!dn0!n+'+stringize(coef[0],ndec=3)],textcolor=[250],/top,/left,charsize=1.4
+al_legend,[stringize(coef[1],ndec=3)+'*(J-Ks)!d0!n+'+stringize(coef[0],ndec=3)],textcolor=[250],/top,/left,charsize=1.4
 ps_close
 ps2png,file+'.eps',/eps
 spawn,['epstopdf',file+'.eps'],/noshell
 
+; LEAVE EQUATION AS IS!!  CHANGE COLOR RANGE TO 0.4<JK0<0.7
+
 ; This is the "corrected" relation!!!
-model_mag = alltmass.jmag + 0.54482*jk0 + 0.20*allcat.ebv + 0.663380
+;model_mag2 = alltmass.jmag + 0.472729*jk0 + 0.20*allcat.ebv + 0.700375
 
 ; versus EBV
 file = 'stripe82_yband_magdiff_ebv'
 ps_open,file,/color,thick=4,/encap
 device,/inches,xsize=8.5,ysize=9.5
-hess,allcat.ebv,model_mag-allcat.cmag,dx=0.02,dy=0.02,xr=[0,0.8],yr=[-1,1],/log,xtit='E(B-V)',ytit='Model-Mag',tit='Y-band'
-;bindata,jk0,model_mag-allcat.cmag,xbin,ybin,binsize=0.05,/med,gdind=gdind,min=0,max=1.2
-;oplot,xbin[gdind],ybin[gdind],ps=-1,co=255
-;gd = where(xbin ge 0.2 and xbin le 0.8,ngd)
-;coef = robust_poly_fitq(xbin[gd],ybin[gd],1)
-;xx = scale_vector(findgen(100),-1,3)
-;oplot,xx,poly(xx,coef),co=250
+hess,allcat[gd].ebv,model_mag[gd]-allcat[gd].cmag,dx=0.01,dy=0.02,xr=[0,0.8],yr=[-1,1],/log,xtit='E(B-V)',ytit='Model-Mag',tit='Y-band'
 oplot,[-1,3],[0,0],linestyle=2,co=255
-;al_legend,[stringize(coef[1],ndec=3)+'*(J-Ks)!dn0!n+'+stringize(coef[0],ndec=3)],textcolor=[250],/top,/left,charsize=1.4
 ps_close
 ps2png,file+'.eps',/eps
 spawn,['epstopdf',file+'.eps'],/noshell
