@@ -73,8 +73,10 @@ cnt = 0LL
 for i=0,ncatfiles-1 do begin
   dum = strsplit(file_basename(catfiles[i],'.fits'),'_',/extract)
   ccdnum = long(first_el(dum,/last))
+  hd = headfits(catfiles[i],exten=2)
   cat1 = MRDFITS(catfiles[i],2,/silent)
-  ncat1 = n_elements(cat1)
+  ncat1 = sxpar(hd,'naxis2')  ; handles empty catalogs
+  ;ncat1 = n_elements(cat1)
   chstr[i].filename = catfiles[i]
   chstr[i].ccdnum = ccdnum
   chstr[i].nsources = ncat1
