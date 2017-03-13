@@ -349,8 +349,8 @@ cat.ebv = ebv
 printlog,logf,'' & printlog,logf,'Step 4. Photometric calibration'
 printlog,logf,'-------------------------------'
 expstr = {file:fluxfile,base:base,expnum:long(expnum),ra:0.0d0,dec:0.0d0,dateobs:dateobs,mjd:0.0d,filter:filter,exptime:exptime,$
-          airmass:0.0,nsources:long(ncat),fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,zpterm:0.0,zptermerr:0.0,$
-          zptermsig:0.0,nrefmatch:0L}
+          airmass:0.0,nsources:long(ncat),fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,zpterm:999999.0,zptermerr:99999.0,$
+          zptermsig:999999.0,nrefmatch:0L}
 expstr.ra = cenra
 expstr.dec = cendec
 expstr.mjd = photred_getmjd('','CTIO',dateobs=dateobs)
@@ -377,7 +377,7 @@ CASE filter of
   printlog,logf,strtrim(ngd,2),' matches to GAIA, 2MASS and GALEX'
   if ngd eq 0 then begin
     printlog,logf,'No matches to GAIA, 2MASS and GALEX'
-    return
+    goto,ENDBOMB
   endif
   ; Matched catalogs
   cat1 = cat[gd]
@@ -399,7 +399,7 @@ CASE filter of
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
-    return
+    goto,ENDBOMB
   endif
   cat2 = cat1[gdcat]
   gaia2 = gaia1[gdcat]
@@ -450,7 +450,7 @@ end
   printlog,logf,strtrim(ngd,2),' matches to 2MASS and APASS'
   if ngd eq 0 then begin
     printlog,logf,'No matches to 2MASS and APASS'
-    return
+    goto,ENDBOMB
   endif
   ; Matched catalogs
   cat1 = cat[gd]
@@ -469,7 +469,7 @@ end
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
-    return
+    goto,ENDBOMB
   endif
   cat2 = cat1[gdcat]
   tmass2 = tmass1[gdcat]
@@ -517,7 +517,7 @@ end
   printlog,logf,strtrim(ngd,2),' matches to 2MASS and APASS'
   if ngd eq 0 then begin
     printlog,logf,'No matches to 2MASS and APASS'
-    return
+    goto,ENDBOMB
   endif
   ; Matched catalogs
   cat1 = cat[gd]
@@ -536,7 +536,7 @@ end
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
-    return
+    goto,ENDBOMB
   endif
   cat2 = cat1[gdcat]
   tmass2 = tmass1[gdcat]
@@ -584,7 +584,7 @@ end
   printlog,logf,strtrim(ngd,2),' matches to GAIA and 2MASS'
   if ngd eq 0 then begin
     printlog,logf,'No matches to GAIA and 2MASS'
-    return
+    goto,ENDBOMB
   endif
   ; Matched catalogs
   cat1 = cat[gd]
@@ -604,7 +604,7 @@ end
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
-    return
+    goto,ENDBOMB
   endif
   cat2 = cat1[gdcat]
   gaia2 = gaia1[gdcat]
@@ -647,7 +647,7 @@ end
   printlog,logf,strtrim(ngd,2),' matches to 2MASS'
   if ngd eq 0 then begin
     printlog,logf,'No matches to 2MASS'
-    return
+    goto,ENDBOMB
   endif
   ; Matched catalogs
   cat1 = cat[gd]
@@ -665,7 +665,7 @@ end
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
-    return
+    goto,ENDBOMB
   endif
   cat2 = cat1[gdcat]
   tmass2 = tmass1[gdcat]
@@ -706,7 +706,7 @@ end
   printlog,logf,strtrim(ngd,2),' matches to 2MASS'
   if ngd eq 0 then begin
     printlog,logf,'No matches to 2MASS'
-    return
+    goto,ENDBOMB
   endif
   ; Matched catalogs
   cat1 = cat[gd]
@@ -724,7 +724,7 @@ end
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
-    return
+    goto,ENDBOMB
   endif
   cat2 = cat1[gdcat]
   tmass2 = tmass1[gdcat]
@@ -767,7 +767,7 @@ end
   printlog,logf,strtrim(ngd,2),' matches to GAIA and 2MASS'
   if ngd eq 0 then begin
     printlog,logf,'No matches to GAIA and 2MASS'
-    return
+    goto,ENDBOMB
   endif
   ; Matched catalogs
   cat1 = cat[gd]
@@ -787,7 +787,7 @@ end
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
-    return
+    goto,ENDBOMB
   endif
   cat2 = cat1[gdcat]
   gaia2 = gaia1[gdcat]
@@ -827,6 +827,7 @@ printlog,logf,'ZPTERM = ',stringize(expstr.zpterm,ndec=4),' +/- ',stringize(exps
 
 ; Step 5. Write out the final catalogs and metadata
 ;--------------------------------------------------
+ENDBOMB:
 printlog,logf,'' & printlog,logf,'Writing final catalog to ',outfile
 MWRFITS,cat,outfile,/create
 ;if file_test(outfile+'.gz') eq 1 then file_delete,outfile+'.gz'
