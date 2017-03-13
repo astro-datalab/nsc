@@ -66,8 +66,8 @@ add_tag,schema,'CERR',9.99,schema
 cat = REPLICATE(schema,ncat)
 ; Start the chips summary structure
 chstr = replicate({filename:'',ccdnum:0L,nsources:0L,cenra:999999.0d0,cendec:999999.0d0,$
-                   gaianmatch:0L,rarms:0.0,racoef:dblarr(4),decrms:0.0,$
-                   deccoef:dblarr(4),zpterm:0.0,zperr:0.0},nchips)
+                   gaianmatch:0L,rarms:999999.0,racoef:dblarr(4),decrms:999999.0,$
+                   deccoef:dblarr(4),zpterm:999999.0,zperr:999999.0},nchips)
 ; Load the files
 cnt = 0LL
 for i=0,ncatfiles-1 do begin
@@ -84,6 +84,8 @@ for i=0,ncatfiles-1 do begin
     temp = cat[cnt:cnt+ncat1-1]
     STRUCT_ASSIGN,cat1,temp,/nozero
     temp.ccdnum = ccdnum
+    temp.ra = cat1.alpha_j2000  ; add these here in case the astrometric correction fails later on
+    temp.dec = cat1.delta_j2000
     cat[cnt:cnt+ncat1-1] = temp
     cnt += ncat1
     cenra = mean(minmax(cat1.alpha_j2000))
