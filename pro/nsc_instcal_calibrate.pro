@@ -362,6 +362,7 @@ expstr.rarms = median(chstr.rarms)
 expstr.decrms = median(chstr.decrms)
 expstr.ebv = median(ebv)
 expstr.gaianmatch = median(chstr.gaianmatch)
+expstr.fwhm = medfwhm
 
 CASE filter of
 ; ---- u-band ----
@@ -433,7 +434,6 @@ CASE filter of
   expstr.zptermerr = zptermerr
   expstr.zptermsig = sig  
   expstr.nrefmatch = ngdcat
-  expstr.fwhm = medfwhm
   ; Apply the zero-point to the full catalogs
   gdcatmag = where(cat.mag_auto lt 50,ngd)
   cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
@@ -500,7 +500,6 @@ end
   expstr.zptermerr = zptermerr
   expstr.zptermsig = sig  
   expstr.nrefmatch = ngdcat
-  expstr.fwhm = medfwhm
   ; Apply the zero-point to the full catalogs
   gdcatmag = where(cat.mag_auto lt 50,ngd)
   cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
@@ -567,7 +566,6 @@ end
   expstr.zptermerr = zptermerr
   expstr.zptermsig = sig  
   expstr.nrefmatch = ngdcat
-  expstr.fwhm = medfwhm
   ; Apply the zero-point to the full catalogs
   gdcatmag = where(cat.mag_auto lt 50,ngd)
   cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
@@ -632,7 +630,6 @@ end
   expstr.zptermerr = zptermerr
   expstr.zptermsig = sig  
   expstr.nrefmatch = ngdcat
-  expstr.fwhm = medfwhm
   ; Apply the zero-point to the full catalogs
   gdcatmag = where(cat.mag_auto lt 50,ngd)
   cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
@@ -691,7 +688,6 @@ end
   expstr.zptermerr = zptermerr
   expstr.zptermsig = sig  
   expstr.nrefmatch = ngdcat
-  expstr.fwhm = medfwhm
   ; Apply the zero-point to the full catalogs
   gdcatmag = where(cat.mag_auto lt 50,ngd)
   cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
@@ -750,7 +746,6 @@ end
   expstr.zptermerr = zptermerr
   expstr.zptermsig = sig  
   expstr.nrefmatch = ngdcat
-  expstr.fwhm = medfwhm
   ; Apply the zero-point to the full catalogs
   gdcatmag = where(cat.mag_auto lt 50,ngd)
   cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
@@ -812,7 +807,6 @@ end
   expstr.zptermerr = zptermerr
   expstr.zptermsig = sig  
   expstr.nrefmatch = ngdcat
-  expstr.fwhm = medfwhm
   ; Apply the zero-point to the full catalogs
   gdcatmag = where(cat.mag_auto lt 50,ngd)
   cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
