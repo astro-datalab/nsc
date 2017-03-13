@@ -123,7 +123,7 @@ model_mag = allapass.g_mag - 0.1433*jk0 - 0.05*allcat.ebv - 0.0138
 gd = where(allcat.class_star gt 0.8 and alltmass.qflg eq 'AAA' and allcat.fwhm_world*3600 lt 2.0,ngd)
 hess,jk0[gd],model_mag[gd]-allcat[gd].cmag,dx=0.02,dy=0.02,xr=[-0.1,1.3],yr=[-1,1],/log,xtit='(J-Ks)o',ytit='Model-Mag',tit='g-band'
 bindata,jk0[gd],model_mag[gd]-allcat[gd].cmag,xbin,ybin,binsize=0.05,/med,min=0,max=1.2
-oplot,xbin[gdind],ybin[gdind],ps=-1,co=255
+oplot,xbin,ybin,ps=-1,co=255
 gdbin = where(xbin ge 0.2 and xbin le 0.8,ngdbin)
 coef = robust_poly_fitq(xbin[gdbin],ybin[gdbin],1)
 ;  0.0461191    -0.102567
