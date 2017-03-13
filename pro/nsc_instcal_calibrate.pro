@@ -238,7 +238,8 @@ for i=0,nrefcat-1 do begin
     ;   for low density with 2MASS/GAIA and always for GALEX and APASS
     endif else begin
       ;ref = QUERYVIZIER(refcat[i],[cenra,cendec],[rarange*1.1*60,decrange*1.1*60],/cfa)
-      ref = QUERYVIZIER(refcat[i],[cenra,cendec],radius*60,/cfa)
+      if refcat[i] eq 'APASS' then cfa=0 else cfa=1  ; cfa doesn't have APASS
+      ref = QUERYVIZIER(refcat[i],[cenra,cendec],radius*60,cfa=cfa)
 
       ; Fix/homogenize the GAIA tags
       if varname eq 'GAIA' then begin
