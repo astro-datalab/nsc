@@ -65,7 +65,7 @@ add_tag,schema,'CMAG',99.99,schema
 add_tag,schema,'CERR',9.99,schema
 cat = REPLICATE(schema,ncat)
 ; Start the chips summary structure
-chstr = replicate({filename:'',ccdnum:0L,nsources:0L,cenra:0.0d0,cendec:0.0d0,$
+chstr = replicate({filename:'',ccdnum:0L,nsources:0L,cenra:999999.0d0,cendec:999999.0d0,$
                    gaianmatch:0L,rarms:0.0,racoef:dblarr(4),decrms:0.0,$
                    deccoef:dblarr(4),zpterm:0.0,zperr:0.0},nchips)
 ; Load the files
@@ -75,34 +75,37 @@ for i=0,ncatfiles-1 do begin
   ccdnum = long(first_el(dum,/last))
   cat1 = MRDFITS(catfiles[i],2,/silent)
   ncat1 = n_elements(cat1)
-  temp = cat[cnt:cnt+ncat1-1]
-  STRUCT_ASSIGN,cat1,temp,/nozero
-  temp.ccdnum = ccdnum
-  cat[cnt:cnt+ncat1-1] = temp
-  cnt += ncat1
   chstr[i].filename = catfiles[i]
   chstr[i].ccdnum = ccdnum
   chstr[i].nsources = ncat1
-  cenra = mean(minmax(cat1.alpha_j2000))
-  ; Wrapping around RA=0
-  if range(cat1.alpha_j2000) gt 100 then begin
-    ra = cat1.alpha_j2000
-    bdra = where(ra gt 180,nbdra)
-    if nbdra gt 0 then ra[bdra]-=360
-    cenra = mean(minmax(ra))
-    if cenra lt 0 then cenra+=360
+  if ncat1 gt 0 then begin
+    temp = cat[cnt:cnt+ncat1-1]
+    STRUCT_ASSIGN,cat1,temp,/nozero
+    temp.ccdnum = ccdnum
+    cat[cnt:cnt+ncat1-1] = temp
+    cnt += ncat1
+    cenra = mean(minmax(cat1.alpha_j2000))
+    ; Wrapping around RA=0
+    if range(cat1.alpha_j2000) gt 100 then begin
+      ra = cat1.alpha_j2000
+      bdra = where(ra gt 180,nbdra)
+      if nbdra gt 0 then ra[bdra]-=360
+      cenra = mean(minmax(ra))
+      if cenra lt 0 then cenra+=360
+    endif
+    chstr[i].cenra = cenra
+    chstr[i].cendec = mean(minmax(cat1.delta_j2000))
   endif
-  chstr[i].cenra = cenra
-  chstr[i].cendec = mean(minmax(cat1.delta_j2000))
 endfor
 ; Exposure level values
-cendec = mean(minmax(chstr.cendec))
-decrange = range(chstr.cendec)
-cenra = mean(minmax(chstr.cenra))
-rarange = range(chstr.cenra)*cos(cendec/!radeg)
+gdchip = where(chstr.nsources gt 0,ngdchip)
+cendec = mean(minmax(chstr[gdchip].cendec))
+decrange = range(chstr[gdchip].cendec)
+cenra = mean(minmax(chstr[gdchip].cenra))
+rarange = range(chstr[gdchip].cenra)*cos(cendec/!radeg)
 ; Wrapping around RA=0
-if range(minmax(chstr.cenra)) gt 100 then begin
- ra = chstr.cenra
+if range(minmax(chstr[gdchip].cenra)) gt 100 then begin
+ ra = chstr[gdchip].cenra
  bdra = where(ra gt 180,nbdra)
  if nbdra gt 0 then ra[bdra]-=360
  cenra = mean(minmax(ra))
@@ -274,6 +277,7 @@ printlog,logf,'' & printlog,logf,'Step 3. Astrometric calibration'
 printlog,logf,'--------------------------------'
 ; CCD loop
 For i=0,nchips-1 do begin
+  if chstr[i].nsources eq 0 then goto,BOMB
   ; Relative to center of chip
   MATCH,chstr[i].ccdnum,cat.ccdnum,chind1,chind2,/sort,count=nchmatch
   cat1 = cat[chind2]
@@ -318,6 +322,7 @@ For i=0,nchips-1 do begin
   chstr[i].racoef = racoef
   chstr[i].decrms = decrms
   chstr[i].deccoef = deccoef
+  BOMB:
 Endfor
 
 ; Measure median seeing FWHM
