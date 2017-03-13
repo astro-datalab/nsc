@@ -285,8 +285,8 @@ For i=0,nchips-1 do begin
   cat1 = cat[chind2]
   SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat1.alpha_j2000,cat1.delta_j2000,0.5,ind1,ind2,/sph,count=ngmatch
   if ngmatch eq 0 then SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat1.alpha_j2000,cat1.delta_j2000,1.0,ind1,ind2,/sph,count=ngmatch
-  if ngmatch eq 0 then begin
-    print,'NO Gaia matches'
+  if ngmatch lt 5 then begin
+    print,'Not enough Gaia matches'
     goto,BOMB
   endif
   gaia2 = gaia[ind1]
