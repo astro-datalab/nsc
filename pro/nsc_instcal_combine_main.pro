@@ -9,6 +9,28 @@ nside = 128
 nmulti = 30
 radeg = 180.0d0 / !dpi
 
+; Log file
+;------------------
+; format is nsc_combine_main.DATETIME.log
+jd = systime(/julian)
+caldat,jd,month,day,year,hour,minute,second
+smonth = strtrim(month,2)
+if month lt 10 then smonth = '0'+smonth
+sday = strtrim(day,2)
+if day lt 10 then sday = '0'+sday
+syear = strmid(strtrim(year,2),2,2)
+shour = strtrim(hour,2)
+if hour lt 10 then shour='0'+shour
+sminute = strtrim(minute,2)
+if minute lt 10 then sminute='0'+sminute
+ssecond = strtrim(round(second),2)
+if second lt 10 then ssecond='0'+ssecond
+logfile = dir+'combine/nsc_instcal_combine_main.'+smonth+sday+syear+shour+sminute+ssecond+'.log'
+JOURNAL,logfile
+
+print, "Combining DECam InstCal catalogs"
+
+
 ; Restore the calibration summary file
 str0 = mrdfits(dir+'nsc_instcal_calibrate.fits',1,/silent)
 gd = where(str0.success eq 1,ngd)
@@ -148,6 +170,35 @@ stop
 
 ; Now run the combination program on each healpix pixel
 PBS_DAEMON,cmd,cmddir,/hyperthread,/idle,prefix='nsccmb',jobs=jobs,nmulti=nmulti,wait=1
+
+
+; Load all the summary/metadata files
+print,'Creating Healpix summary file'
+sumstr = replicate({pix:0L,nexposures:0L,nobjects:0L,success:0},nupix)
+sumstr.pix = upix
+for i=0,nupix-1 do begin
+  if (i+1) mod 5000 eq 0 then print,i+1
+  file = dir+'combine/'+strtrim(upix[i],2)+'.fits'
+  if file_test(file) eq 1 then begin
+    meta = MRDFITS(file,1,/silent)
+    sumstr[i].nexposures = n_elements(meta)
+    hd = headfits(file,exten=2)
+    sumstr[i].nobjects = sxpar(hd,'naxis2')
+    sumstr[i].success = 1
+  endif else begin
+    sumstr[i].success = 0
+  endelse
+endfor
+gd = where(sumstr.success eq 1,ngd)
+print,strtrim(ngd,2),' Healpix successfully processed'
+print,'Writing summary file to ',dir+'combine/nsc_instcal_combine.fits'
+MWRFITS,expstr,dir+'combine/nsc_instcal_combine.fits',/create
+
+; End logfile
+;------------
+JOURNAL
+
+
 
 stop
 
