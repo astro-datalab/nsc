@@ -98,6 +98,12 @@ lonbuff = lonbound*frac
 latbuff = latbound*frac
 buffer = {cenra:cenra,cendec:cendec,lon:lonbuff,lat:latbuff}
 
+; Initialize the ID structure
+;  this will contain the SourceID, Exposure name, ObjectID
+schema_idstr = {sourceid:'',exposure:'',expnum:'',objectid:''}
+idstr = replicate(schema_idstr,1e6)
+nidstr = n_elements(idstr)
+idcnt = 0LL
 
 ; Initialize the object structure
 schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,ndet:0L,$
@@ -118,7 +124,8 @@ nobj = n_elements(obj)
 cnt = 0LL
 
 ; Loop over the exposures
-for i=0,nlist-1 do begin
+undefine,allmeta
+FOR i=0,nlist-1 do begin
   print,strtrim(i+1,2),' Loading ',list[i].file
 
   ; Load the exposure catalog
@@ -137,6 +144,8 @@ for i=0,nlist-1 do begin
 
   metafile = repstr(list[i].file,'_cat','_meta')
   meta = MRDFITS(metafile,1,/silent)
+  meta.base = strtrim(meta.base)
+  meta.expnum = strtrim(meta.expnum)
   ;head = headfits(list[i].file,exten=0)
   ;filtername = sxpar(head,'filter')
   ;if strmid(filtername,0,2) eq 'VR' then filter='VR' else filter=strmid(filtername,0,1)
@@ -148,7 +157,7 @@ for i=0,nlist-1 do begin
   ;  -reproject to tangent plane first so we don't have to deal
   ;     with RA=0 wrapping or pol issues
   ROTSPHCEN,cat1.ra,cat1.dec,buffer.cenra,buffer.cendec,lon,lat,/gnomic
-  ROI_CUT,buffer.lon,buffer.lat,lon,lat,ind0,ind1,fac=100
+  ROI_CUT,buffer.lon,buffer.lat,lon,lat,ind0,ind1,fac=100,/silent
   nmatch = n_elements(ind1)
 
   ; Only want source inside this pixel
@@ -163,6 +172,9 @@ for i=0,nlist-1 do begin
   print,'  ',strtrim(nmatch,2),' sources are inside this pixel'
   cat = cat1[ind1]
   ncat = nmatch
+
+  ; Add metadata to ALLMETA
+  push,allmeta,meta
 
   ; NDETX is good "detection" and morphology for this filter
   ; NPHOTX is good "photometry" for this filter
@@ -181,7 +193,7 @@ for i=0,nlist-1 do begin
 
     ; Copy to final structure
     newexp = replicate(schema_obj,ncat)
-    newexp.id = lindgen(ncat)+1
+    newexp.id = strtrim(pix,2)+'.'+strtrim(lindgen(ncat)+1,2)
     newexp.pix = pix
     newexp.ra = cat.ra
     newexp.dec = cat.dec
@@ -223,6 +235,22 @@ for i=0,nlist-1 do begin
     newexp.class_star = cat.class_star
     obj[0:ncat-1] = newexp
     cnt += ncat
+
+    ; Add new elements to IDSTR
+    if idcnt+ncat gt nidstr then begin
+      old = idstr
+      idstr = replicate(schema_idstr,nidstr+1e5)
+      idstr[0:nidstr-1] = old
+      nidstr = n_elements(idstr)
+      undefine,old
+    endif
+    ; Add to IDSTR
+    sourceid = strtrim(meta.expnum,2)+'.'+strtrim(cat.ccdnum,2)+'.'+strtrim(cat.number,2)
+    idstr[idcnt:idcnt+ncat-1].sourceid = sourceid
+    idstr[idcnt:idcnt+ncat-1].exposure = meta.base
+    idstr[idcnt:idcnt+ncat-1].expnum = meta.expnum
+    idstr[idcnt:idcnt+ncat-1].objectid = newexp.id
+    idcnt += ncat
 
   ; Second and up
   Endif else begin
@@ -277,6 +305,22 @@ for i=0,nlist-1 do begin
       cmb.class_star += newcat.class_star
       obj[ind1] = cmb  ; stuff it back in
 
+      ; Add new elements to IDSTR
+      if idcnt+nmatch gt nidstr then begin
+        old = idstr
+        idstr = replicate(schema_idstr,nidstr+1e5)
+        idstr[0:nidstr-1] = old
+        nidstr = n_elements(idstr)
+        undefine,old
+      endif
+      ; Add to IDSTR
+      sourceid = strtrim(meta.expnum,2)+'.'+strtrim(newcat.ccdnum,2)+'.'+strtrim(newcat.number,2)
+      idstr[idcnt:idcnt+nmatch-1].sourceid = sourceid
+      idstr[idcnt:idcnt+nmatch-1].exposure = meta.base
+      idstr[idcnt:idcnt+nmatch-1].expnum = meta.expnum
+      idstr[idcnt:idcnt+nmatch-1].objectid = cmb.id
+      idcnt += nmatch
+
       ; Remove stars
       if nmatch lt n_elements(cat) then remove,ind2,cat else undefine,cat
       ncat = n_elements(cat)
@@ -297,7 +341,7 @@ for i=0,nlist-1 do begin
 
       ; Copy to final structure
       newexp = replicate(schema_obj,ncat)
-      newexp.id = cnt+lindgen(ncat)+1
+      newexp.id = strtrim(pix,2)+'.'+strtrim(cnt+lindgen(ncat)+1,2)
       newexp.pix = pix
       newexp.ra = cat.ra
       newexp.dec = cat.dec
@@ -338,11 +382,27 @@ for i=0,nlist-1 do begin
       newexp.class_star = cat.class_star
       obj[cnt:cnt+ncat-1] = newexp   ; stuff it in
       cnt += ncat
+
+      ; Add new elements to IDSTR
+      if idcnt+ncat gt nidstr then begin
+        old = idstr
+        idstr = replicate(schema_idstr,nidstr+1e5)
+        idstr[0:nidstr-1] = old
+        nidstr = n_elements(idstr)
+        undefine,old
+      endif
+      ; Add to IDSTR
+      sourceid = strtrim(meta.expnum,2)+'.'+strtrim(cat.ccdnum,2)+'.'+strtrim(cat.number,2)
+      idstr[idcnt:idcnt+ncat-1].sourceid = sourceid
+      idstr[idcnt:idcnt+ncat-1].exposure = meta.base
+      idstr[idcnt:idcnt+ncat-1].expnum = meta.expnum
+      idstr[idcnt:idcnt+ncat-1].objectid = newexp.id
+      idcnt += ncat
     endif
 
-  Endelse
+  Endelse  ; second exposure and up
   BOMB:
-endfor
+ENDFOR  ; exposure loop
 ; No sources
 if cnt eq 0 then begin
   print,'No sources in this pixel'
@@ -352,6 +412,7 @@ endif
 obj = obj[0:cnt-1]
 nobj = n_elements(obj)
 print,strtrim(nobj,2),' final objects'
+idstr = idstr[0:idcnt-1]
 
 ; Convert totalwt and totalfluxwt to MAG and ERR
 ;  and average the morphology parameters PER FILTER
@@ -429,12 +490,41 @@ if nmatch eq 0 then begin
   print,'None of the final objects fall inside the pixel'
   return
 endif
+; Get trimmed objects
+trimind = lindgen(nobj)
+REMOVE,ind1,trimind
+trimobj = obj[trimind]
+; Keep the objects inside the Healpix
 obj = obj[ind1]
 print,strtrim(nmatch,2),' final objects fall inside the pixel'
 
+; Remove trimmed objects from IDSTR
+ntrim = n_elements(trimobj)
+undefine,torem
+for i=0,ntrim-1 do begin
+  MATCH,idstr.objectid,trimobj.id,ind1,ind2,/sort,count=nmatch
+  push,torem,ind1
+endfor
+REMOVE,torem,idstr
+
+; Create final summary structure from ALLMETA
+;  get exposures that are in IDSTR
+uiexpnum = uniq(idstr.expnum,sort(idstr.expnum))
+uexpnum = idstr[uiexpnum].expnum
+MATCH,allmeta.expnum,uexpnum,ind1,ind2,/sort,count=nmatch
+sumstr = allmeta[ind1]
+add_tag,sumstr,'nobjects',0L,sumstr
+add_tag,sumstr,'healpix',long(pix),sumstr
+for i=0,nmatch-1 do begin
+  MATCH,idstr.expnum,sumstr[i].expnum,ind1,ind2,/sort,count=nmatch  
+  sumstr[i].nobjects = nmatch
+endfor
+
 ; Write the output file
 print,'Writing combined catalog to ',outfile
-MWRFITS,obj,outfile,/create
+MWRFITS,sumstr,outfile,/create      ; first, summary table
+MWRFITS,obj,outfile,/silent         ; second, catalog
+MWRFITS,idstr,outfile,/silent       ; third, ID table
 
 if keyword_set(stp) then stop
 
