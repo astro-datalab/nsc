@@ -1,4 +1,4 @@
-pro nsc_instcal_combine_main
+pro nsc_instcal_combine_main,redo=redo,nmulti=nmulti
 
 ; Combine all of the data
 NSC_ROOTDIRS,dldir,mssdir,localdir
@@ -6,8 +6,30 @@ dir = dldir+'users/dnidever/decamcatalog/instcal/'
 ;dir = '/datalab/users/dnidever/decamcatalog/instcal/'
 ;nside = 256
 nside = 128
-nmulti = 20
+nmulti = 30
 radeg = 180.0d0 / !dpi
+
+; Log file
+;------------------
+; format is nsc_combine_main.DATETIME.log
+jd = systime(/julian)
+caldat,jd,month,day,year,hour,minute,second
+smonth = strtrim(month,2)
+if month lt 10 then smonth = '0'+smonth
+sday = strtrim(day,2)
+if day lt 10 then sday = '0'+sday
+syear = strmid(strtrim(year,2),2,2)
+shour = strtrim(hour,2)
+if hour lt 10 then shour='0'+shour
+sminute = strtrim(minute,2)
+if minute lt 10 then sminute='0'+sminute
+ssecond = strtrim(round(second),2)
+if second lt 10 then ssecond='0'+ssecond
+logfile = dir+'combine/nsc_instcal_combine_main.'+smonth+sday+syear+shour+sminute+ssecond+'.log'
+JOURNAL,logfile
+
+print, "Combining DECam InstCal catalogs"
+
 
 ; Restore the calibration summary file
 str0 = mrdfits(dir+'nsc_instcal_calibrate.fits',1,/silent)
@@ -19,6 +41,8 @@ str.metafile = strtrim(str.metafile,2)
 str.file = strtrim(str.file,2)
 str.base = strtrim(str.base,2)
 str.filter = strtrim(str.filter,2)
+
+; APPLY RELEASE-DATE CUTS
 
 ; APPLY QA CUTS IN ZEROPOINT AND SEEING
 print,'APPLY QA CUTS IN ZEROPOINT AND SEEING'
@@ -120,7 +144,7 @@ MWRFITS,index,dir+'combine/healpix_list.fits',/silent
 ;endfor
 
 ; Make the commands
-cmd = "nsc_instcal_combine,'"+strtrim(upix,2)+"',nside="+strtrim(nside,2)
+cmd = "nsc_instcal_combine,"+strtrim(upix,2)+",nside="+strtrim(nside,2)
 if keyword_set(redo) then cmd+=',/redo'
 cmddir = strarr(nupix)+localdir+'dnidever/nsc/instcal/tmp/'
 ;dirs = strarr(nupix)+'/data0/dnidever/decamcatalog/tmp/'
@@ -147,79 +171,34 @@ stop
 ; Now run the combination program on each healpix pixel
 PBS_DAEMON,cmd,cmddir,/hyperthread,/idle,prefix='nsccmb',jobs=jobs,nmulti=nmulti,wait=1
 
-; Combine everything
-print,'' & print,'Combining all of the data into one file'
-schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,ndet:0L,$
-              ndetu:0,nphotu:0,umag:0.0,uerr:0.0,uasemi:0.0,ubsemi:0.0,utheta:0.0,$
-              ndetg:0,nphotg:0,gmag:0.0,gerr:0.0,gasemi:0.0,gbsemi:0.0,gtheta:0.0,$
-              ndetr:0,nphotr:0,rmag:0.0,rerr:0.0,rasemi:0.0,rbsemi:0.0,rtheta:0.0,$
-              ndeti:0,nphoti:0,imag:99.9,ierr:0.0,iasemi:0.0,ibsemi:0.0,itheta:0.0,$
-              ndetz:0,nphotz:0,zmag:0.0,zerr:0.0,zasemi:0.0,zbsemi:0.0,ztheta:0.0,$
-              ndety:0,nphoty:0,ymag:0.0,yerr:0.0,yasemi:0.0,ybsemi:0.0,ytheta:0.0,$
-              ndetvr:0,nphotvr:0,vrmag:0.0,vrerr:0.0,vrasemi:0.0,vrbsemi:0.0,vrtheta:0.0,$
-              x2:0.0,x2err:0.0,y2:0.0,y2err:0.0,xy:0.0,xyerr:0.0,cxx:0.0,cxxerr:0.0,$
-              cxy:0.0,cxyerr:0.0,cyy:0.0,cyyerr:0.0,asemi:0.0,asemierr:0.0,bsemi:0.0,$
-              bsemierr:0.0,theta:0.0,thetaerr:0.0,elongation:0.0,$
-              ellipticity:0.0,fwhm:0.0,flags:0,class_star:0.0,ebv:0.0}
-obj = replicate(schema_obj,1e7)
-nobj = n_elements(obj)
-cnt = 0LL
+
+; Load all the summary/metadata files
+print,'Creating Healpix summary file'
+sumstr = replicate({pix:0L,nexposures:0L,nobjects:0L,success:0},nupix)
+sumstr.pix = upix
 for i=0,nupix-1 do begin
-  print,strtrim(i+1,2),' ',index[i].pix
-  file = dir+'combine/'+strtrim(index[i].pix,2)+'.fits'
+  if (i+1) mod 5000 eq 0 then print,i+1
+  file = dir+'combine/'+strtrim(upix[i],2)+'.fits'
   if file_test(file) eq 1 then begin
-    cat1 = MRDFITS(file,1,/silent)
-    ncat1 = n_elements(cat1)
-    print,'  ',strtrim(ncat1,2),' sources'
-    cat1.id = strtrim(index[i].pix,2)+'.'+strtrim(cat1.id,2)
-
-    ; Add new elements
-    if cnt+ncat1 gt nobj then begin
-      print,'Adding more elements'
-      orig = obj
-      obj = replicate(schema_obj,nobj+5e6)
-      obj[0:nobj-1] = orig
-      nobj = n_elements(obj)
-      undefine,orig
-    endif
-
-    ; Stuff information in
-    obj[cnt:cnt+ncat1-1] = cat1
-    cnt += ncat1
-    ;push,obj,cat1
+    meta = MRDFITS(file,1,/silent)
+    sumstr[i].nexposures = n_elements(meta)
+    hd = headfits(file,exten=2)
+    sumstr[i].nobjects = sxpar(hd,'naxis2')
+    sumstr[i].success = 1
   endif else begin
-    print,file,' NOT FOUND'
+    sumstr[i].success = 0
   endelse
-  ;stop
 endfor
-; Trim excess elements
-obj = obj[0:cnt-1]
-nobj = n_elements(obj)
-print,strtrim(nobj,2),' objects'
+gd = where(sumstr.success eq 1,ngd)
+print,strtrim(ngd,2),' Healpix successfully processed'
+print,'Writing summary file to ',dir+'combine/nsc_instcal_combine.fits'
+MWRFITS,expstr,dir+'combine/nsc_instcal_combine.fits',/create
 
-; Write combined catalog
-print,'Writing combined catalog to ',dir+'combine/nsc_combine.fits'
-MWRFITS,obj,dir+'combine/nsc_combine.fits',/create
+; End logfile
+;------------
+JOURNAL
 
-; Make figure
-setdisp
-!p.font = 0
-; On sky distribution
-file = 'nsc_skycounts'
-ps_open,file,/color,thick=4,/encap
-hess,obj.ra,obj.dec,dum,dx=0.1,dy=0.1,/log,xtit='RA',ytit='DEC',tit='NOAO Source Catalog on sky distribution'
-ps_close
-ps2png,file+'.eps',/eps
 
-; CMD
-file = 'nsc_gihess'
-ps_open,file,/color,thick=4,/encap
-device,/inches,xsize=7.5,ysize=9.5
-gd = where(obj.gmag lt 50 and obj.imag lt 50,ngd)
-hess,obj[gd].gmag-obj[gd].imag,obj[gd].gmag,dum,im,dx=0.02,dy=0.05,xr=[-1,3.5],yr=[24,10],/log,/noplot,xarr=xarr,yarr=yarr
-displayc,im,xarr,yarr,xtit='g-i',ytit='i',tit='NOAO Source Catalog CMD',charsize=1.3,/yflip,/log
-ps_close
-ps2png,file+'.eps',/eps
 
 stop
 
