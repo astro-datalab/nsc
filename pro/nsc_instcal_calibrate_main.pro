@@ -113,6 +113,26 @@ for i=0,nexpdirs-1 do begin
     ;expstr[i].decrms = median(chstr1.decrms)
     ;expstr[i].gaianmatch = median(chstr1.gaianmatch)
     expstr[i].success = 1
+
+    ; Fix missing DATE-OBS
+    if strtrim(expstr[i].dateobs,2) eq '' or strtrim(expstr[i].dateobs,2) eq '0' then begin
+      fluxfile = strtrim(expstr[i].file)
+      lo = strpos(fluxfile,'archive') 
+      fluxfile = mssdir+strmid(fluxfile,lo)
+      head = headfits(fluxfile,exten=0) 
+      expstr[i].dateobs = sxpar(head,'DATE-OBS') 
+    endif
+    ; Fix missing AIRMASS
+    if expstr[i].airmass lt 0.9 then begin
+      OBSERVATORY,'ctio',obs
+      lat = obs.latitude 
+      lon = obs.longitude
+      jd = date2jd(expstr[i].dateobs) 
+      ra = expstr[i].ra 
+      dec = expstr[i].dec
+      expstr[i].airmass = AIRMASS(jd,ra,dec,lat,lon)
+    endif
+
   endif else expstr[i].success=0
 endfor
 gd = where(expstr.success eq 1,ngd)
