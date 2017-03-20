@@ -24,7 +24,7 @@ endif
 print,'Combining InstCal SExtractor catalogs or Healpix pixel = ',strtrim(pix,2)
 
 ; Load the list
-listfile = dir+'combine/healpix_list.fits'
+listfile = dir+'combine/nsc_healpix_list.fits'
 ;listfile = dir+'combine/lists/'+strtrim(pix,2)+'.fits'
 if file_test(listfile) eq 0 then begin
   print,listfile,' NOT FOUND'
@@ -133,8 +133,49 @@ FOR i=0,nlist-1 do begin
   ncat1 = n_elements(cat1)
   print,'  ',strtrim(ncat1,2),' sources'
 
-  ; Remove sources near bad pixels
-  bdcat = where(cat1.imaflags_iso gt 10,nbdcat)
+  ; Source Extractor FLAGS
+  ; 1   The object has neighbours, bright and close enough to significantly bias the MAG AUTO photometry,
+  ;       or bad pixels (more than 10% of the integrated area affected),
+  ; 2   The object was originally blended with another one,
+  ; 4   At least one pixel of the object is saturated (or very close to),
+  ; 8   The object is truncated (too close to an image boundary),
+  ; 16  Object’s aperture data are incomplete or corrupted,
+  ; 32  Object’s isophotal data are incomplete or corrupted,
+  ; 64  A memory overflow occurred during deblending,
+  ; 128 A memory overflow occurred during extraction.
+  ; Don't use any of these.  That saturation one is already
+  ;  covered in the CP bitmask flag
+
+  ; --CP bit masks, Pre-V3.5.0 (PLVER)  
+  ; Bit     DQ Type
+  ; 1      detector bad pixel
+  ; 2      saturated
+  ; 4      interpolated
+  ; 16     single exposure cosmic ray
+  ; 64     bleed trail
+  ; 128    multi-exposure transient
+  ; --CP bit masks, V3.5.0 on (after ~10/28/2014), integer masks  
+  ;  1 = bad (in static bad pixel mask)
+  ;  2 = no value (for stacks)
+  ;  3 = saturated
+  ;  4 = bleed mask
+  ;  5 = cosmic ray
+  ;  6 = low weight
+  ;  7 = diff detect   
+  ; OR: the result is an arithmetic (bit-to-bit) OR of flag-map pixels.
+  ; The NIMAFLAGS ISO catalog parameter contains a number of relevant
+  ; flag-map pixels: the number of non-zero flag-map pixels in the
+  ; case of an OR or AND FLAG TYPE.
+
+  ; Make a cut on quality mask flag (IMAFLAGS_ISO)
+  ;   Don't use "difference image masking" for pre-V3.5 or so version
+  ;   because it had problems.  We don't have PLVER but just use
+  ;   the maximum IMAFLAGS_ISO value
+  if max(str.imaflags_iso) gt 10 then begin
+    bdcat = where(cat1.imaflags_iso gt 0 and cat1.imaflags_iso lt 120,nbdcat)
+  endif else begin
+    bdcat = where(cat1.imaflags_iso gt 0,nbdcat)
+  endelse
   if nbdcat gt 0 then begin
     print,'  Removing ',strtrim(nbdcat,2),' sources contaminated by bad pixels.'
     if nbdcat eq ncat1 then goto,BOMB
