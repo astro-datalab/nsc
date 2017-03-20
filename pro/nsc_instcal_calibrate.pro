@@ -266,7 +266,8 @@ expstr = {file:fluxfile,base:base,expnum:long(expnum),ra:0.0d0,dec:0.0d0,dateobs
           zptermsig:0.0,nrefmatch:0L}
 expstr.ra = cenra
 expstr.dec = cendec
-expstr.mjd = photred_getmjd('','CTIO',dateobs=dateobs)
+expstr.mjd = date2jd(dateobs,/mjd)
+;expstr.mjd = photred_getmjd('','CTIO',dateobs=dateobs)
 expstr.nchips = nchips
 expstr.airmass = airmass
 expstr.rarms = median(chstr.rarms)
