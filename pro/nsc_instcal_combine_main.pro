@@ -247,6 +247,8 @@ index.nexp = nexp
 print,'Writing list to ',dir+'combine/nsc_healpix_list.fits'
 MWRFITS,healstr,dir+'combine/nsc_healpix_list.fits',/create
 MWRFITS,index,dir+'combine/nsc_healpix_list.fits',/silent
+; Copy to local directory for faster reading speed
+file_copy,dir+'combine/nsc_healpix_list.fits',localdir+'dnidever/nsc/instcal/',/over
 ; PUT NSIDE IN HEADER!!
 
 ;; Loop over each pixel and get list of overlapping exposures
@@ -263,8 +265,6 @@ cmd = "nsc_instcal_combine,"+strtrim(upix,2)+",nside="+strtrim(nside,2)
 if keyword_set(redo) then cmd+=',/redo'
 cmddir = strarr(nupix)+localdir+'dnidever/nsc/instcal/tmp/'
 ;dirs = strarr(nupix)+'/data0/dnidever/decamcatalog/tmp/'
-
-stop
 
 ; Check if the output file exists
 if not keyword_set(redo) then begin
