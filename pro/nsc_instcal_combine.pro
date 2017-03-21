@@ -566,6 +566,7 @@ endif
 ;  and sometimes not, so turn to LONG to match
 uiexpnum = uniq(long(idstr.expnum),sort(long(idstr.expnum)))
 uexpnum = long(idstr[uiexpnum].expnum)
+nuexpnum = n_elements(uexpnum)
 MATCH,long(allmeta.expnum),uexpnum,ind1,ind2,/sort,count=nmatch
 sumstr = allmeta[ind1]
 add_tag,sumstr,'nobjects',0L,sumstr
@@ -574,15 +575,13 @@ add_tag,sumstr,'healpix',long(pix),sumstr
 expnum = long(idstr.expnum)
 siexp = sort(expnum)
 expnum = expnum[siexp]
-brklo = where(expnum ne shift(expnum,1),nbrk)
-brkhi = [brklo[1:nbrk-1]-1,n_elements(expnum)-1]
-numobjexp = brkhi-brklo+1
+if nuexpnum gt 1 then begin
+  brklo = where(expnum ne shift(expnum,1),nbrk)
+  brkhi = [brklo[1:nbrk-1]-1,n_elements(expnum)-1]
+  numobjexp = brkhi-brklo+1
+endif else numobjexp=n_elements(expnum)
 MATCH,long(sumstr.expnum),uexpnum,ind1,ind2,/sort,count=nmatch
 sumstr[ind1].nobjects = numobjexp
-;for i=0,nmatch-1 do begin
-;  MATCH,idstr.expnum,sumstr[i].expnum,ind1,ind2,/sort,count=nmatch  
-;  sumstr[i].nobjects = nmatch
-;endfor
 
 ; Write the output file
 print,'Writing combined catalog to ',outfile
