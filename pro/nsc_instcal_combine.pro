@@ -1,5 +1,7 @@
 pro nsc_instcal_combine,pix,nside=nside,redo=redo,stp=stp
 
+t0 = systime(1)
+
 ; Combine all the exposures that fall in this healpix pixel
 ;nside = 256
 if n_elements(nside) eq 0 then nside = 128
@@ -100,7 +102,7 @@ buffer = {cenra:cenra,cendec:cendec,lon:lonbuff,lat:latbuff}
 
 ; Initialize the ID structure
 ;  this will contain the SourceID, Exposure name, ObjectID
-schema_idstr = {sourceid:'',exposure:'',expnum:'',objectid:''}
+schema_idstr = {sourceid:'',exposure:'',expnum:'',objectid:'',objectindex:0LL}
 idstr = replicate(schema_idstr,1e6)
 nidstr = n_elements(idstr)
 idcnt = 0LL
@@ -171,7 +173,7 @@ FOR i=0,nlist-1 do begin
   ;   Don't use "difference image masking" for pre-V3.5 or so version
   ;   because it had problems.  We don't have PLVER but just use
   ;   the maximum IMAFLAGS_ISO value
-  if max(str.imaflags_iso) gt 10 then begin
+  if max(cat1.imaflags_iso) gt 10 then begin
     bdcat = where(cat1.imaflags_iso gt 0 and cat1.imaflags_iso lt 120,nbdcat)
   endif else begin
     bdcat = where(cat1.imaflags_iso gt 0,nbdcat)
@@ -291,6 +293,7 @@ FOR i=0,nlist-1 do begin
     idstr[idcnt:idcnt+ncat-1].exposure = meta.base
     idstr[idcnt:idcnt+ncat-1].expnum = meta.expnum
     idstr[idcnt:idcnt+ncat-1].objectid = newexp.id
+    idstr[idcnt:idcnt+ncat-1].objectindex = lindgen(ncat)
     idcnt += ncat
 
   ; Second and up
@@ -360,6 +363,7 @@ FOR i=0,nlist-1 do begin
       idstr[idcnt:idcnt+nmatch-1].exposure = meta.base
       idstr[idcnt:idcnt+nmatch-1].expnum = meta.expnum
       idstr[idcnt:idcnt+nmatch-1].objectid = cmb.id
+      idstr[idcnt:idcnt+nmatch-1].objectindex = ind1
       idcnt += nmatch
 
       ; Remove stars
@@ -422,6 +426,7 @@ FOR i=0,nlist-1 do begin
       newexp.flags = cat.flags
       newexp.class_star = cat.class_star
       obj[cnt:cnt+ncat-1] = newexp   ; stuff it in
+      objectindex = lindgen(ncat)+cnt
       cnt += ncat
 
       ; Add new elements to IDSTR
@@ -436,8 +441,9 @@ FOR i=0,nlist-1 do begin
       sourceid = strtrim(meta.expnum,2)+'.'+strtrim(cat.ccdnum,2)+'.'+strtrim(cat.number,2)
       idstr[idcnt:idcnt+ncat-1].sourceid = sourceid
       idstr[idcnt:idcnt+ncat-1].exposure = meta.base
-      idstr[idcnt:idcnt+ncat-1].expnum = meta.expnum
+      idstr[idcnt:idcnt+ncat-1].expnum = strtrim(meta.expnum,2)
       idstr[idcnt:idcnt+ncat-1].objectid = newexp.id
+      idstr[idcnt:idcnt+ncat-1].objectindex = objectindex
       idcnt += ncat
     endif
 
@@ -531,41 +537,60 @@ if nmatch eq 0 then begin
   print,'None of the final objects fall inside the pixel'
   return
 endif
-; Get trimmed objects
+; Get trimmed objects and indices
+objtokeep = lonarr(nobj)         ; boolean to keep or trim objects
+objtokeep[ind1] = 1
 trimind = lindgen(nobj)
 REMOVE,ind1,trimind
-trimobj = obj[trimind]
+trimobj = obj[trimind]          ; trimmed objects
+newobjindex = lonarr(nobj)-1    ; new indices
+newobjindex[ind1] = lindgen(nmatch)
 ; Keep the objects inside the Healpix
 obj = obj[ind1]
 print,strtrim(nmatch,2),' final objects fall inside the pixel'
 
 ; Remove trimmed objects from IDSTR
-ntrim = n_elements(trimobj)
-undefine,torem
-for i=0,ntrim-1 do begin
-  MATCH,idstr.objectid,trimobj.id,ind1,ind2,/sort,count=nmatch
-  push,torem,ind1
-endfor
-REMOVE,torem,idstr
+totrim = where(objtokeep[idstr.objectindex] eq 0,ntotrim)  ;using old index
+if ntotrim gt 0 then begin
+  ; Trim objects
+  REMOVE,totrim,idstr
+  ; Update IDSTR.objectindex
+  old_idstr_objectindex = idstr.objectindex
+  idstr.objectindex = newobjindex[old_idstr_objectindex]
+endif
 
 ; Create final summary structure from ALLMETA
 ;  get exposures that are in IDSTR
-uiexpnum = uniq(idstr.expnum,sort(idstr.expnum))
-uexpnum = idstr[uiexpnum].expnum
-MATCH,allmeta.expnum,uexpnum,ind1,ind2,/sort,count=nmatch
+;  sometimes EXPNUM numbers have the leading 0s removed
+;  and sometimes not, so turn to LONG to match
+uiexpnum = uniq(long(idstr.expnum),sort(long(idstr.expnum)))
+uexpnum = long(idstr[uiexpnum].expnum)
+MATCH,long(allmeta.expnum),uexpnum,ind1,ind2,/sort,count=nmatch
 sumstr = allmeta[ind1]
 add_tag,sumstr,'nobjects',0L,sumstr
 add_tag,sumstr,'healpix',long(pix),sumstr
-for i=0,nmatch-1 do begin
-  MATCH,idstr.expnum,sumstr[i].expnum,ind1,ind2,/sort,count=nmatch  
-  sumstr[i].nobjects = nmatch
-endfor
+; get number of objects per exposure
+expnum = long(idstr.expnum)
+siexp = sort(expnum)
+expnum = expnum[siexp]
+brklo = where(expnum ne shift(expnum,1),nbrk)
+brkhi = [brklo[1:nbrk-1]-1,n_elements(expnum)-1]
+numobjexp = brkhi-brklo+1
+MATCH,long(sumstr.expnum),uexpnum,ind1,ind2,/sort,count=nmatch
+sumstr[ind1].nobjects = numobjexp
+;for i=0,nmatch-1 do begin
+;  MATCH,idstr.expnum,sumstr[i].expnum,ind1,ind2,/sort,count=nmatch  
+;  sumstr[i].nobjects = nmatch
+;endfor
 
 ; Write the output file
 print,'Writing combined catalog to ',outfile
 MWRFITS,sumstr,outfile,/create      ; first, summary table
 MWRFITS,obj,outfile,/silent         ; second, catalog
 MWRFITS,idstr,outfile,/silent       ; third, ID table
+
+dt = systime(1)-t0
+print,'dt = ',stringize(dt,ndec=2),' sec.'
 
 if keyword_set(stp) then stop
 
