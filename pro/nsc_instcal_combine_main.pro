@@ -283,6 +283,15 @@ if not keyword_set(redo) then begin
   cmddir = cmddir[gd]
 endif
 
+; Start with healpix with low NEXP and far from MW midplane, LMC/SMC
+pix2ang_ring,nside,index.pix,theta,phi
+pixra = phi*radeg
+pixdec = 90-theta*radeg
+glactc,pixra,pixdec,2000.0,pixgl,pixgb,1,/deg
+cel2lmc,pixra,pixdec,palmc,radlmc
+cel2smc,pixra,pixdec,rasmc,radsmc
+gdpix = where(index.nexp lt 50 and abs(glat) gt 10 and radlmc gt 5 and radsmc gt 5,ngdpix)
+
 stop
 
 ; Now run the combination program on each healpix pixel
