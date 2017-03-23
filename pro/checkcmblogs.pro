@@ -49,7 +49,7 @@ for i=0,ninfo-1 do begin
       dum2 = strsplit(tout[ind3[0]],' ',/extract)
       sdt = dum2[2]
       sdt = repstr(sdt,',','')
-      dt = float(dt)
+      dt = float(sdt)
       str[i].dt = dt
     endif
     ind4 = where(stregex(tout,'final objects fall inside the pixel',/boolean) eq 1,nind4)
