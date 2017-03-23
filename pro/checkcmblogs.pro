@@ -18,10 +18,14 @@ info = info[gd]
 ninfo = n_elements(info)
 print,strtrim(ninfo,2),' log files after the cutoff'
 
-str = replicate({file:'',size:0LL,mtime:0LL,nexp:-1L,pix:-1L,noverlap:-1L,dt:-1.0,nobjects:-1L,empty:-1},ninfo)
+str = replicate({file:'',size:0LL,mtime:0LL,nexp:-1L,pix:-1L,noverlap:-1L,dt:-1.0,nobjects:-1L,empty:-1,bugerror:0,recent:0},ninfo)
 str.file = info.name
 str.size = info.size
 str.mtime = info.mtime
+; Check if this log was modified recently, might still be in progress
+bd = where(str.mtime ge (systime(1)-3600.),nbd)
+if nbd gt 0 then str[bd].recent=1
+; Loop through the files
 for i=0,ninfo-1 do begin                                             
   ; Get head
   spawn,['head','-100',str[i].file],hout,herrout,/noshell
@@ -68,10 +72,11 @@ for i=0,ninfo-1 do begin
     ; If there are no sources in this pixel then it
     ; ends with "No sources in this pixel" and that's it
     ind5 = where(stregex(tout,'No sources in this pixel',/boolean) eq 1,nind5)
-    if nind5 gt 0 then begin
-      str[i].empty = 1
-    endif
-  endif
+    if nind5 gt 0 then str[i].empty = 1
+    ; Check for error due to bug for single exposure at end
+    ind6 = where(stregex(tout,'Illegal subscript range: BRKLO.',/boolean) eq 1,nind6)
+    if nind6 gt 0 then str[i].bugerror = 1
+  endif  
   print,strtrim(i+1,2),' ',str[i].file,' ',strtrim(str[i].pix,2),' ',strtrim(str[i].nobjects,2),' ',strtrim(str[i].dt,2),' ',strtrim(str[i].empty,2)
 endfor
 
