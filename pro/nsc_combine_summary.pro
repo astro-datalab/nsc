@@ -29,22 +29,23 @@ print,strtrim(ngdexist,2),'/',strtrim(npix,2),' exist'
 for i=0,npix-1 do begin
   if (i+1) mod 100 eq 0 then print,i+1
   if sumstr[i].exists eq 1 then begin
-    meta = MRDFITS(sumstr[i].file,1,/silent)
-    if tag_exist(meta,'filter') eq 0 then begin  ; old file
-      sumstr[i].success = 0
-      goto,BOMB
+    hd = headfits(sumstr[i].file,exten=2,errmsg=errmsg)
+    if errmsg eq '' then begin  ; check that we can read it
+      meta = MRDFITS(sumstr[i].file,1,/silent,status=status)
+      if status lt 0 then goto,BOMB 
+     if tag_exist(meta,'filter') eq 0 then begin  ; old file
+        sumstr[i].success = 0
+        goto,BOMB
+      endif
+      sumstr[i].nexposures = n_elements(meta)
+      filter = meta.filter
+      ui = uniq(filter,sort(filter))
+      sumstr[i].nfilters = n_elements(ui)
+      sumstr[i].filters = strjoin(filter[ui],',')
+      sumstr[i].nobjects = sxpar(hd,'naxis2')
+      sumstr[i].success = 1
     endif
-    sumstr[i].nexposures = n_elements(meta)
-    filter = meta.filter
-    ui = uniq(filter,sort(filter))
-    sumstr[i].nfilters = n_elements(ui)
-    sumstr[i].filters = strjoin(filter[ui],',')
-    hd = headfits(sumstr[i].file,exten=2)
-    sumstr[i].nobjects = sxpar(hd,'naxis2')
-    sumstr[i].success = 1
-  endif else begin
-    sumstr[i].success = 0
-  endelse
+  endif
   BOMB:
 endfor
 gd = where(sumstr.success eq 1,ngd)
