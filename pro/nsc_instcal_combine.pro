@@ -302,6 +302,12 @@ FOR i=0,nlist-1 do begin
 
     ; Match new sources to the objects
     SRCMATCH,obj[0:cnt-1].ra,obj[0:cnt-1].dec,cat.ra,cat.dec,0.5,ind1,ind2,count=nmatch,/sph,/usehist  ; use faster histogram_nd method
+    if nmatch gt 0 then if (max(ind2) gt ncat-1) or (max(ind1) gt cnt-1) then begin
+      ; sometimes the histogram_nd method gives indices that are too large
+      ; not sure why, use SRCOR method.
+      print,'  Problem with HISTOGRAM_ND SRCMATCH indices, using SRCOR method instead.'
+      SRCMATCH,obj[0:cnt-1].ra,obj[0:cnt-1].dec,cat.ra,cat.dec,0.5,ind1,ind2,count=nmatch,/sph,usehist=0
+    endif
     print,'  ',strtrim(nmatch,2),' matched sources'
     ; Some matches, add data to existing record for these sources
     if nmatch gt 0 then begin
