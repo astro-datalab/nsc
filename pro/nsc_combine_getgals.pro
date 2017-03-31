@@ -11,6 +11,10 @@ radeg = 180.0d0 / !dpi
 index = mrdfits(dir+'combine/nsc_healpix_list.fits',2,/silent)
 npix = n_elements(index)
 
+sumstr = mrdfits(dir+'combine/gal/nsc_combine_gal.fits',1,/silent)
+sumstr.galfile = strtrim(sumstr.galfile,2)
+goto,combine
+
 ; Load all the summary/metadata files
 print,'Creating Healpix summary file'
 sumstr = replicate({file:'',galfile:'',exists:0,pix:0L,ra:0.0d0,dec:0.0d0,nexposures:0L,nfilters:0L,filters:'',nobjects:0L,ngals:0L,success:0,size:0LL,mtime:0LL},npix)
@@ -66,9 +70,10 @@ MWRFITS,sumstr,dir+'combine/gal/nsc_combine_gal.fits',/create
 stop
 
 ; Now sum them all up, keep on what's necessary
+combine:
 
-schema_gal = {id:'',ra:0.0d0,dec:0.0d0,mag:99.0,fwhm:0.0,class_star:0.0,ellipticity:0.0}
-allgal = replicate(schema_gal,5e6)
+schema_gal = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,mag:99.0,fwhm:0.0,asemi:0.0,bsemi:0.0,class_star:0.0,ellipticity:0.0}
+allgal = replicate(schema_gal,1e7)
 nallgal = n_elements(allgal)
 cnt = 0LL
 
@@ -77,9 +82,13 @@ filters = ['r','i','g','z','Y','VR','u']
 nfilters = n_elements(filters)
 magind = lonarr(nfilters)
 for i=0,npix-1 do begin
-  if sumstr[i].galfile ne '' then begin
+  if (i+1) mod 100 eq 0 then print,i+1
+  if sumstr[i].ngals gt 0 then begin
+    outfile = file_dirname(sumstr[i].file)+'/gal/'+strtrim(sumstr[i].pix,2)+'_gal.fits'
+    sumstr[i].galfile = outfile
     gal = mrdfits(sumstr[i].galfile,1,/silent)
     ngal = n_elements(gal)
+    gal.id = strtrim(gal.id,2)
 
     ; Get tags and magnitude indices
     tags = tag_names(gal)
@@ -87,7 +96,7 @@ for i=0,npix-1 do begin
 
     ; Put in new structure
     newgal = replicate(schema_gal,ngal)
-    struct_assign,gal,newcal
+    struct_assign,gal,newgal
 
     ; Get fiducial magnitude
     nhavemag = 0
@@ -115,6 +124,10 @@ for i=0,npix-1 do begin
 endfor
 ; Trim allgal
 allgal = allgal[0:cnt-1]
+
+; save the output
+print,'Writing combined catalog to ',dir+'combine/gal/nsc_combine_gal_allcat.fits'
+MWRFITS,allgal,dir+'combine/gal/nsc_combine_gal_allcat.fits',/create
 
 stop
 
