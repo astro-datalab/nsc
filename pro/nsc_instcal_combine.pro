@@ -552,9 +552,11 @@ endif
 ; Get trimmed objects and indices
 objtokeep = lonarr(nobj)         ; boolean to keep or trim objects
 objtokeep[ind1] = 1
-trimind = lindgen(nobj)
-REMOVE,ind1,trimind
-trimobj = obj[trimind]          ; trimmed objects
+if nmatch lt nobj then begin  ; some to trim
+  trimind = lindgen(nobj)
+  REMOVE,ind1,trimind
+  trimobj = obj[trimind]          ; trimmed objects
+endif
 newobjindex = lonarr(nobj)-1    ; new indices
 newobjindex[ind1] = lindgen(nmatch)
 ; Keep the objects inside the Healpix
