@@ -218,7 +218,12 @@ FOR i=0,nlist-1 do begin
   ncat = nmatch
 
   ; Add metadata to ALLMETA
-  push,allmeta,meta
+  ;  Make sure it's in the right format
+  newmeta = {file:'',base:'',expnum:0L,ra:0.0d0,dec:0.0d0,dateobs:'',mjd:0.0d0,filter:'',exptime:0.0,$
+             airmass:0.0,nsources:0L,fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,$
+             zpterm:0.0,zptermerr:0.0,zptermsig:0.0,nrefmatch:0L}
+  STRUCT_ASSIGN,meta,newmeta
+  PUSH,allmeta,newmeta
 
   ; NDETX is good "detection" and morphology for this filter
   ; NPHOTX is good "photometry" for this filter
@@ -547,9 +552,11 @@ endif
 ; Get trimmed objects and indices
 objtokeep = lonarr(nobj)         ; boolean to keep or trim objects
 objtokeep[ind1] = 1
-trimind = lindgen(nobj)
-REMOVE,ind1,trimind
-trimobj = obj[trimind]          ; trimmed objects
+if nmatch lt nobj then begin  ; some to trim
+  trimind = lindgen(nobj)
+  REMOVE,ind1,trimind
+  trimobj = obj[trimind]          ; trimmed objects
+endif
 newobjindex = lonarr(nobj)-1    ; new indices
 newobjindex[ind1] = lindgen(nmatch)
 ; Keep the objects inside the Healpix

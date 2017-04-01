@@ -290,7 +290,9 @@ pixdec = 90-theta*radeg
 glactc,pixra,pixdec,2000.0,pixgl,pixgb,1,/deg
 cel2lmc,pixra,pixdec,palmc,radlmc
 cel2smc,pixra,pixdec,rasmc,radsmc
-gdpix = where(index.nexp lt 50 and abs(glat) gt 10 and radlmc gt 5 and radsmc gt 5,ngdpix)
+gdpix = where(index.nexp lt 50 and abs(pixgb) gt 10 and radlmc gt 5 and radsmc gt 5,ngdpix)
+
+outfile = dldir+'users/dnidever/nsc/instcal/combine/'+strtrim(index.pix,2)+'.fits'
 
 stop
 
@@ -318,7 +320,7 @@ endfor
 gd = where(sumstr.success eq 1,ngd)
 print,strtrim(ngd,2),' Healpix successfully processed'
 print,'Writing summary file to ',dir+'combine/nsc_instcal_combine.fits'
-MWRFITS,expstr,dir+'combine/nsc_instcal_combine.fits',/create
+MWRFITS,sumstr,dir+'combine/nsc_instcal_combine.fits',/create
 
 ; End logfile
 ;------------
