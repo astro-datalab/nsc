@@ -122,7 +122,7 @@ schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,ndet:0L,$
               bsemierr:0.0,theta:0.0,thetaerr:0.0,elongation:0.0,$
               ellipticity:0.0,fwhm:0.0,flags:0,class_star:0.0,ebv:0.0}
 tags = tag_names(schema_obj)
-obj = replicate(schema_obj,1e5)
+obj = replicate(schema_obj,5e5)
 nobj = n_elements(obj)
 cnt = 0LL
 
