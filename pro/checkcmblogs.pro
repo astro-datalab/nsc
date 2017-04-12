@@ -77,7 +77,7 @@ for i=0,ninfo-1 do begin
     ind6 = where(stregex(tout,'Illegal subscript range: BRKLO.',/boolean) eq 1,nind6)
     if nind6 gt 0 then str[i].bugerror = 1
     ; Check for error due to bad catalog format
-    ind7 = where(stregex(tout,'Illegal subscript range: BRKLO.',/boolean) eq 1,nind7)
+    ind7 = where(stregex(tout,'% Tag name IMAFLAGS_ISO is undefined',/boolean) eq 1,nind7)
     if nind6 gt 0 then str[i].badformaterror = 1
   endif  
   print,strtrim(i+1,2),' ',str[i].file,' ',strtrim(str[i].pix,2),' ',strtrim(str[i].nobjects,2),' ',strtrim(str[i].dt,2),' ',strtrim(str[i].empty,2),$
