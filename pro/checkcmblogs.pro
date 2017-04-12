@@ -84,11 +84,11 @@ for i=0,ninfo-1 do begin
         ' ',strtrim(str[i].bugerror,2),' ',strtrim(str[i].badformaterror,2)
 endfor
 
-index=mrdfits('../nsc_healpix_list.fits',2)
+index=mrdfits(localdir+'dnidever/nsc/instcal/nsc_healpix_list.fits',2)
 match,index.pix,str.pix,ind1,ind2,/sort,count=nmatch
 str[ind2].nexp = index[ind1].nexp
 
-outfile = '../nsccmb_summary.fits'
+outfile = localdir+'dnidever/nsc/instcal/nsccmb_summary.fits'
 print,'Writing results to ',outfile
 mwrfits,str,outfile,/create
 
