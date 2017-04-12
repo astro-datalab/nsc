@@ -136,6 +136,12 @@ FOR i=0,nlist-1 do begin
   ncat1 = n_elements(cat1)
   print,'  ',strtrim(ncat1,2),' sources'
 
+  ; Make sure it's in the right format
+  if n_tags(cat1) ne 44 then begin
+    print,'This catalog does not have the right format. Skipping'
+    goto,BOMB
+  endif
+
   ; Source Extractor FLAGS
   ; 1   The object has neighbours, bright and close enough to significantly bias the MAG AUTO photometry,
   ;       or bad pixels (more than 10% of the integrated area affected),
