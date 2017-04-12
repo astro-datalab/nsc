@@ -138,7 +138,7 @@ FOR i=0,nlist-1 do begin
 
   ; Make sure it's in the right format
   if n_tags(cat1) ne 44 then begin
-    print,'This catalog does not have the right format. Skipping'
+    print,'  This catalog does not have the right format. Skipping'
     goto,BOMB
   endif
 
