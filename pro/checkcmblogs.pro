@@ -18,7 +18,7 @@ info = info[gd]
 ninfo = n_elements(info)
 print,strtrim(ninfo,2),' log files after the cutoff'
 
-str = replicate({file:'',size:0LL,mtime:0LL,nexp:-1L,pix:-1L,noverlap:-1L,dt:-1.0,nobjects:-1L,empty:-1,bugerror:0,recent:0},ninfo)
+str = replicate({file:'',size:0LL,mtime:0LL,nexp:-1L,pix:-1L,noverlap:-1L,dt:-1.0,nobjects:-1L,empty:-1,bugerror:0,badformaterror:0,recent:0},ninfo)
 str.file = info.name
 str.size = info.size
 str.mtime = info.mtime
@@ -76,8 +76,12 @@ for i=0,ninfo-1 do begin
     ; Check for error due to bug for single exposure at end
     ind6 = where(stregex(tout,'Illegal subscript range: BRKLO.',/boolean) eq 1,nind6)
     if nind6 gt 0 then str[i].bugerror = 1
+    ; Check for error due to bad catalog format
+    ind7 = where(stregex(tout,'Illegal subscript range: BRKLO.',/boolean) eq 1,nind7)
+    if nind6 gt 0 then str[i].badformaterror = 1
   endif  
-  print,strtrim(i+1,2),' ',str[i].file,' ',strtrim(str[i].pix,2),' ',strtrim(str[i].nobjects,2),' ',strtrim(str[i].dt,2),' ',strtrim(str[i].empty,2)
+  print,strtrim(i+1,2),' ',str[i].file,' ',strtrim(str[i].pix,2),' ',strtrim(str[i].nobjects,2),' ',strtrim(str[i].dt,2),' ',strtrim(str[i].empty,2),$
+        ' ',strtrim(str[i].bugerror,2),' ',strtrim(str[i].badformaterror,2)
 endfor
 
 index=mrdfits('../nsc_healpix_list.fits',2)
