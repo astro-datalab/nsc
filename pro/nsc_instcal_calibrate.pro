@@ -232,7 +232,7 @@ for i=0,nrefcat-1 do begin
       spawn,cmd,out,outerr
       ; Load ASCII file and create the FITS file
       ref = importascii(refcattemp,/header,delim='|',skipline=2,/silent)
-      MWRFITS,ref,refcatfile,/create      
+      ;MWRFITS,ref,refcatfile,/create      ; don't write out files anymore
       file_delete,refcattemp,/allow
       (SCOPE_VARFETCH(varname,/enter)) = ref
 
@@ -266,7 +266,7 @@ for i=0,nrefcat-1 do begin
 
       (SCOPE_VARFETCH(varname,/enter)) = ref
       ; Save the file
-      MWRFITS,ref,refcatfile,/create
+      ;MWRFITS,ref,refcatfile,/create  ; don't write out files anymore
     endelse
   endelse
   nref = n_elements(ref)
