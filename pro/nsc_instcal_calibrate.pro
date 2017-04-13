@@ -274,7 +274,6 @@ for i=0,nrefcat-1 do begin
   printlog,logf,'  ',strtrim(nref,2),' sources   dt=',stringize(dt,ndec=1),' sec.'
 endfor
 
-
 ; Step 3. Astrometric calibration
 ;----------------------------------
 ; At the chip level, linear fits in RA/DEC
@@ -298,24 +297,30 @@ For i=0,nchips-1 do begin
   ROTSPHCEN,cat2.alpha_j2000,cat2.delta_j2000,chstr[i].cenra,chstr[i].cendec,lon1,lat1,/gnomic
   ; Fit RA as function of RA/DEC
   londiff = gaialon-lon1
+  lonmed = median(londiff)
+  lonsig = mad(londiff)
+  gdlon = where(abs(londiff-lonmed) lt 2.5*lonsig,ngdlon)  ; remove outliers
   err = gaia2.e_ra_icrs
   npars = 4
   initpars = dblarr(npars)
   initpars[0] = median(londiff)
   parinfo = REPLICATE({limited:[0,0],limits:[0.0,0.0],fixed:0},npars)
-  racoef = MPFIT2DFUN('func_poly2d',lon1,lat1,londiff,err,initpars,status=status,dof=dof,$
+  racoef = MPFIT2DFUN('func_poly2d',lon1[gdlon],lat1[gdlon],londiff[gdlon],err[gdlon],initpars,status=status,dof=dof,$
                   bestnorm=chisq,parinfo=parinfo,perror=perror,yfit=yfit,/quiet)
-  rarms = sqrt(mean((londiff-yfit)*3600.)^2)
+  rarms = sqrt(mean((londiff[gdlon]-yfit)*3600.)^2)
   ; Fit DEC as function of RA/DEC
   latdiff = gaialat-lat1
+  latmed = median(latdiff)
+  latsig = mad(latdiff)
+  gdlat = where(abs(latdiff-latmed) lt 2.5*latsig,ngdlat)  ; remove outliers
   err = gaia2.e_de_icrs
   npars = 4
   initpars = dblarr(npars)
   initpars[0] = median(latdiff)
   parinfo = REPLICATE({limited:[0,0],limits:[0.0,0.0],fixed:0},npars)
-  deccoef = MPFIT2DFUN('func_poly2d',lon1,lat1,latdiff,err,initpars,status=status,dof=dof,$
+  deccoef = MPFIT2DFUN('func_poly2d',lon1[gdlat],lat1[gdlat],latdiff[gdlat],err[gdlat],initpars,status=status,dof=dof,$
                        bestnorm=chisq,parinfo=parinfo,perror=perror,yfit=yfit,/quiet)
-  decrms = sqrt(mean((latdiff-yfit)*3600.)^2)
+  decrms = sqrt(mean((latdiff[gdlat]-yfit)*3600.)^2)
   printlog,logf,'  CCDNUM=',strtrim(chstr[i].ccdnum,2),'  NSOURCES=',strtrim(nchmatch,2),'  ',strtrim(ngmatch,2),' GAIA matches  RMS(RA)=',$
        stringize(rarms,ndec=3),' RMS(DEC)=',stringize(decrms,ndec=3),' arcsec'
   ; Apply to all sources
