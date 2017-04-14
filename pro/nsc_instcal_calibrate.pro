@@ -67,7 +67,7 @@ cat = REPLICATE(schema,ncat)
 ; Start the chips summary structure
 chstr = replicate({filename:'',ccdnum:0L,nsources:0L,cenra:999999.0d0,cendec:999999.0d0,$
                    gaianmatch:0L,rarms:999999.0,racoef:dblarr(4),decrms:999999.0,$
-                   deccoef:dblarr(4),zpterm:999999.0,zperr:999999.0},nchips)
+                   deccoef:dblarr(4),vra:dlbarr(4),vdec:dblarr(4),zpterm:999999.0,zperr:999999.0},nchips)
 ; Load the files
 cnt = 0LL
 for i=0,ncatfiles-1 do begin
@@ -80,6 +80,12 @@ for i=0,ncatfiles-1 do begin
   chstr[i].filename = catfiles[i]
   chstr[i].ccdnum = ccdnum
   chstr[i].nsources = ncat1
+  ; Get the chip corners
+  nx = sxpar(hd,'NAXIS1')
+  ny = sxpar(hd,'NAXIS2')
+  head_xyad,hd,[0,nx-1,nx-1,0],[0,0,ny-1,ny-1],vra,vdec,/degree
+  chstr[i].vra = vra
+  chstr[i].vdec = vdec
   if ncat1 gt 0 then begin
     temp = cat[cnt:cnt+ncat1-1]
     STRUCT_ASSIGN,cat1,temp,/nozero
