@@ -142,6 +142,38 @@ FOR i=0,nlist-1 do begin
     goto,BOMB
   endif
 
+  metafile = repstr(list[i].file,'_cat','_meta')
+  meta = MRDFITS(metafile,1,/silent)
+  meta.base = strtrim(meta.base)
+  meta.expnum = strtrim(meta.expnum)
+  ;head = headfits(list[i].file,exten=0)
+  ;filtername = sxpar(head,'filter')
+  ;if strmid(filtername,0,2) eq 'VR' then filter='VR' else filter=strmid(filtername,0,1)
+  ;exptime = sxpar(head,'exptime')
+  print,'  FILTER=',meta.filter,'  EXPTIME=',stringize(meta.exptime,ndec=1),' sec'
+
+  ; Remove bad chip data
+  ; Half of chip 31 for MJD>56660
+  if meta.mjd gt 56660 then begin  
+    ; Remove bad measurements
+    ; X: 1-1024 okay
+    ; X: 1025-2049 bad
+    bdind = where(cat1.x_imag gt 1024,nbdind,comp=gdind,ncomp=ngdind)
+    if nbdind gt 0 then begin   ; some bad ones found
+      if ngdind eq 0 then begin   ; all bad
+        print,'NO useful measurements in ',fitsfile
+        undefine,cat1
+        ncat1 = 0
+        goto,BOMB
+      endif else begin
+        print,'Removing '+strtrim(nbdind,2)+' bad measurements, '+strtrim(ngdind,2)+' left.'
+        REMOVE,bdind,cat1
+        ncat1 = n_elements(cat1)
+      endelse
+    endif  ; some bad ones to remove
+  endif  ; chip 31
+
+  ; Removing BAD sources
   ; Source Extractor FLAGS
   ; 1   The object has neighbours, bright and close enough to significantly bias the MAG AUTO photometry,
   ;       or bad pixels (more than 10% of the integrated area affected),
@@ -192,15 +224,6 @@ FOR i=0,nlist-1 do begin
     ncat1 = n_elements(cat1)
   endif
 
-  metafile = repstr(list[i].file,'_cat','_meta')
-  meta = MRDFITS(metafile,1,/silent)
-  meta.base = strtrim(meta.base)
-  meta.expnum = strtrim(meta.expnum)
-  ;head = headfits(list[i].file,exten=0)
-  ;filtername = sxpar(head,'filter')
-  ;if strmid(filtername,0,2) eq 'VR' then filter='VR' else filter=strmid(filtername,0,1)
-  ;exptime = sxpar(head,'exptime')
-  print,'  FILTER=',meta.filter,'  EXPTIME=',stringize(meta.exptime,ndec=1),' sec'
 
   ; Only include sources inside Boundary+Buffer zone
   ;  -use ROI_CUT
