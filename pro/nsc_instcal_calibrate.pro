@@ -67,7 +67,7 @@ cat = REPLICATE(schema,ncat)
 ; Start the chips summary structure
 chstr = replicate({filename:'',ccdnum:0L,nsources:0L,cenra:999999.0d0,cendec:999999.0d0,$
                    gaianmatch:0L,rarms:999999.0,racoef:dblarr(4),decrms:999999.0,$
-                   deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,zperr:999999.0},nchips)
+                   deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,zptermerr:999999.0,nrefmatch:0L},nchips)
 ; Load the files
 cnt = 0LL
 for i=0,ncatfiles-1 do begin
@@ -186,12 +186,6 @@ else: begin
   return
 end
 ENDCASE
-
-
-; Do a small test query to check density
-;testqry = QUERYVIZIER('2MASS-PSC',[cenra,cendec],[10,10],/cfa)
-;tmdensity = n_elements(testqry)*36.0  ; density per deg^2
-;print,'2MASS density = ',strtrim(long(tmdensity),2),' sources per deg^2'
 
 ; Load the necessary catalogs
 nrefcat = n_elements(refcat)
@@ -365,7 +359,7 @@ printlog,logf,'' & printlog,logf,'Step 4. Photometric calibration'
 printlog,logf,'-------------------------------'
 expstr = {file:fluxfile,base:base,expnum:long(expnum),ra:0.0d0,dec:0.0d0,dateobs:string(dateobs),mjd:0.0d,filter:filter,exptime:float(exptime),$
           airmass:0.0,nsources:long(ncat),fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,zpterm:999999.0,zptermerr:99999.0,$
-          zptermsig:999999.0,nrefmatch:0L}
+          zptermsig:999999.0,zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L}
 expstr.ra = cenra
 expstr.dec = cendec
 expstr.mjd = date2jd(dateobs,/mjd)
@@ -434,24 +428,8 @@ CASE filter of
   ; ADJUSTED EQUATION
   ; u = 0.2469*NUV + 0.7501*G + 0.5462*GJ0 + 0.6809*EBV + 0.0052  ; for 0.8<GJ0<1.1
   model_mag = 0.2469*galex2.nuv + 0.7501*gaia2.gmag + 0.5462*col2 + 0.6809*cat2.ebv + 0.0052
-  diff = model_mag - mag
-  ;col = gaia2.gmag - tmass2.jmag
-  ; Make a sigma cut
-  med = median(diff)
-  sig = mad(diff)
-  gd = where(abs(diff-med) lt 3*sig,ngd)
-  zpterm = dln_poly_fit(col2[gd],diff[gd],0,measure_errors=err[gd],sigma=zptermerr,yerror=yerror,status=status,yfit=yfit1,/bootstrap)
-  ;zpterm = dln_poly_fit(col[gd],diff[gd],1,measure_errors=err[gd],sigma=zptermerr,yerror=yerror,status=status,yfit=yfit1,/bootstrap)
-  zpterm = zpterm[0] & zptermerr=zptermerr[0]
-  ; Save in exposure structure
-  expstr.zpterm = zpterm
-  expstr.zptermerr = zptermerr
-  expstr.zptermsig = sig  
-  expstr.nrefmatch = ngdcat
-  ; Apply the zero-point to the full catalogs
-  gdcatmag = where(cat.mag_auto lt 50,ngd)
-  cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
-  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + zptermerr^2)  ; add calibration error in quadrature
+  ; Matched structure
+  mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
 ;- --- g-band ----
 'g': begin
@@ -500,24 +478,8 @@ end
   ; ADJUSTED EQUATION
   ; g = APASS_G - 0.0421*JK0 - 0.05*EBV - 0.0620
   model_mag = apass2.g_mag - 0.0421*col2 - 0.05*cat2.ebv - 0.0620
-  diff = model_mag - mag
-  ;diff = apass2.g_mag-mag
-  ; Make a sigma cut
-  med = median(diff)
-  sig = mad(diff)
-  gd = where(abs(diff-med) lt 3*sig,ngd)
-  x = fltarr(ngdcat)
-  zpterm = dln_poly_fit(x[gd],diff[gd],0,measure_errors=err[gd],sigma=zptermerr,yerror=yerror,status=status,yfit=yfit1,/bootstrap)
-  zpterm = zpterm[0] & zptermerr=zptermerr[0]
-  ; Save in exposure structure
-  expstr.zpterm = zpterm
-  expstr.zptermerr = zptermerr
-  expstr.zptermsig = sig  
-  expstr.nrefmatch = ngdcat
-  ; Apply the zero-point to the full catalogs
-  gdcatmag = where(cat.mag_auto lt 50,ngd)
-  cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
-  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + zptermerr^2)  ; add calibration error in quadrature
+  ; Matched structure
+  mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
 ; ---- r-band ----
 'r': begin
@@ -566,24 +528,8 @@ end
   ; ADJUSTED EQUATION
   ; r = APASS_r - 0.0861884*JK0 + 0.0*EBV + 0.0548607
   model_mag = apass2.r_mag - 0.0861884*col2 + 0.0548607
-  diff = model_mag - mag
-  ;diff = apass2.r_mag-mag
-  ; Make a sigma cut
-  med = median(diff)
-  sig = mad(diff)
-  gd = where(abs(diff-med) lt 3*sig,ngd)
-  x = fltarr(ngdcat)
-  zpterm = dln_poly_fit(x[gd],diff[gd],0,measure_errors=err[gd],sigma=zptermerr,yerror=yerror,status=status,yfit=yfit1,/bootstrap)
-  zpterm = zpterm[0] & zptermerr=zptermerr[0]
-  ; Save in exposure structure
-  expstr.zpterm = zpterm
-  expstr.zptermerr = zptermerr
-  expstr.zptermsig = sig  
-  expstr.nrefmatch = ngdcat
-  ; Apply the zero-point to the full catalogs
-  gdcatmag = where(cat.mag_auto lt 50,ngd)
-  cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
-  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + zptermerr^2)  ; add calibration error in quadrature
+  ; Matched structure
+  mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
 ; ---- i-band ----
 'i': begin
@@ -631,23 +577,8 @@ end
   ; see nsc_color_relations_stripe82_superposition.pro
   ; i = G - 0.4587*JK0 - 0.276*EBV + 0.0967721
   model_mag = gaia2.gmag - 0.4587*col2 - 0.276*cat2.ebv + 0.0967721
-  diff = model_mag - mag
-  ; Make a sigma cut
-  med = median(diff)
-  sig = mad(diff)
-  gd = where(abs(diff-med) lt 3*sig,ngd)
-  x = fltarr(ngdcat)
-  zpterm = dln_poly_fit(x[gd],diff[gd],0,measure_errors=err[gd],sigma=zptermerr,yerror=yerror,status=status,yfit=yfit1,/bootstrap)
-  zpterm = zpterm[0] & zptermerr=zptermerr[0]
-  ; Save in exposure structure
-  expstr.zpterm = zpterm
-  expstr.zptermerr = zptermerr
-  expstr.zptermsig = sig  
-  expstr.nrefmatch = ngdcat
-  ; Apply the zero-point to the full catalogs
-  gdcatmag = where(cat.mag_auto lt 50,ngd)
-  cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
-  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + zptermerr^2)  ; add calibration error in quadrature
+  ; Matched structure
+  mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
 ; ---- z-band ----
 'z': begin
@@ -689,23 +620,8 @@ end
   ; see nsc_color_relations_stripe82_superposition.pro
   ; z = J + 0.765720*JK0 + 0.40*EBV +  0.605658
   model_mag = tmass2.jmag + 0.765720*col2 + 0.40*cat2.ebv +  0.605658
-  diff = model_mag - mag
-  ; Make a sigma cut
-  med = median(diff)
-  sig = mad(diff)
-  gd = where(abs(diff-med) lt 3*sig,ngd)
-  x = fltarr(ngdcat)
-  zpterm = dln_poly_fit(x[gd],diff[gd],0,measure_errors=err[gd],sigma=zptermerr,yerror=yerror,status=status,yfit=yfit1,/bootstrap)
-  zpterm = zpterm[0] & zptermerr=zptermerr[0]
-  ; Save in exposure structure
-  expstr.zpterm = zpterm
-  expstr.zptermerr = zptermerr
-  expstr.zptermsig = sig  
-  expstr.nrefmatch = ngdcat
-  ; Apply the zero-point to the full catalogs
-  gdcatmag = where(cat.mag_auto lt 50,ngd)
-  cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
-  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + zptermerr^2)  ; add calibration error in quadrature
+  ; Matched structure
+  mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
 ; ---- Y-band ----
 'Y': begin
@@ -747,23 +663,7 @@ end
   ; see nsc_color_relations_stripe82_superposition.pro
   ; Y = J + 0.54482*JK0 + 0.20*EBV + 0.663380
   model_mag = tmass2.jmag + 0.54482*col2 + 0.20*cat2.ebv + 0.663380
-  diff = model_mag - mag
-  ; Make a sigma cut
-  med = median(diff)
-  sig = mad(diff)
-  gd = where(abs(diff-med) lt 3*sig,ngd)
-  x = fltarr(ngdcat)
-  zpterm = dln_poly_fit(x[gd],diff[gd],0,measure_errors=err[gd],sigma=zptermerr,yerror=yerror,status=status,yfit=yfit1,/bootstrap)
-  zpterm = zpterm[0] & zptermerr=zptermerr[0]
-  ; Save in exposure structure
-  expstr.zpterm = zpterm
-  expstr.zptermerr = zptermerr
-  expstr.zptermsig = sig  
-  expstr.nrefmatch = ngdcat
-  ; Apply the zero-point to the full catalogs
-  gdcatmag = where(cat.mag_auto lt 50,ngd)
-  cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
-  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + zptermerr^2)  ; add calibration error in quadrature
+  mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
 ; ---- VR-band ----
 'VR': begin
@@ -808,32 +708,25 @@ end
   ; Take a robust mean relative to GAIA GMAG
   mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
   err = sqrt(cat2.magerr_auto^2 + gmagerr2^2)
-  diff = gaia2.gmag - mag
-  ; Make a sigma cut
-  med = median(diff)
-  sig = mad(diff)
-  gd = where(abs(diff-med) lt 3*sig,ngd)
-  x = fltarr(ngdcat)
-  zpterm = dln_poly_fit(x[gd],diff[gd],0,measure_errors=err[gd],sigma=zptermerr,yerror=yerror,status=status,yfit=yfit1,/bootstrap)
-  zpterm = zpterm[0] & zptermerr=zptermerr[0]
-  ; Save in exposure structure
-  expstr.zpterm = zpterm
-  expstr.zptermerr = zptermerr
-  expstr.zptermsig = sig  
-  expstr.nrefmatch = ngdcat
-  ; Apply the zero-point to the full catalogs
-  gdcatmag = where(cat.mag_auto lt 50,ngd)
-  cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
-  cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + zptermerr^2)  ; add calibration error in quadrature
+  model_mag = gaia2.gmag
+  mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
 else: begin
   printlog,logf,filter,' not currently supported'
   return
 end
 ENDCASE
+; Measure the zero-point
+NSC_INSTCAL_CALIBRATE_FITZPTERM,mstr,expstr,chstr
+; Apply the zero-point to the full catalogs
+gdcatmag = where(cat.mag_auto lt 50,ngd)
+cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + expstr.zpterm
+cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + expstr.zptermerr^2)  ; add calibration error in quadrature
+; Print out the results
 printlog,logf,strtrim(ngdcat,2)+' good sources'
-printlog,logf,'ZPTERM = ',stringize(expstr.zpterm,ndec=4),' +/- ',stringize(expstr.zptermerr,ndec=4),'  SIG=',stringize(expstr.zptermsig,ndec=4),' mag'
-
+printlog,logf,'ZPTERM=',stringize(expstr.zpterm,ndec=4),'+/-',stringize(expstr.zptermerr,ndec=4),'  SIG=',stringize(expstr.zptermsig,ndec=4),'mag'
+printlog,logf,'ZPSPATIALVAR:  RMS=',stringize(expstr.zpspatialvar_rms,ndec=3),' ',$
+         'RANGE=',stringize(expstr.zpspatialvar_range,ndec=3),' NCCD=',strtrim(expstr.zpspatialvar_nccd,2)
 
 ; Step 5. Write out the final catalogs and metadata
 ;--------------------------------------------------
