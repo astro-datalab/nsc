@@ -1,4 +1,4 @@
-pro nsc_instcal_calibrate,expdir,redo=redo,ncpu=ncpu,stp=stp
+pro nsc_instcal_calibrate,expdir,redo=redo,saveref=saveref,ncpu=ncpu,stp=stp
 
 ; Calibrate catalogs for one exposure
 
@@ -6,7 +6,7 @@ NSC_ROOTDIRS,dldir,mssdir,localdir
 
 ; Not enough inputs
 if n_elements(expdir) eq 0 then begin
-  print,'Syntax - nsc_instcal_calibrate,expdir'
+  print,'Syntax - nsc_instcal_calibrate,expdir,redo=redo,saveref=saveref,ncpu=ncpu,stp=stp'
   return
 endif
 
@@ -61,6 +61,8 @@ add_tag,schema,'CCDNUM',0L,schema
 add_tag,schema,'EBV',0.0,schema
 add_tag,schema,'RA',0.0d0,schema
 add_tag,schema,'DEC',0.0d0,schema
+add_tag,schema,'RAERR',0.0d0,schema
+add_tag,schema,'DECERR',0.0d0,schema
 add_tag,schema,'CMAG',99.99,schema
 add_tag,schema,'CERR',9.99,schema
 cat = REPLICATE(schema,ncat)
@@ -94,6 +96,18 @@ for i=0,ncatfiles-1 do begin
     temp.ccdnum = ccdnum
     temp.ra = cat1.alpha_j2000  ; add these here in case the astrometric correction fails later on
     temp.dec = cat1.delta_j2000
+    ; Add coordinate uncertainties
+    ;   sigma = 0.644*FWHM/SNR
+    ;   SNR = 1.087/magerr
+    snr = 1.087/temp.magerr_auto
+    bderr = where(temp.magerr_auto gt 10 and temp.magerr_iso lt 10,nbderr)
+    if nbderr gt 0 then snr[bderr]=1.087/temp[bderr].magerr_iso
+    bderr = where(temp.magerr_auto gt 10 and temp.magerr_iso gt 10,nbderr)
+    if nbderr gt 0 then snr[bderr] = 1
+    coorderr = 0.664*(temp.fwhm_world*3600)/snr
+    temp.raerr = coorderr
+    temp.decerr = coorderr
+    ; Stuff into main structure
     cat[cnt:cnt+ncat1-1] = temp
     cnt += ncat1
     cenra = mean(minmax(cat1.alpha_j2000))
@@ -234,7 +248,7 @@ for i=0,nrefcat-1 do begin
       spawn,cmd,out,outerr
       ; Load ASCII file and create the FITS file
       ref = importascii(refcattemp,/header,delim='|',skipline=2,/silent)
-      ;MWRFITS,ref,refcatfile,/create      ; don't write out files anymore
+      if keyword_set(saveref) then MWRFITS,ref,refcatfile,/create      ; only save if necessary
       file_delete,refcattemp,/allow
       (SCOPE_VARFETCH(varname,/enter)) = ref
 
@@ -268,7 +282,7 @@ for i=0,nrefcat-1 do begin
 
       (SCOPE_VARFETCH(varname,/enter)) = ref
       ; Save the file
-      ;MWRFITS,ref,refcatfile,/create  ; don't write out files anymore
+      if keyword_set(saveref) then MWRFITS,ref,refcatfile,/create  ; only save if necessary
     endelse
   endelse
   nref = n_elements(ref)
@@ -291,6 +305,10 @@ For i=0,nchips-1 do begin
   if ngmatch eq 0 then SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat1.alpha_j2000,cat1.delta_j2000,1.0,ind1,ind2,/sph,count=ngmatch
   if ngmatch lt 5 then begin
     print,'Not enough Gaia matches'
+    ; Add threshold to astrometric errors
+    cat1.raerr = sqrt(cat1.raerr^2 + 0.100^2)
+    cat1.decerr = sqrt(cat1.decerr^2 + 0.100^2)
+    cat[chind2] = cat1
     goto,BOMB
   endif
   gaia2 = gaia[ind1]
@@ -332,6 +350,9 @@ For i=0,nchips-1 do begin
   ROTSPHCEN,lon2,lat2,chstr[i].cenra,chstr[i].cendec,ra2,dec2,/reverse,/gnomic
   cat1.ra = ra2
   cat1.dec = dec2
+  ; Add to astrometric errors
+  cat1.raerr = sqrt(cat1.raerr^2 + rarms^2)
+  cat1.decerr = sqrt(cat1.decerr^2 + decrms^2)
   ; Stuff back into the main structure
   cat[chind2] = cat1
   chstr[i].gaianmatch = ngmatch
