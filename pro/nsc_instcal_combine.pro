@@ -109,7 +109,8 @@ nidstr = n_elements(idstr)
 idcnt = 0LL
 
 ; Initialize the object structure
-schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,pmra:0.0d0,pmdec:0.0d0,mjd:0.0d0,deltamjd:0.0,ndet:0L,$
+schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,raerr:0.0d0,decerr:0.0d0,pmra:0.0d0,$
+              pmdec:0.0d0,pmraerr:0.0d0,pmdecerr:0.0d0,mjd:0.0d0,deltamjd:0.0,ndet:0L,$
               ndetu:0,nphotu:0,umag:0.0,uerr:0.0,uasemi:0.0,ubsemi:0.0,utheta:0.0,$
               ndetg:0,nphotg:0,gmag:0.0,gerr:0.0,gasemi:0.0,gbsemi:0.0,gtheta:0.0,$
               ndetr:0,nphotr:0,rmag:0.0,rerr:0.0,rasemi:0.0,rbsemi:0.0,rtheta:0.0,$
@@ -124,7 +125,7 @@ schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,pmra:0.0d0,pmdec:0.0d0,mjd:0.0d0,d
 tags = tag_names(schema_obj)
 obj = replicate(schema_obj,5e5)
 nobj = n_elements(obj)
-totobj = replicate({ra:0.0d0,dec:0.0d0,mjd2:0.0d0,minmjd:999999.0d0,maxmjd:-999999.0d0},nobj)
+totobj = replicate({ra:0.0d0,dec:0.0d0,ramjd:0.0d0,decmjd:0.0d0,ramjd2:0.0d0,decmjd2:0.0d0,minmjd:999999.0d0,maxmjd:-999999.0d0},nobj)
 cnt = 0LL
 
 ; Loop over the exposures
@@ -277,9 +278,11 @@ FOR i=0,nlist-1 do begin
     newexp.pix = pix
     newexp.ra = cat.ra
     newexp.dec = cat.dec
-    newexp.pmra = newmeta.mjd*cat.ra    ; total(mjd*ra)
-    newexp.pmdec = newmeta.mjd*cat.dec  ; total(mjd*dec)
-    newexp.mjd = newmeta.mjd
+    newexp.raerr = 1.0/cat.raerr^2                           ; total(ra_wt)
+    newexp.decerr = 1.0/cat.decerr^2                         ; total(dec_wt)
+    newexp.pmra = (1.0/cat.raerr^2) * newmeta.mjd*cat.ra     ; total(wt*mjd*ra)
+    newexp.pmdec = (1.0/cat.decerr^2) * newmeta.mjd*cat.dec  ; total(wt*mjd*dec)
+    newexp.mjd = newmeta.mjd                                 ; total(mjd)
     newexp.ndet = 1
     ; Detection and morphology parameters for this FILTER
     newexp.(detind) = 1
@@ -317,9 +320,12 @@ FOR i=0,nlist-1 do begin
     newexp.flags = cat.flags
     newexp.class_star = cat.class_star
     obj[0:ncat-1] = newexp
-    totobj[0:ncat-1].ra = newexp.ra
-    totobj[0:ncat-1].dec = newexp.dec
-    totobj[0:ncat-1].mjd2 = newmeta.mjd^2
+    totobj[0:ncat-1].ra = cat.ra * (1.0/cat.raerr^2)               ; total(ra*wt)
+    totobj[0:ncat-1].dec = cat.dec * (1.0/cat.decerr^2)            ; total(dec*wt)
+    totobj[0:ncat-1].ramjd = (1.0/cat.raerr^2) * newmeta.mjd       ; total(wt_ra*mjd)
+    totobj[0:ncat-1].decmjd = (1.0/cat.decerr^2) * newmeta.mjd     ; total(wt_dec*mjd)
+    totobj[0:ncat-1].ramjd2 = (1.0/cat.raerr^2) * newmeta.mjd^2    ; total(wt_ra*mjd^2)
+    totobj[0:ncat-1].decmjd2 = (1.0/cat.decerr^2) * newmeta.mjd^2  ; total(wt_dec*mjd^2)
     totobj[0:ncat-1].minmjd = newmeta.mjd
     totobj[0:ncat-1].maxmjd = newmeta.mjd
     cnt += ncat
@@ -363,10 +369,13 @@ FOR i=0,nlist-1 do begin
       totcmb = totobj[ind1]
       cmb.ndet++
       newcat = cat[ind2]
+      ; Coordinate errors
+      cmb.raerr += (1.0/newcat.raerr^2)    ; total(ra_wt)
+      cmb.decerr += (1.0/newcat.decerr^2)  ; total(dec_wt)
       ; Proper motion stuff
-      cmb.pmra += newmeta.mjd*newcat.ra    ; total(mjd*ra)
-      cmb.pmdec += newmeta.mjd*newcat.dec  ; total(mjd*dec)
-      cmb.mjd += newmeta.mjd
+      cmb.pmra += (1.0/newcat.raerr^2) * newmeta.mjd*newcat.ra     ; total(wt*mjd*ra)
+      cmb.pmdec += (1.0/newcat.decerr^2) * newmeta.mjd*newcat.dec  ; total(wt*mjd*dec)
+      cmb.mjd += newmeta.mjd                                       ; total(mjd^2)
       ; Detection and morphology parameters for this FILTER
       cmb.(detind)++
       cmb.(asemiind) += newcat.a_world
@@ -403,9 +412,12 @@ FOR i=0,nlist-1 do begin
       cmb.fwhm += newcat.fwhm_world*3600  ; in arcsec
       cmb.flags OR= newcat.flags
       cmb.class_star += newcat.class_star
-      totcmb.ra += newcat.ra
-      totcmb.dec += newcat.dec
-      totcmb.mjd2 +=  newmeta.mjd^2
+      totcmb.ra += newcat.ra * (1.0/newcat.raerr^2)             ; total(wt*ra)
+      totcmb.dec += newcat.dec * (1.0/newcat.decerr^2)          ; total(wt*dec)
+      totcmb.ramjd +=  (1.0/newcat.raerr^2) * newmeta.mjd       ; total(wt_ra*mjd)
+      totcmb.decmjd +=  (1.0/newcat.decerr^2) * newmeta.mjd     ; total(wt_dec*mjd)
+      totcmb.ramjd2 +=  (1.0/newcat.raerr^2) * newmeta.mjd^2    ; total(wt_ra*mjd^2)
+      totcmb.decmjd2 +=  (1.0/newcat.decerr^2) * newmeta.mjd^2  ; total(wt_dec*mjd^2)
       totcmb.minmjd <= newmeta.mjd
       totcmb.maxmjd >= newmeta.mjd
       obj[ind1] = cmb  ; stuff it back in
@@ -455,9 +467,11 @@ FOR i=0,nlist-1 do begin
       newexp.pix = pix
       newexp.ra = cat.ra
       newexp.dec = cat.dec
-      newexp.pmra = newmeta.mjd*cat.ra    ; total(mjd*ra)
-      newexp.pmdec = newmeta.mjd*cat.dec  ; total(mjd*dec)
-      newexp.mjd = newmeta.mjd
+      newexp.raerr = 1.0/cat.raerr^2                          ; total(ra_wt)
+      newexp.decerr = 1.0/cat.decerr^2                        ; total(dec_wt)
+      newexp.pmra = (1.0/cat.raerr^2) * newmeta.mjd*cat.ra    ; total(wt*mjd*ra)
+      newexp.pmdec = (1.0/cat.decerr^2) * newmeta.mjd*cat.dec ; total(wt*mjd*dec)
+      newexp.mjd = newmeta.mjd                                ; total(mjd) 
       newexp.ndet = 1
       ; Detection and morphology parameters for this FILTER
       newexp.(detind) = 1
@@ -494,9 +508,12 @@ FOR i=0,nlist-1 do begin
       newexp.flags = cat.flags
       newexp.class_star = cat.class_star
       obj[cnt:cnt+ncat-1] = newexp   ; stuff it in
-      totobj[cnt:cnt+ncat-1].ra = newexp.ra
-      totobj[cnt:cnt+ncat-1].dec = newexp.dec
-      totobj[cnt:cnt+ncat-1].mjd2 = newmeta.mjd^2
+      totobj[cnt:cnt+ncat-1].ra = cat.ra * (1.0/cat.raerr^2)               ; total(ra*wt)
+      totobj[cnt:cnt+ncat-1].dec = cat.dec * (1.0/cat.decerr^2)            ; total(dec*wt)
+      totobj[cnt:cnt+ncat-1].ramjd = (1.0/cat.raerr^2) * newmeta.mjd       ; total(wt_ra*mjd)
+      totobj[cnt:cnt+ncat-1].decmjd = (1.0/cat.decerr^2) * newmeta.mjd     ; total(wt_dec*mjd)
+      totobj[cnt:cnt+ncat-1].ramjd2 = (1.0/cat.raerr^2) * newmeta.mjd^2    ; total(wt_ra*mjd^2)
+      totobj[cnt:cnt+ncat-1].decmjd2 = (1.0/cat.decerr^2) * newmeta.mjd^2  ; total(wt_dec*mjd^2)
       totobj[cnt:cnt+ncat-1].minmjd = newmeta.mjd
       totobj[cnt:cnt+ncat-1].maxmjd = newmeta.mjd
       objectindex = lindgen(ncat)+cnt
@@ -536,33 +553,49 @@ print,strtrim(nobj,2),' final objects'
 idstr = idstr[0:idcnt-1]
 
 ; Convert total(mjd*ra) to true proper motion values
-;  the slope of RA vs. MJD is pmra=(total(mjd*ra)-n*<mjd>*<ra>)/(total(mjd^2)-n*<mjd>^2)
+;  the slope of RA vs. MJD is
+;  pmra=(total(wt*mjd*ra)/total(wt)-<mjd>*<ra>)/(total(wt*mjd^2)/total(wt)-<mjd>^2)
 ;  we are creating the totals cumulatively as we go
-totobj.ra /= obj.ndet  ; get mean RA
-totobj.dec /= obj.ndet ; get mean DEC
-obj.mjd /= obj.ndet    ; get mean MJD
-pmra = (obj.pmra-obj.ndet*obj.mjd*totobj.ra)/(totobj.mjd2-obj.ndet*obj.mjd^2)   ; deg[ra]/day
+totobj.ra /= obj.raerr        ; wt mean RA (totalrawt/totalwt)
+totobj.dec /= obj.decerr      ; wt mean DEC (totaldecwt/totalwt)
+obj.mjd /= obj.ndet           ; mean MJD
+totobj.ramjd /= obj.raerr     ; wt_ra mean MJD
+totobj.decmjd /= obj.decerr   ; wt_dec mean MJD
+pmra = (obj.pmra/obj.raerr-totobj.ramjd*totobj.ra)/(totobj.ramjd2/obj.raerr-obj.ramjd^2)   ; deg[ra]/day
 pmra *= (3600*1e3)*365.2425     ; mas/year
 pmra *= cos(obj.dec/radeg)      ; mas/year, true degrees
-pmdec = (obj.pmdec-obj.ndet*obj.mjd*totobj.dec)/(totobj.mjd2-obj.ndet*obj.mjd^2)  ; deg/day
+pmdec = (obj.pmdec/obj.decerr-totobj.decmjd*totobj.dec)/(totobj.decmjd2/obj.decerr-obj.decmjd^2)  ; deg/day
 pmdec *= (3600*1e3)*365.2425    ; mas/year
+; Proper motion errors
+; pmerr = 1/sqrt( sum(wt*mjd^2) - <mjd>^2 * sum(wt) )
+pmraerr = 1.0/sqrt( totobj.ramjd2 - totobj.ramjd^2 * obj.raerr )
+pmraerr *= (3600*1e3)*365.2425     ; mas/year
+pmraerr *= cos(obj.dec/radeg)      ; mas/year, true degrees 
+pmdecerr = 1.0/sqrt( totobj.decmjd2 - totobj.decmjd^2 * obj.decerr )
+pmdecerr *= (3600*1e3)*365.2425    ; mas/year
 gdet = where(obj.ndet gt 1,ngdet)
 if ngdet gt 0 then begin
   obj[gdet].pmra = pmra[gdet]
   obj[gdet].pmdec = pmdec[gdet]
+  obj[gdet].pmraerr = pmraerr[gdet]
+  obj[gdet].pmdecerr = pmdecerr[gdet]
 endif
-bdet =where(obj.ndet lt 2 or finite(pmra) eq 0,nbdet)
+bdet = where(obj.ndet lt 2 or finite(pmra) eq 0,nbdet)
 ; sometimes it happens that the denominator is 0.0 
 ;  when there are few closely spaced points
 ;  nothing we can do, just mark as bad
 if nbdet gt 0 then begin
   obj[bdet].pmra = 999999.0
   obj[bdet].pmdec = 999999.0
+  obj[bdet].pmraerr = 999999.0
+  obj[bdet].pmdecerr = 999999.0
 endif
 obj.deltamjd = totobj.maxmjd-totobj.minmjd
 ; Average coordinates
 obj.ra = totobj.ra   ; now stuff in the average coordinates
 obj.dec = totobj.dec
+obj.raerr = sqrt(1.0/obj.raerr)    ; err in wt mean RA
+obj.decerr = sqrt(1.0/obj.decerr)  ; err in wt mean DEC
 
 ; Convert totalwt and totalfluxwt to MAG and ERR
 ;  and average the morphology parameters PER FILTER
@@ -686,6 +719,8 @@ if nuexpnum gt 1 then begin
 endif else numobjexp=n_elements(expnum)
 MATCH,long(sumstr.expnum),uexpnum,ind1,ind2,/sort,count=nmatch
 sumstr[ind1].nobjects = numobjexp
+
+stop
 
 ; Write the output file
 print,'Writing combined catalog to ',outfile
