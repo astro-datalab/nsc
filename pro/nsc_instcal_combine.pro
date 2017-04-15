@@ -23,7 +23,7 @@ if file_test(outfile) eq 1 and not keyword_set(redo) then begin
   return
 endif
 
-print,'Combining InstCal SExtractor catalogs or Healpix pixel = ',strtrim(pix,2)
+print,'Combining InstCal SExtractor catalogs for Healpix pixel = ',strtrim(pix,2)
 
 ; Load the list
 listfile = localdir+'dnidever/nsc/instcal/nsc_healpix_list.fits'
@@ -109,7 +109,7 @@ nidstr = n_elements(idstr)
 idcnt = 0LL
 
 ; Initialize the object structure
-schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,ndet:0L,$
+schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,pmra:0.0d0,pmdec:0.0d0,mjd:0.0d0,deltamjd:0.0,ndet:0L,$
               ndetu:0,nphotu:0,umag:0.0,uerr:0.0,uasemi:0.0,ubsemi:0.0,utheta:0.0,$
               ndetg:0,nphotg:0,gmag:0.0,gerr:0.0,gasemi:0.0,gbsemi:0.0,gtheta:0.0,$
               ndetr:0,nphotr:0,rmag:0.0,rerr:0.0,rasemi:0.0,rbsemi:0.0,rtheta:0.0,$
@@ -124,6 +124,7 @@ schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,ndet:0L,$
 tags = tag_names(schema_obj)
 obj = replicate(schema_obj,5e5)
 nobj = n_elements(obj)
+totobj = replicate({ra:0.0d0,dec:0.0d0,mjd2:0.0d0,minmjd:999999.0d0,maxmjd:-999999.0d0},nobj)
 cnt = 0LL
 
 ; Loop over the exposures
@@ -146,6 +147,7 @@ FOR i=0,nlist-1 do begin
   meta = MRDFITS(metafile,1,/silent)
   meta.base = strtrim(meta.base)
   meta.expnum = strtrim(meta.expnum)
+  meta.mjd = date2jd(meta.dateobs,/mjd)  ; recompute because some MJD are bad
   ;head = headfits(list[i].file,exten=0)
   ;filtername = sxpar(head,'filter')
   ;if strmid(filtername,0,2) eq 'VR' then filter='VR' else filter=strmid(filtername,0,1)
@@ -158,7 +160,7 @@ FOR i=0,nlist-1 do begin
     ; Remove bad measurements
     ; X: 1-1024 okay
     ; X: 1025-2049 bad
-    bdind = where(cat1.x_imag gt 1024,nbdind,comp=gdind,ncomp=ngdind)
+    bdind = where(cat1.x_image gt 1024 and cat1.ccdnum eq 31,nbdind,comp=gdind,ncomp=ngdind)
     if nbdind gt 0 then begin   ; some bad ones found
       if ngdind eq 0 then begin   ; all bad
         print,'NO useful measurements in ',fitsfile
@@ -166,7 +168,7 @@ FOR i=0,nlist-1 do begin
         ncat1 = 0
         goto,BOMB
       endif else begin
-        print,'Removing '+strtrim(nbdind,2)+' bad measurements, '+strtrim(ngdind,2)+' left.'
+        print,'  Removing '+strtrim(nbdind,2)+' bad chip 31 measurements, '+strtrim(ngdind,2)+' left.'
         REMOVE,bdind,cat1
         ncat1 = n_elements(cat1)
       endelse
@@ -275,6 +277,9 @@ FOR i=0,nlist-1 do begin
     newexp.pix = pix
     newexp.ra = cat.ra
     newexp.dec = cat.dec
+    newexp.pmra = newmeta.mjd*cat.ra    ; total(mjd*ra)
+    newexp.pmdec = newmeta.mjd*cat.dec  ; total(mjd*dec)
+    newexp.mjd = newmeta.mjd
     newexp.ndet = 1
     ; Detection and morphology parameters for this FILTER
     newexp.(detind) = 1
@@ -312,6 +317,11 @@ FOR i=0,nlist-1 do begin
     newexp.flags = cat.flags
     newexp.class_star = cat.class_star
     obj[0:ncat-1] = newexp
+    totobj[0:ncat-1].ra = newexp.ra
+    totobj[0:ncat-1].dec = newexp.dec
+    totobj[0:ncat-1].mjd2 = newmeta.mjd^2
+    totobj[0:ncat-1].minmjd = newmeta.mjd
+    totobj[0:ncat-1].maxmjd = newmeta.mjd
     cnt += ncat
 
     ; Add new elements to IDSTR
@@ -350,8 +360,13 @@ FOR i=0,nlist-1 do begin
 
       ; Combine the information
       cmb = obj[ind1]
+      totcmb = totobj[ind1]
       cmb.ndet++
       newcat = cat[ind2]
+      ; Proper motion stuff
+      cmb.pmra += newmeta.mjd*newcat.ra    ; total(mjd*ra)
+      cmb.pmdec += newmeta.mjd*newcat.dec  ; total(mjd*dec)
+      cmb.mjd += newmeta.mjd
       ; Detection and morphology parameters for this FILTER
       cmb.(detind)++
       cmb.(asemiind) += newcat.a_world
@@ -388,7 +403,13 @@ FOR i=0,nlist-1 do begin
       cmb.fwhm += newcat.fwhm_world*3600  ; in arcsec
       cmb.flags OR= newcat.flags
       cmb.class_star += newcat.class_star
+      totcmb.ra += newcat.ra
+      totcmb.dec += newcat.dec
+      totcmb.mjd2 +=  newmeta.mjd^2
+      totcmb.minmjd <= newmeta.mjd
+      totcmb.maxmjd >= newmeta.mjd
       obj[ind1] = cmb  ; stuff it back in
+      totobj[ind1] = totcmb
 
       ; Add new elements to IDSTR
       if idcnt+nmatch gt nidstr then begin
@@ -421,6 +442,9 @@ FOR i=0,nlist-1 do begin
         old = obj
         obj = replicate(schema_obj,nobj+1e5)
         obj[0:nobj-1] = old
+        oldtot = totobj
+        totobj = replicate({ra:0.0d0,dec:0.0d0,mjd2:0.0d0},nobj+1e5)
+        totobj[0:nobj-1] = oldtot
         nobj = n_elements(obj)
         undefine,old
       endif
@@ -431,6 +455,9 @@ FOR i=0,nlist-1 do begin
       newexp.pix = pix
       newexp.ra = cat.ra
       newexp.dec = cat.dec
+      newexp.pmra = newmeta.mjd*cat.ra    ; total(mjd*ra)
+      newexp.pmdec = newmeta.mjd*cat.dec  ; total(mjd*dec)
+      newexp.mjd = newmeta.mjd
       newexp.ndet = 1
       ; Detection and morphology parameters for this FILTER
       newexp.(detind) = 1
@@ -467,6 +494,11 @@ FOR i=0,nlist-1 do begin
       newexp.flags = cat.flags
       newexp.class_star = cat.class_star
       obj[cnt:cnt+ncat-1] = newexp   ; stuff it in
+      totobj[cnt:cnt+ncat-1].ra = newexp.ra
+      totobj[cnt:cnt+ncat-1].dec = newexp.dec
+      totobj[cnt:cnt+ncat-1].mjd2 = newmeta.mjd^2
+      totobj[cnt:cnt+ncat-1].minmjd = newmeta.mjd
+      totobj[cnt:cnt+ncat-1].maxmjd = newmeta.mjd
       objectindex = lindgen(ncat)+cnt
       cnt += ncat
 
@@ -498,9 +530,39 @@ if cnt eq 0 then begin
 endif
 ; Trim off the excess elements
 obj = obj[0:cnt-1]
+totobj = totobj[0:cnt-1]
 nobj = n_elements(obj)
 print,strtrim(nobj,2),' final objects'
 idstr = idstr[0:idcnt-1]
+
+; Convert total(mjd*ra) to true proper motion values
+;  the slope of RA vs. MJD is pmra=(total(mjd*ra)-n*<mjd>*<ra>)/(total(mjd^2)-n*<mjd>^2)
+;  we are creating the totals cumulatively as we go
+totobj.ra /= obj.ndet  ; get mean RA
+totobj.dec /= obj.ndet ; get mean DEC
+obj.mjd /= obj.ndet    ; get mean MJD
+pmra = (obj.pmra-obj.ndet*obj.mjd*totobj.ra)/(totobj.mjd2-obj.ndet*obj.mjd^2)   ; deg[ra]/day
+pmra *= (3600*1e3)*365.2425     ; mas/year
+pmra *= cos(obj.dec/radeg)      ; mas/year, true degrees
+pmdec = (obj.pmdec-obj.ndet*obj.mjd*totobj.dec)/(totobj.mjd2-obj.ndet*obj.mjd^2)  ; deg/day
+pmdec *= (3600*1e3)*365.2425    ; mas/year
+gdet = where(obj.ndet gt 1,ngdet)
+if ngdet gt 0 then begin
+  obj[gdet].pmra = pmra[gdet]
+  obj[gdet].pmdec = pmdec[gdet]
+endif
+bdet =where(obj.ndet lt 2 or finite(pmra) eq 0,nbdet)
+; sometimes it happens that the denominator is 0.0 
+;  when there are few closely spaced points
+;  nothing we can do, just mark as bad
+if nbdet gt 0 then begin
+  obj[bdet].pmra = 999999.0
+  obj[bdet].pmdec = 999999.0
+endif
+obj.deltamjd = totobj.maxmjd-totobj.minmjd
+; Average coordinates
+obj.ra = totobj.ra   ; now stuff in the average coordinates
+obj.dec = totobj.dec
 
 ; Convert totalwt and totalfluxwt to MAG and ERR
 ;  and average the morphology parameters PER FILTER
@@ -624,6 +686,8 @@ if nuexpnum gt 1 then begin
 endif else numobjexp=n_elements(expnum)
 MATCH,long(sumstr.expnum),uexpnum,ind1,ind2,/sort,count=nmatch
 sumstr[ind1].nobjects = numobjexp
+
+stop
 
 ; Write the output file
 print,'Writing combined catalog to ',outfile
