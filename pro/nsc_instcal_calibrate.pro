@@ -189,9 +189,9 @@ ENDCASE
 
 
 ; Do a small test query to check density
-testqry = QUERYVIZIER('2MASS-PSC',[cenra,cendec],[10,10],/cfa)
-tmdensity = n_elements(testqry)*36.0  ; density per deg^2
-print,'2MASS density = ',strtrim(long(tmdensity),2),' sources per deg^2'
+;testqry = QUERYVIZIER('2MASS-PSC',[cenra,cendec],[10,10],/cfa)
+;tmdensity = n_elements(testqry)*36.0  ; density per deg^2
+;print,'2MASS density = ',strtrim(long(tmdensity),2),' sources per deg^2'
 
 ; Load the necessary catalogs
 nrefcat = n_elements(refcat)

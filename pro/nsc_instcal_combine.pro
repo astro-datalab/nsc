@@ -687,8 +687,6 @@ endif else numobjexp=n_elements(expnum)
 MATCH,long(sumstr.expnum),uexpnum,ind1,ind2,/sort,count=nmatch
 sumstr[ind1].nobjects = numobjexp
 
-stop
-
 ; Write the output file
 print,'Writing combined catalog to ',outfile
 MWRFITS,sumstr,outfile,/create      ; first, summary table
