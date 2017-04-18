@@ -170,7 +170,7 @@ for i=0,ngdexp-1 do begin
   dateobs = str[gdexp[i]].date_obs
   night = strmid(dateobs,0,4)+strmid(dateobs,5,2)+strmid(dateobs,8,2)
   baseroot = file_basename(base,'.fits.fz')
-  outfile = dldir+'users/dnidever/decamcatalog/instcal/'+night+'/'+baseroot+'/'+baseroot+'_'+strtrim(1,2)+'.fits'
+  outfile = dldir+'users/dnidever/decamcatalog/instcal/k4m/'+night+'/'+baseroot+'/'+baseroot+'_'+strtrim(1,2)+'.fits'
   expstr[i].outfile = outfile
 
   ; Do all three files exist?
