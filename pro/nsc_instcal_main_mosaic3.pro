@@ -241,7 +241,7 @@ for i=0,ntosubmit-1 do begin
 endfor
 
 ; Saving the structure of jobs to run
-runfile = dir+'logs/nsc_instcal_main.'+logtime+'_run.fits'
+runfile = dir+'logs/nsc_instcal_main_mosaic3.'+logtime+'_run.fits'
 print,'Writing running information to ',runfile
 MWRFITS,expstr,runfile,/create
 
