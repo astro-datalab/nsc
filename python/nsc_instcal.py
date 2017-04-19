@@ -166,14 +166,26 @@ if __name__ == "__main__":
     #    fwhm = fwhmpix*0.27
     dateobs = head0.get("DATE-OBS")
     night = dateobs[0:4]+dateobs[5:7]+dateobs[8:10]
-
+    # instrument, c4d, k4m or ksb
+    # DTINSTRU = 'mosaic3 '
+    # DTTELESC = 'kp4m    '
+    # Bok 90Prime data has
+    if head0.get("DTINSTRU") == 'mosaic3':
+      instcode = 'k4m'
+      rootLogger.info("  This is KPNO Mosaic3 data")
+    elif head0.get("DTINSTRU") == '90prime':
+      instcode = 'ksb'
+      rootLogger.info("  This is Bok 90Prime data")
+    else:
+      instcode = 'c4d'
+      rootLogger.info("  This is CTIO DECam data")
 
     # Make final output directory
-    if not os.path.exists(dir+night):
-        os.mkdir(dir+night)
-    if not os.path.exists(dir+night+"/"+base):
-        os.mkdir(dir+night+"/"+base)
-        rootLogger.info("  Making output directory: "+dir+night+"/"+base)
+    if not os.path.exists(dir+instcode+"/"+night):
+        os.mkdir(dir+instcode+"/"+night)
+    if not os.path.exists(dir+instcode+"/"+night+"/"+base):
+        os.mkdir(dir+instcode+"/"+night+"/"+base)
+        rootLogger.info("  Making output directory: "+dir+instcode+"/"+night+"/"+base)
     #if not os.path.exists("/datalab/users/dnidever/decamcatalog/instcal/"+night):
     #    os.mkdir("/datalab/users/dnidever/decamcatalog/instcal/"+night)
     #if not os.path.exists("/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base):
@@ -317,7 +329,7 @@ if __name__ == "__main__":
         # 3d) Load the catalog (and logfile) and write final output file
         # Move the file to final locaation
         if os.path.exists("cat.fits"):
-            outcatfile = dir+night+"/"+base+"/"+base+"_"+str(ccdnum)+".fits"
+            outcatfile = dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".fits"
             #outcatfile = "/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".fits"
             # Clobber if it already exists
             if os.path.exists(outcatfile):
@@ -342,7 +354,7 @@ if __name__ == "__main__":
     # Move the log file
     #os.rename(logfile,"/datalab/users/dnidever/decamcatalog/"+night+"/"+base+"/"+base+".log")
     # The above rename gave an error on gp09, OSError: [Errno 18] Invalid cross-device link
-    shutil.move(logfile,dir+night+"/"+base+"/"+base+".log")
+    shutil.move(logfile,dir+instcode+"/"+night+"/"+base+"/"+base+".log")
     #shutil.move(logfile,"/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base+"/"+base+".log")
 
     # Delete temporary files and directory

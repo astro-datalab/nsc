@@ -14,10 +14,9 @@ if n_elements(all) eq 0 then begin
   all.date_obs = strtrim(all.date_obs,2)
   all.plver = strtrim(all.plver,2)
   ; Fix URI, ALREADY FIXED!!!
-  ;uri = repstr(all.uri, 'irods:///noao-tuc-z1/', '/net/mss1/archive/')
-  ;uri = strtrim(uri,2)
-  ;all.uri = uri
-  all.uri = strtrim(all.uri,2)
+  uri = repstr(all.uri, 'irods:///noao-tuc-z1/', '/net/mss1/archive/')
+  uri = strtrim(uri,2)
+  all.uri = uri
 endif
 
 ; Get just the images
