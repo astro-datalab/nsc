@@ -43,8 +43,28 @@ if ncatfiles1 gt 0 then push,catfiles,catfiles1
 catfiles2 = file_search(expdir+'/'+base+'_[0-9][0-9].fits',count=ncatfiles2)
 if ncatfiles2 gt 0 then push,catfiles,catfiles2
 ncatfiles = n_elements(catfiles)
+if ncatfiles eq 0 then begin
+  print,'No catalog files found'
+  return
+endif
 nchips = ncatfiles
 printlog,logf,strtrim(ncatfiles,2),' catalogs found'
+
+; Check that this isn't a problematic Mosaic3 exposure
+if stregex(expdir,'/k4m/',/boolean) eq 1 then begin
+  dum = MRDFITS(catfiles[0],1)
+  head0 = dum.field_header_card
+  pixcnt = sxpar(head0,'PIXCNT*',count=npixcnt)
+  if pixcnt gt 0 then begin
+    print,'This is a Mosaic3 exposure with pixel shift problems'
+    return
+  endif
+  wcscal = sxpar(head0,'WCSCAL',count=nwcscal)
+  if nwcscal gt 0 and strtrim(wcscal,2) eq 'Failed' then begin
+    print,'This is a Mosaic3 exposure with failed WCS calibration'
+    return
+  endif
+endif
 
 ; Figure out the number of sources
 ncat = 0L
@@ -151,8 +171,9 @@ fluxfile = mssdir+strtrim(strmid(line,lo+1),2)
 ; Load the meta-data from the original header
 ;READLINE,expdir+'/'+base+'.head',head
 head = headfits(fluxfile,exten=0)
-filterlong = sxpar(head,'filter')
+filterlong = strtrim(sxpar(head,'filter'),2)
 if strmid(filterlong,0,2) eq 'VR' then filter='VR' else filter=strmid(filterlong,0,1)
+if filterlong eq 'bokr' then filter='r'
 expnum = sxpar(head,'expnum')
 exptime = sxpar(head,'exptime')
 dateobs = sxpar(head,'date-obs')
