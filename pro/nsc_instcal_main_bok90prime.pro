@@ -141,6 +141,8 @@ exptime = str.exposure
 ;  if strcmp(str[i].prodtype,'image1',6) eq 1 then prodtype[i]='image1'
 ;endfor
 
+stop
+
 gdexp = lindgen(nstr)
 ngdexp = nstr
 
