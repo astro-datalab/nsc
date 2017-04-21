@@ -2,7 +2,7 @@ pro nsc_instcal_calibrate_fitzpterm,mstr,expstr,chstr
 
 ; Fit the global and ccd zero-points
 
-n = n_elements(mstr)
+n = n_elements(mstr.col)
 diff = mstr.model - mstr.mag
 err = mstr.err
 ; Make a sigma cut
