@@ -32,12 +32,17 @@ print, "Calibrating DECam InstCal SExtractor catalogs"
 
 ; Find all of the directories
 print,'Getting the exposure directories'
-expdirs = file_search(dir+'instcal/20??????/*',/test_directory,count=nexpdirs)
+c4d_expdirs = file_search(dir+'instcal/c4d/20??????/*',/test_directory,count=nc4d_expdirs)
+if nc4d_expdirs gt 0 then push,expdirs,c4d_expdirs
+k4m_expdirs = file_search(dir+'instcal/k4m/20??????/*',/test_directory,count=nk4m_expdirs)
+if nk4m_expdirs gt 0 then push,expdirs,k4m_expdirs
+ksb_expdirs = file_search(dir+'instcal/ksb/20??????/*',/test_directory,count=nksb_expdirs)
+if nksb_expdirs gt 0 then push,expdirs,ksb_expdirs
 ; GDL file_search doesn't have /test_directory
 ;expdirs = file_search(dir+'instcal/20??????/*',count=nexpdirs)
 ;gddirs = where(file_test(expdirs,/directory) eq 1,ngddirs)
 ;expdirs = expdirs[gddirs]
-;nexpdirs = n_elements(expdirs)
+nexpdirs = n_elements(expdirs)
 print,strtrim(nexpdirs,2),' exposure directories'
 
 cmd = 'nsc_instcal_calibrate,"'+expdirs+'"'
@@ -46,12 +51,12 @@ dirs = strarr(nexpdirs)+localdir+'/dnidever/nsc/instcal/tmp/'
 ;dirs = strarr(nexpdirs)+'/data0/dnidever/decamcatalog/instcal/tmp/'
 
 ; ----- Run the LAF and Stripe82 exposures ----
-str = MRDFITS(dir+'decam_instcal_list.fits',1)
-nstr = n_elements(str)
-glactc,str.ra,str.dec,2000.0,glon,glat,1,/deg
-gal2mag,glon,glat,mlon,mlat
-filt = strmid(str.filter,0,1)
-exptime = str.exposure
+;str = MRDFITS(dir+'decam_instcal_list.fits',1)
+;nstr = n_elements(str)
+;glactc,str.ra,str.dec,2000.0,glon,glat,1,/deg
+;gal2mag,glon,glat,mlon,mlat
+;filt = strmid(str.filter,0,1)
+;exptime = str.exposure
 
 ;; Stripe82, -60<RA<60 and -1.26 < DEC < 1.26
 ;gdexp82 = where((str.ra lt 61 or str.ra gt 259) and (str.dec ge -1.5 and str.dec le 1.5) and $
@@ -87,63 +92,94 @@ exptime = str.exposure
 ;remove,ind1,cmd,dirs
 ;PBS_DAEMON,cmd,dirs,jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
 
-stop
+;stop
 
 ; Run PBS_DAEMON
 ;PBS_DAEMON,cmd,dirs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
 
-;; Load all the summary/metadata files
-;print,'Creating calibration summary file'
-;expstr = replicate({expdir:'',metafile:'',success:0,file:'',base:'',expnum:0L,ra:0.0d0,dec:0.0d,dateobs:'',mjd:0.0d0,filter:'',exptime:0.0,$
-;                    airmass:0.0,nsources:0L,fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,zpterm:0.0,zptermerr:0.0,zptermsig:0.0,$
-;                    nrefmatch:0L},nexpdirs)
-;expstr.expdir = expdirs
-;for i=0,nexpdirs-1 do begin
-;  if (i+1) mod 5000 eq 0 then print,i+1
-;  base = file_basename(expdirs[i])
-;  metafile = expdirs[i]+'/'+base+'_meta.fits'
-;  expstr[i].metafile = metafile
-;  if file_test(metafile) eq 1 then begin
-;    expstr1 = MRDFITS(metafile,1,/silent)
-;    ;chstr1 = MRDFITS(metafile,2,/silent)
-;    temp = expstr[i]
-;    struct_assign,expstr1,temp,/nozero
-;    expstr[i] = temp
-;    ;expstr[i].rarms = median(chstr1.rarms)
-;    ;expstr[i].decrms = median(chstr1.decrms)
-;    ;expstr[i].gaianmatch = median(chstr1.gaianmatch)
-;    expstr[i].success = 1;
-;
-;    ; Fix missing DATE-OBS
-;    if strtrim(expstr[i].dateobs,2) eq '' or strtrim(expstr[i].dateobs,2) eq '0' then begin
-;      fluxfile = strtrim(expstr[i].file)
-;      lo = strpos(fluxfile,'archive') 
-;      fluxfile = mssdir+strmid(fluxfile,lo)
-;      head = headfits(fluxfile,exten=0) 
-;      expstr[i].dateobs = sxpar(head,'DATE-OBS') 
-;    endif
-;    ; Fix missing AIRMASS
-;    if expstr[i].airmass lt 0.9 then begin
-;      OBSERVATORY,'ctio',obs
-;      lat = obs.latitude 
-;      lon = obs.longitude
-;      jd = date2jd(expstr[i].dateobs) 
-;      ra = expstr[i].ra 
-;      dec = expstr[i].dec
-;      expstr[i].airmass = AIRMASS(jd,ra,dec,lat,lon)
-;    endif
-;
-;  endif else expstr[i].success=0
-;endfor
-;gd = where(expstr.success eq 1,ngd)
-;print,strtrim(ngd,2),' exposure successfully calibrated'
-;print,'Writing summary file to ',dir+'instcal/nsc_instcal_calibrate.fits'
-;MWRFITS,expstr,dir+'instcal/nsc_instcal_calibrate.fits',/create
+;stop
+
+; Load all the summary/metadata files
+print,'Creating calibration summary file'
+expstr = replicate({expdir:'',instrument:'',metafile:'',success:0,file:'',base:'',expnum:0L,ra:0.0d0,dec:0.0d,dateobs:'',mjd:0.0d0,filter:'',exptime:0.0,$
+                    airmass:0.0,nsources:0L,fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,zpterm:0.0,zptermerr:0.0,zptermsig:0.0,$
+                    nrefmatch:0L},nexpdirs)
+expstr.expdir = expdirs
+chstr = replicate({expdir:'',instrument:'',success:0,filename:'',ccdnum:0L,nsources:0L,cenra:999999.0d0,cendec:999999.0d0,$
+                   gaianmatch:0L,rarms:999999.0,racoef:dblarr(4),decrms:999999.0,$
+                   deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,zptermerr:999999.0,nrefmatch:0L},nexpdirs*61)
+chcnt = 0LL
+for i=0,nexpdirs-1 do begin
+  if (i+1) mod 5000 eq 0 then print,i+1
+  base = file_basename(expdirs[i])
+  type = ['c4d','k4m','ksb']
+  obs = ['ctio','kpno','kpno']
+  obsname = 'ctio'    ; by default
+  instrument = 'c4d'  ; by default
+  for j=0,n_elements(type)-1 do begin
+    if stregex(base,type[j],/boolean) eq 1 then begin
+      instrument = 'c4d'
+      obsname = obs[j]
+    endif
+  endfor
+
+  metafile = expdirs[i]+'/'+base+'_meta.fits'
+  expstr[i].metafile = metafile
+  if file_test(metafile) eq 1 then begin
+    ; Exposure structure
+    expstr1 = MRDFITS(metafile,1,/silent)
+    temp = expstr[i]
+    struct_assign,expstr1,temp,/nozero
+    expstr[i] = temp
+    ;expstr[i].rarms = median(chstr1.rarms)
+    ;expstr[i].decrms = median(chstr1.decrms)
+    ;expstr[i].gaianmatch = median(chstr1.gaianmatch)
+    expstr[i].instrument = instrument
+    expstr[i].success = 1
+    ; Chip structure
+    chstr1 = MRDFITS(metafile,2,/silent)
+    nchstr1 = n_elements(chstr1)
+    temp = chstr[chcnt:chcnt+nchstr1-1]
+    struct_assign,chstr1,temp,/nozero
+    chstr[chcnt:chcnt+nchstr1-1] = temp
+    chstr[chcnt:chcnt+nchstr1-1].expdir = expdirs[i]
+    chstr[chcnt:chcnt+nchstr1-1].instrument = instrument
+    chstr[chcnt:chcnt+nchstr1-1].success = 1
+    chcnt += nchstr1
+
+    ; Fix missing DATE-OBS
+    if strtrim(expstr[i].dateobs,2) eq '' or strtrim(expstr[i].dateobs,2) eq '0' then begin
+      fluxfile = strtrim(expstr[i].file)
+      lo = strpos(fluxfile,'archive') 
+      fluxfile = mssdir+strmid(fluxfile,lo)
+      head = headfits(fluxfile,exten=0) 
+      expstr[i].dateobs = sxpar(head,'DATE-OBS') 
+    endif
+    ; Fix missing AIRMASS
+    if expstr[i].airmass lt 0.9 then begin
+      OBSERVATORY,obsname,obs
+      lat = obs.latitude 
+      lon = obs.longitude
+      jd = date2jd(expstr[i].dateobs) 
+      ra = expstr[i].ra 
+      dec = expstr[i].dec
+      expstr[i].airmass = AIRMASS(jd,ra,dec,lat,lon)
+    endif
+
+  endif else expstr[i].success=0
+endfor
+; Trim CHSTR structure
+chstr = chstr[0:chcnt-1]
+gd = where(expstr.success eq 1,ngd)
+print,strtrim(ngd,2),' exposure successfully calibrated'
+print,'Writing summary file to ',dir+'instcal/nsc_instcal_calibrate.fits'
+MWRFITS,expstr,dir+'instcal/nsc_instcal_calibrate.fits',/create
+MWRFITS,chstr,dir+'instcal/nsc_instcal_calibrate.fits'
 
 ; End logfile
 ;------------
 JOURNAL
 
-;stop
+stop
 
 end
