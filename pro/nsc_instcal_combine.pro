@@ -18,7 +18,7 @@ endif
 
 ; Check if output file already exists
 outfile = dir+'combine/'+strtrim(pix,2)+'.fits'
-if file_test(outfile) eq 1 and not keyword_set(redo) then begin
+if (file_test(outfile) eq 1 or file_test(outfile+'.gz') eq 1) and not keyword_set(redo) then begin
   print,outfile,' EXISTS already and /redo not set'
   return
 endif
@@ -727,6 +727,8 @@ print,'Writing combined catalog to ',outfile
 MWRFITS,sumstr,outfile,/create      ; first, summary table
 MWRFITS,obj,outfile,/silent         ; second, catalog
 MWRFITS,idstr,outfile,/silent       ; third, ID table
+if file_test(outfile+'.gz') eq 1 then file_delete,outfile+'.gz',/allow
+spawn,['gzip',outfile],/noshell     ; compress final catalog
 
 dt = systime(1)-t0
 print,'dt = ',stringize(dt,ndec=2),' sec.'

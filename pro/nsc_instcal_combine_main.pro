@@ -63,23 +63,58 @@ print, "Combining DECam InstCal catalogs"
 
 
 ; Restore the calibration summary file
-str0 = mrdfits(dir+'nsc_instcal_calibrate.fits',1,/silent)
-gd = where(str0.success eq 1,ngd)
-str = str0[gd]
-nstr = n_elements(str)
+temp = mrdfits(dir+'nsc_instcal_calibrate.fits',1,/silent)
+schema = temp[0]
+struct_assign,{dum:''},schema
+schema = create_struct(schema,'chipindx',-1LL)
+str = replicate(schema,n_elements(temp))
+struct_assign,temp,str,/nozero
 str.expdir = strtrim(str.expdir,2)
+str.instrument = strtrim(str.instrument,2)
 str.metafile = strtrim(str.metafile,2)
 str.file = strtrim(str.file,2)
 str.base = strtrim(str.base,2)
 str.filter = strtrim(str.filter,2)
+gd = where(str.success eq 1,nstr)
+str = str[gd]
+si = sort(str.expdir)
+str = str[si]
+chstr = mrdfits(dir+'nsc_instcal_calibrate.fits',2,/silent)
+chstr.expdir = strtrim(chstr.expdir,2)
+chstr.instrument = strtrim(chstr.instrument,2)
+nchstr = n_elements(chstr)
+; Get indices for CHSTR
+siexp = sort(chstr.expdir)
+chstr = chstr[siexp]
+expdir = chstr[siexp].expdir
+brklo = where(expdir ne shift(expdir,1),nbrk)
+brkhi = [brklo[1:nbrk-1]-1,n_elements(expdir)-1]
+nchexp = brkhi-brklo+1
+if nstr ne n_elements(brklo) then stop,'number of exposures in STR and CHSTR do not match'
+str.chipindx = brklo
+str.nchips = nchexp
+; Flux filename
 file = str.file
 g1 = where(stregex(file,'/net/mss1/',/boolean) eq 1,ng1)
 file[g1] = strmid(file[g1],10)
 g2 = where(stregex(file,'/mss1/',/boolean) eq 1,ng2)
 file[g2] = strmid(file[g2],6)
 
+; Fix instrument in STR and CHSTR
+print,'FIXING INSTRUMENT IN STR AND CHSTR'
+type = ['c4d','k4m','ksb']
+for i=0,n_elements(type)-1 do begin
+  gd = where(stregex(str.expdir,'/'+type[i]+'/',/boolean) eq 1,ngd)
+  if ngd gt 0 then str[gd].instrument=type[i]
+  gd = where(stregex(chstr.expdir,'/'+type[i]+'/',/boolean) eq 1,ngd)
+  if ngd gt 0 then chstr[gd].instrument=type[i]
+endfor
+
 ; APPLY RELEASE-DATE CUTS
-list = MRDFITS(dir+'decam_instcal_list.fits',1)
+list1 = MRDFITS(dir+'decam_instcal_list.fits',1)
+list2 = MRDFITS(dir+'mosaic3_instcal_list.fits',1)
+list3 = MRDFITS(dir+'bok90prime_instcal_list.fits',1)
+list = [list1,list2,list3]
 list.fluxfile = strtrim(list.fluxfile,2)
 fluxfile = strmid(list.fluxfile,10)
 MATCH,fluxfile,file,ind1,ind2,/sort,count=nmatch
@@ -91,58 +126,42 @@ release_year = long(strmid(release_date,0,4))
 release_month = long(strmid(release_date,5,2))
 release_day = long(strmid(release_date,8,2))
 release_mjd = JULDAY(release_month,release_day,release_year)-2400000.5d0
-release_cutoff = [2017,4,1]  ; April 1, 2017 for now
+release_cutoff = [2017,4,21]  ; April 21, 2017 for now
 release_cutoff_mjd = JULDAY(release_cutoff[1],release_cutoff[2],release_cutoff[0])-2400000.5d0
-gdrelease = where(release_mjd le release_cutoff_mjd,ngdrelease)
+gdrelease = where(release_mjd le release_cutoff_mjd,ngdrelease,comp=bdrelease,ncomp=nbdrelease)
 print,strtrim(ngdrelease,2),' exposures are PUBLIC'
 str = str[gdrelease]  ; impose the public data cut
 
-;; Fix bad MJD values
-;;  my MJD values are off from the archive ones.
-;bd = where(str.mjd lt 1000,nbd)
-;print,'Fixing ',strtrim(nbd,2),' bad MJDs'
-;for i=0,nbd-1 do begin
-;  if (i+1) mod 100 eq 0 then print,i+1
-;  fluxfile = str[bd[i]].file
-;  lo = strpos(fluxfile,'archive')
-;  fluxfile = mssdir+strmid(fluxfile,lo)
-;  head = headfits(fluxfile,exten=0)
-;  str[bd[i]].dateobs = sxpar(head,'DATE-OBS')
-;  str[bd[i]].mjd = date2jd(str[bd[i]].dateobs,/mjd)
-;endfor
-;; Fix bad AIRMASS
-;bd = where(str.airmass lt 0.9,nbd)
-;for i=0,nbd-1 do begin
-;  OBSERVATORY,'ctio',obs
-;  lat = obs.latitude
-;  lon = obs.longitude
-; ;jd = str[bd].mjd + 2400000.5d0
-;  jd = date2jd(str[bd[i]].dateobs)
-;  ra = str[bd[i]].ra
-;  dec = str[bd[i]].dec
-;  str[bd[i]].airmass = AIRMASS(jd,ra,dec,lat,lon)
-;endfor
-
-;stop
-
-; Airmass extinction term structure
-amstr = replicate({filter:'',amcoef:fltarr(2)},7)
-amstr.filter = ['u','g','r','i','z','Y','VR']
+; Zero-point structure
+zpstr = replicate({instrument:'',filter:'',amcoef:fltarr(2),thresh:0.5},10)
+zpstr[0:6].instrument = 'c4d'
+zpstr[0:6].filter = ['u','g','r','i','z','Y','VR']
 ;ZP(u) = -0.38340071*X -1.6202186
-amstr[0].amcoef = [-1.6202186,-0.38340071]
+zpstr[0].amcoef = [-1.6202186,-0.38340071]
 ;ZP(g) = -0.19290602*X + 0.25785509
-amstr[1].amcoef = [0.25785509,-0.19290602]
+zpstr[1].amcoef = [0.25785509,-0.19290602]
 ;ZP(r) = -0.17150109*X + 0.58451093
-amstr[2].amcoef = [0.58451093,-0.17150109]
+zpstr[2].amcoef = [0.58451093,-0.17150109]
 ;ZP(i) = -0.10241476*X + 0.39506315
-amstr[3].amcoef = [0.39506315,-0.10241476]
+zpstr[3].amcoef = [0.39506315,-0.10241476]
 ;ZP(z) = -0.07762681*X + 0.097165843
-amstr[4].amcoef = [0.097165843,-0.07762681]
+zpstr[4].amcoef = [0.097165843,-0.07762681]
 ;ZP(Y) = -0.03525268*X -1.0885863
-amstr[5].amcoef = [-1.0885863,-0.03525268]
+zpstr[5].amcoef = [-1.0885863,-0.03525268]
 ;ZP(VR) = -0.091242237*X + 1.0202652
-amstr[6].amcoef = [1.0202652,-0.091242237]
-namstr = n_elements(amstr)
+zpstr[6].amcoef = [1.0202652,-0.091242237]
+; Mosiac3 z-band
+zpstr[7].instrument = 'k4m'
+zpstr[7].filter = 'z'
+zpstr[7].amcoef = [-2.4692841,  -1.0928824]
+; Bok 90Prime, g and r
+zpstr[8].instrument = 'ksb'
+zpstr[8].filter = 'g'
+zpstr[8].amcoef = [-2.80864,  -1.46826]
+zpstr[9].instrument = 'ksb'
+zpstr[9].filter = 'r'
+zpstr[9].amcoef = [-4.11, 0.0]
+nzpstr = n_elements(zpstr)
 
 ; APPLY QA CUTS IN ZEROPOINT AND SEEING
 print,'APPLY QA CUTS IN ZEROPOINT AND SEEING'
@@ -150,18 +169,18 @@ fwhmthresh = 3.0  ; arcsec
 ;filters = ['u','g','r','i','z','Y','VR']
 ;nfilters = n_elements(filters)
 ;zpthresh = [2.0,2.0,2.0,2.0,2.0,2.0,2.0]
-zpthresh = [0.5,0.5,0.5,0.5,0.5,0.5,0.5]
-badmask = lonarr(n_elements(str))
+;zpthresh = [0.5,0.5,0.5,0.5,0.5,0.5,0.5]
+badmask = lonarr(n_elements(str)) + 1
 
-for i=0,namstr-1 do begin
-  ind = where(str.filter eq amstr[i].filter and str.success eq 1,nind)
-  print,amstr[i].filter,' ',strtrim(nind,2),' exposures'
+for i=0,nzpstr-1 do begin
+  ind = where(str.instrument eq zpstr[i].instrument and str.filter eq zpstr[i].filter and str.success eq 1,nind)
+  print,zpstr[i].instrument,'-',zpstr[i].filter,' ',strtrim(nind,2),' exposures'
   if nind gt 0 then begin
     zpterm = str[ind].zpterm
     am = str[ind].airmass
     mjd = str[ind].mjd
     ; Correct for airmass extinction effect
-    zpterm -= poly(am,amstr[i].amcoef)
+    zpterm -= poly(am,zpstr[i].amcoef)
     ; Remove temporal variations
     ;gd1 = where(abs(zpterm) lt 2,ngd1)
     ;si = sort(mjd[gd1])
@@ -175,17 +194,35 @@ for i=0,namstr-1 do begin
     ; if there are clouds then instmag is larger/fainter
     ;  and zpterm is smaller (more negative)
     ;bdind = where(str[ind].zpterm-medzp lt -zpthresh[i],nbdind)
-    bdind = where(zpterm lt -zpthresh[i],nbdind)
+    gdind = where(zpterm ge -zpstr[i].thresh and zpterm le zpstr[i].thresh,ngdind,comp=bdind,ncomp=nbdind)
     print,'  ',strtrim(nbdind,2),' exposures with ZPTERM below the threshold'    
-    if nbdind gt 0 then badmask[ind[bdind]] = 1
+    if nbdind gt 0 then badmask[ind[gdind]] = 0
   endif
 endfor
 ; Many of the short u-band exposures have weird ZPTERMs, not sure why
-bdexp = where(str.fwhm gt fwhmthresh or badmask eq 1,nbdexp)
+; There are a few exposures with BAD WCS, RA>360!
+bdexp = where(str.fwhm gt fwhmthresh or str.ra gt 360 or badmask eq 1,nbdexp)
 print,'QA cuts remove ',strtrim(nbdexp,2),' exposures'
+; Remove
+torem = bytarr(nchstr)
+for i=0,nbdexp-1 do torem[str[bdexp[i]].chipindx:str[bdexp[i]].chipindx+str[bdexp[i]].nchips-1]=1
+bdchstr = where(torem eq 1,nbdchstr)
+REMOVE,bdchstr,chstr
 REMOVE,bdexp,str
+; Get new CHIPINDEX values
+;   make two arrays of old and new indices to transfer 
+;   the new index values into an array with the size of
+;   the old CHSTR
+trimoldindex = lindgen(nchstr)                    ; index into original array, but "bad" ones removed/trimed
+remove,bdchstr,trimoldindex
+trimnewindex = lindgen(n_elements(trimoldindex))  ; new index of trimmed array
+newindex = lonarr(nchstr)-1
+newindex[trimoldindex] = trimnewindex             ; new index in original array
+newchipindex = newindex[str.chipindx]
+str.chipindx = newchipindex
 nstr = n_elements(str)
 
+; CREATE LIST OF HEALPIX AND OVERLAPPING EXPOSURES
 ; Which healpix pixels have data
 print,'Finding the Healpix pixels with data'
 radius = 1.1
@@ -204,6 +241,31 @@ for i=0,nstr-1 do begin
   ANG2VEC,theta,phi,vec
   QUERY_DISC,nside,vec,radius,listpix,nlistpix,/deg,/inclusive
 
+  ; Use the chip corners to figure out which ones actually overlap
+  chstr1 = chstr[str[i].chipindx:str[i].chipindx+str[i].nchips-1]
+  ;  loop over heapix
+  overlap = bytarr(nlistpix)
+  for j=0,nlistpix-1 do begin
+    PIX2VEC_RING,128,listpix[j],vec,vertex
+    vertex = transpose(reform(vertex))  ; [1,3,4] -> [4,3]
+    VEC2ANG,vertex,hdec,hra,/astro
+    ;  loop over chips
+    for k=0,str[i].nchips-1 do begin
+      overlap[j] >= DOPOLYGONSOVERLAP(hra,hdec,chstr1[k].vra,chstr1[k].vdec)
+    endfor  
+  endfor
+  ; Only keep the healpix with real overlaps
+  gdlistpix = where(overlap eq 1,ngdlistpix)
+  if ngdlistpix gt 0 then begin
+    listpix = listpix[gdlistpix]
+    nlistpix = ngdlistpix
+  endif else begin
+    undefine,listpix
+    nlistpix = 0
+  endelse
+
+  if nlistpix eq 0 then stop,'No healpix for this exposure.  Something is wrong!'
+
   ; Add new elements to array
   if cnt+nlistpix gt nhealstr then begin
     old = healstr
@@ -213,6 +275,7 @@ for i=0,nstr-1 do begin
     undefine,old
   endif
 
+  ; Add to the structure
   healstr[cnt:cnt+nlistpix-1].file = str[i].expdir+'/'+str[i].base+'_cat.fits'
   healstr[cnt:cnt+nlistpix-1].base = str[i].base
   healstr[cnt:cnt+nlistpix-1].pix = listpix
@@ -268,7 +331,7 @@ cmddir = strarr(nupix)+localdir+'dnidever/nsc/instcal/tmp/'
 
 ; Check if the output file exists
 if not keyword_set(redo) then begin
-  outfiles = dir+'combine/'+strtrim(upix,2)+'.fits'
+  outfiles = dir+'combine/'+strtrim(upix,2)+'.fits.gz'
   test = file_test(outfiles)
   gd = where(test eq 0,ngd,comp=bd,ncomp=nbd)
   if nbd gt 0 then begin
@@ -283,44 +346,74 @@ if not keyword_set(redo) then begin
   cmddir = cmddir[gd]
 endif
 
-; Start with healpix with low NEXP and far from MW midplane, LMC/SMC
-pix2ang_ring,nside,index.pix,theta,phi
-pixra = phi*radeg
-pixdec = 90-theta*radeg
-glactc,pixra,pixdec,2000.0,pixgl,pixgb,1,/deg
-cel2lmc,pixra,pixdec,palmc,radlmc
-cel2smc,pixra,pixdec,rasmc,radsmc
-gdpix = where(index.nexp lt 50 and abs(pixgb) gt 10 and radlmc gt 5 and radsmc gt 5,ngdpix)
+; Prioritize longest-running jobs FIRST
+; Load the DECam run times
+sum1 = mrdfits(dir+'nsccmb_summary_hulk.fits',1)
+sum2 = mrdfits(dir+'nsccmb_summary_thing.fits',1)
+sum3 = mrdfits(dir+'nsccmb_summary_gp09.fits',1)
+sum = [sum1,sum2,sum3]
+si = sort(sum.mtime)
+sum = sum[si]
+; only keep fairly recent ones
+gd = where(sum.mtime gt 1.4897704e+09,ngd)
+sum = sum[gd]
+; Deal with duplicates
+dbl = doubles(sum.pix,count=ndbl)
+alldbl = doubles(sum.pix,/all,count=nalldbl)
+torem = bytarr(nalldbl)
+for i=0,ndbl-1 do begin
+  MATCH,sum[alldbl].pix,sum[dbl[i]].pix,ind1,ind2,/sort,count=nmatch
+  torem[ind1[0:nmatch-2]] = 1
+endfor
+bd=where(torem eq 1,nbd)
+remove,alldbl[bd],sum
+dt = lonarr(n_elements(index))-1
+MATCH,index.pix,sum.pix,ind1,ind2,/sort,count=nmatch
+dt[ind1] = sum[ind2].dt
+; Do the sorting
+hsi = reverse(si(dt))
+cmd = cmd[hsi]
+cmddir = cmddir[shi]
 
-outfile = dldir+'users/dnidever/nsc/instcal/combine/'+strtrim(index.pix,2)+'.fits'
+;; Start with healpix with low NEXP and far from MW midplane, LMC/SMC
+;pix2ang_ring,nside,index.pix,theta,phi
+;pixra = phi*radeg
+;pixdec = 90-theta*radeg
+;glactc,pixra,pixdec,2000.0,pixgl,pixgb,1,/deg
+;cel2lmc,pixra,pixdec,palmc,radlmc
+;cel2smc,pixra,pixdec,rasmc,radsmc
+;gdpix = where(index.nexp lt 50 and abs(pixgb) gt 10 and radlmc gt 5 and radsmc gt 5,ngdpix)
+;
+;outfile = dldir+'users/dnidever/nsc/instcal/combine/'+strtrim(index.pix,2)+'.fits'
 
 stop
 
 ; Now run the combination program on each healpix pixel
 PBS_DAEMON,cmd,cmddir,/hyperthread,/idle,prefix='nsccmb',jobs=jobs,nmulti=nmulti,wait=1
 
+; RUN NSC_COMBINE_SUMMARY WHEN IT'S DONE!!!
 
-; Load all the summary/metadata files
-print,'Creating Healpix summary file'
-sumstr = replicate({pix:0L,nexposures:0L,nobjects:0L,success:0},nupix)
-sumstr.pix = upix
-for i=0,nupix-1 do begin
-  if (i+1) mod 5000 eq 0 then print,i+1
-  file = dir+'combine/'+strtrim(upix[i],2)+'.fits'
-  if file_test(file) eq 1 then begin
-    meta = MRDFITS(file,1,/silent)
-    sumstr[i].nexposures = n_elements(meta)
-    hd = headfits(file,exten=2)
-    sumstr[i].nobjects = sxpar(hd,'naxis2')
-    sumstr[i].success = 1
-  endif else begin
-    sumstr[i].success = 0
-  endelse
-endfor
-gd = where(sumstr.success eq 1,ngd)
-print,strtrim(ngd,2),' Healpix successfully processed'
-print,'Writing summary file to ',dir+'combine/nsc_instcal_combine.fits'
-MWRFITS,sumstr,dir+'combine/nsc_instcal_combine.fits',/create
+;; Load all the summary/metadata files
+;print,'Creating Healpix summary file'
+;sumstr = replicate({pix:0L,nexposures:0L,nobjects:0L,success:0},nupix)
+;sumstr.pix = upix
+;for i=0,nupix-1 do begin
+;  if (i+1) mod 5000 eq 0 then print,i+1
+;  file = dir+'combine/'+strtrim(upix[i],2)+'.fits'
+;  if file_test(file) eq 1 then begin
+;    meta = MRDFITS(file,1,/silent)
+;    sumstr[i].nexposures = n_elements(meta)
+;    hd = headfits(file,exten=2)
+;    sumstr[i].nobjects = sxpar(hd,'naxis2')
+;    sumstr[i].success = 1
+;  endif else begin
+;    sumstr[i].success = 0
+;  endelse
+;endfor
+;gd = where(sumstr.success eq 1,ngd)
+;print,strtrim(ngd,2),' Healpix successfully processed'
+;print,'Writing summary file to ',dir+'combine/nsc_instcal_combine.fits'
+;MWRFITS,sumstr,dir+'combine/nsc_instcal_combine.fits',/create
 
 ; End logfile
 ;------------
