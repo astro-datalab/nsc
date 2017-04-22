@@ -170,7 +170,7 @@ fwhmthresh = 3.0  ; arcsec
 ;nfilters = n_elements(filters)
 ;zpthresh = [2.0,2.0,2.0,2.0,2.0,2.0,2.0]
 ;zpthresh = [0.5,0.5,0.5,0.5,0.5,0.5,0.5]
-badmask = lonarr(n_elements(str)) + 1
+badmask = bytarr(n_elements(str)) + 1
 
 for i=0,nzpstr-1 do begin
   ind = where(str.instrument eq zpstr[i].instrument and str.filter eq zpstr[i].filter and str.success eq 1,nind)
@@ -199,9 +199,28 @@ for i=0,nzpstr-1 do begin
     if nbdind gt 0 then badmask[ind[gdind]] = 0
   endif
 endfor
-; Many of the short u-band exposures have weird ZPTERMs, not sure why
-; There are a few exposures with BAD WCS, RA>360!
-bdexp = where(str.fwhm gt fwhmthresh or str.ra gt 360 or badmask eq 1,nbdexp)
+; Get bad DECaLS and SMASH exposures
+badexp = bytarr(n_elements(str))
+READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/smash_badexposures.txt',smashexpnum,format='A',comment='#',/silent
+MATCH,long(str.expnum),long(smashexpnum),ind1,ind2,/sort,count=nmatch
+badexp[ind1] = 1
+badexp[ind1] = badexp[ind1] AND (str[ind1].instrument eq 'c4d')   ; make sure they are DECam exposures
+READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/decals_bad_expid.txt',decalsexpnum,format='A',comment='#',/silent
+MATCH,long(str.expnum),long(decalsexpnum),ind1,ind2,/sort,count=nmatch
+badexp[ind1] = 1
+badexp[ind1] = badexp[ind1] AND (str[ind1].instrument eq 'c4d')   ; make sure they are DECam exposures
+READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/mzls_bad_expid.txt',mzlsexpnum,format='A',comment='#',/silent
+MATCH,long(str.expnum),long(mzlsexpnum),ind1,ind2,/sort,count=nmatch
+badexp[ind1] = 1
+badexp[ind1] = badexp[ind1] AND (str[ind1].instrument eq 'k4m')   ; make sure they are Mosaic3 exposures
+
+; Final QA cuts
+;  Many of the short u-band exposures have weird ZPTERMs, not sure why
+;  There are a few exposures with BAD WCS, RA>360!
+bdexp = where(str.fwhm gt fwhmthresh or str.ra gt 360 or badmask eq 1 or badexp eq 1 or $
+              str.rarms gt 0.2 or str.decrms gt 0.2 or $
+              (str.instrument eq 'c4d' and str.zpspatialvar_nccd gt 5 and str.zpspatialvar_rms gt 0.1),nbdexp)
+; rarms/decrms, nrefmatch
 print,'QA cuts remove ',strtrim(nbdexp,2),' exposures'
 ; Remove
 torem = bytarr(nchstr)
@@ -246,7 +265,7 @@ for i=0,nstr-1 do begin
   ;  loop over heapix
   overlap = bytarr(nlistpix)
   for j=0,nlistpix-1 do begin
-    PIX2VEC_RING,128,listpix[j],vec,vertex
+    PIX2VEC_RING,nside,listpix[j],vec,vertex
     vertex = transpose(reform(vertex))  ; [1,3,4] -> [4,3]
     VEC2ANG,vertex,hdec,hra,/astro
     ;  loop over chips

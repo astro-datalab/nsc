@@ -1903,7 +1903,7 @@
 108563 depfac<0.3
 108564 depfac<0.3
 108575 trans<0.5 depfac<0.3
- 
+
 #2017-02-15
 108765  empty frame, timeout 
 
@@ -2003,7 +2003,7 @@
 111755 out of focus
 111756 out of focus
 111757 mirror covers were closed
-anything before-111792 Due to a cloudy weather, the dome is closed (no useful data tonight)
+#anything before-111792 Due to a cloudy weather, the dome is closed (no useful data tonight)
 113282 counts > 50k
 113283 counts > 50k
 113284 counts > 50k
