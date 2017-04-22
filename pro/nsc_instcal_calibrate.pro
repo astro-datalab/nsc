@@ -173,14 +173,19 @@ fluxfile = mssdir+strtrim(strmid(line,lo+1),2)
 head = headfits(fluxfile,exten=0)
 filterlong = strtrim(sxpar(head,'filter',count=nfilter),2)
 if nfilter eq 0 then begin
-  dum = mrdfits(catfiles[0],1)
+  dum = mrdfits(catfiles[0],1,/silent)
   hd1 = dum.field_header_card
   filterlong = strtrim(sxpar(hd1,'filter'),2)
 endif
 if strmid(filterlong,0,2) eq 'VR' then filter='VR' else filter=strmid(filterlong,0,1)
 if filterlong eq 'bokr' then filter='r'
 expnum = sxpar(head,'expnum')
-exptime = sxpar(head,'exptime')
+exptime = sxpar(head,'exptime',count=nexptime)
+if nexptime eq 0 then begin
+  dum = mrdfits(catfiles[0],1,/silent)
+  hd1 = dum.field_header_card
+  exptime = sxpar(hd1,'exptime')
+endif
 dateobs = sxpar(head,'date-obs')
 airmass = sxpar(head,'airmass')
 printlog,logf,'FILTER = ',filter
