@@ -125,7 +125,8 @@ schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,raerr:0.0d0,decerr:0.0d0,pmra:0.0d
 tags = tag_names(schema_obj)
 obj = replicate(schema_obj,5e5)
 nobj = n_elements(obj)
-totobj = replicate({ra:0.0d0,dec:0.0d0,ramjd:0.0d0,decmjd:0.0d0,ramjd2:0.0d0,decmjd2:0.0d0,minmjd:999999.0d0,maxmjd:-999999.0d0},nobj)
+schema_totobj = {ra:0.0d0,dec:0.0d0,ramjd:0.0d0,decmjd:0.0d0,ramjd2:0.0d0,decmjd2:0.0d0,minmjd:999999.0d0,maxmjd:-999999.0d0}
+totobj = replicate(schema_totobj,nobj)
 cnt = 0LL
 
 ; Loop over the exposures
@@ -139,7 +140,7 @@ FOR i=0,nlist-1 do begin
   print,'  ',strtrim(ncat1,2),' sources'
 
   ; Make sure it's in the right format
-  if n_tags(cat1) ne 44 then begin
+  if n_tags(cat1) ne 46 then begin
     print,'  This catalog does not have the right format. Skipping'
     goto,BOMB
   endif
@@ -455,7 +456,7 @@ FOR i=0,nlist-1 do begin
         obj = replicate(schema_obj,nobj+1e5)
         obj[0:nobj-1] = old
         oldtot = totobj
-        totobj = replicate({ra:0.0d0,dec:0.0d0,mjd2:0.0d0},nobj+1e5)
+        totobj = replicate(schema_totobj,nobj+1e5)
         totobj[0:nobj-1] = oldtot
         nobj = n_elements(obj)
         undefine,old
@@ -561,17 +562,21 @@ totobj.dec /= obj.decerr      ; wt mean DEC (totaldecwt/totalwt)
 obj.mjd /= obj.ndet           ; mean MJD
 totobj.ramjd /= obj.raerr     ; wt_ra mean MJD
 totobj.decmjd /= obj.decerr   ; wt_dec mean MJD
-pmra = (obj.pmra/obj.raerr-totobj.ramjd*totobj.ra)/(totobj.ramjd2/obj.raerr-obj.ramjd^2)   ; deg[ra]/day
+pmra = (obj.pmra/obj.raerr-totobj.ramjd*totobj.ra)/(totobj.ramjd2/obj.raerr-totobj.ramjd^2)   ; deg[ra]/day
 pmra *= (3600*1e3)*365.2425     ; mas/year
-pmra *= cos(obj.dec/radeg)      ; mas/year, true degrees
-pmdec = (obj.pmdec/obj.decerr-totobj.decmjd*totobj.dec)/(totobj.decmjd2/obj.decerr-obj.decmjd^2)  ; deg/day
+pmra *= cos(obj.dec/radeg)      ; mas/year, true angle
+pmdec = (obj.pmdec/obj.decerr-totobj.decmjd*totobj.dec)/(totobj.decmjd2/obj.decerr-totobj.decmjd^2)  ; deg/day
 pmdec *= (3600*1e3)*365.2425    ; mas/year
 ; Proper motion errors
 ; pmerr = 1/sqrt( sum(wt*mjd^2) - <mjd>^2 * sum(wt) )
+;   if wt=1/err^2 with err in degrees, but we are using arcsec
+;   Need to divide by 3600 for PMDECERR and 3600*cos(dec) for PMRAERR
 pmraerr = 1.0/sqrt( totobj.ramjd2 - totobj.ramjd^2 * obj.raerr )
+pmraerr /= (3600*cos(totobj.dec/!radeg))    ; correction for raerr in arcsec
 pmraerr *= (3600*1e3)*365.2425     ; mas/year
-pmraerr *= cos(obj.dec/radeg)      ; mas/year, true degrees 
+pmraerr *= cos(obj.dec/radeg)      ; mas/year, true angle
 pmdecerr = 1.0/sqrt( totobj.decmjd2 - totobj.decmjd^2 * obj.decerr )
+pmdecerr /= 3600                   ; correction for decerr in arcsec
 pmdecerr *= (3600*1e3)*365.2425    ; mas/year
 gdet = where(obj.ndet gt 1,ngdet)
 if ngdet gt 0 then begin
@@ -594,8 +599,8 @@ obj.deltamjd = totobj.maxmjd-totobj.minmjd
 ; Average coordinates
 obj.ra = totobj.ra   ; now stuff in the average coordinates
 obj.dec = totobj.dec
-obj.raerr = sqrt(1.0/obj.raerr)    ; err in wt mean RA
-obj.decerr = sqrt(1.0/obj.decerr)  ; err in wt mean DEC
+obj.raerr = sqrt(1.0/obj.raerr)    ; err in wt mean RA, arcsec
+obj.decerr = sqrt(1.0/obj.decerr)  ; err in wt mean DEC, arcsec
 
 ; Convert totalwt and totalfluxwt to MAG and ERR
 ;  and average the morphology parameters PER FILTER
