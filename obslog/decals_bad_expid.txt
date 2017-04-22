@@ -1,0 +1,278 @@
+#EXPID	Flag	comments
+#Flags: 1=possibly saturated; 2=clouds; 3=other source
+346662	1
+346663	1
+346664	1
+346665	1
+347736	1
+347737	1
+347738	1
+347739	1
+347740	1
+347741	1
+347744	1
+347747	1
+347748	1
+347750	1
+347751	1
+347752	1
+347753	1
+347754	1
+347755	1
+347756	1
+347757	1
+347758	1
+347759	1
+347760	1
+347761	1
+347762	1
+347763	1
+347764	1
+347765	1
+347766	1
+347767	1
+347768	1
+347769	1
+347770	1
+347771	1
+347772	1
+347773	1
+347774	1
+347775	1
+347776	1
+347777	1
+347778	1
+347779	1
+347780	1
+347781	1
+347782	1
+347783	1
+347784	1
+347785	1
+347786	1
+347787	1
+347788	1
+347789	1
+347790	1
+348295	3	DECAL lights on top ring turned on
+393680	2
+393681	2
+393682	2
+393683	2
+393684	2
+393685	2
+396101	3
+396131	3	active optics failure
+425616	3	guiding failed
+425619	3	telescope moved, double stars
+520012  3       Vsub not working 
+522055  3       pointing moved 
+535197  3       pointing moved
+535355  3       shutter control failed. Image not taken
+535578  3       depth factor < 0.4 because seeing blew up
+535579  3       depth factor < 0.4 because seeing blew up
+535872  3       depth factor < 0.2 because 23sec exposure
+535873  3       depth factor < 0.2 because 23sec exposure
+535874  3       depth factor < 0.2 because 23sec exposure
+536280  3       depth factor < 0.3 because of clouds
+536314  3       transparency < 0.3 and depth factor < 0.3
+536315  3       transparency < 0.3 and depth factor < 0.3
+536316  3       transparency < 0.3 and depth factor < 0.3
+536317  3       transparency < 0.3 and depth factor < 0.3
+536318  3       transparency < 0.3 and depth factor < 0.3
+536319  3       transparency < 0.3 and depth factor < 0.3
+536320  3       transparency < 0.3 and depth factor < 0.3
+536321  3       transparency < 0.3 and depth factor < 0.3
+536322  3       transparency < 0.3 and depth factor < 0.3
+536323  3       transparency < 0.3 and depth factor < 0.3
+536324  3       transparency < 0.3 and depth factor < 0.3
+536325  3       transparency < 0.3 and depth factor < 0.3
+536326  3       transparency < 0.3 and depth factor < 0.3
+536327  3       transparency < 0.3 and depth factor < 0.3
+536328  3       transparency < 0.3 and depth factor < 0.3
+536329  3       transparency < 0.3 and depth factor < 0.3
+536330  3       transparency < 0.3 and depth factor < 0.3
+536331  3       transparency < 0.3 and depth factor < 0.3
+536332  3       transparency < 0.3 and depth factor < 0.3
+536333  3       transparency < 0.3 and depth factor < 0.3
+536334  3       transparency < 0.3 and depth factor < 0.3
+536335  3       transparency < 0.3 and depth factor < 0.3
+536336  3       transparency < 0.3 and depth factor < 0.3
+536337  3       transparency < 0.3 and depth factor < 0.3
+536338  3       transparency < 0.3 and depth factor < 0.3
+536347  3       transparency < 0.3 and depth factor < 0.3
+536348  3       transparency < 0.3 and depth factor < 0.3
+536349  3       transparency < 0.3 and depth factor < 0.3
+536350  3       transparency < 0.3 and depth factor < 0.3
+536351  3       transparency < 0.3 and depth factor < 0.3
+536354  3       transparency < 0.3 and depth factor < 0.3
+536355  3       transparency < 0.3 and depth factor < 0.3
+536356  3      clouds; depth factor = 0.00 
+536357  3      clouds; depth factor = 0.00 
+536358  3      clouds; depth factor = 0.00 
+536409  3      depth factor < 0.1.
+536410  3      depth factor < 0.1.
+536411  3      depth factor < 0.1.
+536412  3      depth factor < 0.1.
+536415  3      depth factor < 0.3
+548172  3	no guide stars. Maybe ok anyway.
+548188  3	no guide stars. Double images. Bad.
+548218  3	no guide stars. Double images. Bad.
+548362  3	no guide stars. Double images. Bad.
+548400  3	lost guide stars 2/3 in. Double images. Bad.
+548414  2	lost guide
+548415  2	lost guide
+548416  2	lost guide
+548417  2	lost guide
+552525  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552526  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552527  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552528  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552529  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552530  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552531  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552532  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552533  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552534  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552535  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552536  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552537  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552538  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552539  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552540  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552541  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552542  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552543  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552544  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552545  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552546  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552547  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552548  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552549  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552550  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552551  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552552  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552553  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552554  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552555  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552556  2  transparency < 0.3 thick clouds, and seeing > 2.5
+559016  3  depth factor < 0.3, bright sky during twilight
+559017  3  depth factor < 0.3, bright sky during twilight
+562852	3	depth factor < 0.2
+562855	3	depth factor < 0.2
+562856	3	depth factor < 0.2
+562857	3	transparency < 0.3, depth factor < 0.2
+562872	3	depth factor < 0.2
+562873	3	depth factor < 0.2
+562874	3	depth factor < 0.2
+562875	3	transparency < 0.3, depth factor < 0.2
+562876	3	transparency < 0.3, depth factor < 0.2
+562878	3	depth factor < 0.2
+562882	3	depth factor < 0.2
+562883	3	transparency < 0.3, depth factor < 0.2
+562884	3	transparency < 0.3, depth factor < 0.2
+562885	3	depth factor < 0.2
+562887	3	depth factor < 0.2
+562888	3	transparency < 0.3, depth factor < 0.2
+562889	3	transparency < 0.3, depth factor < 0.2
+562890	3	transparency < 0.3, depth factor < 0.2
+562891	3	transparency < 0.3, depth factor < 0.2
+562892	3	transparency < 0.3, depth factor < 0.2
+562893	3	transparency < 0.3, depth factor < 0.2
+562894	3	transparency < 0.3, depth factor < 0.2
+562895	3	transparency < 0.3, depth factor < 0.2
+562896	3	transparency < 0.3, depth factor < 0.2
+562897	3	transparency < 0.3, depth factor < 0.2
+563460	3	telescope moved during image
+563658	3	transparency < 0.3, depth factor < 0.2
+563665	3	depth factor < 0.2
+563666	3	transparency < 0.3, depth factor < 0.2
+563667	3	transparency < 0.3, depth factor < 0.2
+563812	3	depth factor < 0.2
+563830	3	depth factor < 0.2
+563831	3	depth factor < 0.2
+563832	3	depth factor < 0.2
+563833	3	depth factor < 0.2
+563834	3	depth factor < 0.2
+563835	3	depth factor < 0.2
+563836	3	depth factor < 0.2
+563837	3	depth factor < 0.2
+582832	2	depth factor < 0.2
+582833	2	depth factor < 0.2
+582834	2	depth factor < 0.2
+582840  2	depth factor < 0.2
+582841  2	depth factor < 0.2
+582842  2	depth factor < 0.2
+582843  2	depth factor < 0.2
+582844  2	depth factor < 0.2
+582845  2	depth factor < 0.2
+582846  2	depth factor < 0.2
+582847  2	depth factor < 0.2
+582848  2	depth factor < 0.2
+582849  2	depth factor < 0.2
+582850  2	depth factor < 0.2
+582851  2	depth factor < 0.2
+582852  2	depth factor < 0.2
+582853  2	depth factor < 0.2
+582854  2	depth factor < 0.2
+582855  2	depth factor < 0.2
+582856  2	depth factor < 0.2
+582857  2	depth factor < 0.2
+582858  2	depth factor < 0.2
+582863  3	Earthquake
+582864  3	Earthquake
+582871  2 	depth factor < 0.2	
+582872  2 	depth factor < 0.2	
+582873  2 	depth factor < 0.2	
+582874  2 	depth factor < 0.2	
+582875  2 	depth factor < 0.2	
+582876  2 	depth factor < 0.2	
+582877  2 	depth factor < 0.2	
+583110  2 	depth factor < 0.2	
+583111  2 	depth factor < 0.2	
+583114  2 	depth factor < 0.2	
+583115  2 	depth factor < 0.2	
+583194  1 	between 10.7 and 12 twilight end of night	
+583195  1 	between 10.7 and 12 twilight end of night	
+583196  1 	between 10.7 and 12 twilight end of night	
+592619  2       lots of clouds, depth factor <<0.3
+592620  2	lots of clouds, depth factor <<0.3
+592621  2	lots of clouds, depth factor <<0.3
+592622  2	lots of clouds, depth factor <<0.3
+592623  2	lots of clouds, depth factor <<0.3
+592624  2	lots of clouds, depth factor <<0.3
+592625  2	lots of clouds, depth factor <<0.3
+592626  2	lots of clouds, depth factor <<0.3
+592627  2	lots of clouds, depth factor <0.3
+592791  3	insufficient exposure time, depth factor <0.3
+592792  3	insufficient exposure time, depth factor <0.3
+592793  3	insufficient exposure time, depth factor <0.3
+592874  3       insufficient exposure time
+592875  3       insufficient exposure time
+592876  3       insufficient exposure time
+592877  3       insufficient exposure time
+592883  3	telescope brakes activated, dome got in front of camera
+592884  3	telescope brakes activated, dome got in front of camera
+604729  3       taken as pass2 but should have been pass3, bad seeing       
+604730  3       taken as pass2 but should have been pass3, bad seeing
+604734  3       taken as pass2 but should have been pass3, bad seeing
+604735  3       taken as pass2 but should have been pass3, bad seeing
+604736  3       taken as pass2 but should have been pass3, bad seeing
+604737  3       taken as pass2 but should have been pass3, bad seeing
+604738  3       taken as pass2 but should have been pass3, bad seeing
+604739  3       taken as pass2 but should have been pass3, bad seeing
+604740  3       taken as pass2 but should have been pass3, bad seeing
+604741  3       taken as pass2 but should have been pass3, bad seeing
+604742  3       taken as pass2 but should have been pass3, bad seeing
+604743  3       taken as pass2 but should have been pass3, bad seeing
+604744  3       taken as pass2 but should have been pass3, bad seeing
+604788  3       short exposure time and wrongly pass2 after decbot crash
+604789  3       short exposure time and wrongly pass2 after decbot crash
+604790  3       short exposure time and wrongly pass2 after decbot crash
+607932	3	telescope moving for pointing correction ~4s early
+625105	1	bright, weird structures.  20k counts
+630869  3       4MAPS down; telescope slewing - junk
+634312  3       pointing is -91, -20 off
+634313  3       trailed. 
+634314  3       pointing off -104, -13.
+634315  3       pointing off 50, -99. 
