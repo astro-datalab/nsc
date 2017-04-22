@@ -171,7 +171,12 @@ fluxfile = mssdir+strtrim(strmid(line,lo+1),2)
 ; Load the meta-data from the original header
 ;READLINE,expdir+'/'+base+'.head',head
 head = headfits(fluxfile,exten=0)
-filterlong = strtrim(sxpar(head,'filter'),2)
+filterlong = strtrim(sxpar(head,'filter',count=nfilter),2)
+if nfilter eq 0 then begin
+  dum = mrdfits(catfiles[0],1)
+  hd1 = dum.field_header_card
+  filterlong = strtrim(sxpar(hd1,'filter'),2)
+endif
 if strmid(filterlong,0,2) eq 'VR' then filter='VR' else filter=strmid(filterlong,0,1)
 if filterlong eq 'bokr' then filter='r'
 expnum = sxpar(head,'expnum')
