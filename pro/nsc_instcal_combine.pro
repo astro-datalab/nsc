@@ -168,6 +168,7 @@ FOR i=0,nlist-1 do begin
     mnback = 0.5*(lftback+rtback)
     sigback = mad(cat1.background)
     if abs(lftback-rtback) gt (sqrt(mnback)>sigback) then bad31=1 else bad31=0
+    print,'  Big jump in CCDNUM 31 background levels'
   endif else bad31=0
   if meta.mjd gt 56600 or bad31 eq 1 then begin  
     ; Remove bad measurements
