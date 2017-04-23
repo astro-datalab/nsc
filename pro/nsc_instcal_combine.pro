@@ -158,11 +158,24 @@ FOR i=0,nlist-1 do begin
 
   ; Remove bad chip data
   ; Half of chip 31 for MJD>56660
-  if meta.mjd gt 56660 then begin  
+  ;  c4d_131123_025436_ooi_r_v2 with MJD=56619 has problems too
+  ;  if the background b/w the left and right half is large then BAd
+  lft31 = where(cat1.x_image lt 1024 and cat1.ccdnum eq 31,nlft31)
+  rt31 = where(cat1.x_image ge 1024 and cat1.ccdnum eq 31,nrt31)
+  if nlft31 gt 10 and nrt31 gt 10 then begin
+    lftback = median([cat1[lft31].background])
+    rtback = median([cat1[rt31].background])
+    mnback = 0.5*(lftback+rtback)
+    sigback = mad(cat1.background)
+    if abs(lftback-rtback) gt (sqrt(mnback)>sigback) then bad31=1 else bad31=0
+  endif else bad31=0
+  if meta.mjd gt 56600 or bad31 eq 1 then begin  
     ; Remove bad measurements
     ; X: 1-1024 okay
     ; X: 1025-2049 bad
-    bdind = where(cat1.x_image gt 1024 and cat1.ccdnum eq 31,nbdind,comp=gdind,ncomp=ngdind)
+    ; use 1000 as the boundary since sometimes there's a sharp drop
+    ; at the boundary that causes problem sources with SExtractor
+    bdind = where(cat1.x_image gt 1000 and cat1.ccdnum eq 31,nbdind,comp=gdind,ncomp=ngdind)
     if nbdind gt 0 then begin   ; some bad ones found
       if ngdind eq 0 then begin   ; all bad
         print,'NO useful measurements in ',fitsfile
