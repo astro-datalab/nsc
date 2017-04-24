@@ -107,6 +107,11 @@ for i=0,ncatfiles-1 do begin
   hd1 = dum.field_header_card
   nx = sxpar(hd1,'NAXIS1')
   ny = sxpar(hd1,'NAXIS2')
+  extast,hd1,ast,noparams=noparams  ; check the WCS
+  if noparams le 0 then begin
+    print,'Problem with WCS in header ',catfiles[i]
+    goto,BOMB1
+  endif
   head_xyad,hd1,[0,nx-1,nx-1,0],[0,0,ny-1,ny-1],vra,vdec,/degree
   chstr[i].vra = vra
   chstr[i].vdec = vdec
@@ -142,6 +147,7 @@ for i=0,ncatfiles-1 do begin
     chstr[i].cenra = cenra
     chstr[i].cendec = mean(minmax(cat1.delta_j2000))
   endif
+  BOMB1:
 endfor
 ; Exposure level values
 gdchip = where(chstr.nsources gt 0,ngdchip)

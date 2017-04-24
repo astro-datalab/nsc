@@ -167,10 +167,11 @@ FOR i=0,nlist-1 do begin
     rtback = median([cat1[rt31].background])
     mnback = 0.5*(lftback+rtback)
     sigback = mad(cat1.background)
-    if abs(lftback-rtback) gt (sqrt(mnback)>sigback) then bad31=1 else bad31=0
+    if abs(lftback-rtback) gt (sqrt(mnback)>sigback) then jump31=1 else jump31=0
     print,'  Big jump in CCDNUM 31 background levels'
-  endif else bad31=0
-  if meta.mjd gt 56600 or bad31 eq 1 then begin  
+  endif else jump31=0
+  if meta.mjd gt 56600 or jump31 eq 1 then begin  
+    badchip31 = 1
     ; Remove bad measurements
     ; X: 1-1024 okay
     ; X: 1025-2049 bad
@@ -189,7 +190,7 @@ FOR i=0,nlist-1 do begin
         ncat1 = n_elements(cat1)
       endelse
     endif  ; some bad ones to remove
-  endif  ; chip 31
+  endif else badchip31=0     ; chip 31
 
   ; Removing BAD sources
   ; Source Extractor FLAGS
@@ -267,9 +268,10 @@ FOR i=0,nlist-1 do begin
   ; Add metadata to ALLMETA
   ;  Make sure it's in the right format
   newmeta = {file:'',base:'',expnum:0L,ra:0.0d0,dec:0.0d0,dateobs:'',mjd:0.0d0,filter:'',exptime:0.0,$
-             airmass:0.0,nsources:0L,fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,$
+             airmass:0.0,nsources:0L,fwhm:0.0,nchips:0L,badchip31:0B,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,$
              zpterm:0.0,zptermerr:0.0,zptermsig:0.0,nrefmatch:0L}
   STRUCT_ASSIGN,meta,newmeta
+  newmeta.badchip31 = badchip31
   PUSH,allmeta,newmeta
 
   ; NDETX is good "detection" and morphology for this filter
