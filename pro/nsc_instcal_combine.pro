@@ -111,13 +111,13 @@ idcnt = 0LL
 ; Initialize the object structure
 schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,raerr:0.0d0,decerr:0.0d0,pmra:0.0d0,$
               pmdec:0.0d0,pmraerr:0.0d0,pmdecerr:0.0d0,mjd:0.0d0,deltamjd:0.0,ndet:0L,$
-              ndetu:0,nphotu:0,umag:0.0,uerr:0.0,uasemi:0.0,ubsemi:0.0,utheta:0.0,$
-              ndetg:0,nphotg:0,gmag:0.0,gerr:0.0,gasemi:0.0,gbsemi:0.0,gtheta:0.0,$
-              ndetr:0,nphotr:0,rmag:0.0,rerr:0.0,rasemi:0.0,rbsemi:0.0,rtheta:0.0,$
-              ndeti:0,nphoti:0,imag:99.9,ierr:0.0,iasemi:0.0,ibsemi:0.0,itheta:0.0,$
-              ndetz:0,nphotz:0,zmag:0.0,zerr:0.0,zasemi:0.0,zbsemi:0.0,ztheta:0.0,$
-              ndety:0,nphoty:0,ymag:0.0,yerr:0.0,yasemi:0.0,ybsemi:0.0,ytheta:0.0,$
-              ndetvr:0,nphotvr:0,vrmag:0.0,vrerr:0.0,vrasemi:0.0,vrbsemi:0.0,vrtheta:0.0,$
+              ndetu:0,nphotu:0,umag:0.0,urms:0.0,uerr:0.0,uasemi:0.0,ubsemi:0.0,utheta:0.0,$
+              ndetg:0,nphotg:0,gmag:0.0,grms:0.0,gerr:0.0,gasemi:0.0,gbsemi:0.0,gtheta:0.0,$
+              ndetr:0,nphotr:0,rmag:0.0,rrms:0.0,rerr:0.0,rasemi:0.0,rbsemi:0.0,rtheta:0.0,$
+              ndeti:0,nphoti:0,imag:99.9,irms:0.0,ierr:0.0,iasemi:0.0,ibsemi:0.0,itheta:0.0,$
+              ndetz:0,nphotz:0,zmag:0.0,zrms:0.0,zerr:0.0,zasemi:0.0,zbsemi:0.0,ztheta:0.0,$
+              ndety:0,nphoty:0,ymag:0.0,yrms:0.0,yerr:0.0,yasemi:0.0,ybsemi:0.0,ytheta:0.0,$
+              ndetvr:0,nphotvr:0,vrmag:0.0,vrrms:0.0,vrerr:0.0,vrasemi:0.0,vrbsemi:0.0,vrtheta:0.0,$
               x2:0.0,x2err:0.0,y2:0.0,y2err:0.0,xy:0.0,xyerr:0.0,cxx:0.0,cxxerr:0.0,$
               cxy:0.0,cxyerr:0.0,cyy:0.0,cyyerr:0.0,asemi:0.0,asemierr:0.0,bsemi:0.0,$
               bsemierr:0.0,theta:0.0,thetaerr:0.0,elongation:0.0,$
@@ -125,7 +125,10 @@ schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,raerr:0.0d0,decerr:0.0d0,pmra:0.0d
 tags = tag_names(schema_obj)
 obj = replicate(schema_obj,5e5)
 nobj = n_elements(obj)
-schema_totobj = {ra:0.0d0,dec:0.0d0,ramjd:0.0d0,decmjd:0.0d0,ramjd2:0.0d0,decmjd2:0.0d0,minmjd:999999.0d0,maxmjd:-999999.0d0}
+schema_totobj = {ra:0.0d0,dec:0.0d0,ramjd:0.0d0,decmjd:0.0d0,ramjd2:0.0d0,decmjd2:0.0d0,minmjd:999999.0d0,maxmjd:-999999.0d0,$
+                 umag2:0.0d0,gmag2:0.0d0,rmag2:0.0d0,imag2:0.0d0,zmag2:0.0d0,ymag2:0.0d0,vrmag2:0.0d0,$
+                 utot:0.0d0,gtot:0.0d0,rtot:0.0d0,itot:0.0d0,ztot:0.0d0,ytot:0.0d0,vrtot:0.0d0}
+tottags = tag_names(schema_totobj)
 totobj = replicate(schema_totobj,nobj)
 cnt = 0LL
 
@@ -279,6 +282,8 @@ FOR i=0,nlist-1 do begin
   detind = where(tags eq 'NDET'+strupcase(meta.filter),ndetind)
   magind = where(tags eq strupcase(meta.filter)+'MAG',nmagind)
   errind = where(tags eq strupcase(meta.filter)+'ERR',nerrind)
+  totind = where(tottags eq strupcase(meta.filter)+'TOT',ntotind)
+  mag2ind = where(tottags eq strupcase(meta.filter)+'MAG2',nmag2ind)
   detphind = where(tags eq 'NPHOT'+strupcase(meta.filter),nphotind)
   asemiind = where(tags eq strupcase(meta.filter)+'ASEMI',nasemiind)
   bsemiind = where(tags eq strupcase(meta.filter)+'BSEMI',nbsemiind)
@@ -345,6 +350,8 @@ FOR i=0,nlist-1 do begin
     totobj[0:ncat-1].decmjd2 = (1.0/cat.decerr^2) * newmeta.mjd^2  ; total(wt_dec*mjd^2)
     totobj[0:ncat-1].minmjd = newmeta.mjd
     totobj[0:ncat-1].maxmjd = newmeta.mjd
+    totobj[gdmag].(totind) = cat[gdmag].cmag                       ; sum(mag)
+    totobj[gdmag].(mag2ind) = double(cat[gdmag].cmag)^2            ; sum(mag^2), need dbl to precent underflow
     cnt += ncat
 
     ; Add new elements to IDSTR
@@ -401,8 +408,8 @@ FOR i=0,nlist-1 do begin
       ; Good photometry for this FILTER
       gdmag = where(newcat.cmag lt 50,ngdmag)
       if ngdmag gt 0 then begin
-        cmb[gdmag].(magind) = 2.5118864d^newcat[gdmag].cmag * (1.0d0/newcat[gdmag].cerr^2)
-        cmb[gdmag].(errind) = 1.0d0/newcat[gdmag].cerr^2
+        cmb[gdmag].(magind) += 2.5118864d^newcat[gdmag].cmag * (1.0d0/newcat[gdmag].cerr^2)
+        cmb[gdmag].(errind) += 1.0d0/newcat[gdmag].cerr^2
         cmb[gdmag].(detphind) += 1
         ; NPHOTX means good PHOT detection
       endif
@@ -437,6 +444,8 @@ FOR i=0,nlist-1 do begin
       totcmb.decmjd2 +=  (1.0/newcat.decerr^2) * newmeta.mjd^2  ; total(wt_dec*mjd^2)
       totcmb.minmjd <= newmeta.mjd
       totcmb.maxmjd >= newmeta.mjd
+      totcmb[gdmag].(totind) += newcat[gdmag].cmag              ; sum(mag)
+      totcmb[gdmag].(mag2ind) += double(newcat[gdmag].cmag)^2   ; sum(mag^2), need dbl to prevent underflow
       obj[ind1] = cmb  ; stuff it back in
       totobj[ind1] = totcmb
 
@@ -533,6 +542,8 @@ FOR i=0,nlist-1 do begin
       totobj[cnt:cnt+ncat-1].decmjd2 = (1.0/cat.decerr^2) * newmeta.mjd^2  ; total(wt_dec*mjd^2)
       totobj[cnt:cnt+ncat-1].minmjd = newmeta.mjd
       totobj[cnt:cnt+ncat-1].maxmjd = newmeta.mjd
+      totobj[cnt+gdmag].(totind) = cat[gdmag].cmag                         ; sum(mag)
+      totobj[cnt+gdmag].(mag2ind) = double(cat[gdmag].cmag)^2              ; sum(mag^2), need dbl to prevent underflow
       objectindex = lindgen(ncat)+cnt
       cnt += ncat
 
@@ -628,6 +639,9 @@ for i=0,nfilters-1 do begin
   detind = where(tags eq 'NDET'+strupcase(filters[i]),ndetind)
   magind = where(tags eq strupcase(filters[i])+'MAG',nmagind)
   errind = where(tags eq strupcase(filters[i])+'ERR',nerrind)
+  rmsind = where(tags eq strupcase(filters[i])+'RMS',nrmsind)
+  totind = where(tottags eq strupcase(filters[i])+'TOT',ntotind)
+  mag2ind = where(tottags eq strupcase(filters[i])+'MAG2',nmag2ind)
   detphind = where(tags eq 'NPHOT'+strupcase(filters[i]),nphotind)
   asemiind = where(tags eq strupcase(filters[i])+'ASEMI',nasemiind)
   bsemiind = where(tags eq strupcase(filters[i])+'BSEMI',nbsemiind)
@@ -643,6 +657,19 @@ for i=0,nfilters-1 do begin
     obj[bdmag].(magind) = 99.99
     obj[bdmag].(errind) = 9.99
   endif
+
+  ; Calculate RMS scatter
+  ;  RMS^2 * N = sum(mag^2) - 2*<mag>*sum(mag) + N*<mag>^2
+  ;   where <mag> is a weighted average
+  ;  RMS = sqrt( sum(mag^2)/N - 2*<mag>*sum(mag)/N + <mag>^2 )
+  ;  sum(mag^2) is in the MAG2 column and sum(mag) is in TOT
+  rms = fltarr(nobj)
+  gdrms = where(obj.(detphind) gt 1,ngdrms,comp=bdrms,ncomp=nbdrms)
+  if ngdrms gt 0 then $
+    rms[gdrms] = sqrt( totobj[gdrms].(mag2ind)/obj[gdrms].(detphind) - $
+                       2*obj[gdrms].(magind)*totobj[gdrms].(totind)/obj[gdrms].(detphind) + double(obj[gdrms].(magind))^2 )
+  if nbdrms gt 0 then rms[bdrms] = 999999.
+  obj.(rmsind) = rms
 
   ; Average the morphology parameters PER FILTER
   gdet = where(obj.(detind) gt 0,ngdet,comp=bdet,ncomp=nbdet)
