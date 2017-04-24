@@ -150,7 +150,11 @@ for i=0,ncatfiles-1 do begin
   BOMB1:
 endfor
 ; Exposure level values
-gdchip = where(chstr.nsources gt 0,ngdchip)
+gdchip = where(chstr.nsources gt 0 and chstr.cenra lt 400,ngdchip)
+if ngdchip eq 0 then begin
+  print,'No good chip catalogs with good WCS.'
+  return
+endif
 cendec = mean(minmax(chstr[gdchip].cendec))
 decrange = range(chstr[gdchip].cendec)
 cenra = mean(minmax(chstr[gdchip].cenra))
