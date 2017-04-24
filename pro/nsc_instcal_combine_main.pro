@@ -262,16 +262,17 @@ for i=0,nstr-1 do begin
 
   ; Use the chip corners to figure out which ones actually overlap
   chstr1 = chstr[str[i].chipindx:str[i].chipindx+str[i].nchips-1]
+  ;  rotate to tangent plane so it can handle RA=0/360 and poles properly
+  ROTSPHCEN,chstr1.vra,chstr1.vdec,str[i].ra,str[i].dec,vlon,vlat,/gnomic
   ;  loop over heapix
   overlap = bytarr(nlistpix)
   for j=0,nlistpix-1 do begin
     PIX2VEC_RING,nside,listpix[j],vec,vertex
     vertex = transpose(reform(vertex))  ; [1,3,4] -> [4,3]
     VEC2ANG,vertex,hdec,hra,/astro
+    ROTSPHCEN,hra,hdec,str[i].ra,str[i].dec,hlon,hlat,/gnomic
     ;  loop over chips
-    for k=0,str[i].nchips-1 do begin
-      overlap[j] >= DOPOLYGONSOVERLAP(hra,hdec,chstr1[k].vra,chstr1[k].vdec)
-    endfor  
+    for k=0,str[i].nchips-1 do overlap[j] >= DOPOLYGONSOVERLAP(hlon,hlat,vlon[*,k],vlat[*,k])
   endfor
   ; Only keep the healpix with real overlaps
   gdlistpix = where(overlap eq 1,ngdlistpix)
@@ -283,7 +284,7 @@ for i=0,nstr-1 do begin
     nlistpix = 0
   endelse
 
-  if nlistpix eq 0 then stop,'No healpix for this exposure.  Something is wrong!'
+;if nlistpix eq 0 then stop,'No healpix for this exposure.  Something is wrong!'
 
   ; Add new elements to array
   if cnt+nlistpix gt nhealstr then begin
@@ -393,6 +394,13 @@ dt[ind1] = sum[ind2].dt
 hsi = reverse(si(dt))
 cmd = cmd[hsi]
 cmddir = cmddir[shi]
+dt = dt[hsi]
+
+; Divide into three using total times
+tot = total(dt>10)
+totcum = total(dt>10,/cum)
+print,min(where(totcum ge tot/3))
+print,min(where(totcum ge 2*tot/3))
 
 ;; Start with healpix with low NEXP and far from MW midplane, LMC/SMC
 ;pix2ang_ring,nside,index.pix,theta,phi
