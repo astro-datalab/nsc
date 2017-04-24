@@ -107,7 +107,7 @@ for i=0,ncatfiles-1 do begin
   hd1 = dum.field_header_card
   nx = sxpar(hd1,'NAXIS1')
   ny = sxpar(hd1,'NAXIS2')
-  extast,hd1,ast,noparams=noparams  ; check the WCS
+  extast,hd1,ast,noparams  ; check the WCS
   if noparams le 0 then begin
     print,'Problem with WCS in header ',catfiles[i]
     goto,BOMB1
