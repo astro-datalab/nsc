@@ -1,4 +1,4 @@
-pro nsc_instcal_combine_main,redo=redo,nmulti=nmulti
+pro nsc_instcal_combine_main,redo=redo,makelist=makelist,nmulti=nmulti
 
 ; Combine all of the data
 NSC_ROOTDIRS,dldir,mssdir,localdir
@@ -243,111 +243,110 @@ nstr = n_elements(str)
 
 ; CREATE LIST OF HEALPIX AND OVERLAPPING EXPOSURES
 ; Which healpix pixels have data
-print,'Finding the Healpix pixels with data'
-radius = 1.1
-healstr = replicate({file:'',base:'',pix:0L},1e5)
-nhealstr = n_elements(healstr)
-cnt = 0LL
-for i=0,nstr-1 do begin
-  if i mod 1e3 eq 0 then print,i
-  ;head = headfits(str[i].file,exten=0)
-  ;sra = sxpar(head,'ra')
-  ;sdec = sxpar(head,'dec')
-  ;ra = sexig2ten(sra)*15.0d0
-  ;dec = sexig2ten(sdec)
-  theta = (90-str[i].dec)/radeg
-  phi = str[i].ra/radeg
-  ANG2VEC,theta,phi,vec
-  QUERY_DISC,nside,vec,radius,listpix,nlistpix,/deg,/inclusive
+if keyword_set(makelist) then begin
+  print,'Finding the Healpix pixels with data'
+  radius = 1.1
+  healstr = replicate({file:'',base:'',pix:0L},1e5)
+  nhealstr = n_elements(healstr)
+  cnt = 0LL
+  for i=0,nstr-1 do begin
+    if i mod 1e3 eq 0 then print,i
+    ;head = headfits(str[i].file,exten=0)
+    ;sra = sxpar(head,'ra')
+    ;sdec = sxpar(head,'dec')
+    ;ra = sexig2ten(sra)*15.0d0
+    ;dec = sexig2ten(sdec)
+    theta = (90-str[i].dec)/radeg
+    phi = str[i].ra/radeg
+    ANG2VEC,theta,phi,vec
+    QUERY_DISC,nside,vec,radius,listpix,nlistpix,/deg,/inclusive
 
-  ; Use the chip corners to figure out which ones actually overlap
-  chstr1 = chstr[str[i].chipindx:str[i].chipindx+str[i].nchips-1]
-  ;  rotate to tangent plane so it can handle RA=0/360 and poles properly
-  ROTSPHCEN,chstr1.vra,chstr1.vdec,str[i].ra,str[i].dec,vlon,vlat,/gnomic
-  ;  loop over heapix
-  overlap = bytarr(nlistpix)
-  for j=0,nlistpix-1 do begin
-    PIX2VEC_RING,nside,listpix[j],vec,vertex
-    vertex = transpose(reform(vertex))  ; [1,3,4] -> [4,3]
-    VEC2ANG,vertex,hdec,hra,/astro
-    ROTSPHCEN,hra,hdec,str[i].ra,str[i].dec,hlon,hlat,/gnomic
-    ;  loop over chips
-    for k=0,str[i].nchips-1 do overlap[j] >= DOPOLYGONSOVERLAP(hlon,hlat,vlon[*,k],vlat[*,k])
-  endfor
-  ; Only keep the healpix with real overlaps
-  gdlistpix = where(overlap eq 1,ngdlistpix)
-  if ngdlistpix gt 0 then begin
-    listpix = listpix[gdlistpix]
-    nlistpix = ngdlistpix
-  endif else begin
-    undefine,listpix
-    nlistpix = 0
-  endelse
+    ; Use the chip corners to figure out which ones actually overlap
+    chstr1 = chstr[str[i].chipindx:str[i].chipindx+str[i].nchips-1]
+    ;  rotate to tangent plane so it can handle RA=0/360 and poles properly
+    ROTSPHCEN,chstr1.vra,chstr1.vdec,str[i].ra,str[i].dec,vlon,vlat,/gnomic
+    ;  loop over heapix
+    overlap = bytarr(nlistpix)
+    for j=0,nlistpix-1 do begin
+      PIX2VEC_RING,nside,listpix[j],vec,vertex
+      vertex = transpose(reform(vertex))  ; [1,3,4] -> [4,3]
+      VEC2ANG,vertex,hdec,hra,/astro
+      ROTSPHCEN,hra,hdec,str[i].ra,str[i].dec,hlon,hlat,/gnomic
+      ;  loop over chips
+      for k=0,str[i].nchips-1 do overlap[j] >= DOPOLYGONSOVERLAP(hlon,hlat,vlon[*,k],vlat[*,k])
+    endfor
+    ; Only keep the healpix with real overlaps
+    gdlistpix = where(overlap eq 1,ngdlistpix)
+    if ngdlistpix gt 0 then begin
+      listpix = listpix[gdlistpix]
+      nlistpix = ngdlistpix
+    endif else begin
+      undefine,listpix
+      nlistpix = 0
+    endelse
 
 ;if nlistpix eq 0 then stop,'No healpix for this exposure.  Something is wrong!'
 
-  ; Add new elements to array
-  if cnt+nlistpix gt nhealstr then begin
-    old = healstr
-    healstr = replicate({file:'',base:'',pix:0L},nhealstr+1e4)
-    healstr[0:nhealstr-1] = old
-    nhealstr += 1e4
-    undefine,old
-  endif
+    ; Add new elements to array
+    if cnt+nlistpix gt nhealstr then begin
+      old = healstr
+      healstr = replicate({file:'',base:'',pix:0L},nhealstr+1e4)
+      healstr[0:nhealstr-1] = old
+      nhealstr += 1e4
+      undefine,old
+    endif
 
-  ; Add to the structure
-  healstr[cnt:cnt+nlistpix-1].file = str[i].expdir+'/'+str[i].base+'_cat.fits'
-  healstr[cnt:cnt+nlistpix-1].base = str[i].base
-  healstr[cnt:cnt+nlistpix-1].pix = listpix
-  cnt += nlistpix
+    ; Add to the structure
+    healstr[cnt:cnt+nlistpix-1].file = str[i].expdir+'/'+str[i].base+'_cat.fits'
+    healstr[cnt:cnt+nlistpix-1].base = str[i].base
+    healstr[cnt:cnt+nlistpix-1].pix = listpix
+    cnt += nlistpix
 
-endfor
-; Trim extra elements
-healstr = healstr[0:cnt-1]
-nhealstr = n_elements(healstr)
+  endfor
+  ; Trim extra elements
+  healstr = healstr[0:cnt-1]
+  nhealstr = n_elements(healstr)
 
-; Get uniq pixels
-ui = uniq(healstr.pix,sort(healstr.pix))
-upix = healstr[ui].pix
-nupix = n_elements(upix)
-print,strtrim(nupix,2),' Healpix pixels have overlapping data'
+  ; Get uniq pixels
+  ui = uniq(healstr.pix,sort(healstr.pix))
+  upix = healstr[ui].pix
+  nupix = n_elements(upix)
+  print,strtrim(nupix,2),' Healpix pixels have overlapping data'
 
-; Get start/stop indices for each pixel
-idx = sort(healstr.pix)
-healstr = healstr[idx]
-q = healstr.pix
-lo = where(q ne shift(q,1),nlo)
-;hi = where(q ne shift(q,-1))
-hi = [lo[1:nlo-1]-1,nhealstr-1]
-nexp = hi-lo+1
-index = replicate({pix:0L,lo:0L,hi:0L,nexp:0L},nupix)
-index.pix = upix
-index.lo = lo
-index.hi = hi
-index.nexp = nexp
+  ; Get start/stop indices for each pixel
+  idx = sort(healstr.pix)
+  healstr = healstr[idx]
+  q = healstr.pix
+  lo = where(q ne shift(q,1),nlo)
+  ;hi = where(q ne shift(q,-1))
+  hi = [lo[1:nlo-1]-1,nhealstr-1]
+  nexp = hi-lo+1
+  index = replicate({pix:0L,lo:0L,hi:0L,nexp:0L},nupix)
+  index.pix = upix
+  index.lo = lo
+  index.hi = hi
+  index.nexp = nexp
 
-; Write the full list plus an index
-print,'Writing list to ',dir+'combine/nsc_healpix_list.fits'
-MWRFITS,healstr,dir+'combine/nsc_healpix_list.fits',/create
-MWRFITS,index,dir+'combine/nsc_healpix_list.fits',/silent
-; Copy to local directory for faster reading speed
-file_copy,dir+'combine/nsc_healpix_list.fits',localdir+'dnidever/nsc/instcal/',/over
-; PUT NSIDE IN HEADER!!
-
-;; Loop over each pixel and get list of overlapping exposures
-;for i=0,nupix-1 do begin
-;  healstr1 = healstr[idx[lo[i]:hi[i]]]
-;  ; Create a file with this list
-;  ;lines = healstr1.file+'  '+healstr1.base+'  '+healstr1.pix
-;  WRITELINE,dir+'combine/lists/'+strtrim(upix[i],2)+'.lst',healstr1.file
-;  ;MWRFITS,healstr1,dir+'combine/lists/'+strtrim(upix[i],2)+'.fits',/create
-;endfor
+  ; Write the full list plus an index
+  print,'Writing list to ',dir+'combine/nsc_healpix_list.fits'
+  MWRFITS,healstr,dir+'combine/nsc_healpix_list.fits',/create
+  MWRFITS,index,dir+'combine/nsc_healpix_list.fits',/silent
+  ; Copy to local directory for faster reading speed
+  file_copy,dir+'combine/nsc_healpix_list.fits',localdir+'dnidever/nsc/instcal/',/over
+  ; PUT NSIDE IN HEADER!!
+endif else begin
+  print,'Reading list from ',dir+'combine/nsc_healpix_list.fits'
+  healstr = MRDFITS(dir+'combine/nsc_healpix_list.fits',1)
+  index = MRDFITS(dir+'combine/nsc_healpix_list.fits',2)
+  npix = n_elements(index)
+  ; Copy to local directory for faster reading speed
+  file_copy,dir+'combine/nsc_healpix_list.fits',localdir+'dnidever/nsc/instcal/',/over
+endelse
 
 ; Make the commands
-cmd = "nsc_instcal_combine,"+strtrim(upix,2)+",nside="+strtrim(nside,2)
+cmd = "nsc_instcal_combine,"+strtrim(index.pix,2)+",nside="+strtrim(nside,2)
 if keyword_set(redo) then cmd+=',/redo'
-cmddir = strarr(nupix)+localdir+'dnidever/nsc/instcal/tmp/'
-;dirs = strarr(nupix)+'/data0/dnidever/decamcatalog/tmp/'
+cmddir = strarr(npix)+localdir+'dnidever/nsc/instcal/tmp/'
 
 ; Check if the output file exists
 if not keyword_set(redo) then begin
@@ -391,9 +390,10 @@ dt = lonarr(n_elements(index))-1
 MATCH,index.pix,sum.pix,ind1,ind2,/sort,count=nmatch
 dt[ind1] = sum[ind2].dt
 ; Do the sorting
+stop
 hsi = reverse(si(dt))
 cmd = cmd[hsi]
-cmddir = cmddir[shi]
+cmddir = cmddir[hsi]
 dt = dt[hsi]
 
 ; Divide into three using total times
