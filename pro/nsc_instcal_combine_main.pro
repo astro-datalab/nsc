@@ -3,8 +3,6 @@ pro nsc_instcal_combine_main,redo=redo,makelist=makelist,nmulti=nmulti
 ; Combine all of the data
 NSC_ROOTDIRS,dldir,mssdir,localdir
 dir = dldir+'users/dnidever/nsc/instcal/'
-;dir = '/datalab/users/dnidever/decamcatalog/instcal/'
-;nside = 256
 nside = 128
 nmulti = 30
 radeg = 180.0d0 / !dpi
@@ -28,42 +26,11 @@ if second lt 10 then ssecond='0'+ssecond
 logfile = dir+'combine/nsc_instcal_combine_main.'+smonth+sday+syear+shour+sminute+ssecond+'.log'
 JOURNAL,logfile
 
-print, "Combining DECam InstCal catalogs"
-
-; Fix MJD values from night numbers to full MJD
-;  and bad AIRMASS values
-;str = mrdfits(dir+'nsc_instcal_calibrate.fits',1,/silent)
-;nstr = n_elements(str)
-;OBSERVATORY,'ctio',obs
-;for i=0,nstr-1 do begin
-;  if (i+1) mod 10000 eq 0 then print,i+1
-;  if str[i].success eq 1 then begin
-;    dateobs = strtrim(str[i].dateobs,2)
-;    if dateobs eq '' or dateobs eq '0' then begin
-;      fluxfile = strtrim(str[i].file,2)
-;      lo = strpos(fluxfile,'archive')
-;      fluxfile = mssdir+strmid(fluxfile,lo)
-;      head = headfits(fluxfile,exten=0)
-;      dateobs = sxpar(head,'DATE-OBS',count=ndateobs)
-;    if ndateobs eq 0 then stop,'no dateobs'
-;      str[i].dateobs = dateobs
-;    endif
-;    str[i].mjd=date2jd(str[i].dateobs,/mjd)
-;    ; Fix airmass values
-;    if str[i].airmass lt 0.9 then begin
-;      jd = date2jd(str[i].dateobs)
-;      ra = str[i].ra
-;      dec = str[i].dec
-;      str[i].airmass = AIRMASS(jd,ra,dec,obs.latitude,obs.longitude)
-;    endif
-;  endif
-;endfor
-;;mwrfits,str,dir+'nsc_instcal_calibrate.fits',/create
-;stop
+print, "Combining NOAO InstCal catalogs"
 
 
 ; Restore the calibration summary file
-temp = mrdfits(dir+'nsc_instcal_calibrate.fits',1,/silent)
+temp = MRDFITS(dir+'nsc_instcal_calibrate.fits',1,/silent)
 schema = temp[0]
 struct_assign,{dum:''},schema
 schema = create_struct(schema,'chipindx',-1LL)
@@ -93,7 +60,7 @@ nchexp = brkhi-brklo+1
 if nstr ne n_elements(brklo) then stop,'number of exposures in STR and CHSTR do not match'
 str.chipindx = brklo
 str.nchips = nchexp
-; Flux filename
+; Fixing absolute paths of flux filename
 file = str.file
 g1 = where(stregex(file,'/net/mss1/',/boolean) eq 1,ng1)
 file[g1] = strmid(file[g1],10)
@@ -126,7 +93,7 @@ release_year = long(strmid(release_date,0,4))
 release_month = long(strmid(release_date,5,2))
 release_day = long(strmid(release_date,8,2))
 release_mjd = JULDAY(release_month,release_day,release_year)-2400000.5d0
-release_cutoff = [2017,4,21]  ; April 21, 2017 for now
+release_cutoff = [2017,4,24]  ; April 24, 2017 for now
 release_cutoff_mjd = JULDAY(release_cutoff[1],release_cutoff[2],release_cutoff[0])-2400000.5d0
 gdrelease = where(release_mjd le release_cutoff_mjd,ngdrelease,comp=bdrelease,ncomp=nbdrelease)
 print,strtrim(ngdrelease,2),' exposures are PUBLIC'
@@ -251,11 +218,6 @@ if keyword_set(makelist) then begin
   cnt = 0LL
   for i=0,nstr-1 do begin
     if i mod 1e3 eq 0 then print,i
-    ;head = headfits(str[i].file,exten=0)
-    ;sra = sxpar(head,'ra')
-    ;sdec = sxpar(head,'dec')
-    ;ra = sexig2ten(sra)*15.0d0
-    ;dec = sexig2ten(sdec)
     theta = (90-str[i].dec)/radeg
     phi = str[i].ra/radeg
     ANG2VEC,theta,phi,vec
@@ -334,6 +296,7 @@ if keyword_set(makelist) then begin
   ; Copy to local directory for faster reading speed
   file_copy,dir+'combine/nsc_healpix_list.fits',localdir+'dnidever/nsc/instcal/',/over
   ; PUT NSIDE IN HEADER!!
+; Using existing list
 endif else begin
   print,'Reading list from ',dir+'combine/nsc_healpix_list.fits'
   healstr = MRDFITS(dir+'combine/nsc_healpix_list.fits',1)
@@ -390,8 +353,7 @@ dt = lonarr(n_elements(index))-1
 MATCH,index.pix,sum.pix,ind1,ind2,/sort,count=nmatch
 dt[ind1] = sum[ind2].dt
 ; Do the sorting
-stop
-hsi = reverse(si(dt))
+hsi = reverse(sort(dt))
 cmd = cmd[hsi]
 cmddir = cmddir[hsi]
 dt = dt[hsi]
