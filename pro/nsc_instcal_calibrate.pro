@@ -89,7 +89,7 @@ cat = REPLICATE(schema,ncat)
 ; Start the chips summary structure
 chstr = replicate({filename:'',ccdnum:0L,nsources:0L,cenra:999999.0d0,cendec:999999.0d0,$
                    gaianmatch:0L,rarms:999999.0,racoef:dblarr(4),decrms:999999.0,$
-                   deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,zptermerr:999999.0,nrefmatch:0L},nchips)
+                   deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,zptermerr:999999.0,nrefmatch:0L,depth:99.99},nchips)
 ; Load the files
 cnt = 0LL
 for i=0,ncatfiles-1 do begin
@@ -421,7 +421,7 @@ printlog,logf,'' & printlog,logf,'Step 4. Photometric calibration'
 printlog,logf,'-------------------------------'
 expstr = {file:fluxfile,base:base,expnum:long(expnum),ra:0.0d0,dec:0.0d0,dateobs:string(dateobs),mjd:0.0d,filter:filter,exptime:float(exptime),$
           airmass:0.0,nsources:long(ncat),fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,zpterm:999999.0,zptermerr:99999.0,$
-          zptermsig:999999.0,zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L}
+          zptermsig:999999.0,zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L,depth:99.99}
 expstr.ra = cenra
 expstr.dec = cendec
 expstr.mjd = date2jd(dateobs,/mjd)
@@ -789,6 +789,23 @@ printlog,logf,strtrim(ngdcat,2)+' good sources'
 printlog,logf,'ZPTERM=',stringize(expstr.zpterm,ndec=4),'+/-',stringize(expstr.zptermerr,ndec=4),'  SIG=',stringize(expstr.zptermsig,ndec=4),'mag'
 printlog,logf,'ZPSPATIALVAR:  RMS=',stringize(expstr.zpspatialvar_rms,ndec=3),' ',$
          'RANGE=',stringize(expstr.zpspatialvar_range,ndec=3),' NCCD=',strtrim(expstr.zpspatialvar_nccd,2)
+
+
+; Measure the depth
+;  S/N = 1.087/err
+;  so S/N=5 is for err=1.087/5=0.2174
+;  S/N=10 is for err=1.087/10=0.1087
+depth = 99.99
+depind = where(cat.cmag lt 50 and cat.cerr ge 0.0987 and cat.cerr le 0.1187,ndepind)
+if ndepind lt 5 then depind = where(cat.cmag lt 50 and cat.cerr ge 0.0787 and cat.cerr le 0.1387,ndepind)
+if ndepind gt 5 then begin
+  depth = median([cat[depind].cmag])
+endif else begin
+  depind = where(cat.cmag lt 50,ndepind)
+  if ndepind gt 0 then depth=max([cat[depind].cmag])
+endelse
+expstr.depth = depth
+chstr.depth = depth
 
 ; Step 5. Write out the final catalogs and metadata
 ;--------------------------------------------------
