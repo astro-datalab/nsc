@@ -103,11 +103,11 @@ dirs = strarr(nexpdirs)+localdir+'/dnidever/nsc/instcal/tmp/'
 print,'Creating calibration summary file'
 expstr = replicate({expdir:'',instrument:'',metafile:'',success:0,file:'',base:'',expnum:0L,ra:0.0d0,dec:0.0d,dateobs:'',mjd:0.0d0,filter:'',exptime:0.0,$
                     airmass:0.0,nsources:0L,fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,zpterm:0.0,zptermerr:0.0,zptermsig:0.0,$
-                    zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L},nexpdirs)
+                    zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L,depth95:99.99,depth10sig:99.99},nexpdirs)
 expstr.expdir = expdirs
 chstr = replicate({expdir:'',instrument:'',success:0,filename:'',ccdnum:0L,nsources:0L,cenra:999999.0d0,cendec:999999.0d0,$
                    gaianmatch:0L,rarms:999999.0,racoef:dblarr(4),decrms:999999.0,$
-                   deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,zptermerr:999999.0,nrefmatch:0L},nexpdirs*61)
+                   deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,zptermerr:999999.0,nrefmatch:0L,depth95:99.99,depth10sig:99.99},nexpdirs*61)
 chcnt = 0LL
 for i=0,nexpdirs-1 do begin
   if (i+1) mod 5000 eq 0 then print,i+1
@@ -117,7 +117,7 @@ for i=0,nexpdirs-1 do begin
   obsname = 'ctio'    ; by default
   instrument = 'c4d'  ; by default
   for j=0,n_elements(type)-1 do begin
-    if stregex(base,'/'+type[j]+'/',/boolean) eq 1 then begin
+    if stregex(expdirs[i],'/'+type[j]+'/',/boolean) eq 1 then begin
       instrument = 'c4d'
       obsname = obs[j]
     endif
