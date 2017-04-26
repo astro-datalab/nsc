@@ -89,7 +89,8 @@ cat = REPLICATE(schema,ncat)
 ; Start the chips summary structure
 chstr = replicate({filename:'',ccdnum:0L,nsources:0L,cenra:999999.0d0,cendec:999999.0d0,$
                    gaianmatch:0L,rarms:999999.0,racoef:dblarr(4),decrms:999999.0,$
-                   deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,zptermerr:999999.0,nrefmatch:0L,depth:99.99},nchips)
+                   deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,$
+                   zptermerr:999999.0,nrefmatch:0L,depth95:99.99,depth10sig:99.99},nchips)
 ; Load the files
 cnt = 0LL
 for i=0,ncatfiles-1 do begin
@@ -421,7 +422,7 @@ printlog,logf,'' & printlog,logf,'Step 4. Photometric calibration'
 printlog,logf,'-------------------------------'
 expstr = {file:fluxfile,base:base,expnum:long(expnum),ra:0.0d0,dec:0.0d0,dateobs:string(dateobs),mjd:0.0d,filter:filter,exptime:float(exptime),$
           airmass:0.0,nsources:long(ncat),fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,zpterm:999999.0,zptermerr:99999.0,$
-          zptermsig:999999.0,zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L,depth:99.99}
+          zptermsig:999999.0,zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L,depth95:99.99,depth10sig:99.99}
 expstr.ra = cenra
 expstr.dec = cendec
 expstr.mjd = date2jd(dateobs,/mjd)
@@ -792,20 +793,33 @@ printlog,logf,'ZPSPATIALVAR:  RMS=',stringize(expstr.zpspatialvar_rms,ndec=3),' 
 
 
 ; Measure the depth
-;  S/N = 1.087/err
-;  so S/N=5 is for err=1.087/5=0.2174
-;  S/N=10 is for err=1.087/10=0.1087
-depth = 99.99
-depind = where(cat.cmag lt 50 and cat.cerr ge 0.0987 and cat.cerr le 0.1187,ndepind)
-if ndepind lt 5 then depind = where(cat.cmag lt 50 and cat.cerr ge 0.0787 and cat.cerr le 0.1387,ndepind)
-if ndepind gt 5 then begin
-  depth = median([cat[depind].cmag])
-endif else begin
-  depind = where(cat.cmag lt 50,ndepind)
-  if ndepind gt 0 then depth=max([cat[depind].cmag])
-endelse
-expstr.depth = depth
-chstr.depth = depth
+;   need good photometry
+gdmag = where(cat.cmag lt 50,ngdmag)
+if ngdmag gt 0 then begin
+  ; Get 95% percentile depth
+  cmag = cat[gdmag].cmag
+  si = sort(cmag)
+  cmag = cmag[si]
+  depth95 = cmag[round(0.95*ngdmag)]
+  expstr.depth95 = depth95
+  chstr.depth95 = depth95
+  ; Get 10 sigma depth
+  ;  S/N = 1.087/err
+  ;  so S/N=5 is for err=1.087/5=0.2174
+  ;  S/N=10 is for err=1.087/10=0.1087
+  depth10sig = 99.99
+  depind = where(cat.cmag lt 50 and cat.cerr ge 0.0987 and cat.cerr le 0.1187,ndepind)
+  if ndepind lt 5 then depind = where(cat.cmag lt 50 and cat.cerr ge 0.0787 and cat.cerr le 0.1387,ndepind)
+  if ndepind gt 5 then begin
+    depth10sig = median([cat[depind].cmag])
+  endif else begin
+    depind = where(cat.cmag lt 50,ndepind)
+    if ndepind gt 0 then depth10sig=max([cat[depind].cmag])
+  endelse
+  expstr.depth10sig = depth10sig
+  chstr.depth10sig = depth10sig
+endif
+
 
 ; Step 5. Write out the final catalogs and metadata
 ;--------------------------------------------------
