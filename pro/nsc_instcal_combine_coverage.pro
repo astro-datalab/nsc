@@ -289,8 +289,10 @@ endelse
 
 ; KLUDGE!!!!!!
 print,'KLUDGE!!!! CREATING FAKE DEPTH INFORMATION!!'
+add_tag,str,'depth95',99.99,str
+add_tag,str,'depth10sig',99.99,str
 str.depth95 = 20.+2.5*alog(str.exptime)+randomn(seed,nstr)*0.2
-str.depht10sig = str.depth95
+str.depth10sig = str.depth95
 
 ; Add index to STR into HEALSTR
 print,'Adding STR index to HEALSTR'
@@ -315,6 +317,13 @@ for i=0,n_elements(brklo)-1 do healstr[siexp[brklo[i]:brkhi[i]]].strindx=i
 schema_chstr = chstr[0]
 struct_assign,{dum:''},schema_chstr
 schema_chstr = create_struct(schema_chstr,'vlon',dblarr(4),'vlat',dblarr(4))
+
+; Initialize the coverage structure
+nside2 = 4096
+npix = nside2npix(nside2)
+covstr = replicate({pix:0L,coverage:0.0,ucoverage:0.0,udepth:99.99,gcoverage:0.0,gdepth:99.99,$
+                    rcoverage:0.0,rdepth:99.99,icoverage:0.0,idepth:99.99,zcoverage:0.0,$
+                    zdepth:99.99,ycoverage:0.0,ydepth:99.99,vrcoverage:9.9,vrdepth:99.99},npix)
 
 ; Loop through all of the healpix
 For i=0,npix-1 do begin
@@ -358,10 +367,34 @@ For i=0,npix-1 do begin
   gdover = where(overlap eq 1,ngdover,comp=bdover,ncomp=nbdover)
   hchstr = hchstr[gdover]
 
+  ; I could also do query_polygon with /inclusive for each chip!!!!
+  ; might be faster!!!
+  stop
+
   ; I NEED DEPTH PER EXPOSURE/CHIP!!!
 
   ; Now get the list of nside=4096 pixels for this larger Healpix pixel
-  
+  QUERY_POLYGON,4096,vertex,listpix,nlist  
+
+  ; Loop through the list and figure out the coverage
+  for j=0,nlist-1 do begin
+    ; Get healpix boundary coordinates
+    PIX2VEC_RING,nside2,listpix[j],vec1,vertex1
+    vertex1 = transpose(reform(vertex1))  ; [1,3,4] -> [4,3]
+    VEC2ANG,vec1,hcendec1,hcenra1,/astro
+    VEC2ANG,vertex1,hdec1,hra1,/astro
+    ROTSPHCEN,hra1,hdec1,hcenra,hcendec,hlon1,hlat1,/gnomic
+
+    ; Figure out which chips overlap
+    overlap = bytarr(nhchstr)
+    for k=0,nhchstr-1 do begin
+      overlap[k] = dopolygonsoverlap(hlon1,hlat1,hchstr[k].vlon,hchstr[k].vlat)
+      stop
+    endfor
+    gdover = where(overlap eq 1,ngdover,comp=bdover,ncomp=nbdover)
+    hchstr = hchstr[gdover]
+
+  endfor
 
   stop
 
