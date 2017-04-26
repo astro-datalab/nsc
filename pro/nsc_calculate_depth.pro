@@ -7,22 +7,13 @@ dir = dldir+'users/dnidever/nsc/instcal/'
   
 ; Restore the calibration summary file
 print,'Loading nsc_instcal_calibrate.fits'
-temp = MRDFITS(dir+'nsc_instcal_calibrate.fits',1,/silent)
-schema = temp[0]
-struct_assign,{dum:''},schema
-schema = create_struct(schema,'chipindx',-1LL)
-str = replicate(schema,n_elements(temp))
-struct_assign,temp,str,/nozero
+str = MRDFITS(dir+'nsc_instcal_calibrate.fits',1,/silent)
 str.expdir = strtrim(str.expdir,2)
 str.instrument = strtrim(str.instrument,2)
 str.metafile = strtrim(str.metafile,2)
 str.file = strtrim(str.file,2)
 str.base = strtrim(str.base,2)
 str.filter = strtrim(str.filter,2)
-gd = where(str.success eq 1,nstr)
-str = str[gd]
-si = sort(str.expdir)
-str = str[si]
 nstr = n_elements(str)
 
 ; Add depth column
