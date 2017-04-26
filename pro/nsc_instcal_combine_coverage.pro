@@ -278,23 +278,85 @@ if keyword_set(makelist) then begin
 endif else begin
   print,'Reading list from ',dir+'combine/nsc_healpix_list.fits'
   healstr = MRDFITS(dir+'combine/nsc_healpix_list.fits',1)
+  healstr.file = strtrim(healstr.file,2)
+  healstr.base = strtrim(healstr.base,2)
   index = MRDFITS(dir+'combine/nsc_healpix_list.fits',2)
   npix = n_elements(index)
 endelse
+
+; NOW COMPUTE THE COVERAGE
+;--------------------------
+
+; Add index to STR into HEALSTR
+print,'Adding STR index to HEALSTR'
+schema_healstr = healstr[0]
+struct_assign,{dum:''},schema_healstr
+schema_healstr = create_struct(schema_healstr,'strindx',-1LL)
+hold = healstr
+healstr = replicate(schema_healstr,n_elements(hold))
+struct_assign,hold,healstr,/nozero
+undefine,hold
+nhealstr = n_elements(healstr)
+; Get indices for STR
+siexp = sort(healstr.file)
+hfile = healstr[siexp].file
+brklo = where(hfile ne shift(hfile,1),nbrk)
+brkhi = [brklo[1:nbrk-1]-1,n_elements(hfile)-1]
+nhexp = brkhi-brklo+1
+if nstr ne n_elements(brklo) then stop,'number of exposures in STR and HEALSTR do not match'
+for i=0,n_elements(brklo)-1 do healstr[siexp[brklo[i]:brkhi[i]]].strindx=i
+
+; Get CHSTR schema
+schema_chstr = chstr[0]
+struct_assign,{dum:''},schema_chstr
+schema_chstr = create_struct(schema_chstr,'vlon',dblarr(4),'vlat',dblarr(4))
 
 ; Loop through all of the healpix
 For i=0,npix-1 do begin
 
   ; Get all of the exposures overlapping this healpix
-  ind = where(index.pix eq pix,nind)
-  list = healstr[index[ind].lo:index[ind].hi]
+  list = healstr[index[i].lo:index[i].hi]
   nlist = n_elements(list)
-stop
 
   ; Get all of the chips overlapping this healpix
+  nhchstr = long(total(str[list.strindx].nchips))
+  hchstr = replicate(schema_chstr,nhchstr)
+  cnt = 0LL
   for j=0,nlist-1 do begin
-    chstr1 = chstr[str[i].chipindx:str[i].chipindx+str[i].nchips-1]
+    chlo = str[list[j].strindx].chipindx
+    chhi = chlo + str[list[j].strindx].nchips-1
+    chstr1 = chstr[chlo:chhi]
+    nchstr1 = n_elements(chstr1)
+    temp = replicate(schema_chstr,nchstr1)
+    struct_assign,chstr1,temp,/nozero
+    hchstr[cnt:cnt+nchstr1-1] = temp
+    cnt += nchstr1
   endfor
+
+  ; Get healpix boundary coordinates
+  PIX2VEC_RING,nside,index[i].pix,vec,vertex
+  vertex = transpose(reform(vertex))  ; [1,3,4] -> [4,3]
+  VEC2ANG,vec,hcendec,hcenra,/astro
+  VEC2ANG,vertex,hdec,hra,/astro
+
+  ; Rotate to tangent plane
+  ROTSPHCEN,hra,hdec,hcenra,hcendec,hlon,hlat,/gnomic
+  ROTSPHCEN,hchstr.vra,hchstr.vdec,hcenra,hcendec,vlon,vlat,/gnomic
+  mmhlon = minmax(hlon)
+  mmhlat = minmax(hlat)
+  hchstr.vlon = vlon
+  hchstr.vlat = vlat
+
+  ; Figure out which chips overlap
+  overlap = bytarr(nhchstr)
+  for j=0,nhchstr-1 do overlap[j]=dopolygonsoverlap(hlon,hlat,hchstr[j].vlon,hchstr[j].vlat)
+  gdover = where(overlap eq 1,ngdover,comp=bdover,ncomp=nbdover)
+  hchstr = hchstr[gdover]
+
+  ; I NEED DEPTH PER EXPOSURE/CHIP!!!
+
+  ; Now get the list of nside=4096 pixels for this larger Healpix pixel
+  
 
   stop
 
