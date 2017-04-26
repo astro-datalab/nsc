@@ -287,6 +287,11 @@ endelse
 ; NOW COMPUTE THE COVERAGE
 ;--------------------------
 
+; KLUDGE!!!!!!
+print,'KLUDGE!!!! CREATING FAKE DEPTH INFORMATION!!'
+str.depth95 = 20.+2.5*alog(str.exptime)+randomn(seed,nstr)*0.2
+str.depht10sig = str.depth95
+
 ; Add index to STR into HEALSTR
 print,'Adding STR index to HEALSTR'
 schema_healstr = healstr[0]
