@@ -6,6 +6,7 @@ pro nsc_instcal_combine_coverage,redo=redo
 NSC_ROOTDIRS,dldir,mssdir,localdir
 dir = dldir+'users/dnidever/nsc/instcal/'
 nside = 128
+nmulti = 30
 radeg = 180.0d0 / !dpi
 
 ; Restore the calibration summary file
@@ -39,20 +40,6 @@ nchexp = brkhi-brklo+1
 if nstr ne n_elements(brklo) then stop,'number of exposures in STR and CHSTR do not match'
 str.chipindx = brklo
 str.nchips = nchexp
-; Add FILTER, EXPTIME, and DEPTH columns to CHSTR
-schema_chstr = chstr[0]
-struct_assign,{dum:''},schema_chstr
-schema_chstr = create_struct(schema_chstr,'filter','','exptime',0.0,'depth95',0.0)
-old = chstr
-chstr = replicate(schema_chstr,nchstr)
-struct_assign,old,chstr
-undefine,old
-for i=0,nstr-1 do begin
-  lo = str[i].chipindx
-  hi = lo+str[i].nchips-1
-  chstr[lo:hi].filter = str[i].filter
-  chstr[lo:hi].exptime = str[i].exptime
-endfor
 ; Fixing absolute paths of flux filename
 file = str.file
 g1 = where(stregex(file,'/net/mss1/',/boolean) eq 1,ng1)
@@ -200,81 +187,218 @@ newindex[trimoldindex] = trimnewindex             ; new index in original array
 newchipindex = newindex[str.chipindx]
 str.chipindx = newchipindex
 nstr = n_elements(str)
-nchstr = n_elements(chstr)
+
+; CREATE LIST OF HEALPIX AND OVERLAPPING EXPOSURES
+; Which healpix pixels have data
+if keyword_set(makelist) then begin
+  print,'Finding the Healpix pixels with data'
+  radius = 1.1
+  healstr = replicate({file:'',base:'',pix:0L},1e5)
+  nhealstr = n_elements(healstr)
+  cnt = 0LL
+  for i=0,nstr-1 do begin
+    if i mod 1e3 eq 0 then print,i
+    theta = (90-str[i].dec)/radeg
+    phi = str[i].ra/radeg
+    ANG2VEC,theta,phi,vec
+    QUERY_DISC,nside,vec,radius,listpix,nlistpix,/deg,/inclusive
+
+    ; Use the chip corners to figure out which ones actually overlap
+    chstr1 = chstr[str[i].chipindx:str[i].chipindx+str[i].nchips-1]
+    ;  rotate to tangent plane so it can handle RA=0/360 and poles properly
+    ROTSPHCEN,chstr1.vra,chstr1.vdec,str[i].ra,str[i].dec,vlon,vlat,/gnomic
+    ;  loop over heapix
+    overlap = bytarr(nlistpix)
+    for j=0,nlistpix-1 do begin
+      PIX2VEC_RING,nside,listpix[j],vec,vertex
+      vertex = transpose(reform(vertex))  ; [1,3,4] -> [4,3]
+      VEC2ANG,vertex,hdec,hra,/astro
+      ROTSPHCEN,hra,hdec,str[i].ra,str[i].dec,hlon,hlat,/gnomic
+      ;  loop over chips
+      for k=0,str[i].nchips-1 do overlap[j] >= DOPOLYGONSOVERLAP(hlon,hlat,vlon[*,k],vlat[*,k])
+    endfor
+    ; Only keep the healpix with real overlaps
+    gdlistpix = where(overlap eq 1,ngdlistpix)
+    if ngdlistpix gt 0 then begin
+      listpix = listpix[gdlistpix]
+      nlistpix = ngdlistpix
+    endif else begin
+      undefine,listpix
+      nlistpix = 0
+    endelse
+
+;if nlistpix eq 0 then stop,'No healpix for this exposure.  Something is wrong!'
+
+    ; Add new elements to array
+    if cnt+nlistpix gt nhealstr then begin
+      old = healstr
+      healstr = replicate({file:'',base:'',pix:0L},nhealstr+1e4)
+      healstr[0:nhealstr-1] = old
+      nhealstr += 1e4
+      undefine,old
+    endif
+
+    ; Add to the structure
+    healstr[cnt:cnt+nlistpix-1].file = str[i].expdir+'/'+str[i].base+'_cat.fits'
+    healstr[cnt:cnt+nlistpix-1].base = str[i].base
+    healstr[cnt:cnt+nlistpix-1].pix = listpix
+    cnt += nlistpix
+
+  endfor
+  ; Trim extra elements
+  healstr = healstr[0:cnt-1]
+  nhealstr = n_elements(healstr)
+
+  ; Get uniq pixels
+  ui = uniq(healstr.pix,sort(healstr.pix))
+  upix = healstr[ui].pix
+  nupix = n_elements(upix)
+  print,strtrim(nupix,2),' Healpix pixels have overlapping data'
+
+  ; Get start/stop indices for each pixel
+  idx = sort(healstr.pix)
+  healstr = healstr[idx]
+  q = healstr.pix
+  lo = where(q ne shift(q,1),nlo)
+  ;hi = where(q ne shift(q,-1))
+  hi = [lo[1:nlo-1]-1,nhealstr-1]
+  nexp = hi-lo+1
+  index = replicate({pix:0L,lo:0L,hi:0L,nexp:0L},nupix)
+  index.pix = upix
+  index.lo = lo
+  index.hi = hi
+  index.nexp = nexp
+
+  ; Write the full list plus an index
+  ;print,'Writing list to ',dir+'combine/nsc_healpix_list.fits'
+  ;MWRFITS,healstr,dir+'combine/nsc_healpix_list.fits',/create
+  ;MWRFITS,index,dir+'combine/nsc_healpix_list.fits',/silent
+  ; PUT NSIDE IN HEADER!!
+; Using existing list
+endif else begin
+  print,'Reading list from ',dir+'combine/nsc_healpix_list.fits'
+  healstr = MRDFITS(dir+'combine/nsc_healpix_list.fits',1)
+  healstr.file = strtrim(healstr.file,2)
+  healstr.base = strtrim(healstr.base,2)
+  index = MRDFITS(dir+'combine/nsc_healpix_list.fits',2)
+  npix = n_elements(index)
+endelse
+
+; NOW COMPUTE THE COVERAGE
+;--------------------------
 
 ; KLUDGE!!!!!!
 print,'KLUDGE!!!! CREATING FAKE DEPTH INFORMATION!!'
-;add_tag,str,'depth95',99.99,str
-;add_tag,str,'depth10sig',99.99,str
-;str.depth95 = 20.+2.5*alog(str.exptime)+randomn(seed,nstr)*0.2
-;str.depth10sig = str.depth95
-chstr.depth95 = 20.+2.5*alog(chstr.exptime)+randomn(seed,nstr)*0.2 
+add_tag,str,'depth95',99.99,str
+add_tag,str,'depth10sig',99.99,str
+str.depth95 = 20.+2.5*alog(str.exptime)+randomn(seed,nstr)*0.2
+str.depth10sig = str.depth95
+
+; Add index to STR into HEALSTR
+print,'Adding STR index to HEALSTR'
+schema_healstr = healstr[0]
+struct_assign,{dum:''},schema_healstr
+schema_healstr = create_struct(schema_healstr,'strindx',-1LL)
+hold = healstr
+healstr = replicate(schema_healstr,n_elements(hold))
+struct_assign,hold,healstr,/nozero
+undefine,hold
+nhealstr = n_elements(healstr)
+; Get indices for STR
+siexp = sort(healstr.file)
+hfile = healstr[siexp].file
+brklo = where(hfile ne shift(hfile,1),nbrk)
+brkhi = [brklo[1:nbrk-1]-1,n_elements(hfile)-1]
+nhexp = brkhi-brklo+1
+if nstr ne n_elements(brklo) then stop,'number of exposures in STR and HEALSTR do not match'
+for i=0,n_elements(brklo)-1 do healstr[siexp[brklo[i]:brkhi[i]]].strindx=i
+
+; Get CHSTR schema
+schema_chstr = chstr[0]
+struct_assign,{dum:''},schema_chstr
+schema_chstr = create_struct(schema_chstr,'vlon',dblarr(4),'vlat',dblarr(4))
 
 ; Initialize the coverage structure
-print,'Creating coverage structure'
 nside2 = 4096
-nallpix = nside2npix(nside2)
-covstr = replicate({pix:0L,ra:0.0d0,dec:0.0d0,coverage:0.0,ucoverage:0.0,udepth:0.0,gcoverage:0.0,gdepth:0.0,$
-                    rcoverage:0.0,rdepth:0.0,icoverage:0.0,idepth:0.0,zcoverage:0.0,$
-                    zdepth:0.0,ycoverage:0.0,ydepth:0.0,vrcoverage:0.0,vrdepth:0.0},nallpix)
-covstr.pix = lindgen(nallpix)
-PIX2ANG_RING,nside2,covstr.pix,theta,phi
-covstr.ra = phi*radeg
-covstr.dec = 90-theta*radeg
-covtags = tag_names(covstr)
+npix = nside2npix(nside2)
+covstr = replicate({pix:0L,coverage:0.0,ucoverage:0.0,udepth:99.99,gcoverage:0.0,gdepth:99.99,$
+                    rcoverage:0.0,rdepth:99.99,icoverage:0.0,idepth:99.99,zcoverage:0.0,$
+                    zdepth:99.99,ycoverage:0.0,ydepth:99.99,vrcoverage:9.9,vrdepth:99.99},npix)
 
-; Loop over chips, find overlapping healpix
-;   and compute coverage/depth
-for i=0,nchstr-1 do begin
-  if i mod 5e3 eq 0 then print,i
+; Loop through all of the healpix
+For i=0,npix-1 do begin
 
-  theta = (90-chstr[i].vdec)/radeg
-  phi = chstr[i].vra/radeg
-  ANG2VEC,theta,phi,vec
-  QUERY_POLYGON,nside2,vec,listpix,nlistpix,/inclusive
+  ; Get all of the exposures overlapping this healpix
+  list = healstr[index[i].lo:index[i].hi]
+  nlist = n_elements(list)
 
-  ; Get columns for this filter
-  covind = where(covtags eq strupcase(chstr[i].filter)+'COVERAGE',ncovind)
-  depind = where(covtags eq strupcase(chstr[i].filter)+'DEPTH',ndepind)
+  ; Get all of the chips overlapping this healpix
+  nhchstr = long(total(str[list.strindx].nchips))
+  hchstr = replicate(schema_chstr,nhchstr)
+  cnt = 0LL
+  for j=0,nlist-1 do begin
+    chlo = str[list[j].strindx].chipindx
+    chhi = chlo + str[list[j].strindx].nchips-1
+    chstr1 = chstr[chlo:chhi]
+    nchstr1 = n_elements(chstr1)
+    temp = replicate(schema_chstr,nchstr1)
+    struct_assign,chstr1,temp,/nozero
+    hchstr[cnt:cnt+nchstr1-1] = temp
+    cnt += nchstr1
+  endfor
 
-  ; Now loop over each healpix
-  for j=0,nlistpix-1 do begin
-    pix1 = listpix[j]
-    overlap = NSC_MEASURE_HEALPIX_OVERLAP(nside2,pix1,chstr[i].vra,chstr[i].vdec)
-    if chstr[i].depth95 gt covstr[pix1].(depind) then begin
-      covstr[pix1].(depind) = chstr[i].depth95
-      covstr[pix1].(covind) = overlap
-    endif
-  endfor  ; pixel loop
+  ; Get healpix boundary coordinates
+  PIX2VEC_RING,nside,index[i].pix,vec,vertex
+  vertex = transpose(reform(vertex))  ; [1,3,4] -> [4,3]
+  VEC2ANG,vec,hcendec,hcenra,/astro
+  VEC2ANG,vertex,hdec,hra,/astro
+
+  ; Rotate to tangent plane
+  ROTSPHCEN,hra,hdec,hcenra,hcendec,hlon,hlat,/gnomic
+  ROTSPHCEN,hchstr.vra,hchstr.vdec,hcenra,hcendec,vlon,vlat,/gnomic
+  mmhlon = minmax(hlon)
+  mmhlat = minmax(hlat)
+  hchstr.vlon = vlon
+  hchstr.vlat = vlat
+
+  ; Figure out which chips overlap
+  overlap = bytarr(nhchstr)
+  for j=0,nhchstr-1 do overlap[j]=dopolygonsoverlap(hlon,hlat,hchstr[j].vlon,hchstr[j].vlat)
+  gdover = where(overlap eq 1,ngdover,comp=bdover,ncomp=nbdover)
+  hchstr = hchstr[gdover]
+
+  ; I could also do query_polygon with /inclusive for each chip!!!!
+  ; might be faster!!!
+  stop
+
+  ; I NEED DEPTH PER EXPOSURE/CHIP!!!
+
+  ; Now get the list of nside=4096 pixels for this larger Healpix pixel
+  QUERY_POLYGON,4096,vertex,listpix,nlist  
+
+  ; Loop through the list and figure out the coverage
+  for j=0,nlist-1 do begin
+    ; Get healpix boundary coordinates
+    PIX2VEC_RING,nside2,listpix[j],vec1,vertex1
+    vertex1 = transpose(reform(vertex1))  ; [1,3,4] -> [4,3]
+    VEC2ANG,vec1,hcendec1,hcenra1,/astro
+    VEC2ANG,vertex1,hdec1,hra1,/astro
+    ROTSPHCEN,hra1,hdec1,hcenra,hcendec,hlon1,hlat1,/gnomic
+
+    ; Figure out which chips overlap
+    overlap = bytarr(nhchstr)
+    for k=0,nhchstr-1 do begin
+      overlap[k] = dopolygonsoverlap(hlon1,hlat1,hchstr[k].vlon,hchstr[k].vlat)
+      stop
+    endfor
+    gdover = where(overlap eq 1,ngdover,comp=bdover,ncomp=nbdover)
+    hchstr = hchstr[gdover]
+
+  endfor
 
   stop
 
-endfor
-
-;Calculating area of overlap of two colygons
-;-probabaly fastest to create a grid of cartesian points and
-; then use roi_cut on both polygons to get map of "inside" pixels
-; and use union of both to get overlap
-;-could do similar with high-res healpix and query_polygon, not sure
-;  which one is faster.
-;Figuring out which healpix are fully INSIDE the chip polygon
-;-use ispointinpolygon.pro (part of dopolygonsoverlap.pro) on all the healpix
-;   vertices
-
-
-
-; TWO WAYS TO DO THIS
-; 1) Create the chip/healpix index
-;      -loop over each healpix, get overlapping chips (only need pix
-;         and chipindex)
-;      -do finer scale healpix and get depth for each
-;      -use that information to calculate final depth and covering fraction
-; 2) Loop through all chips
-;    -find the healpix it overlaps
-;    -calculate covering fraction
-;    -Use the depth of this chip if it is the deepest
-;      exposure for any of the pixels
-
+Endfor
 
 
 stop
