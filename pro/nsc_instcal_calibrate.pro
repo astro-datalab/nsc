@@ -34,6 +34,12 @@ if file_test(outfile) eq 1 and not keyword_set(redo) then begin
   return
 endif
 
+; What instrument is this?
+instrument = 'c4d'  ; by default
+if stregex(expdir,'/k4m/',/boolean) eq 1 then instrument='k4m'
+if stregex(expdir,'/ksb/',/boolean) eq 1 then instrument='ksb'
+printlog,logf,'This is a '+instrument+' exposure'
+
 ; Step 1. Read in the catalogs 
 ;-----------------------------
 printlog,logf,'' & printlog,logf,'Step 1. Read in the catalogs'
@@ -85,12 +91,17 @@ add_tag,schema,'RAERR',0.0d0,schema
 add_tag,schema,'DECERR',0.0d0,schema
 add_tag,schema,'CMAG',99.99,schema
 add_tag,schema,'CERR',9.99,schema
+add_tag,schema,'SOURCEID','',schema
+add_tag,schema,'FILTER','',schema
+add_tag,schema,'MJD',0.0d0,schema
 cat = REPLICATE(schema,ncat)
 ; Start the chips summary structure
-chstr = replicate({filename:'',ccdnum:0L,nsources:0L,cenra:999999.0d0,cendec:999999.0d0,$
+chstr = replicate({expdir:'',instrument:'',filename:'',ccdnum:0L,nsources:0L,cenra:999999.0d0,cendec:999999.0d0,$
                    gaianmatch:0L,rarms:999999.0,racoef:dblarr(4),decrms:999999.0,$
                    deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,$
                    zptermerr:999999.0,nrefmatch:0L,depth95:99.99,depth10sig:99.99},nchips)
+chstr.expdir = expdir
+chstr.instrument = instrument
 ; Load the files
 cnt = 0LL
 for i=0,ncatfiles-1 do begin
@@ -191,6 +202,19 @@ endif
 if strmid(filterlong,0,2) eq 'VR' then filter='VR' else filter=strmid(filterlong,0,1)
 if filterlong eq 'bokr' then filter='r'
 expnum = sxpar(head,'expnum')
+if instrument eq 'ksb' then begin  ; Bok doesn't have expnum
+  ;DTACQNAM= '/data1/batch/bok/20160102/d7390.0049.fits.fz'   
+  dtacqnam = sxpar(head,'DTACQNAM',count=ndtacqnam)
+  if ndtacqnam eq 0 then begin
+    print,'I cannot create an EXPNUM for this Bok exposure'
+    return
+  endif
+  bokbase = file_basename(dtacqnam)
+  dum = strsplit(bokbase,'.',/extract)
+  boknight = strmid(dum[0],1)
+  boknum = dum[1]
+  expnum = boknight+boknum  ; concatenate the two numbers
+endif
 exptime = sxpar(head,'exptime',count=nexptime)
 if nexptime eq 0 then begin
   dum = mrdfits(catfiles[0],1,/silent)
@@ -199,8 +223,15 @@ if nexptime eq 0 then begin
 endif
 dateobs = sxpar(head,'date-obs')
 airmass = sxpar(head,'airmass')
+mjd = date2jd(dateobs,/mjd)
 printlog,logf,'FILTER = ',filter
 printlog,logf,'EXPTIME = ',stringize(exptime,ndec=2),' sec.'
+printlog,logf,'MJD = ',stringize(mjd,ndec=4,/nocomma)
+
+; Set some catalog values
+cat.filter = filter
+cat.mjd = mjd
+cat.sourceid = instrument+'.'+strtrim(expnum,2)+'.'+strtrim(cat.ccdnum,2)+'.'+strtrim(cat.number,2)
 
 ; Step 2. Load the reference catalogs
 ;------------------------------------
@@ -420,12 +451,13 @@ cat.ebv = ebv
 ; Do it on the exposure level
 printlog,logf,'' & printlog,logf,'Step 4. Photometric calibration'
 printlog,logf,'-------------------------------'
-expstr = {file:fluxfile,base:base,expnum:long(expnum),ra:0.0d0,dec:0.0d0,dateobs:string(dateobs),mjd:0.0d,filter:filter,exptime:float(exptime),$
+expstr = {file:fluxfile,instrument:'',base:base,expnum:long(expnum),ra:0.0d0,dec:0.0d0,dateobs:string(dateobs),mjd:0.0d,filter:filter,exptime:float(exptime),$
           airmass:0.0,nsources:long(ncat),fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,zpterm:999999.0,zptermerr:99999.0,$
           zptermsig:999999.0,zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L,depth95:99.99,depth10sig:99.99}
+expstr.instrument = instrument
 expstr.ra = cenra
 expstr.dec = cendec
-expstr.mjd = date2jd(dateobs,/mjd)
+expstr.mjd = mjd
 ;expstr.mjd = photred_getmjd('','CTIO',dateobs=dateobs)
 expstr.nchips = nchips
 expstr.airmass = airmass
@@ -434,6 +466,7 @@ expstr.decrms = median(chstr.decrms)
 expstr.ebv = median(ebv)
 expstr.gaianmatch = median(chstr.gaianmatch)
 expstr.fwhm = medfwhm
+cat.mjd = expstr.mjd
 
 CASE filter of
 ; ---- u-band ----
@@ -800,26 +833,29 @@ if ngdmag gt 0 then begin
   cmag = cat[gdmag].cmag
   si = sort(cmag)
   cmag = cmag[si]
-  depth95 = cmag[round(0.95*ngdmag)]
+  depth95 = cmag[round(0.95*ngdmag)-1]
   expstr.depth95 = depth95
   chstr.depth95 = depth95
+  printlog,logf,'95% percentile depth = '+stringize(depth95,ndec=2)+' mag'
   ; Get 10 sigma depth
   ;  S/N = 1.087/err
   ;  so S/N=5 is for err=1.087/5=0.2174
   ;  S/N=10 is for err=1.087/10=0.1087
   depth10sig = 99.99
-  depind = where(cat.cmag lt 50 and cat.cerr ge 0.0987 and cat.cerr le 0.1187,ndepind)
-  if ndepind lt 5 then depind = where(cat.cmag lt 50 and cat.cerr ge 0.0787 and cat.cerr le 0.1387,ndepind)
+  depind = where(cat.cmag lt 50 and cat.cmag gt depth95-3.0 and cat.cerr ge 0.0987 and cat.cerr le 0.1187,ndepind)
+  if ndepind lt 5 then depind = where(cat.cmag lt 50 and cat.cmag gt depth95-3.0 and cat.cerr ge 0.0787 and cat.cerr le 0.1387,ndepind)
   if ndepind gt 5 then begin
     depth10sig = median([cat[depind].cmag])
   endif else begin
     depind = where(cat.cmag lt 50,ndepind)
     if ndepind gt 0 then depth10sig=max([cat[depind].cmag])
   endelse
+  printlog,logf,'10sigma depth = '+stringize(depth10sig,ndec=2)+' mag'
   expstr.depth10sig = depth10sig
   chstr.depth10sig = depth10sig
 endif
 
+stop
 
 ; Step 5. Write out the final catalogs and metadata
 ;--------------------------------------------------
