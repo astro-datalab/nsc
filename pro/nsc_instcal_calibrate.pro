@@ -855,8 +855,6 @@ if ngdmag gt 0 then begin
   chstr.depth10sig = depth10sig
 endif
 
-stop
-
 ; Step 5. Write out the final catalogs and metadata
 ;--------------------------------------------------
 ENDBOMB:

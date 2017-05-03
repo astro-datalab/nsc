@@ -26,6 +26,11 @@ cat = MRDFITS(catfile,1,/silent,status=status)
 if status lt 0 then goto,BOMB
 ncat = n_elements(cat)
 
+if tag_exist(cat,'SOURCEID') eq 1 then begin
+  print,'This file has already been updated'
+  return
+endif
+
 ; Load metadata
 expstr = MRDFITS(metafile,1,/silent,status=status1)
 if status1 lt 0 then goto,BOMB
