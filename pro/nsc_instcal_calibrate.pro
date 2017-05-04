@@ -237,36 +237,58 @@ cat.sourceid = instrument+'.'+strtrim(expnum,2)+'.'+strtrim(cat.ccdnum,2)+'.'+st
 ;------------------------------------
 printlog,logf,'' & printlog,logf,'Step 2. Load the reference catalogs'
 printlog,logf,'------------------------------------'
-refcat = ['GAIA/GAIA','2MASS-PSC']  ; always need these two
-CASE filter of
-; u-band
-'u': begin
+refcat = 'GAIA/GAIA'                ; always need this one
+instfilt = instrument+'-'+filter    ; instrument-filter combination
+CASE instfilt of
+; DECam u-band
+'c4d-u': begin
   ; Use GAIA, 2MASS and GALEX to calibrate
-  push,refcat,'II/312/ais'
+  push,refcat,['2MASS-PSC','II/312/ais']
 end
-; g-band
-'g': begin
+; DECam g-band
+'c4d-g': begin
   ; Use 2MASS and APASS to calibrate
-  push,refcat,'APASS'
+  push,refcat,['2MASS-PSC','APASS']
 end
-; r-band
-'r': begin
+; DECam r-band
+'c4d-r': begin
   ; Use 2MASS and APASS to calibrate
-  push,refcat,'APASS'
+  push,refcat,['2MASS-PSC','APASS']
 end
-; i-band
-'i': begin
+; DECam i-band
+'c4d-i': begin
   ; Use GAIA and 2MASS to calibrate
+  push,refcat,['2MASS-PSC']
 end
-; z-band
-'z': begin
+; DECam z-band
+'c4d-z': begin
   ; Use GAIA and 2MASS to calibrate  
+  push,refcat,['2MASS-PSC']
 end
-'Y': begin
+; DECam Y-band
+'c4d-Y': begin
   ; Use 2MASS to calibrate
+  push,refcat,['2MASS-PSC']
 end
-'VR': begin
+; DECam VR-band
+'c4d-VR': begin
   ; Use GAIA G-band to calibrate
+  push,refcat,['2MASS-PSC']
+end
+; Bok+90Prime g-band
+'ksb-g': begin
+  ; Use PS1
+  push,refcat,'PS'
+end
+; Bok+90Prime r-band
+'ksb-r': begin
+  ; Use PS1
+  push,refcat,'PS'
+end
+; Mosaic3 z-band
+'k4m-z': begin
+  ; Use PS1
+  push,refcat,'PS'
 end
 else: begin
   printlog,logf,filter,' not currently supported'
@@ -301,19 +323,27 @@ for i=0,nrefcat-1 do begin
   endif else begin
 
     ; Use DataLab database search for Gaia and 2MASS if density is high
-    if (varname eq 'TMASS' or varname eq 'GAIA') then begin
+    if (varname eq 'TMASS' or varname eq 'GAIA' or varname eq 'PS1') then begin
       if varname eq 'TMASS' then begin
         tablename = 'twomass.psc'
         cols = 'designation,ra as raj2000,dec as dej2000,j_m as jmag,j_cmsig as e_jmag,h_m as hmag,h_cmsig as e_hmag,k_m as kmag,k_cmsig as e_kmag,ph_qual as qflg'
-      endif else begin
+        server = 'dldb1.sdm.noao.edu'
+      endif
+      if varname eq 'GAIA' then begin
         tablename = 'gaia_dr1.gaia_source'
         cols = 'source_id as source,ra as ra_icrs,ra_error as e_ra_icrs,dec as de_icrs,dec_error as e_de_icrs,'+$
                'phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,phot_g_mean_mag as gmag'
-      endelse
+        server = 'dldb1.sdm.noao.edu'
+      endif
+      if varname eq 'PS1' then begin
+        tablename = 'ps1.stars'
+        cols = 'ra, dec, g as gmag, r as rmag, i as imag, z as zmag, y as ymag'
+        server = 'gp02.datalab.noao.edu'
+      endif
 
       ; Use Postgres command with q3c cone search
       refcattemp = repstr(refcatfile,'.fits','.txt')
-      cmd = "psql -h dldb1.sdm.noao.edu -U datalab -d tapdb -w --pset footer -c 'SELECT "+cols+" FROM "+tablename+$
+      cmd = "psql -h '+server+' -U datalab -d tapdb -w --pset footer -c 'SELECT "+cols+" FROM "+tablename+$
             " WHERE q3c_radial_query(ra,dec,"+stringize(cenra,ndec=4,/nocomma)+","+stringize(cendec,ndec=4,/nocomma)+$
             ","+stringize(radius,ndec=3)+")' > "+refcattemp
       file_delete,refcattemp,/allow
@@ -468,9 +498,9 @@ expstr.gaianmatch = median(chstr.gaianmatch)
 expstr.fwhm = medfwhm
 cat.mjd = expstr.mjd
 
-CASE filter of
-; ---- u-band ----
-'u': begin
+CASE instfilt of
+; ---- DECam u-band ----
+'c4d-u': begin
   ; Use GAIA, 2MASS and GALEX to calibrate
   index = lonarr(ncat,3)-1
   dcr = 1.0
@@ -527,8 +557,8 @@ CASE filter of
   ; Matched structure
   mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
-;- --- g-band ----
-'g': begin
+;---- DECam g-band ----
+'c4d-g': begin
   ; Use 2MASS and APASS to calibrate
   index = lonarr(ncat,2)-1
   dcr = 0.5
@@ -577,8 +607,8 @@ end
   ; Matched structure
   mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
-; ---- r-band ----
-'r': begin
+; ---- DECam r-band ----
+'c4d-r': begin
   ; Use 2MASS and APASS to calibrate
   index = lonarr(ncat,2)-1
   dcr = 0.5
@@ -627,8 +657,8 @@ end
   ; Matched structure
   mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
-; ---- i-band ----
-'i': begin
+; ---- DECam i-band ----
+'c4d-i': begin
   ; Use GAIA and 2MASS to calibrate
   index = lonarr(ncat,2)-1
   dcr = 0.5
@@ -676,8 +706,8 @@ end
   ; Matched structure
   mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
-; ---- z-band ----
-'z': begin
+; ---- DECam z-band ----
+'c4d-z': begin
   ; Use 2MASS to calibrate  
   index = lonarr(ncat)-1
   dcr = 0.5
@@ -719,8 +749,8 @@ end
   ; Matched structure
   mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
-; ---- Y-band ----
-'Y': begin
+; ---- DECam Y-band ----
+'c4d-Y': begin
   ; Use 2MASS to calibrate
   index = lonarr(ncat)-1
   dcr = 0.5
@@ -761,8 +791,8 @@ end
   model_mag = tmass2.jmag + 0.54482*col2 + 0.20*cat2.ebv + 0.663380
   mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
-; ---- VR-band ----
-'VR': begin
+; ---- DECam VR-band ----
+'c4d-VR': begin
   ; Use GAIA G-band to calibrate
   index = lonarr(ncat,2)-1
   dcr = 0.5
@@ -805,6 +835,129 @@ end
   mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
   err = sqrt(cat2.magerr_auto^2 + gmagerr2^2)
   model_mag = gaia2.gmag
+  mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
+end
+; ---- Bok+90Prime g-band ----
+'ksb-g': begin
+  ; Use PS1 g-band to calibrate
+  index = lonarr(ncat,2)-1
+  dcr = 0.5
+  SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat.ra,cat.dec,dcr,gind1,gind2,/sph,count=ngmatch
+  if ngmatch gt 0 then index[gind2,0] = gind1
+  SRCMATCH,ps.raj2000,ps.dej2000,cat.ra,cat.dec,dcr,tind1,tind2,/sph,count=ntmatch
+  if ntmatch gt 0 then index[tind2,1] = tind1
+  gd = where(total(index gt -1,2) eq 2,ngd)
+  printlog,logf,strtrim(ngd,2),' matches to GAIA and PS1'
+  if ngd eq 0 then begin
+    printlog,logf,'No matches to GAIA and PS1'
+    goto,ENDBOMB
+  endif
+  ; Matched catalogs
+  cat1 = cat[gd]
+  gaia1 = gaia[index[gd,0]]
+  ps1 = ps[index[gd,1]]
+  ; Make quality and error cuts
+  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+                cat1.fwhm_world*3600 lt 2*medfwhm and ps1.gmag lt 21.0,ngdcat)
+  ;  if the seeing is bad then class_star sometimes doesn't work well
+  if medfwhm gt 2 and ngdcat lt 100 then begin
+    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+                  cat1.fwhm_world*3600 lt 2*medfwhm and ps1.gmag lt 21.0,ngdcat)
+  endif
+  if ngdcat eq 0 then begin
+    printlog,logf,'No stars that pass all of the quality/error cuts'
+    goto,ENDBOMB
+  endif
+  cat2 = cat1[gdcat]
+  gaia2 = gaia1[gdcat]
+  ps2 = ps1[gdcat]
+  ; Take a robust mean relative to GAIA GMAG
+  mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
+  err = cat2.magerr_auto)
+  model_mag = ps2.gmag
+  col2 = fltarr(n_elements(mag))
+  mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
+end
+; ---- Bok+90Prime r-band ----
+'ksb-r': begin
+  ; Use PS1 r-band to calibrate
+  index = lonarr(ncat,2)-1
+  dcr = 0.5
+  SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat.ra,cat.dec,dcr,gind1,gind2,/sph,count=ngmatch
+  if ngmatch gt 0 then index[gind2,0] = gind1
+  SRCMATCH,ps.raj2000,ps.dej2000,cat.ra,cat.dec,dcr,tind1,tind2,/sph,count=ntmatch
+  if ntmatch gt 0 then index[tind2,1] = tind1
+  gd = where(total(index gt -1,2) eq 2,ngd)
+  printlog,logf,strtrim(ngd,2),' matches to GAIA and PS1'
+  if ngd eq 0 then begin
+    printlog,logf,'No matches to GAIA and PS1'
+    goto,ENDBOMB
+  endif
+  ; Matched catalogs
+  cat1 = cat[gd]
+  gaia1 = gaia[index[gd,0]]
+  ps1 = ps[index[gd,1]]
+  ; Make quality and error cuts
+  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+                cat1.fwhm_world*3600 lt 2*medfwhm and ps1.rmag lt 21.0,ngdcat)
+  ;  if the seeing is bad then class_star sometimes doesn't work well
+  if medfwhm gt 2 and ngdcat lt 100 then begin
+    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+                  cat1.fwhm_world*3600 lt 2*medfwhm and ps1.rmag lt 21.0,ngdcat)
+  endif
+  if ngdcat eq 0 then begin
+    printlog,logf,'No stars that pass all of the quality/error cuts'
+    goto,ENDBOMB
+  endif
+  cat2 = cat1[gdcat]
+  gaia2 = gaia1[gdcat]
+  ps2 = ps1[gdcat]
+  ; Take a robust mean relative to GAIA GMAG
+  mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
+  err = cat2.magerr_auto)
+  model_mag = ps2.rmag
+  col2 = fltarr(n_elements(mag))
+  mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
+end
+; ---- Mosaic3 z-band ----
+'k4m-z': begin
+  ; Use PS1 z-band to calibrate
+  index = lonarr(ncat,2)-1
+  dcr = 0.5
+  SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat.ra,cat.dec,dcr,gind1,gind2,/sph,count=ngmatch
+  if ngmatch gt 0 then index[gind2,0] = gind1
+  SRCMATCH,ps.raj2000,ps.dej2000,cat.ra,cat.dec,dcr,tind1,tind2,/sph,count=ntmatch
+  if ntmatch gt 0 then index[tind2,1] = tind1
+  gd = where(total(index gt -1,2) eq 2,ngd)
+  printlog,logf,strtrim(ngd,2),' matches to GAIA and PS1'
+  if ngd eq 0 then begin
+    printlog,logf,'No matches to GAIA and PS1'
+    goto,ENDBOMB
+  endif
+  ; Matched catalogs
+  cat1 = cat[gd]
+  gaia1 = gaia[index[gd,0]]
+  ps1 = ps[index[gd,1]]
+  ; Make quality and error cuts
+  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+                cat1.fwhm_world*3600 lt 2*medfwhm and ps1.zmag lt 21.0,ngdcat)
+  ;  if the seeing is bad then class_star sometimes doesn't work well
+  if medfwhm gt 2 and ngdcat lt 100 then begin
+    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+                  cat1.fwhm_world*3600 lt 2*medfwhm and ps1.zmag lt 21.0,ngdcat)
+  endif
+  if ngdcat eq 0 then begin
+    printlog,logf,'No stars that pass all of the quality/error cuts'
+    goto,ENDBOMB
+  endif
+  cat2 = cat1[gdcat]
+  gaia2 = gaia1[gdcat]
+  ps2 = ps1[gdcat]
+  ; Take a robust mean relative to GAIA GMAG
+  mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
+  err = cat2.magerr_auto)
+  model_mag = ps2.zmag
+  col2 = fltarr(n_elements(mag))
   mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
 else: begin
