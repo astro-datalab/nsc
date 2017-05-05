@@ -859,6 +859,10 @@ end
   ; Make quality and error cuts
   gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and ps1.gmag lt 21.0,ngdcat)
+  ; Don't use CLASS_STAR threshold if not enough sources are selected
+  if ngdcat lt 10 then $
+    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+                  cat1.fwhm_world*3600 lt 2*medfwhm and ps1.gmag lt 21.0,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
   if medfwhm gt 2 and ngdcat lt 100 then begin
     gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
@@ -900,8 +904,12 @@ end
   ; Make quality and error cuts
   gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and ps1.rmag lt 21.0,ngdcat)
+  ; Don't use CLASS_STAR threshold if not enough sources are selected
+  if ngdcat lt 10 then $
+    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+                  cat1.fwhm_world*3600 lt 2*medfwhm and ps1.rmag lt 21.0,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
-  if medfwhm gt 2 and ngdcat lt 100 then begin
+  if medfwhm gt 1.8 and ngdcat lt 100 then begin
     gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ps1.rmag lt 21.0,ngdcat)
   endif
@@ -941,8 +949,12 @@ end
   ; Make quality and error cuts
   gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and ps1.zmag lt 21.0,ngdcat)
+  ; Don't use CLASS_STAR threshold if not enough sources are selected
+  if ngdcat lt 10 then $
+    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+                  cat1.fwhm_world*3600 lt 2*medfwhm and ps1.zmag lt 21.0,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
-  if medfwhm gt 2 and ngdcat lt 100 then begin
+  if medfwhm gt 1.8 and ngdcat lt 100 then begin
     gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ps1.zmag lt 21.0,ngdcat)
   endif
