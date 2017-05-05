@@ -529,7 +529,7 @@ CASE instfilt of
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
                 tmass1.e_jmag lt 0.05 and finite(galex1.nuv) eq 1 and col ge 0.8 and col le 1.1,ngdcat)
   ;  if the seeing is bad then class_star sometimes doens't work well
-  if medfwhm gt 2 and ngdcat lt 100 then begin
+  if medfwhm gt 1.8 and ngdcat lt 100 then begin
     gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
                   tmass1.e_jmag lt 0.05 and finite(galex1.nuv) eq 1 and col ge 0.8 and col le 1.1,ngdcat)
@@ -582,7 +582,7 @@ end
                 cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
                 tmass1.e_jmag lt 0.05 and apass1.e_g_mag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
   ;  if the seeing is bad then class_star sometimes doens't work well
-  if medfwhm gt 2 and ngdcat lt 100 then begin
+  if medfwhm gt 1.8 and ngdcat lt 100 then begin
     gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
                   tmass1.e_jmag lt 0.05 and apass1.e_g_mag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
@@ -632,7 +632,7 @@ end
                 cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
                 tmass1.e_jmag lt 0.05 and apass1.e_r_mag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
   ;  if the seeing is bad then class_star sometimes doens't work well
-  if medfwhm gt 2 and ngdcat lt 100 then begin
+  if medfwhm gt 1.8 and ngdcat lt 100 then begin
     gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
                   tmass1.e_jmag lt 0.05 and apass1.e_r_mag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
@@ -683,7 +683,7 @@ end
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
                 tmass1.e_jmag lt 0.05 and col ge 0.25 and col le 0.65,ngdcat)
   ;  if the seeing is bad then class_star sometimes doens't work well
-  if medfwhm gt 2 and ngdcat lt 100 then begin
+  if medfwhm gt 1.8 and ngdcat lt 100 then begin
     gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
                   tmass1.e_jmag lt 0.05 and col ge 0.25 and col le 0.65,ngdcat)
@@ -728,7 +728,7 @@ end
                 cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
                 tmass1.e_jmag lt 0.05 and col ge 0.4 and col le 0.65,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
-  if medfwhm gt 2 and ngdcat lt 100 then begin
+  if medfwhm gt 1.8 and ngdcat lt 100 then begin
     gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
                   tmass1.e_jmag lt 0.05 and col ge 0.4 and col le 0.65,ngdcat)
@@ -771,7 +771,7 @@ end
                 cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
                 tmass1.e_jmag lt 0.05 and col ge 0.4 and col le 0.7,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
-  if medfwhm gt 2 and ngdcat lt 100 then begin
+  if medfwhm gt 1.8 and ngdcat lt 100 then begin
     gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
                   tmass1.e_jmag lt 0.05 and col ge 0.4 and col le 0.7,ngdcat)
