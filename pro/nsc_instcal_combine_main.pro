@@ -288,6 +288,7 @@ if keyword_set(makelist) then begin
   index.lo = lo
   index.hi = hi
   index.nexp = nexp
+  npix = n_elements(index)
 
   ; Write the full list plus an index
   print,'Writing list to ',dir+'combine/nsc_healpix_list.fits'
