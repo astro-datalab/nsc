@@ -141,7 +141,7 @@ QUERY_POLYGON,nside2,vertex,listpix,nlistpix
 
 ; Initialize the coverage structure
 print,'Creating coverage structure'
-covstr = replicate({pix:0L,ra:0.0d0,dec:0.0d0,coverage:0.0,nexp:0,ucoverage:0.0,unexp:0,udepth:0.0,gcoverage:0.0,gnexp:0,gdepth:0.0,$
+covstr = replicate({pix:0L,pix128:long(pix),ra:0.0d0,dec:0.0d0,coverage:0.0,nexp:0,ucoverage:0.0,unexp:0,udepth:0.0,gcoverage:0.0,gnexp:0,gdepth:0.0,$
                     rcoverage:0.0,rnexp:0,rdepth:0.0,icoverage:0.0,inexp:0,idepth:0.0,zcoverage:0.0,$
                     znexp:0,zdepth:0.0,ycoverage:0.0,ynexp:0,ydepth:0.0,vrcoverage:0.0,vrnexp:0,vrdepth:0.0},nlistpix)
 covstr.pix = listpix
