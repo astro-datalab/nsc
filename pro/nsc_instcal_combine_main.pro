@@ -328,41 +328,41 @@ if not keyword_set(redo) then begin
   cmddir = cmddir[gd]
 endif
 
-; Prioritize longest-running jobs FIRST
-; Load the DECam run times
-sum1 = mrdfits(dir+'nsccmb_summary_hulk.fits',1)
-sum2 = mrdfits(dir+'nsccmb_summary_thing.fits',1)
-sum3 = mrdfits(dir+'nsccmb_summary_gp09.fits',1)
-sum = [sum1,sum2,sum3]
-si = sort(sum.mtime)
-sum = sum[si]
-; only keep fairly recent ones
-gd = where(sum.mtime gt 1.4897704e+09,ngd)
-sum = sum[gd]
-; Deal with duplicates
-dbl = doubles(sum.pix,count=ndbl)
-alldbl = doubles(sum.pix,/all,count=nalldbl)
-torem = bytarr(nalldbl)
-for i=0,ndbl-1 do begin
-  MATCH,sum[alldbl].pix,sum[dbl[i]].pix,ind1,ind2,/sort,count=nmatch
-  torem[ind1[0:nmatch-2]] = 1
-endfor
-bd=where(torem eq 1,nbd)
-remove,alldbl[bd],sum
-dt = lonarr(n_elements(index))-1
-MATCH,index.pix,sum.pix,ind1,ind2,/sort,count=nmatch
-dt[ind1] = sum[ind2].dt
-; Do the sorting
-hsi = reverse(sort(dt))
-cmd = cmd[hsi]
-cmddir = cmddir[hsi]
-dt = dt[hsi]
-
-; Divide into three using total times
-tot = total(dt>10)
-totcum = total(dt>10,/cum)
-print,min(where(totcum ge tot/3))
-print,min(where(totcum ge 2*tot/3))
+;; Prioritize longest-running jobs FIRST
+;; Load the DECam run times
+;sum1 = mrdfits(dir+'nsccmb_summary_hulk.fits',1)
+;sum2 = mrdfits(dir+'nsccmb_summary_thing.fits',1)
+;sum3 = mrdfits(dir+'nsccmb_summary_gp09.fits',1)
+;sum = [sum1,sum2,sum3]
+;si = sort(sum.mtime)
+;sum = sum[si]
+;; only keep fairly recent ones
+;gd = where(sum.mtime gt 1.4897704e+09,ngd)
+;sum = sum[gd]
+;; Deal with duplicates
+;dbl = doubles(sum.pix,count=ndbl)
+;alldbl = doubles(sum.pix,/all,count=nalldbl)
+;torem = bytarr(nalldbl)
+;for i=0,ndbl-1 do begin
+;  MATCH,sum[alldbl].pix,sum[dbl[i]].pix,ind1,ind2,/sort,count=nmatch
+;  torem[ind1[0:nmatch-2]] = 1
+;endfor
+;bd=where(torem eq 1,nbd)
+;remove,alldbl[bd],sum
+;dt = lonarr(n_elements(index))-1
+;MATCH,index.pix,sum.pix,ind1,ind2,/sort,count=nmatch
+;dt[ind1] = sum[ind2].dt
+;; Do the sorting
+;hsi = reverse(sort(dt))
+;cmd = cmd[hsi]
+;cmddir = cmddir[hsi]
+;dt = dt[hsi]
+;
+;; Divide into three using total times
+;tot = total(dt>10)
+;totcum = total(dt>10,/cum)
+;print,min(where(totcum ge tot/3))
+;print,min(where(totcum ge 2*tot/3))
 
 ;; Start with healpix with low NEXP and far from MW midplane, LMC/SMC
 ;pix2ang_ring,nside,index.pix,theta,phi
