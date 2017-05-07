@@ -58,6 +58,10 @@ endif
 ; Load the list of exposures
 expstr = MRDFITS(objfile,1,/silent)
 nexpstr = n_elements(expstr)
+expstr.file = strtrim(expstr.file,2)
+expstr.base = strtrim(expstr.base,2)
+expstr.dateobs = strtrim(expstr.dateobs,2)
+expstr.filter = strtrim(expstr.filter,2)
 add_tag,expstr,'success',0,expstr
 add_tag,expstr,'hoverlap',0,expstr
 add_tag,expstr,'chipindx',-1LL,expstr
@@ -82,6 +86,8 @@ for i=0,nexpstr-1 do begin
     ; Load the chip summary structure
     chstr1 = MRDFITS(metafile,2,/silent)
     nchstr1 = n_elements(chstr1)
+    chstr1.expdir = strtrim(chstr1.expdir,2)
+    chstr1.filename = strtrim(chstr1.filename,2)
     add_tag,chstr1,'hoverlap',0,chstr1   ; does it overlap healpix
     add_tag,chstr1,'filter',strtrim(expstr[i].filter,2),chstr1
     expstr[i].success = 1
@@ -208,9 +214,9 @@ for i=0,nlistpix-1 do begin
         vx = (lon1-lon0)/dx
         vy = (lat1-lat0)/dx
         ; Pixels in the chip
-        cin = polyfillv(vx,vy,nx,ny)
+        cin = POLYFILLV(vx,vy,nx,ny)
         cmask = bytarr(nx,ny)
-        cmask[cin] = 1
+        if n_elements(cin) gt 1 or cin[0] ne -1 then cmask[cin]=1  ; some good overlap
         cmask = cmask * mask   ; pixels in healpix region
 
         numim[*,*] += cmask               ; number of chips that overlap
