@@ -15,7 +15,7 @@ npix = n_elements(index)
 print,'Creating Healpix summary file'
 ; u, g, r, i, z, Y, VR
 sumstr = replicate({file:'',exists:0,pix:0L,ra:0.0d0,dec:0.0d0,nexposures:0L,nfilters:0L,filters:'',nobjects:0L,nsources:-1L,nobjfilt:lonarr(7),$
-                    exptimefilt:fltarr(7),depth95filt:fltarr(7)+99.99,depth10sigfilt:fltarr(7)+99.99,success:0,size:0LL,mtime:0LL},npix)
+                    nexpfilt:lonarr(7),exptimefilt:fltarr(7),depth95filt:fltarr(7)+99.99,depth10sigfilt:fltarr(7)+99.99,success:0,size:0LL,mtime:0LL},npix)
 sumstr.pix = index.pix
 PIX2ANG_RING,nside,sumstr.pix,theta,phi
 sumstr.ra = phi*radeg
@@ -54,6 +54,7 @@ for i=0,npix-1 do begin
       for j=0,nfilters-1 do begin
         ; Total exposure time in this filter
         filtind = where(meta.filter eq filters[j],nfiltind)
+        sumstr[i].nexpfilt[j] = nfiltind
         if nfiltind gt 0 then sumstr[i].exptimefilt[j]=total(meta[filtind].exptime)
         ; Check photometry
         magind = where(tags eq strupcase(filters[j])+'MAG',nmagind)
@@ -66,17 +67,22 @@ for i=0,npix-1 do begin
         cmag = cat[ind].(magind)
         si = sort(cmag)
         cmag = cmag[si]
-        sumstr[i].depth95filt[j] = cmag[round(0.95*nind)-1]
+        depth95 = cmag[round(0.95*nind)-1]
+        sumstr[i].depth95filt[j] = depth95
         ; 10 sigma
         ;  S/N = 1.087/err
         ;  so S/N=5 is for err=1.087/5=0.2174
         ;  S/N=10 is for err=1.087/10=0.1087
-        ind2 = where(cat.(magind) lt 50 and cat.(errind) ge 0.0987 and cat.(errind) le 0.1187,nind2)
-        if nind2 lt 5 then ind2 = where(cat.(magind) lt 50 and cat.(errind) ge 0.0787 and cat.(errind) le 0.1387,nind2)
-        if nind2 gt 5 then begin
-          depth = median([cat[ind2].(magind)])
-          sumstr[i].depth10sigfilt[j] = depth
-        endif
+        depth10sig = 99.99
+        depind = where(cat.(magind) lt 50 and cat.(magind) gt depth95-3.0 and cat.(errind) ge 0.0987 and cat.(errind) le 0.1187,ndepind)
+        if ndepind lt 5 then depind = where(cat.(magind) lt 50 and cat.(magind) gt depth95-3.0 and cat.(errind) ge 0.0787 and cat.(errind) le 0.1387,ndepind)
+        if ndepind gt 5 then begin
+          depth10sig = median([cat[depind].(magind)])
+        endif else begin
+          depind = where(cat.(magind) lt 50,ndepind)
+          if ndepind gt 0 then depth10sig=max([cat[depind].(magind)])
+        endelse
+        sumstr[i].depth10sigfilt[j] = depth10sig
       endfor
       ; Load the source table header
       hd3 = headfits(sumstr[i].file,exten=3,errmsg=errmsg3)
