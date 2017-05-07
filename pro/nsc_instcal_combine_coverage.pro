@@ -15,13 +15,6 @@ if n_elements(pix) eq 0 then begin
   return
 endif
 
-; Does the combined object file exist?
-objfile = dir+'combine/'+strtrim(pix,2)+'.fits.gz'
-if file_test(objfile) eq 0 then begin
-  print,objfile,' NOT FOUND'
-  return
-endif
-
 ; Does the coverage map already exist
 covfile = dir+'combine/coverage/'+strtrim(pix,2)+'_coverage.fits'
 if file_test(covfile) eq 1 and not keyword_set(redo) then begin
@@ -39,6 +32,28 @@ VEC2ANG,vertex,hdec,hra,/astro
 ROTSPHCEN,hra,hdec,hcenra,hcendec,hlon,hlat,/gnomic
 mmhlon = minmax(hlon)
 mmhlat = minmax(hlat)
+
+; Get the pixel numbers for nside=4096 healpix that are within
+; this larger pixel
+QUERY_POLYGON,nside2,vertex,listpix,nlistpix
+
+; Initialize the coverage structure
+print,'Creating coverage structure'
+covstr = replicate({pix:0L,pix128:long(pix),ra:0.0d0,dec:0.0d0,coverage:0.0,nexp:0,ucoverage:0.0,unexp:0,udepth:0.0,gcoverage:0.0,gnexp:0,gdepth:0.0,$
+                    rcoverage:0.0,rnexp:0,rdepth:0.0,icoverage:0.0,inexp:0,idepth:0.0,zcoverage:0.0,$
+                    znexp:0,zdepth:0.0,ycoverage:0.0,ynexp:0,ydepth:0.0,vrcoverage:0.0,vrnexp:0,vrdepth:0.0},nlistpix)
+covstr.pix = listpix
+PIX2ANG_RING,nside2,covstr.pix,theta,phi
+covstr.ra = phi*radeg
+covstr.dec = 90-theta*radeg
+covtags = tag_names(covstr)
+
+; Does the combined object file exist?
+objfile = dir+'combine/'+strtrim(pix,2)+'.fits.gz'
+if file_test(objfile) eq 0 then begin
+  print,objfile,' NOT FOUND'
+  goto,SAVEFILE
+endif
 
 ; Load the list of exposures
 expstr = MRDFITS(objfile,1,/silent)
@@ -135,21 +150,6 @@ bdexp = where(expstr.hoverlap eq 0,nbdexp)
 if nbdexp gt 0 then REMOVE,bdexp,expstr
 
 
-; Get the pixel numbers for nside=4096 healpix that are within
-; this larger pixel
-QUERY_POLYGON,nside2,vertex,listpix,nlistpix
-
-; Initialize the coverage structure
-print,'Creating coverage structure'
-covstr = replicate({pix:0L,pix128:long(pix),ra:0.0d0,dec:0.0d0,coverage:0.0,nexp:0,ucoverage:0.0,unexp:0,udepth:0.0,gcoverage:0.0,gnexp:0,gdepth:0.0,$
-                    rcoverage:0.0,rnexp:0,rdepth:0.0,icoverage:0.0,inexp:0,idepth:0.0,zcoverage:0.0,$
-                    znexp:0,zdepth:0.0,ycoverage:0.0,ynexp:0,ydepth:0.0,vrcoverage:0.0,vrnexp:0,vrdepth:0.0},nlistpix)
-covstr.pix = listpix
-PIX2ANG_RING,nside2,covstr.pix,theta,phi
-covstr.ra = phi*radeg
-covstr.dec = 90-theta*radeg
-covtags = tag_names(covstr)
-
 filters = ['u','g','r','i','z','Y','VR']
 nfilters = n_elements(filters)
 
@@ -240,8 +240,9 @@ for i=0,nlistpix-1 do begin
 endfor  ; pixel loop
 
 ; Save the coverage map
-print,'Writing coverage information to ',outfile
-MWRFITS,covstr,outfile,/create
+SAVEFILE:
+print,'Writing coverage information to ',covfile
+MWRFITS,covstr,covfile,/create
 
 ;cat = mrdfits(objfile,2,/silent)
 ;plotc,covstr.ra,covstr.dec,covstr.coverage,ps=1,/ysty
