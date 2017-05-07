@@ -290,6 +290,9 @@ if keyword_set(makelist) then begin
   index.nexp = nexp
   npix = n_elements(index)
 
+  ; Replace /net/dl1/ with /dl1/ so it will work on all machines
+  healstr.file = repstr(healstr.file,'/net/dl1/','/dl1/')
+
   ; Write the full list plus an index
   print,'Writing list to ',dir+'combine/nsc_healpix_list.fits'
   MWRFITS,healstr,dir+'combine/nsc_healpix_list.fits',/create
