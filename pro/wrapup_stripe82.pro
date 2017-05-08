@@ -10,7 +10,7 @@ print,strtrim(ng,2),' healpix pixels'
 for i=0,ng-1 do begin
   print,strtrim(i+1,2),' ',str[g[i]].pix
   objfile = '/dl1/users/dnidever/nsc/instcal/combine/'+strtrim(str[g[i]].pix,2)+'.fits.gz'
-  obj = mrdfits(objfile,1)
+  obj = mrdfits(objfile,2)
   push,allobj,obj
   srcfile = '/dl1/users/dnidever/nsc/instcal/combine/source/'+strtrim(str[g[i]].pix,2)+'_source.fits'
   src = mrdfits(srcfile,1)
