@@ -1,4 +1,6 @@
-pro nsc_instcal_combine_main,redo=redo,makelist=makelist,nmulti=nmulti
+pro nsc_instcal_combine_coverage,redo=redo
+
+; Make the NSC coverage/depth map
 
 ; Combine all of the data
 NSC_ROOTDIRS,dldir,mssdir,localdir
@@ -6,28 +8,6 @@ dir = dldir+'users/dnidever/nsc/instcal/'
 nside = 128
 nmulti = 30
 radeg = 180.0d0 / !dpi
-
-; Log file
-;------------------
-; format is nsc_combine_main.DATETIME.log
-jd = systime(/julian)
-caldat,jd,month,day,year,hour,minute,second
-smonth = strtrim(month,2)
-if month lt 10 then smonth = '0'+smonth
-sday = strtrim(day,2)
-if day lt 10 then sday = '0'+sday
-syear = strmid(strtrim(year,2),2,2)
-shour = strtrim(hour,2)
-if hour lt 10 then shour='0'+shour
-sminute = strtrim(minute,2)
-if minute lt 10 then sminute='0'+sminute
-ssecond = strtrim(round(second),2)
-if second lt 10 then ssecond='0'+ssecond
-logfile = dir+'combine/nsc_instcal_combine_main.'+smonth+sday+syear+shour+sminute+ssecond+'.log'
-JOURNAL,logfile
-
-print, "Combining NOAO InstCal catalogs"
-
 
 ; Restore the calibration summary file
 temp = MRDFITS(dir+'nsc_instcal_calibrate.fits',1,/silent)
@@ -288,130 +268,137 @@ if keyword_set(makelist) then begin
   index.lo = lo
   index.hi = hi
   index.nexp = nexp
-  npix = n_elements(index)
-
-  ; Replace /net/dl1/ with /dl1/ so it will work on all machines
-  healstr.file = repstr(healstr.file,'/net/dl1/','/dl1/')
 
   ; Write the full list plus an index
-  print,'Writing list to ',dir+'combine/nsc_healpix_list.fits'
-  MWRFITS,healstr,dir+'combine/nsc_healpix_list.fits',/create
-  MWRFITS,index,dir+'combine/nsc_healpix_list.fits',/silent
-  ; Copy to local directory for faster reading speed
-  file_copy,dir+'combine/nsc_healpix_list.fits',localdir+'dnidever/nsc/instcal/',/over
+  ;print,'Writing list to ',dir+'combine/nsc_healpix_list.fits'
+  ;MWRFITS,healstr,dir+'combine/nsc_healpix_list.fits',/create
+  ;MWRFITS,index,dir+'combine/nsc_healpix_list.fits',/silent
   ; PUT NSIDE IN HEADER!!
 ; Using existing list
 endif else begin
   print,'Reading list from ',dir+'combine/nsc_healpix_list.fits'
   healstr = MRDFITS(dir+'combine/nsc_healpix_list.fits',1)
+  healstr.file = strtrim(healstr.file,2)
+  healstr.base = strtrim(healstr.base,2)
   index = MRDFITS(dir+'combine/nsc_healpix_list.fits',2)
   npix = n_elements(index)
-  ; Copy to local directory for faster reading speed
-  file_copy,dir+'combine/nsc_healpix_list.fits',localdir+'dnidever/nsc/instcal/',/over
 endelse
 
-; Make the commands
-cmd = "nsc_instcal_combine,"+strtrim(index.pix,2)+",nside="+strtrim(nside,2)
-if keyword_set(redo) then cmd+=',/redo'
-cmddir = strarr(npix)+localdir+'dnidever/nsc/instcal/tmp/'
+; NOW COMPUTE THE COVERAGE
+;--------------------------
 
-; Check if the output file exists
-if not keyword_set(redo) then begin
-  outfiles = dir+'combine/'+strtrim(upix,2)+'.fits.gz'
-  test = file_test(outfiles)
-  gd = where(test eq 0,ngd,comp=bd,ncomp=nbd)
-  if nbd gt 0 then begin
-    print,strtrim(nbd,2),' files already exist and /redo not set.'
-  endif 
-  if ngd eq 0 then begin
-    print,'No files to process'
-    return
-  endif
-  print,strtrim(ngd,2),' files left to process'
-  cmd = cmd[gd]
-  cmddir = cmddir[gd]
-endif
+; KLUDGE!!!!!!
+print,'KLUDGE!!!! CREATING FAKE DEPTH INFORMATION!!'
+add_tag,str,'depth95',99.99,str
+add_tag,str,'depth10sig',99.99,str
+str.depth95 = 20.+2.5*alog(str.exptime)+randomn(seed,nstr)*0.2
+str.depth10sig = str.depth95
 
-;; Prioritize longest-running jobs FIRST
-;; Load the DECam run times
-;sum1 = mrdfits(dir+'nsccmb_summary_hulk.fits',1)
-;sum2 = mrdfits(dir+'nsccmb_summary_thing.fits',1)
-;sum3 = mrdfits(dir+'nsccmb_summary_gp09.fits',1)
-;sum = [sum1,sum2,sum3]
-;si = sort(sum.mtime)
-;sum = sum[si]
-;; only keep fairly recent ones
-;gd = where(sum.mtime gt 1.4897704e+09,ngd)
-;sum = sum[gd]
-;; Deal with duplicates
-;dbl = doubles(sum.pix,count=ndbl)
-;alldbl = doubles(sum.pix,/all,count=nalldbl)
-;torem = bytarr(nalldbl)
-;for i=0,ndbl-1 do begin
-;  MATCH,sum[alldbl].pix,sum[dbl[i]].pix,ind1,ind2,/sort,count=nmatch
-;  torem[ind1[0:nmatch-2]] = 1
-;endfor
-;bd=where(torem eq 1,nbd)
-;remove,alldbl[bd],sum
-;dt = lonarr(n_elements(index))-1
-;MATCH,index.pix,sum.pix,ind1,ind2,/sort,count=nmatch
-;dt[ind1] = sum[ind2].dt
-;; Do the sorting
-;hsi = reverse(sort(dt))
-;cmd = cmd[hsi]
-;cmddir = cmddir[hsi]
-;dt = dt[hsi]
-;
-;; Divide into three using total times
-;tot = total(dt>10)
-;totcum = total(dt>10,/cum)
-;print,min(where(totcum ge tot/3))
-;print,min(where(totcum ge 2*tot/3))
+; Add index to STR into HEALSTR
+print,'Adding STR index to HEALSTR'
+schema_healstr = healstr[0]
+struct_assign,{dum:''},schema_healstr
+schema_healstr = create_struct(schema_healstr,'strindx',-1LL)
+hold = healstr
+healstr = replicate(schema_healstr,n_elements(hold))
+struct_assign,hold,healstr,/nozero
+undefine,hold
+nhealstr = n_elements(healstr)
+; Get indices for STR
+siexp = sort(healstr.file)
+hfile = healstr[siexp].file
+brklo = where(hfile ne shift(hfile,1),nbrk)
+brkhi = [brklo[1:nbrk-1]-1,n_elements(hfile)-1]
+nhexp = brkhi-brklo+1
+if nstr ne n_elements(brklo) then stop,'number of exposures in STR and HEALSTR do not match'
+for i=0,n_elements(brklo)-1 do healstr[siexp[brklo[i]:brkhi[i]]].strindx=i
 
-;; Start with healpix with low NEXP and far from MW midplane, LMC/SMC
-;pix2ang_ring,nside,index.pix,theta,phi
-;pixra = phi*radeg
-;pixdec = 90-theta*radeg
-;glactc,pixra,pixdec,2000.0,pixgl,pixgb,1,/deg
-;cel2lmc,pixra,pixdec,palmc,radlmc
-;cel2smc,pixra,pixdec,rasmc,radsmc
-;gdpix = where(index.nexp lt 50 and abs(pixgb) gt 10 and radlmc gt 5 and radsmc gt 5,ngdpix)
-;
-;outfile = dldir+'users/dnidever/nsc/instcal/combine/'+strtrim(index.pix,2)+'.fits'
+; Get CHSTR schema
+schema_chstr = chstr[0]
+struct_assign,{dum:''},schema_chstr
+schema_chstr = create_struct(schema_chstr,'vlon',dblarr(4),'vlat',dblarr(4))
 
-stop
+; Initialize the coverage structure
+nside2 = 4096
+npix = nside2npix(nside2)
+covstr = replicate({pix:0L,coverage:0.0,ucoverage:0.0,udepth:99.99,gcoverage:0.0,gdepth:99.99,$
+                    rcoverage:0.0,rdepth:99.99,icoverage:0.0,idepth:99.99,zcoverage:0.0,$
+                    zdepth:99.99,ycoverage:0.0,ydepth:99.99,vrcoverage:9.9,vrdepth:99.99},npix)
 
-; Now run the combination program on each healpix pixel
-PBS_DAEMON,cmd,cmddir,/hyperthread,/idle,prefix='nsccmb',jobs=jobs,nmulti=nmulti,wait=1
+; Loop through all of the healpix
+For i=0,npix-1 do begin
 
-; RUN NSC_COMBINE_SUMMARY WHEN IT'S DONE!!!
+  ; Get all of the exposures overlapping this healpix
+  list = healstr[index[i].lo:index[i].hi]
+  nlist = n_elements(list)
 
-;; Load all the summary/metadata files
-;print,'Creating Healpix summary file'
-;sumstr = replicate({pix:0L,nexposures:0L,nobjects:0L,success:0},nupix)
-;sumstr.pix = upix
-;for i=0,nupix-1 do begin
-;  if (i+1) mod 5000 eq 0 then print,i+1
-;  file = dir+'combine/'+strtrim(upix[i],2)+'.fits'
-;  if file_test(file) eq 1 then begin
-;    meta = MRDFITS(file,1,/silent)
-;    sumstr[i].nexposures = n_elements(meta)
-;    hd = headfits(file,exten=2)
-;    sumstr[i].nobjects = sxpar(hd,'naxis2')
-;    sumstr[i].success = 1
-;  endif else begin
-;    sumstr[i].success = 0
-;  endelse
-;endfor
-;gd = where(sumstr.success eq 1,ngd)
-;print,strtrim(ngd,2),' Healpix successfully processed'
-;print,'Writing summary file to ',dir+'combine/nsc_instcal_combine.fits'
-;MWRFITS,sumstr,dir+'combine/nsc_instcal_combine.fits',/create
+  ; Get all of the chips overlapping this healpix
+  nhchstr = long(total(str[list.strindx].nchips))
+  hchstr = replicate(schema_chstr,nhchstr)
+  cnt = 0LL
+  for j=0,nlist-1 do begin
+    chlo = str[list[j].strindx].chipindx
+    chhi = chlo + str[list[j].strindx].nchips-1
+    chstr1 = chstr[chlo:chhi]
+    nchstr1 = n_elements(chstr1)
+    temp = replicate(schema_chstr,nchstr1)
+    struct_assign,chstr1,temp,/nozero
+    hchstr[cnt:cnt+nchstr1-1] = temp
+    cnt += nchstr1
+  endfor
 
-; End logfile
-;------------
-JOURNAL
+  ; Get healpix boundary coordinates
+  PIX2VEC_RING,nside,index[i].pix,vec,vertex
+  vertex = transpose(reform(vertex))  ; [1,3,4] -> [4,3]
+  VEC2ANG,vec,hcendec,hcenra,/astro
+  VEC2ANG,vertex,hdec,hra,/astro
 
+  ; Rotate to tangent plane
+  ROTSPHCEN,hra,hdec,hcenra,hcendec,hlon,hlat,/gnomic
+  ROTSPHCEN,hchstr.vra,hchstr.vdec,hcenra,hcendec,vlon,vlat,/gnomic
+  mmhlon = minmax(hlon)
+  mmhlat = minmax(hlat)
+  hchstr.vlon = vlon
+  hchstr.vlat = vlat
+
+  ; Figure out which chips overlap
+  overlap = bytarr(nhchstr)
+  for j=0,nhchstr-1 do overlap[j]=dopolygonsoverlap(hlon,hlat,hchstr[j].vlon,hchstr[j].vlat)
+  gdover = where(overlap eq 1,ngdover,comp=bdover,ncomp=nbdover)
+  hchstr = hchstr[gdover]
+
+  ; I could also do query_polygon with /inclusive for each chip!!!!
+  ; might be faster!!!
+  stop
+
+  ; I NEED DEPTH PER EXPOSURE/CHIP!!!
+
+  ; Now get the list of nside=4096 pixels for this larger Healpix pixel
+  QUERY_POLYGON,4096,vertex,listpix,nlist  
+
+  ; Loop through the list and figure out the coverage
+  for j=0,nlist-1 do begin
+    ; Get healpix boundary coordinates
+    PIX2VEC_RING,nside2,listpix[j],vec1,vertex1
+    vertex1 = transpose(reform(vertex1))  ; [1,3,4] -> [4,3]
+    VEC2ANG,vec1,hcendec1,hcenra1,/astro
+    VEC2ANG,vertex1,hdec1,hra1,/astro
+    ROTSPHCEN,hra1,hdec1,hcenra,hcendec,hlon1,hlat1,/gnomic
+
+    ; Figure out which chips overlap
+    overlap = bytarr(nhchstr)
+    for k=0,nhchstr-1 do begin
+      overlap[k] = dopolygonsoverlap(hlon1,hlat1,hchstr[k].vlon,hchstr[k].vlat)
+      stop
+    endfor
+    gdover = where(overlap eq 1,ngdover,comp=bdover,ncomp=nbdover)
+    hchstr = hchstr[gdover]
+
+  endfor
+
+  stop
+
+Endfor
 
 
 stop
