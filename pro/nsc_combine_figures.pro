@@ -48,7 +48,6 @@ setdisp
 !p.font = 0
 
 ; Map of ALL objects
-
 file = psdir+'nsc_combine_equimap_nobjects'
 ps_open,file,/color,thick=4,/encap
 device,/inches,xsize=14.5,ysize=8.5
@@ -66,6 +65,32 @@ ps_open,file,/color,thick=4,/encap
 device,/inches,xsize=14.5,ysize=8.5
 plotc,xgal,ygal,sumstr2.nobjects,ps=8,sym=0.3,xr=[180,-180],yr=[-90,90],$
       xs=5,ys=5,tit='All Objects',/log,max=1e6,format='(F8.0)'
+xyouts,0.52,0.03,'Galactic Longitude',align=0.5,/norm,color=0,charsize=1.4
+xyouts,0.05,0.45,'Galactic Latitude',align=0.5,orientation=90,/norm,color=0,charsize=1.4
+oplot_grid,/aitoff
+ps_close
+ps2png,file+'.eps',/eps
+;spawn,['epstopdf',file+'.eps'],/noshell
+
+
+; Map of number of exposures
+file = psdir+'nsc_combine_equimap_nexp'
+ps_open,file,/color,thick=4,/encap
+device,/inches,xsize=14.5,ysize=8.5
+plotc,xequi,yequi,sumstr2.nexposures,ps=8,sym=0.3,xr=[180,-180],yr=[-90,90],$
+      xs=5,ys=5,tit='Number of Exposures',/log,max=1e6,format='(F8.0)'
+xyouts,0.52,0.03,'RA',align=0.5,/norm,color=0,charsize=1.4
+xyouts,0.05,0.45,'DEC',align=0.5,orientation=90,/norm,color=0,charsize=1.4
+oplot_grid,/aitoff
+ps_close
+ps2png,file+'.eps',/eps
+;spawn,['epstopdf',file+'.eps'],/noshell
+
+file = psdir+'nsc_combine_galmap_nobjects'
+ps_open,file,/color,thick=4,/encap
+device,/inches,xsize=14.5,ysize=8.5
+plotc,xgal,ygal,sumstr2.nexposures,ps=8,sym=0.3,xr=[180,-180],yr=[-90,90],$
+      xs=5,ys=5,tit='Number of Exposures',/log,max=1e6,format='(F8.0)'
 xyouts,0.52,0.03,'Galactic Longitude',align=0.5,/norm,color=0,charsize=1.4
 xyouts,0.05,0.45,'Galactic Latitude',align=0.5,orientation=90,/norm,color=0,charsize=1.4
 oplot_grid,/aitoff
