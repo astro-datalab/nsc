@@ -156,7 +156,7 @@ for i=0,nfilters-1 do begin
   file = psdir+'nsc_combine_galmap_'+filters[i]+'exptime'
   ps_open,file,/color,thick=4,/encap
   device,/inches,xsize=14.5,ysize=8.5
-  plotc,xgal,ygal,sumstr2.nobjfilt[i],ps=8,sym=0.3,xr=[180,-180],yr=[-90,90],$
+  plotc,xgal,ygal,sumstr2.exptimefilt[i],ps=8,sym=0.3,xr=[180,-180],yr=[-90,90],$
         xs=5,ys=5,tit=filters[i]+'-band Total Exposure Time',/log,max=1e6,format='(F8.0)'
   xyouts,0.52,0.03,'Galactic Longitude',align=0.5,/norm,color=0,charsize=1.4
   xyouts,0.05,0.45,'Galactic Latitude',align=0.5,orientation=90,/norm,color=0,charsize=1.4
@@ -165,7 +165,32 @@ for i=0,nfilters-1 do begin
   ps2png,file+'.eps',/eps
   spawn,['epstopdf',file+'.eps'],/noshell
 
-  ;stop
+  ; Number of exposures in this filter
+  file = psdir+'nsc_combine_equimap_'+filters[i]+'nexp'
+  ps_open,file,/color,thick=4,/encap
+  device,/inches,xsize=14.5,ysize=8.5
+  plotc,xequi,yequi,sumstr2.nexpfilt[i],ps=8,sym=0.3,xr=[180,-180],yr=[-90,90],$
+        xs=5,ys=5,tit=filters[i]+'-band Number of Exposures',/log,max=1e6,format='(F8.0)'
+  xyouts,0.52,0.03,'RA',align=0.5,/norm,color=0,charsize=1.4
+  xyouts,0.05,0.45,'DEC',align=0.5,orientation=90,/norm,color=0,charsize=1.4
+  oplot_grid,/aitoff
+  ps_close
+  ps2png,file+'.eps',/eps
+  spawn,['epstopdf',file+'.eps'],/noshell
+  
+  file = psdir+'nsc_combine_galmap_'+filters[i]+'nexp'
+  ps_open,file,/color,thick=4,/encap
+  device,/inches,xsize=14.5,ysize=8.5
+  plotc,xgal,ygal,sumstr2.nexpfilt[i],ps=8,sym=0.3,xr=[180,-180],yr=[-90,90],$
+        xs=5,ys=5,tit=filters[i]+'-band Number of Exposures',/log,max=1e6,format='(F8.0)'
+  xyouts,0.52,0.03,'Galactic Longitude',align=0.5,/norm,color=0,charsize=1.4
+  xyouts,0.05,0.45,'Galactic Latitude',align=0.5,orientation=90,/norm,color=0,charsize=1.4
+  oplot_grid,/aitoff
+  ps_close
+  ps2png,file+'.eps',/eps
+  spawn,['epstopdf',file+'.eps'],/noshell
+
+  stop
 
 endfor
 
