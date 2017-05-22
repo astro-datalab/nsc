@@ -11,12 +11,12 @@ if n_elements(meta) eq 0 then begin
 endif
 nmeta = n_elements(meta)
 if n_elements(obj) eq 0 then begin
-  obj = mrdfits(dir+'stripe82_ra220dec0_source.fits',1)
+  obj = mrdfits(dir+'stripe82_ra220dec0_object.fits',1)
   obj.id = strtrim(obj.id,2)
 endif
 nobj = n_elements(obj)
-if n_elemens(src) eq 0 then begin
-  src = mrdfits(dir+'stripe82_ra220dec0_object.fits',1)
+if n_elements(src) eq 0 then begin
+  src = mrdfits(dir+'stripe82_ra220dec0_source.fits',1)
   src.sourceid = strtrim(src.sourceid,2)
   src.objectid = strtrim(src.objectid,2)
 endif
@@ -25,6 +25,8 @@ otag = tag_names(obj)
 
 dum = strsplitter(src.sourceid,'.',/extract)
 src_expname = reform(dum[0,*])+'.'+reform(dum[1,*])
+
+indx = CREATE_INDEX(src_expname)
 
 offsets = fltarr(nmeta)
 rms = fltarr(nmeta)
@@ -42,8 +44,10 @@ for i=0,nmeta-1 do begin
   if instrument eq '' then stop,'instrument not known'
   
   expname = instrument+'.'+strtrim(expnum,2)
-  gd = where(src_expname eq expname,ngd)
-  src1 = src[gd]
+  ;gd = where(src_expname eq expname,ngd)
+  ;src1 = src[gd]
+  expind = where(indstr.name eq expname,nexpind)
+  src1 = src[indx.index[indx.lo[expind[0]]:indx.hi[expind[0]]]]
   ; only keep ones with good photometry
   gd1 = where(src1.cmag lt 50,ngd1)
   src2 = src1[gd1]

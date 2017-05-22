@@ -92,7 +92,7 @@ dirs = strarr(nexpdirs)+localdir+'/dnidever/nsc/instcal/tmp/'
 ;remove,ind1,cmd,dirs
 ;PBS_DAEMON,cmd,dirs,jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
 
-;stop
+stop
 
 ; Run PBS_DAEMON
 ;PBS_DAEMON,cmd,dirs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
@@ -118,7 +118,7 @@ for i=0,nexpdirs-1 do begin
   instrument = 'c4d'  ; by default
   for j=0,n_elements(type)-1 do begin
     if stregex(expdirs[i],'/'+type[j]+'/',/boolean) eq 1 then begin
-      instrument = 'c4d'
+      instrument = type[j]
       obsname = obs[j]
     endif
   endfor
