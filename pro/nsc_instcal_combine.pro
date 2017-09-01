@@ -357,7 +357,8 @@ FOR i=0,nlist-1 do begin
     ; Add new elements to IDSTR
     if idcnt+ncat gt nidstr then begin
       old = idstr
-      idstr = replicate(schema_idstr,nidstr+3e5)
+      nnew = 3e5 > ncat
+      idstr = replicate(schema_idstr,nidstr+nnew)
       idstr[0:nidstr-1] = old
       nidstr = n_elements(idstr)
       undefine,old
@@ -452,7 +453,8 @@ FOR i=0,nlist-1 do begin
       ; Add new elements to IDSTR
       if idcnt+nmatch gt nidstr then begin
         old = idstr
-        idstr = replicate(schema_idstr,nidstr+3e5)
+        nnew = 3e5 > nmatch
+        idstr = replicate(schema_idstr,nidstr+nnew)
         idstr[0:nidstr-1] = old
         nidstr = n_elements(idstr)
         undefine,old
@@ -478,10 +480,11 @@ FOR i=0,nlist-1 do begin
       ; Add new elements
       if cnt+ncat gt nobj then begin
         old = obj
-        obj = replicate(schema_obj,nobj+3e5)
+        nnew = 3e5 > ncat
+        obj = replicate(schema_obj,nobj+nnew)
         obj[0:nobj-1] = old
         oldtot = totobj
-        totobj = replicate(schema_totobj,nobj+3e5)
+        totobj = replicate(schema_totobj,nobj+nnew)
         totobj[0:nobj-1] = oldtot
         nobj = n_elements(obj)
         undefine,old
@@ -550,7 +553,8 @@ FOR i=0,nlist-1 do begin
       ; Add new elements to IDSTR
       if idcnt+ncat gt nidstr then begin
         old = idstr
-        idstr = replicate(schema_idstr,nidstr+3e5)
+        nnew = 3e5 > ncat
+        idstr = replicate(schema_idstr,nidstr+nnew)
         idstr[0:nidstr-1] = old
         nidstr = n_elements(idstr)
         undefine,old
