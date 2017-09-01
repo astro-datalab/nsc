@@ -25,6 +25,7 @@ otag = tag_names(obj)
 
 dum = strsplitter(src.sourceid,'.',/extract)
 src_expname = reform(dum[0,*])+'.'+reform(dum[1,*])
+
 indx = CREATE_INDEX(src_expname)
 
 offsets = fltarr(nmeta)
