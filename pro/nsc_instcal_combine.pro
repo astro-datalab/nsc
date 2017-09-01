@@ -1,4 +1,4 @@
-pro nsc_instcal_combine,pix,nside=nside,redo=redo,stp=stp
+pro nsc_instcal_combine,pix,nside=nside,redo=redo,stp=stp,outdir=outdir
 
 t0 = systime(1)
 
@@ -17,7 +17,8 @@ if n_elements(pix) eq 0 then begin
 endif
 
 ; Check if output file already exists
-outfile = dir+'combine/'+strtrim(pix,2)+'.fits'
+if n_elements(outdir) eq 0 then outdir=dir+'combine/'
+outfile = outdir+strtrim(pix,2)+'.fits'
 if (file_test(outfile) eq 1 or file_test(outfile+'.gz') eq 1) and not keyword_set(redo) then begin
   print,outfile,' EXISTS already and /redo not set'
   return
