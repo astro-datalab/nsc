@@ -23,6 +23,8 @@ pro find_spurious_sources,expdir
 ; -match all of them with our catalog
 ; -the ones that DO NOT match should be saturated
 
+t00 = systime(1)
+
 ;expname = 'c4d_140108_022046_ooi_z_v1'
 expdir = '/dl1/users/dnidever/nsc/instcal/c4d/20140108/c4d_140108_022046_ooi_z_v1/'
 
@@ -211,12 +213,25 @@ gstars = where(cat.cmag lt 20 and cat.class_star gt 0.8,ngstars)
 fwhm = median(cat[gstars].fwhm_world*3600*4)  ; in pixels
 zp = median(cat.cmag-cat.mag_auto)
 flux = 10^((25.0-model_mag+zp)/2.5)  ; in counts
-maxflux = flux/(1.138*fwhm^2)        ; in counts
-add_tag,gaia,'maxflux',0.0,gaia
-gaia.maxflux = maxflux
+add_tag,gaia,'flux',0.0,gaia
+gaia.flux = flux
+; 2D Gaussian profile
+gmaxflux = flux/(1.138*fwhm^2)        ; in counts
+add_tag,gaia,'gmaxflux',0.0,gaia
+gaia.gmaxflux = gmaxflux
+; 2D Moffat profile
+; beta = 2.5 or 3.0
+; profile = (beta-1)/(pi*alpha^2)*(1+(r/alpha)^2)^(-beta) 
+; max flux = flux * (beta-1)/(pi*alpha^2)
+beta = 3.0d0
+alpha = double( fwhm/(2*sqrt(2^(1.0/beta)-1)) )
+mmaxflux = flux * (beta-1)/(!dpi*alpha^2)
+add_tag,gaia,'mmaxflux',0.0,gaia
+gaia.mmaxflux = mmaxflux
+
 
 satlevel = 50000.
-badsat = where(model_mag lt 50 and maxflux gt satlevel,nbadsat)
+badsat = where(model_mag lt 50 and gmaxflux gt satlevel,nbadsat)
 satmag = max(model_mag[badsat])
 print,'Saturation magnitude = ',stringize(satmag,ndec=2),' mag'
 satgaia0 = gaia[badsat]
@@ -232,7 +247,7 @@ for i=0,62 do begin
   nx = sxpar(mhead,'NAXIS1')
   ny = sxpar(mhead,'NAXIS2')
   satmask = fix( ((mask and 3) eq 3) )
-  satmask3 = convol(float(satmask),[[1,1,1],[1,1,1],[1,1,1]])
+  ;satmask3 = convol(float(satmask),[[1,1,1],[1,1,1],[1,1,1]])
 
   ;imfile = '/dl1/users/dnidever/nsc/instcal/c4d/20140108/c4d_140108_022046_ooi_z_v1/c4d_140108_022046_ooi_z_v1.fits'
   ;fits_read,imfile,im,head,exten=i+1
@@ -250,10 +265,11 @@ for i=0,62 do begin
   gx2 = 0 > round(gx1[gd2]) < (nx-1)
   gy2 = 0 > round(gy1[gd2]) < (ny-1)
   satval = satmask[gx2,gy2]
-  satval3 = satmask3[gx2,gy2]
+  ;satval3 = satmask3[gx2,gy2]
 
   ; require that to be 3 neighboring pixels need to saturated as well
-  gbad = where(satval eq 1 and satval3 ge 4,ngbad)
+  ;gbad = where(satval eq 1 and satval3 ge 4,ngbad)
+  gbad = where(satval eq 1,ngbad)
   if ngbad gt 0 then begin
     ;badgaia1 = gaia2[gbad]
     ;push,badgaia,badgaia1
@@ -268,6 +284,8 @@ for i=0,62 do begin
   BOMB:
 
 endfor
+; this loop takes about 10s and 7s is reading the fits file
+; this is without the mask convolution
 
 MATCH,gaia.source,badgaiasource,ind1,ind2,/sort,count=nsatgaia
 satgaia = gaia[ind1]
@@ -288,6 +306,7 @@ setdisp
 ccdstr = importascii('~/projects/noaosourcecatalog/pro/decam_chips.txt',/header)
 
 ; Loop through bright sources and find close neighbors
+undefine,allspur
 For i=0,nsatgaia-1 do begin
   sat1 = satgaia[i]
   print,strtrim(i+1,2),'/',strtrim(nsatgaia,2),' gmag=',stringize(sat1.gmag,ndec=2)   
@@ -303,71 +322,144 @@ For i=0,nsatgaia-1 do begin
     ;print,'Gmag=',stringize(sat1.gmag,ndec=2)
     print,'nmatches = ',strtrim(nind,2)
     ;print,'     NUMBER     DISTANCE      CMAG      FLAGS      SNR      ELLIPTICITY'
-    print,'  NUM   DIST  CMAG  CPFLAGS SEFLAGS   SNR   FWHM  ELLIPTICITY'
-    writecol,-1,indgen(nind)+1,dist,cat[ind].cmag,cat[ind].imaflags_iso,$
-             cat[ind].flags,1/cat[ind].cerr,cat[ind].fwhm_world*3600,cat[ind].ellipticity,$
-             fmt='(I5,F7.2,F7.2,2I7,F9.1,F6.1,F9.2)'
+    if keyword_set(verbose) then begin
+      print,'  NUM   DIST  CMAG  CPFLAGS SEFLAGS   SNR   FWHM  ELLIPTICITY'
+      writecol,-1,indgen(nind)+1,dist,cat[ind].cmag,cat[ind].imaflags_iso,$
+               cat[ind].flags,1/cat[ind].cerr,cat[ind].fwhm_world*3600,cat[ind].ellipticity,$
+               fmt='(I5,F7.2,F7.2,2I7,F9.1,F6.1,F9.2)'
+    endif
 
     ; Load the image
     ;imfile = '/mss1/archive/pipeline/Q20141118/DEC13B/20140105/c4d_140108_022046_ooi_z_v1.fits.fz'
     imfile = expdir+'/'+base+'.fits'
     ccdnum = cat[ind[0]].ccdnum
     ccdind = where(ccdstr.ccdnum eq ccdnum,nccdind)
-    fits_read,imfile,im,head,extname=ccdstr[ccdind].detpos
+    ;fits_read,imfile,im,head,extname=ccdstr[ccdind].detpos
 
     maskfile='/net/mss1/archive/pipeline/Q20141119/DEC13B/20140105/c4d_140108_022046_ood_z_v1.fits.fz'
-    tempfile = mktemp('mask',outdir=expdir)
-    file_delete,tempfile
-    spawn,['funpack','-E',ccdstr[ccdind].detpos,'-O',tempfile,maskfile],out,errout,/noshell
-    fits_read,tempfile,mask,mhead
-    file_delete,tempfile
+    ;tempfile = mktemp('mask',outdir=expdir)
+    ;file_delete,tempfile
+    ;spawn,['funpack','-E',ccdstr[ccdind].detpos,'-O',tempfile,maskfile],out,errout,/noshell
+    ;fits_read,tempfile,mask,mhead
+    ;file_delete,tempfile
 
-    head_adxy,head,satgaia[i].ra_icrs,satgaia[i].de_icrs,xsat,ysat,/deg
-    head_adxy,head,cat.ra,cat.dec,x,y,/deg
-    buff = 100
-    xr = [xsat-buff,xsat+buff]
-    yr = [ysat-buff,ysat+buff]
-    loadcol,3
-    satmask = fix( ((mask and 3) eq 3) or ((mask and 4) eq 4) )
-    displayc,im*(1-satmask),xr=xr,yr=yr,/z
-    ;displayc,im,xr=xr,yr=yr,/log,min=median(im)*0.9,max=median(im)*1.2
-    ;plot,cat.ra,cat.dec,ps=3,xr=[-0.005,0.005]/cos(cendec/!radeg)+satgaia[i].ra_icrs,$
-    ;  yr=[-0.005,0.005]+satgaia[i].de_icrs,xs=1,ys=1
-    ;oplot,satgaia.ra_icrs,satgaia.de_icrs,ps=1,co=250,sym=2
-    ;oplot,[cat[ind].ra],[cat[ind].dec],ps=4,co=150
-    loadct,39,/silent
-    oplot,[xsat],[ysat],ps=1,co=250,sym=2
-    oplot,[x[ind]],[y[ind]],ps=4,co=150
-    oplot,[x],[y],ps=1,sym=0.5,co=80
+    ; I need to figure out what the "effective" radius of the star is in
+    ; the image.
+    ; Maybe where the model 2D Gaussian flux is some sigma above the background?
+    ; you get Lorentzian wings
+    ; Moffat function
+    ; https://www.gnu.org/software/gnuastro/manual/html_node/PSF.html
+    ; beta = 2.5 or 3.0
+    ; alpha = fwhm/(2*sqrt(2^(1.0/beta)-1))
+    ; profile = h*(1+((x-x0)/alpha)^2)^(-beta) + background
+    ; normalized 2D Moffat function is:
+    ; profile = (beta-1)/(pi*alpha^2)*(1+(r/alpha)^2)^(-beta) 
+    ; smaller beta is broader wings
 
-    ;gd = where(cat.ra ge satgaia[i].ra_icrs-0.005/cos(cendec/!radeg) and cat.ra le satgaia[i].ra_icrs+0.005/cos(cendec/!radeg) and $
-    ;           cat.dec ge satgaia[i].de_icrs-0.005 and cat.dec le satgaia[i].de_icrs+0.005,ngd)
-    gd = where(x ge xsat-buff and x le xsat+buff and $
-               y ge ysat-buff and y le ysat+buff,ngd)
-    for j=0,ngd-1 do begin
-      cat1 = cat[gd[j]]
-      coords = ellipsecoords(cat1.a_world,cat1.b_world,cat1.ra,cat1.dec,cat1.theta_world,head=head,/world2pix)
-      ;coords = ellipsecoords(cat1.a_world,cat1.b_world,cat1.ra,cat1.dec,cat1.theta_world)
-      oplot,coords[0,*],coords[1,*],co=80
-    endfor
-    
-    stop
+    ; At what point does the profile drop to a certain absolute height
+    ; above the background, maybe do it in terms of sigma of the image
+    ; sigma = background noise and readnoise
+    ; sigma = sqrt(background*gain + rdnoise^2)/gain
+    ;background = median(im)
+    ;rdnoise = sxpar(head,'rdnoisea')
+    ;gain = sxpar(head,'gaina')
+    ;noise = sqrt(background*gain + rdnoise^2)/gain
+    ; can we get these values from the SE catalog meta-data?
+    ; HDU1 in single-chip files, got gain, rdnoise, fwhm
+    ; can get background from cat.background
+    cathd = mrdfits(expdir+base+'_'+strtrim(ccdnum,2)+'.fits',1,/silent)
+    head = cathd.field_header_card
+    ;background = cat[ind].background
+    background = sxpar(head,'SEXBKGND')
+    rdnoise = sxpar(head,'rdnoisea')
+    gain = sxpar(head,'SEXGAIN')
+    noise = sqrt(background*gain + rdnoise^2)/gain
+
+    ; The radius of height h is
+    ; r_h = alpha*sqrt( (Io/h)^(1/beta) - 1 )
+    ; where Io is the constant in front
+    hlim = noise  ; 3*noise
+    I0 = sat1.flux * (beta-1)/(!dpi*alpha^2)
+    rlim = alpha*sqrt( (I0/hlim)^(1/beta) - 1)
+    pixscale = 0.25  ; for decam
+    print,'Limiting radius = ',stringize(rlim,ndec=1),' pixels = ',stringize(rlim*pixscale,ndec=2),' arcsec'
+
+    ; Select spurious sources
+    spurind = where(dist le rlim*pixscale and (cat[ind].cmag-sat1.model_mag) > 1 and $
+                    1.0/cat[ind].cerr lt 20,nspur)
+    if nspur gt 0 then begin
+      spur = ind[spurind]
+      push,allspur,spur
+    endif
+    ; elliptical, fwhm, SE flags
+    print,strtrim(nspur,2),' spurious source(s) found'
+
+
+    ; Plotting
+    pl = 0
+    if keyword_set(pl) then begin
+      ; Load the flux file
+      fits_read,imfile,im,head,extname=ccdstr[ccdind].detpos
+
+      ; Load the mask image
+      maskfile='/net/mss1/archive/pipeline/Q20141119/DEC13B/20140105/c4d_140108_022046_ood_z_v1.fits.fz'
+      tempfile = mktemp('mask',outdir=expdir)
+      file_delete,tempfile
+      spawn,['funpack','-E',ccdstr[ccdind].detpos,'-O',tempfile,maskfile],out,errout,/noshell
+      fits_read,tempfile,mask,mhead
+      file_delete,tempfile
+
+      head_adxy,head,satgaia[i].ra_icrs,satgaia[i].de_icrs,xsat,ysat,/deg
+      head_adxy,head,cat.ra,cat.dec,x,y,/deg
+      buff = 100
+      xr = [xsat-buff,xsat+buff]
+      yr = [ysat-buff,ysat+buff]
+      loadcol,3
+      satmask = fix( ((mask and 3) eq 3) or ((mask and 4) eq 4) )
+      displayc,im*(1-satmask),xr=xr,yr=yr,/z
+      ;displayc,im,xr=xr,yr=yr,/log,min=median(im)*0.9,max=median(im)*1.2
+      ;plot,cat.ra,cat.dec,ps=3,xr=[-0.005,0.005]/cos(cendec/!radeg)+satgaia[i].ra_icrs,$
+      ;  yr=[-0.005,0.005]+satgaia[i].de_icrs,xs=1,ys=1
+      ;oplot,satgaia.ra_icrs,satgaia.de_icrs,ps=1,co=250,sym=2
+      ;oplot,[cat[ind].ra],[cat[ind].dec],ps=4,co=150
+      loadct,39,/silent
+      oplot,[xsat],[ysat],ps=1,co=250,sym=2
+      oplot,[x[ind]],[y[ind]],ps=4,co=150
+      if nspur gt 0 then oplot,[x[spur]],[y[spur]],ps=6,co=250
+      oplot,[x],[y],ps=1,sym=0.5,co=80
+      phi = scale_vector(findgen(50),0,2*!dpi)
+      oplot,rlim*sin(phi)+xsat,rlim*cos(phi)+ysat
+
+      ;gd = where(cat.ra ge satgaia[i].ra_icrs-0.005/cos(cendec/!radeg) and cat.ra le satgaia[i].ra_icrs+0.005/cos(cendec/!radeg) and $
+      ;           cat.dec ge satgaia[i].de_icrs-0.005 and cat.dec le satgaia[i].de_icrs+0.005,ngd)
+      gd = where(x ge xsat-buff and x le xsat+buff and $
+                 y ge ysat-buff and y le ysat+buff,ngd)
+      for j=0,ngd-1 do begin
+        cat1 = cat[gd[j]]
+        coords = ellipsecoords(cat1.a_world,cat1.b_world,cat1.ra,cat1.dec,cat1.theta_world,head=head,/world2pix)
+        ;coords = ellipsecoords(cat1.a_world,cat1.b_world,cat1.ra,cat1.dec,cat1.theta_world)
+        oplot,coords[0,*],coords[1,*],co=80
+      endfor
+    endif ; plotting    
+
+    ;stop
   endif else print,'no matches'
 
 Endfor
 
-; I need to figure out what the "effective" radius of the star is in
-; the image.
-; Maybe where the model 2D Gaussian flux is some sigma above the background?
-; you get Lorentzian wings
-; Moffat function
-; https://www.gnu.org/software/gnuastro/manual/html_node/PSF.html
-; beta = 2.5
-; alpha = fwhm/(2*sqrt(2^(1.0/beta)-1))
-; profile = h*(1+((x-x0)/alpha)^2)^(-beta) + background
-; smaller beta is broader wings
+; Get unique elements
+ui = uniq(allspur,sort(allspur))
+allspur = allspur[ui]
+nspur = n_elements(allspur)
+print,strtrim(nspur,2),' final spurious sources'
 
-; might need to calculaate different MAXFLUX if using MOFFAT function
+; Final good indices
+gdind = lindgen(n_elements(cat))
+remove,allspur,gdind
+
+print,'dt = ',systime(1)-t00,' sec'
+
+; 20s on a "normal" uncrowded field
 
 stop
 
