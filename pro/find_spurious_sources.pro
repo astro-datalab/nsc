@@ -461,6 +461,15 @@ print,'dt = ',systime(1)-t00,' sec'
 
 ; 20s on a "normal" uncrowded field
 
+; Should we do a final cross-match of spurious sources with Gaia to
+; see if we have matches.  If there are matches, then only toss them
+; if they have bad CPFLAGS.  My worry is accidentally throwing out
+; good bright but not saturated stars.
+; YEP, 142 matches in 0.5".
+srcmatch,gaia.ra_icrs,gaia.de_icrs,cat[allspur].ra,cat[allspur].dec,0.5,ind1,ind2,/sph,count=ngmatch
+; most (113/142) have bad flags, but 29 do not.  they might be "good".
+; double-check
+
 stop
 
 end
