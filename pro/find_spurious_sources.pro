@@ -130,8 +130,6 @@ radius = 1.1 * sqrt( (0.5*rarange)^2 + (0.5*decrange)^2 )
 ; Get the reference catalogs
 tmass = getrefcat(cenra,cendec,radius,'2MASS')
 gaia = getrefcat(cenra,cendec,radius,'Gaia')
-;tmass = mrdfits(rootdir+expname+'_TMASS.fits.gz',1)
-;gaia = mrdfits(rootdir+expname+'_GAIA.fits.gz',1)
 
 ; Match the two catalogs
 srcmatch,gaia.ra_icrs,gaia.de_icrs,tmass.raj2000,tmass.dej2000,1.0,ind1,ind2,/sph,count=nmatch
@@ -158,13 +156,13 @@ gaia = gaia[gdgaia]
 ; Find bright, saturated sources
 ;-------------------------------
 ; Use brightest observed magnitudes to figure out saturation point
-gstar = where(cat.class_star ge 0.7,ngstar)
-if ngstar eq 0 then gstar=where(cat.class_star ge 0.5,ngstar)
-minmag = min(cat[gstar].cmag)
-; Get all reference sources brighter than this
-brtgaiaind = where(gaia.gmag le (minmag+1.0),nbrtgaia)
-brtgaia = gaia[brtgaiaind]
-print,strtrim(nbrtgaia,2),' bright Gaia sources'
+;gstar = where(cat.class_star ge 0.7,ngstar)
+;if ngstar eq 0 then gstar=where(cat.class_star ge 0.5,ngstar)
+;minmag = min(cat[gstar].cmag)
+;; Get all reference sources brighter than this
+;brtgaiaind = where(gaia.gmag le (minmag+1.0),nbrtgaia)
+;brtgaia = gaia[brtgaiaind]
+;print,strtrim(nbrtgaia,2),' bright Gaia sources'
 ; THIS IS A VERY **BAD** CRITERIA FOR SATURATED STARS
 ; THERE CAN BE SATURATED STARS ~4 MAGS FAINTER THAN THIS!!!
 
@@ -201,6 +199,32 @@ head0 = headfits(tempmaskfile,exten=0)
 filter = sxpar(head0,'filter')
 filt = strmid(filter,0,1)
 
+; CALCULATE SATURATION LEVEL
+;----------------------------
+
+; Get model magnitudes
+model_mag = getmodelmag(gaia,filt)
+add_tag,gaia,'model_mag',99.99,gaia
+gaia.model_mag = model_mag
+
+gstars = where(cat.cmag lt 20 and cat.class_star gt 0.8,ngstars)
+fwhm = median(cat[gstars].fwhm_world*3600*4)  ; in pixels
+zp = median(cat.cmag-cat.mag_auto)
+flux = 10^((25.0-model_mag+zp)/2.5)  ; in counts
+maxflux = flux/(1.138*fwhm^2)        ; in counts
+add_tag,gaia,'maxflux',0.0,gaia
+gaia.maxflux = maxflux
+
+satlevel = 50000.
+badsat = where(model_mag lt 50 and maxflux gt satlevel,nbadsat)
+satmag = max(model_mag[badsat])
+print,'Saturation magnitude = ',stringize(satmag,ndec=2),' mag'
+satgaia0 = gaia[badsat]
+print,strtrim(nbadsat,2),' saturated Gaia stars'
+; saturation level for stars, galaxies can be brighter because
+;  they aren't as peaky, so check measured FWHM if they are detected
+; If they are in the 2MASS-PSC then they should be STARS!!!
+
 ; Loop over all chips
 for i=0,62 do begin
   fits_read,tempmaskfile,mask,mhead,exten=i+1,/no_abort,message=message
@@ -210,19 +234,19 @@ for i=0,62 do begin
   satmask = fix( ((mask and 3) eq 3) )
   satmask3 = convol(float(satmask),[[1,1,1],[1,1,1],[1,1,1]])
 
-  imfile = '/dl1/users/dnidever/nsc/instcal/c4d/20140108/c4d_140108_022046_ooi_z_v1/c4d_140108_022046_ooi_z_v1.fits'
-  fits_read,imfile,im,head,exten=i+1
+  ;imfile = '/dl1/users/dnidever/nsc/instcal/c4d/20140108/c4d_140108_022046_ooi_z_v1/c4d_140108_022046_ooi_z_v1.fits'
+  ;fits_read,imfile,im,head,exten=i+1
 
   ; Get Gaia sources in this this
   head_xyad,mhead,[0,nx-1,nx-1,0],[0,0,ny-1,ny-1],vra,vdec,/deg
   rra = minmax(vra)
   rdec = minmax(vdec)
-  gd1 = where(gaia.ra_icrs ge rra[0]-0.001 and gaia.ra_icrs le rra[1]+0.001 and $
-             gaia.de_icrs ge rdec[0]-0.001 and gaia.de_icrs le rdec[1]+0.001,ngd1)
-  gaia1 = gaia[gd1]
-  head_adxy,mhead,gaia1.ra_icrs,gaia1.de_icrs,gx1,gy1,/deg
+  gd1 = where(satgaia0.ra_icrs ge rra[0]-0.001 and satgaia0.ra_icrs le rra[1]+0.001 and $
+             satgaia0.de_icrs ge rdec[0]-0.001 and satgaia0.de_icrs le rdec[1]+0.001,ngd1)
+  satgaia1 = satgaia0[gd1]
+  head_adxy,mhead,satgaia1.ra_icrs,satgaia1.de_icrs,gx1,gy1,/deg
   gd2 = where(gx1 ge 0 and gx1 le (nx-1) and gy1 ge 0 and gy1 le (ny-1),ngd2)
-  gaia2 = gaia1[gd2]
+  satgaia2 = satgaia1[gd2]
   gx2 = 0 > round(gx1[gd2]) < (nx-1)
   gy2 = 0 > round(gy1[gd2]) < (ny-1)
   satval = satmask[gx2,gy2]
@@ -231,9 +255,11 @@ for i=0,62 do begin
   ; require that to be 3 neighboring pixels need to saturated as well
   gbad = where(satval eq 1 and satval3 ge 4,ngbad)
   if ngbad gt 0 then begin
-    badgaia1 = gaia2[gbad]
-    push,badgaia,badgaia1
+    ;badgaia1 = gaia2[gbad]
+    ;push,badgaia,badgaia1
+    push,badgaiasource,satgaia2.source
   endif  
+  print,strtrim(ngbad,2),'/',strtrim(ngd2,2)
 
   ; THIS IS PICKING UP SOME FAINT STARS THAT HAPPEN TO LAND ON A CR AND
   ; AND OTHER SATURATED PIXELS, bleed trails/columns
@@ -243,93 +269,44 @@ for i=0,62 do begin
 
 endfor
 
-; Get model magnitudes
-model_mag = getmodelmag(gaia,filt)
+MATCH,gaia.source,badgaiasource,ind1,ind2,/sort,count=nsatgaia
+satgaia = gaia[ind1]
+print,'Final saturated sources = ',strtrim(nsatgaia,2)
 
-srcmatch,cat.ra,cat.dec,gaia.ra_icrs,gaia.de_icrs,1.0,ind1,ind2,/sph
-cat2=cat[ind1]
-gaia2=gaia[ind2]
-model_mag2=model_mag[ind2]
-plotc,cat2.cmag,cat2.cmag-model_mag2,cat2.ellipticity,ps=3,xr=[10,20],yr=[-5,5]
-; a bunch of bright source have residuals that are way off,
-; are these bright galaxies?
-; Almost all of those are detected and in the catalog.  maybe
-; that's why the residuals are off, the measured values are BAD
-; they have BLENDED flags, but not many have saturated ones.
-; These are real sources but close to the broad wings of very bright
-; stars (high background) and I think that flux is getting
-; incorporated and giving MUCH brighter mags.
-; good example is source near X=1074, Y=2910 in ccdnum=1
-; c4d_140108_022046_ooi_z_v1
-; BACKGROUND isn't much help here.
-; MAG_APER-MAG_AUTO gives LARGE differences, ~3 mags, same for
-; MAG_APER-MAG_ISO, up to ~4 mags difference
-; MAG_ISO and MAG_AUTO are pretty close though
-
-; MAG_ISO  flux inside detection isophote
-; MAG_APER flux inside given aperture (10 pixels)
-; MAG_AUTO uses moments to get elliptical aperture and calculate total flux
-
-; Maybe set a flag if MAG_APER and MAG_AUTO are VERY different.
-; but what to do with extended sources where you expect there to be
-; differences?
-
-plotc,cat2.cmag,cat2.cmag-model_mag2,cat2.fwhm_world*3600*4,ps=3,xr=[10,20],yr=[-5,5],max=40
-; FWHM is also really HUGE!
-
-; ELLIPTICITY/ELONGATION is high as well!
-; It must think the background flux is part of the object or
-; something.
-
-; NO, NO, NO!!  THESE ARE JUST THE SATURATED STARS!!!
-; The measured magnitudes are much fainter because the saturated
-; pixels are interpolated over with lower values. IMAFLAGS_ISO=7
-; I think the 7 is a bitwise OR of 3 and 4
-plotc,gaia2.gmag,cat2.cmag-model_mag2,cat2.imaflags_iso,ps=3,xr=[8,21],yr=[-5,5]
-; Yep, these are the bad ones
-
-;I should have used
-;BACKPHOTO_TYPE LOCAL instead of GLOGAL and that would have
-;calculated a more local backgrounds.
-
-; DO WE REALLY NEED TO FIND THE SATURATED *SOURCES*??  Why not just
-; look for detected sources near saturated pixels and grow the bad
-; pixels and figure out which detected sources it affects.
-
-stop
-
-; OLD STUFF
+; Almost all sources that FALL in the chip end up being kept as saturated
 
 ; Use MATCHALL_SPH to find the closest matches
 dcr = 10.0       ; arcsec
-res = matchall_sph(brtgaia.ra_icrs,brtgaia.de_icrs,cat.ra,cat.dec,dcr/3600,nmatch,distance=distance)
+res = matchall_sph(satgaia.ra_icrs,satgaia.de_icrs,cat.ra,cat.dec,dcr/3600,nmatch,distance=distance)
 ; res gives reverse indices
 
 ;plot,cat.ra,cat.dec,ps=3
-;oplot,brtgaia.ra_icrs,brtgaia.de_icrs,ps=8,co=250
+;oplot,satgaia.ra_icrs,satgaia.de_icrs,ps=8,co=250
 
 setdisp
 
 ccdstr = importascii('~/projects/noaosourcecatalog/pro/decam_chips.txt',/header)
 
 ; Loop through bright sources and find close neighbors
-For i=0,nbrtgaia-1 do begin
-  brt1 = brtgaia[i]
-   
+For i=0,nsatgaia-1 do begin
+  sat1 = satgaia[i]
+  print,strtrim(i+1,2),'/',strtrim(nsatgaia,2),' gmag=',stringize(sat1.gmag,ndec=2)   
+
   ;plot,cat.ra,cat.dec,ps=3
-  ;oplot,brtgaia.ra_icrs,brtgaia.de_icrs,ps=8,co=250
-  ;oplot,[brtgaia[i].ra_icrs],[brtgaia[i].de_icrs],ps=4,co=150,sym=4
+  ;oplot,satgaia.ra_icrs,satgaia.de_icrs,ps=8,co=250
+  ;oplot,[satgaia[i].ra_icrs],[satgaia[i].de_icrs],ps=4,co=150,sym=4
   
   if res[i] ne res[i+1] then begin
     ind = res[res[i]:res[i+1]-1]
     nind = n_elements(ind)
     dist = distance[res[i]-res[0]:res[i+1]-1-res[0]]*3600
-    print,'Gmag=',stringize(brt1.gmag,ndec=2)
+    ;print,'Gmag=',stringize(sat1.gmag,ndec=2)
     print,'nmatches = ',strtrim(nind,2)
     ;print,'     NUMBER     DISTANCE      CMAG      FLAGS      SNR      ELLIPTICITY'
-    print,'  NUM   DIST  CMAG  CPFLAGS SEFLAGS   SNR   ELLIPTICITY'
+    print,'  NUM   DIST  CMAG  CPFLAGS SEFLAGS   SNR   FWHM  ELLIPTICITY'
     writecol,-1,indgen(nind)+1,dist,cat[ind].cmag,cat[ind].imaflags_iso,$
-             cat[ind].flags,1/cat[ind].cerr,cat[ind].ellipticity,fmt='(I5,F7.2,F7.2,2I7,F9.1,F9.2)'
+             cat[ind].flags,1/cat[ind].cerr,cat[ind].fwhm_world*3600,cat[ind].ellipticity,$
+             fmt='(I5,F7.2,F7.2,2I7,F9.1,F6.1,F9.2)'
 
     ; Load the image
     ;imfile = '/mss1/archive/pipeline/Q20141118/DEC13B/20140105/c4d_140108_022046_ooi_z_v1.fits.fz'
@@ -345,32 +322,33 @@ For i=0,nbrtgaia-1 do begin
     fits_read,tempfile,mask,mhead
     file_delete,tempfile
 
-    head_adxy,head,brtgaia[i].ra_icrs,brtgaia[i].de_icrs,xbrt,ybrt,/deg
+    head_adxy,head,satgaia[i].ra_icrs,satgaia[i].de_icrs,xsat,ysat,/deg
     head_adxy,head,cat.ra,cat.dec,x,y,/deg
     buff = 100
-    xr = [xbrt-buff,xbrt+buff]
-    yr = [ybrt-buff,ybrt+buff]
+    xr = [xsat-buff,xsat+buff]
+    yr = [ysat-buff,ysat+buff]
     loadcol,3
-    displayc,im,xr=xr,yr=yr,/z
+    satmask = fix( ((mask and 3) eq 3) or ((mask and 4) eq 4) )
+    displayc,im*(1-satmask),xr=xr,yr=yr,/z
     ;displayc,im,xr=xr,yr=yr,/log,min=median(im)*0.9,max=median(im)*1.2
-    ;plot,cat.ra,cat.dec,ps=3,xr=[-0.005,0.005]/cos(cendec/!radeg)+brtgaia[i].ra_icrs,$
-    ;  yr=[-0.005,0.005]+brtgaia[i].de_icrs,xs=1,ys=1
-    ;oplot,brtgaia.ra_icrs,brtgaia.de_icrs,ps=1,co=250,sym=2
+    ;plot,cat.ra,cat.dec,ps=3,xr=[-0.005,0.005]/cos(cendec/!radeg)+satgaia[i].ra_icrs,$
+    ;  yr=[-0.005,0.005]+satgaia[i].de_icrs,xs=1,ys=1
+    ;oplot,satgaia.ra_icrs,satgaia.de_icrs,ps=1,co=250,sym=2
     ;oplot,[cat[ind].ra],[cat[ind].dec],ps=4,co=150
     loadct,39,/silent
-    oplot,[xbrt],[ybrt],ps=1,co=250,sym=2
+    oplot,[xsat],[ysat],ps=1,co=250,sym=2
     oplot,[x[ind]],[y[ind]],ps=4,co=150
-    oplot,[x],[y],ps=3
+    oplot,[x],[y],ps=1,sym=0.5,co=80
 
-    ;gd = where(cat.ra ge brtgaia[i].ra_icrs-0.005/cos(cendec/!radeg) and cat.ra le brtgaia[i].ra_icrs+0.005/cos(cendec/!radeg) and $
-    ;           cat.dec ge brtgaia[i].de_icrs-0.005 and cat.dec le brtgaia[i].de_icrs+0.005,ngd)
-    gd = where(x ge xbrt-buff and x le xbrt+buff and $
-               y ge ybrt-buff and y le ybrt+buff,ngd)
+    ;gd = where(cat.ra ge satgaia[i].ra_icrs-0.005/cos(cendec/!radeg) and cat.ra le satgaia[i].ra_icrs+0.005/cos(cendec/!radeg) and $
+    ;           cat.dec ge satgaia[i].de_icrs-0.005 and cat.dec le satgaia[i].de_icrs+0.005,ngd)
+    gd = where(x ge xsat-buff and x le xsat+buff and $
+               y ge ysat-buff and y le ysat+buff,ngd)
     for j=0,ngd-1 do begin
       cat1 = cat[gd[j]]
       coords = ellipsecoords(cat1.a_world,cat1.b_world,cat1.ra,cat1.dec,cat1.theta_world,head=head,/world2pix)
       ;coords = ellipsecoords(cat1.a_world,cat1.b_world,cat1.ra,cat1.dec,cat1.theta_world)
-      oplot,coords[0,*],coords[1,*]
+      oplot,coords[0,*],coords[1,*],co=80
     endfor
     
     stop
@@ -378,6 +356,18 @@ For i=0,nbrtgaia-1 do begin
 
 Endfor
 
+; I need to figure out what the "effective" radius of the star is in
+; the image.
+; Maybe where the model 2D Gaussian flux is some sigma above the background?
+; you get Lorentzian wings
+; Moffat function
+; https://www.gnu.org/software/gnuastro/manual/html_node/PSF.html
+; beta = 2.5
+; alpha = fwhm/(2*sqrt(2^(1.0/beta)-1))
+; profile = h*(1+((x-x0)/alpha)^2)^(-beta) + background
+; smaller beta is broader wings
+
+; might need to calculaate different MAXFLUX if using MOFFAT function
 
 stop
 
