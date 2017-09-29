@@ -1,4 +1,4 @@
-pro find_spurious_sources,expdir
+pro find_spurious_sources,expdir,spurind,usemask=usemask
 
 ; Find spurious sources in a single exposure catalog
 
@@ -67,26 +67,15 @@ printlog,logf,'This is a '+instrument+' exposure'
 ; Load the catalog
 cat = mrdfits(expdir+'/'+base+'_cat.fits',1)
 ncat = n_elements(cat)
-
-;; SAME EXACT CUTS AS IN NSC_INSTCAL_COMBINE.PRO!!!!
-;; Make a cut on quality mask flag (IMAFLAGS_ISO)
-;;   Don't use "difference image masking" for pre-V3.5 or so version
-;;   because it had problems.  We don't have PLVER but just use
-;;   the maximum IMAFLAGS_ISO value
-;if max(cat.imaflags_iso) gt 10 then begin
-;  bdcat = where(cat.imaflags_iso gt 0 and cat.imaflags_iso lt 120,nbdcat)
-;;THIS IS A BITMASK, make sure none of the lower values are set
-;; bdcat = where(cat.imaflags_iso gt 0 and cat.imagflags_iso ne 128,nbdcat)
-;endif else begin
-;  bdcat = where(cat.imaflags_iso gt 0,nbdcat)
-;endelse
-;if nbdcat gt 0 then begin
-;  print,'  Removing ',strtrim(nbdcat,2),' sources contaminated by bad pixels.'
-;  if nbdcat eq ncat then return
-;  REMOVE,bdcat,cat
-;  ncat = n_elements(cat)
-;endif
-
+; Load the metadata information
+meta = mrdfits(expdir+'/'+base+'_meta.fits',1)
+filter = meta.filter
+fwhm = meta.fwhm  ; arcsec
+; Load one chip-level catalog
+cat1 = mrdfits(expdir+'/'+base+'_1.fits',1)
+head1 = cat1.field_header_card
+pixscale = sxpar(head1,'SEXPXSCL')
+fwhmpix = fwhm/pixscale
 
 ; --CP bit masks, Pre-V3.5.0 (PLVER)
 ; Bit   DQ Type  PROCTYPE
@@ -107,11 +96,7 @@ ncat = n_elements(cat)
 ;  6 = low weight
 ;  7 = diff detect  I turned this OFF
 
-; I THINK WE CAN GET MOST OF THE SATURATED SOURCES FROM THE CATALOG
-; MAYBE COMBINE WITH BRIGHT GAIA SOURCES
-
-b = where(((cat.imaflags_iso and 3) eq 3) or ((cat.imaflags_iso and 4) eq 4))
-
+; Get central coordinates and radius
 cendec = mean(minmax(cat.dec))
 decrange = range(cat.dec)
 cenra = mean(minmax(cat.ra))
@@ -125,203 +110,192 @@ if range(minmax(cat.ra)) gt 100 then begin
  if cenra lt 0 then cenra+=360
  rarange = range(ra)*cos(cendec/!radeg)
  rawrap = 1
-endif else rawrap=0                                
-; Search radius                                                                                                                                                                    
+endif else rawrap=0
+; Search radius
 radius = 1.1 * sqrt( (0.5*rarange)^2 + (0.5*decrange)^2 )
 
 ; Get the reference catalogs
-tmass = getrefcat(cenra,cendec,radius,'2MASS')
-gaia = getrefcat(cenra,cendec,radius,'Gaia')
-
-; Match the two catalogs
-srcmatch,gaia.ra_icrs,gaia.de_icrs,tmass.raj2000,tmass.dej2000,1.0,ind1,ind2,/sph,count=nmatch
-add_tag,gaia,'jmag',99.99,gaia
-add_tag,gaia,'kmag',99.99,gaia
-if nmatch gt 0 then begin
-  gaia[ind1].jmag = tmass[ind2].jmag
-  gaia[ind1].kmag = tmass[ind2].kmag
-endif
+ref = GETREFDATA(filter,cenra,cendec,radius)
 
 ; Only keep sources in the observed region
 rotsphcen,cat.ra,cat.dec,cenra,cendec,lon,lat,/gnomic
-rotsphcen,tmass.raj2000,tmass.dej2000,cenra,cendec,tlon,tlat,/gnomic
-rotsphcen,gaia.ra_icrs,gaia.de_icrs,cenra,cendec,glon,glat,/gnomic
+rotsphcen,ref.ra,ref.dec,cenra,cendec,glon,glat,/gnomic
 rlon = [min(lon)-0.05,max(lon)+0.05]
 rlat = [min(lat)-0.05,max(lat)+0.05]
-gdtmass = where(tlon ge rlon[0] and tlon le rlon[1] and $
-                tlat ge rlat[0] and tlat le rlat[1],ngdtmass)
-tmass = tmass[gdtmass]
-gdgaia = where(glon ge rlon[0] and glon le rlon[1] and $
-               glat ge rlat[0] and glat le rlat[1],ngdgaia)
-gaia = gaia[gdgaia]
+gdref = where(glon ge rlon[0] and glon le rlon[1] and $
+              glat ge rlat[0] and glat le rlat[1],ngdref)
+ref = ref[gdref]
 
-; Find bright, saturated sources
-;-------------------------------
-; Use brightest observed magnitudes to figure out saturation point
-;gstar = where(cat.class_star ge 0.7,ngstar)
-;if ngstar eq 0 then gstar=where(cat.class_star ge 0.5,ngstar)
-;minmag = min(cat[gstar].cmag)
-;; Get all reference sources brighter than this
-;brtgaiaind = where(gaia.gmag le (minmag+1.0),nbrtgaia)
-;brtgaia = gaia[brtgaiaind]
-;print,strtrim(nbrtgaia,2),' bright Gaia sources'
-; THIS IS A VERY **BAD** CRITERIA FOR SATURATED STARS
-; THERE CAN BE SATURATED STARS ~4 MAGS FAINTER THAN THIS!!!
-
-; Add reddening
-add_tag,gaia,'ebv',0.0,gaia
-glactc,gaia.ra_icrs,gaia.de_icrs,2000.0,glon,glat,1,/deg
-gaia.ebv = dust_getval(glon,glat,/noloop,/interp)
-
-; SOMETIMES THE BRIGHT SATURATED STARS **ARE** DETECTED!!!
-; Some sources have bad CP flags.  Why are those kept??
-; Not all spurious sources have FLAGS=2 or 3
-
-;; Crossmatch and remove any that were detected (couldn't be saturated)
-;srcmatch,brtgaia.ra_icrs,brtgaia.de_icrs,cat.ra,cat.dec,1.0,ind1,ind2,/sph,count=nmatch
-;print,strtrim(nmatch,2),' bright sources observed. ',strtrim(nbrtgaia-nmatch,2),' left'
-;if nmatch gt 0 then begin
-;  if nmatch eq nbrtgaia then begin
-;    print,'No bright Gaia sources left'
-;    return 
-;  endif else begin
-;    remove,ind1,brtgaia
-;    nbrtgaia = n_elements(brtgaia) 
-;  endelse
-;endif
-
-; Copy mask file to local directory
-maskfile = '/net/mss1/archive/pipeline/Q20141119/DEC13B/20140105/c4d_140108_022046_ood_z_v1.fits.fz'
-tempmaskfile = localdir+'dnidever/nsc/instcal/'+file_basename(maskfile)
-file_copy,maskfile,tempmaskfile,/over
-spawn,['funpack','-D',tempmaskfile],out,errout,/noshell
-tempmaskfile = strmid(tempmaskfile,0,strlen(tempmaskfile)-3)
-
-head0 = headfits(tempmaskfile,exten=0)
-filter = sxpar(head0,'filter')
-filt = strmid(filter,0,1)
 
 ; CALCULATE SATURATION LEVEL
 ;----------------------------
-
-; Get model magnitudes
-model_mag = getmodelmag(gaia,filt)
-add_tag,gaia,'model_mag',99.99,gaia
-gaia.model_mag = model_mag
-
-gstars = where(cat.cmag lt 20 and cat.class_star gt 0.8,ngstars)
-fwhm = median(cat[gstars].fwhm_world*3600*4)  ; in pixels
 zp = median(cat.cmag-cat.mag_auto)
-flux = 10^((25.0-model_mag+zp)/2.5)  ; in counts
-add_tag,gaia,'flux',0.0,gaia
-gaia.flux = flux
+flux = 10^((25.0-ref.model_mag+zp)/2.5)  ; in counts
+add_tag,ref,'flux',0.0,ref
+ref.flux = flux
 ; 2D Gaussian profile
-gmaxflux = flux/(1.138*fwhm^2)        ; in counts
-add_tag,gaia,'gmaxflux',0.0,gaia
-gaia.gmaxflux = gmaxflux
+gmaxflux = flux/(1.138*fwhmpix^2)        ; in counts
+add_tag,ref,'gmaxflux',0.0,ref
+ref.gmaxflux = gmaxflux
 ; 2D Moffat profile
 ; beta = 2.5 or 3.0
 ; profile = (beta-1)/(pi*alpha^2)*(1+(r/alpha)^2)^(-beta) 
 ; max flux = flux * (beta-1)/(pi*alpha^2)
 beta = 3.0d0
-alpha = double( fwhm/(2*sqrt(2^(1.0/beta)-1)) )
+alpha = double( fwhmpix/(2*sqrt(2^(1.0/beta)-1)) )
 mmaxflux = flux * (beta-1)/(!dpi*alpha^2)
-add_tag,gaia,'mmaxflux',0.0,gaia
-gaia.mmaxflux = mmaxflux
+add_tag,ref,'mmaxflux',0.0,ref
+ref.mmaxflux = mmaxflux
 
-
+; Find the saturated stars
 satlevel = 50000.
-badsat = where(model_mag lt 50 and gmaxflux gt satlevel,nbadsat)
-satmag = max(model_mag[badsat])
+badsat = where(ref.model_mag lt 50 and gmaxflux gt satlevel,nbadsat)
+satmag = max(ref[badsat].model_mag)
 print,'Saturation magnitude = ',stringize(satmag,ndec=2),' mag'
-satgaia0 = gaia[badsat]
-print,strtrim(nbadsat,2),' saturated Gaia stars'
+satref0 = ref[badsat]
+print,strtrim(nbadsat,2),' saturated Ref stars'
 ; saturation level for stars, galaxies can be brighter because
 ;  they aren't as peaky, so check measured FWHM if they are detected
 ; If they are in the 2MASS-PSC then they should be STARS!!!
 
-; Loop over all chips
-for i=0,62 do begin
-  fits_read,tempmaskfile,mask,mhead,exten=i+1,/no_abort,message=message
-  if message ne '' then goto,BOMB
-  nx = sxpar(mhead,'NAXIS1')
-  ny = sxpar(mhead,'NAXIS2')
-  satmask = fix( ((mask and 3) eq 3) )
-  ;satmask3 = convol(float(satmask),[[1,1,1],[1,1,1],[1,1,1]])
+; Get unique chip names
+uiccd = uniq(cat.ccdnum,sort(cat.ccdnum))
+uccdnum = cat[uiccd].ccdnum
+nccd = n_elements(uccdnum)
+print,strtrim(nccd,2),' unique ccds'
 
-  ;imfile = '/dl1/users/dnidever/nsc/instcal/c4d/20140108/c4d_140108_022046_ooi_z_v1/c4d_140108_022046_ooi_z_v1.fits'
-  ;fits_read,imfile,im,head,exten=i+1
+; Use the mask image to make sure they are saturated
+if keyword_set(usemask) then begin
 
-  ; Get Gaia sources in this this
-  head_xyad,mhead,[0,nx-1,nx-1,0],[0,0,ny-1,ny-1],vra,vdec,/deg
-  rra = minmax(vra)
-  rdec = minmax(vdec)
-  gd1 = where(satgaia0.ra_icrs ge rra[0]-0.001 and satgaia0.ra_icrs le rra[1]+0.001 and $
-             satgaia0.de_icrs ge rdec[0]-0.001 and satgaia0.de_icrs le rdec[1]+0.001,ngd1)
-  satgaia1 = satgaia0[gd1]
-  head_adxy,mhead,satgaia1.ra_icrs,satgaia1.de_icrs,gx1,gy1,/deg
-  gd2 = where(gx1 ge 0 and gx1 le (nx-1) and gy1 ge 0 and gy1 le (ny-1),ngd2)
-  satgaia2 = satgaia1[gd2]
-  gx2 = 0 > round(gx1[gd2]) < (nx-1)
-  gy2 = 0 > round(gy1[gd2]) < (ny-1)
-  satval = satmask[gx2,gy2]
-  ;satval3 = satmask3[gx2,gy2]
+  ; Copy mask file to local directory
+  maskfile = '/net/mss1/archive/pipeline/Q20141119/DEC13B/20140105/c4d_140108_022046_ood_z_v1.fits.fz'
+  tempmaskfile = localdir+'dnidever/nsc/instcal/'+file_basename(maskfile)
+  file_copy,maskfile,tempmaskfile,/over
+  spawn,['funpack','-D',tempmaskfile],out,errout,/noshell
+  tempmaskfile = strmid(tempmaskfile,0,strlen(tempmaskfile)-3)
 
-  ; require that to be 3 neighboring pixels need to saturated as well
-  ;gbad = where(satval eq 1 and satval3 ge 4,ngbad)
-  gbad = where(satval eq 1,ngbad)
-  if ngbad gt 0 then begin
-    ;badgaia1 = gaia2[gbad]
-    ;push,badgaia,badgaia1
-    push,badgaiasource,satgaia2.source
-  endif  
-  print,strtrim(ngbad,2),'/',strtrim(ngd2,2)
+  ; Loop over all chips
+  for i=0,nccd-1 do begin
+    fits_read,tempmaskfile,mask,mhead,exten=i+1,/no_abort,message=message
+    if message ne '' then goto,BOMB
+    nx = sxpar(mhead,'NAXIS1')
+    ny = sxpar(mhead,'NAXIS2')
+    satmask = fix( ((mask and 3) eq 3) )
+    ;satmask3 = convol(float(satmask),[[1,1,1],[1,1,1],[1,1,1]])
 
-  ; THIS IS PICKING UP SOME FAINT STARS THAT HAPPEN TO LAND ON A CR AND
-  ; AND OTHER SATURATED PIXELS, bleed trails/columns
+    ;imfile = '/dl1/users/dnidever/nsc/instcal/c4d/20140108/c4d_140108_022046_ooi_z_v1/c4d_140108_022046_ooi_z_v1.fits'
+    ;fits_read,imfile,im,head,exten=i+1
 
-  ;stop
-  BOMB:
+    ; Get ref sources in this chip
+    head_xyad,mhead,[0,nx-1,nx-1,0],[0,0,ny-1,ny-1],vra,vdec,/deg
+    rra = minmax(vra)
+    rdec = minmax(vdec)
+    gd1 = where(satref0.ra ge rra[0]-0.001 and satref0.ra le rra[1]+0.001 and $
+               satref0.dec ge rdec[0]-0.001 and satref0.dec le rdec[1]+0.001,ngd1)
+    satref1 = satref0[gd1]
+    head_adxy,mhead,satref1.ra,satref1.dec,gx1,gy1,/deg
+    gd2 = where(gx1 ge 0 and gx1 le (nx-1) and gy1 ge 0 and gy1 le (ny-1),ngd2)
+    satref2 = satref1[gd2]
+    gx2 = 0 > round(gx1[gd2]) < (nx-1)
+    gy2 = 0 > round(gy1[gd2]) < (ny-1)
+    satval = satmask[gx2,gy2]
+    ;satval3 = satmask3[gx2,gy2]
 
-endfor
-; this loop takes about 10s and 7s is reading the fits file
-; this is without the mask convolution
+    ; require that to be 3 neighboring pixels need to saturated as well
+    ;gbad = where(satval eq 1 and satval3 ge 4,ngbad)
+    gbad = where(satval eq 1,ngbad)
+    if ngbad gt 0 then begin
+      ;badref1 = ref2[gbad]
+      ;push,badref,badref1
+      push,badrefsource,satref2.source
+    endif  
+    print,strtrim(ngbad,2),'/',strtrim(ngd2,2)
 
-MATCH,gaia.source,badgaiasource,ind1,ind2,/sort,count=nsatgaia
-satgaia = gaia[ind1]
-print,'Final saturated sources = ',strtrim(nsatgaia,2)
+    ; THIS IS PICKING UP SOME FAINT STARS THAT HAPPEN TO LAND ON A CR AND
+    ; AND OTHER SATURATED PIXELS, bleed trails/columns
 
-; Almost all sources that FALL in the chip end up being kept as saturated
+    ;stop
+    BOMB:
 
-; Use MATCHALL_SPH to find the closest matches
+  endfor
+  ; this loop takes about 10s and 7s is reading the fits file
+  ; this is without the mask convolution
+
+  MATCH,ref.source,badrefsource,ind1,ind2,/sort,count=nsatref
+  satref = ref[ind1]
+  print,'Final saturated sources = ',strtrim(nsatref,2)
+
+  ; Almost all sources that FALL in the chip end up being kept as saturated
+
+; Don't use mask, only keep source inside chips
+endif else begin
+
+  ; Remove "saturated" sources that were observed and have OKAY CP flags
+  srcmatch,satref0.ra,satref0.dec,cat.ra,cat.dec,0.5,ind1,ind2,/sph,count=nsatmatch
+  if nsatmatch gt 0 then begin
+    okayind = where(cat[ind2].imaflags_iso eq 0,nokayind)
+    ; Some okay ones to remove from SATREF0
+    if nokayind gt 0 then begin
+      if nokayind eq n_elements(satref0) then begin
+        print,'No saturated stars in image'
+        return
+      endif
+      remove,ind1[okayind],satref0
+    endif
+  endif
+
+  ; Loop over all chips
+  undefine,satind
+  for i=0,nccd-1 do begin
+    cathd = mrdfits(expdir+'/'+base+'_'+strtrim(uccdnum[i],2)+'.fits',1,/silent)
+    head = cathd.field_header_card    
+    nx = sxpar(head,'NAXIS1')
+    ny = sxpar(head,'NAXIS2')
+    ; Get ref sources in this chip
+    head_xyad,head,[0,nx-1,nx-1,0],[0,0,ny-1,ny-1],vra,vdec,/deg
+    rra = minmax(vra)
+    rdec = minmax(vdec)
+    gd1 = where(satref0.ra ge rra[0]-0.001 and satref0.ra le rra[1]+0.001 and $
+                satref0.dec ge rdec[0]-0.001 and satref0.dec le rdec[1]+0.001,ngd1)
+    satref1 = satref0[gd1]
+    head_adxy,head,satref1.ra,satref1.dec,gx1,gy1,/deg
+    gd2 = where(gx1 ge 0 and gx1 le (nx-1) and gy1 ge 0 and gy1 le (ny-1),ngd2)
+    push,satind,gd1[gd2]
+  endfor
+  if n_elements(satind) gt 0 then begin
+    satref = satref0[satind]
+  endif else begin
+    print,'No saturated stars in image'
+    return
+  endelse
+  nsatref = n_elements(satref)
+endelse
+
+; Find candidate spurious nearby sources
+;  use MATCHALL_SPH to find the closest matches
 dcr = 10.0       ; arcsec
-res = matchall_sph(satgaia.ra_icrs,satgaia.de_icrs,cat.ra,cat.dec,dcr/3600,nmatch,distance=distance)
+; THIS MIGHT BE TOO SMALL FOR SOME VERY SATURATED STARS
+res = matchall_sph(satref.ra,satref.dec,cat.ra,cat.dec,dcr/3600,nmatch,distance=distance)
 ; res gives reverse indices
-
-;plot,cat.ra,cat.dec,ps=3
-;oplot,satgaia.ra_icrs,satgaia.de_icrs,ps=8,co=250
-
-setdisp
 
 ccdstr = importascii('~/projects/noaosourcecatalog/pro/decam_chips.txt',/header)
 
 ; Loop through bright sources and find close neighbors
 undefine,allspur
-For i=0,nsatgaia-1 do begin
-  sat1 = satgaia[i]
-  print,strtrim(i+1,2),'/',strtrim(nsatgaia,2),' gmag=',stringize(sat1.gmag,ndec=2)   
+For i=0,nsatref-1 do begin
+  sat1 = satref[i]
 
-  ;plot,cat.ra,cat.dec,ps=3
-  ;oplot,satgaia.ra_icrs,satgaia.de_icrs,ps=8,co=250
-  ;oplot,[satgaia[i].ra_icrs],[satgaia[i].de_icrs],ps=4,co=150,sym=4
-  
+  ; Some matches  
   if res[i] ne res[i+1] then begin
     ind = res[res[i]:res[i+1]-1]
     nind = n_elements(ind)
     dist = distance[res[i]-res[0]:res[i+1]-1-res[0]]*3600
+    ccdnum = cat[ind[0]].ccdnum
     ;print,'Gmag=',stringize(sat1.gmag,ndec=2)
-    print,'nmatches = ',strtrim(nind,2)
+    print,strtrim(i+1,2),'/',strtrim(nsatref,2),' gmag=',stringize(sat1.gmag,ndec=2),$
+          '  nmatches=',strtrim(nind,2)
     ;print,'     NUMBER     DISTANCE      CMAG      FLAGS      SNR      ELLIPTICITY'
+    verbose = 0
     if keyword_set(verbose) then begin
       print,'  NUM   DIST  CMAG  CPFLAGS SEFLAGS   SNR   FWHM  ELLIPTICITY'
       writecol,-1,indgen(nind)+1,dist,cat[ind].cmag,cat[ind].imaflags_iso,$
@@ -331,12 +305,11 @@ For i=0,nsatgaia-1 do begin
 
     ; Load the image
     ;imfile = '/mss1/archive/pipeline/Q20141118/DEC13B/20140105/c4d_140108_022046_ooi_z_v1.fits.fz'
-    imfile = expdir+'/'+base+'.fits'
-    ccdnum = cat[ind[0]].ccdnum
-    ccdind = where(ccdstr.ccdnum eq ccdnum,nccdind)
+    ;imfile = expdir+'/'+base+'.fits'
+    ;ccdind = where(ccdstr.ccdnum eq ccdnum,nccdind)
     ;fits_read,imfile,im,head,extname=ccdstr[ccdind].detpos
 
-    maskfile='/net/mss1/archive/pipeline/Q20141119/DEC13B/20140105/c4d_140108_022046_ood_z_v1.fits.fz'
+    ;maskfile='/net/mss1/archive/pipeline/Q20141119/DEC13B/20140105/c4d_140108_022046_ood_z_v1.fits.fz'
     ;tempfile = mktemp('mask',outdir=expdir)
     ;file_delete,tempfile
     ;spawn,['funpack','-E',ccdstr[ccdind].detpos,'-O',tempfile,maskfile],out,errout,/noshell
@@ -396,9 +369,11 @@ For i=0,nsatgaia-1 do begin
 
 
     ; Plotting
-    pl = 0
+    pl = 0  ;1
     if keyword_set(pl) then begin
       ; Load the flux file
+      ccdind = where(ccdstr.ccdnum eq ccdnum,nccdind)
+      imfile = '/mss1/archive/pipeline/Q20141118/DEC13B/20140105/c4d_140108_022046_ooi_z_v1.fits.fz'
       fits_read,imfile,im,head,extname=ccdstr[ccdind].detpos
 
       ; Load the mask image
@@ -409,18 +384,19 @@ For i=0,nsatgaia-1 do begin
       fits_read,tempfile,mask,mhead
       file_delete,tempfile
 
-      head_adxy,head,satgaia[i].ra_icrs,satgaia[i].de_icrs,xsat,ysat,/deg
+      head_adxy,head,satref[i].ra,satref[i].dec,xsat,ysat,/deg
       head_adxy,head,cat.ra,cat.dec,x,y,/deg
       buff = 100
       xr = [xsat-buff,xsat+buff]
       yr = [ysat-buff,ysat+buff]
+      setdisp,/silent
       loadcol,3
       satmask = fix( ((mask and 3) eq 3) or ((mask and 4) eq 4) )
       displayc,im*(1-satmask),xr=xr,yr=yr,/z
       ;displayc,im,xr=xr,yr=yr,/log,min=median(im)*0.9,max=median(im)*1.2
-      ;plot,cat.ra,cat.dec,ps=3,xr=[-0.005,0.005]/cos(cendec/!radeg)+satgaia[i].ra_icrs,$
-      ;  yr=[-0.005,0.005]+satgaia[i].de_icrs,xs=1,ys=1
-      ;oplot,satgaia.ra_icrs,satgaia.de_icrs,ps=1,co=250,sym=2
+      ;plot,cat.ra,cat.dec,ps=3,xr=[-0.005,0.005]/cos(cendec/!radeg)+satref[i].ra,$
+      ;  yr=[-0.005,0.005]+satref[i].dec,xs=1,ys=1
+      ;oplot,satref.ra,satref.dec,ps=1,co=250,sym=2
       ;oplot,[cat[ind].ra],[cat[ind].dec],ps=4,co=150
       loadct,39,/silent
       oplot,[xsat],[ysat],ps=1,co=250,sym=2
@@ -430,8 +406,8 @@ For i=0,nsatgaia-1 do begin
       phi = scale_vector(findgen(50),0,2*!dpi)
       oplot,rlim*sin(phi)+xsat,rlim*cos(phi)+ysat
 
-      ;gd = where(cat.ra ge satgaia[i].ra_icrs-0.005/cos(cendec/!radeg) and cat.ra le satgaia[i].ra_icrs+0.005/cos(cendec/!radeg) and $
-      ;           cat.dec ge satgaia[i].de_icrs-0.005 and cat.dec le satgaia[i].de_icrs+0.005,ngd)
+      ;gd = where(cat.ra ge satref[i].ra-0.005/cos(cendec/!radeg) and cat.ra le satref[i].ra+0.005/cos(cendec/!radeg) and $
+      ;           cat.dec ge satref[i].dec-0.005 and cat.dec le satref[i].dec+0.005,ngd)
       gd = where(x ge xsat-buff and x le xsat+buff and $
                  y ge ysat-buff and y le ysat+buff,ngd)
       for j=0,ngd-1 do begin
@@ -443,30 +419,32 @@ For i=0,nsatgaia-1 do begin
     endif ; plotting    
 
     ;stop
-  endif else print,'no matches'
+  endif ;else print,'no matches'
 
 Endfor
 
 ; Get unique elements
 ui = uniq(allspur,sort(allspur))
-allspur = allspur[ui]
-nspur = n_elements(allspur)
+spurind = allspur[ui]
+nspur = n_elements(spurind)
 print,strtrim(nspur,2),' final spurious sources'
+spurious = cat[spurind]
 
 ; Final good indices
 gdind = lindgen(n_elements(cat))
-remove,allspur,gdind
+remove,spurind,gdind
 
 print,'dt = ',systime(1)-t00,' sec'
 
 ; 20s on a "normal" uncrowded field
+; 10s without using the mask
 
 ; Should we do a final cross-match of spurious sources with Gaia to
 ; see if we have matches.  If there are matches, then only toss them
 ; if they have bad CPFLAGS.  My worry is accidentally throwing out
 ; good bright but not saturated stars.
 ; YEP, 142 matches in 0.5".
-srcmatch,gaia.ra_icrs,gaia.de_icrs,cat[allspur].ra,cat[allspur].dec,0.5,ind1,ind2,/sph,count=ngmatch
+;srcmatch,ref.ra,ref.dec,cat[allspur].ra,cat[allspur].dec,0.5,ind1,ind2,/sph,count=ngmatch
 ; most (113/142) have bad flags, but 29 do not.  they might be "good".
 ; double-check
 
