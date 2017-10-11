@@ -8,11 +8,15 @@
 ;  expdir     The exposure directory.
 ;  /usemask   Use the quality mask image information to make sure
 ;               the bright stars are saturated.
-;  /verbose   Print a lot of information to the screen.
+;  /verbose   Print a lot of information to the screen.  verbose=2 is
+;               even more verbose.
 ;  =logfile   Name of log file.
+;  /diagplot  Show diagnostic plots.
+;  /stp       Stop at end of program.
 ;
 ; OUTPUTS:
 ;  spurind    Index of spurious sources in catalog.
+;  =count     Number of spurious sources.
 ;  =spurious  Structure of spurious catalog sources.
 ;  =cat       Observed catalog.
 ;  =ref       Reference catalog
@@ -23,8 +27,8 @@
 ; By D. Nidever  Oct 2017
 ;-
 
-pro find_spurious_sources,expdir,spurind,usemask=usemask,spurious=spurious,cat=cat,ref=ref,$
-                          verbose=verbose,logfile=logfile
+pro find_spurious_sources,expdir,spurind,count=count,usemask=usemask,spurious=spurious,cat=cat,ref=ref,$
+                          verbose=verbose,logfile=logfile,diagplot=diagplot,stp=stp
 
 ; Criteria for spurious near-bright-star sources
 ; -within a certain distance of bright, saturated star
@@ -47,11 +51,13 @@ pro find_spurious_sources,expdir,spurind,usemask=usemask,spurious=spurious,cat=c
 ; -match all of them with our catalog
 ; -the ones that DO NOT match should be saturated
 
+; Initialize output values
 undefine,spurind,spurious
+cound = 0
 
 t00 = systime(1)
 
-expdir = '/dl1/users/dnidever/nsc/instcal/c4d/20140108/c4d_140108_022046_ooi_z_v1/'
+;expdir = '/dl1/users/dnidever/nsc/instcal/c4d/20140108/c4d_140108_022046_ooi_z_v1/'
 
 ; Not enough inputs
 if n_elements(expdir) eq 0 then begin
@@ -62,7 +68,9 @@ endif
 ; Default settings
 if n_elements(verbose) eq 0 then verbose=0
 if n_elements(logfile) eq 0 then logf=-1 else logf=logfile
+if n_elements(diagplot) eq 0 then diagplot=0
 
+; Getting directory names
 NSC_ROOTDIRS,dldir,mssdir,localdir
 
 ; Not enough inputs
@@ -92,16 +100,24 @@ if stregex(expdir,'/k4m/',/boolean) eq 1 then instrument='k4m'
 if stregex(expdir,'/ksb/',/boolean) eq 1 then instrument='ksb'
 printlog,logf,'This is a '+instrument+' exposure'
 
+; Get extension names for CCDs
+case instrument of
+'c4d': chipstr = importascii('~/projects/noaosourcecatalog/params/decam_chips.txt',/header,/silent)
+'k4m': chipstr = importascii('~/projects/noaosourcecatalog/params/k4m_chips.txt',/header,/silent)
+'ksb': chipstr = importascii('~/projects/noaosourcecatalog/params/ksb_chips.txt',/header,/silent)
+else: stop,instrument+' not supported'
+endcase
 
-; Load the catalog
-cat = mrdfits(expdir+'/'+base+'_cat.fits',1)
+
+; --- Load the catalogs ---
+cat = mrdfits(expdir+'/'+base+'_cat.fits',1,/silent)
 ncat = n_elements(cat)
 ; Load the metadata information
-meta = mrdfits(expdir+'/'+base+'_meta.fits',1)
+meta = mrdfits(expdir+'/'+base+'_meta.fits',1,/silent)
 filter = meta.filter
 fwhm = meta.fwhm  ; arcsec
 ; Load one chip-level catalog
-cat1 = mrdfits(expdir+'/'+base+'_1.fits',1)
+cat1 = mrdfits(expdir+'/'+base+'_1.fits',1,/silent)
 head1 = cat1.field_header_card
 pixscale = sxpar(head1,'SEXPXSCL')
 fwhmpix = fwhm/pixscale
@@ -155,7 +171,7 @@ gdref = where(glon ge rlon[0] and glon le rlon[1] and $
               glat ge rlat[0] and glat le rlat[1],ngdref)
 ref = ref[gdref]
 
-; Add some columns to REF
+; Add some columns to REF structure
 ; flux, gmaxflux, mmaxflux, ccdnum
 schema = ref[0]
 struct_assign,{dum:''},schema
@@ -168,6 +184,7 @@ undefine,old
 ; CALCULATE SATURATION LEVEL
 ;----------------------------
 zp = median(cat.cmag-cat.mag_auto)
+printlog,logf,'Zero-point offset = ',stringize(zp,ndec=2),' mag'
 flux = 10^((25.0-ref.model_mag+zp)/2.5)  ; in counts
 ref.flux = flux
 ; 2D Gaussian profile
@@ -188,7 +205,7 @@ badsat = where(ref.model_mag lt 50 and gmaxflux gt satlevel,nbadsat)
 satmag = max(ref[badsat].model_mag)
 printlog,logf,'Saturation magnitude = ',stringize(satmag,ndec=2),' mag'
 satref0 = ref[badsat]
-printlog,logf,strtrim(nbadsat,2),' saturated Ref stars'
+printlog,logf,strtrim(nbadsat,2),' saturated reference stars'
 ; saturation level for stars, galaxies can be brighter because
 ;  they aren't as peaky, so check measured FWHM if they are detected
 ; If they are in the 2MASS-PSC then they should be STARS!!!
@@ -375,6 +392,7 @@ endif else begin
     if nokayind gt 0 then begin
       if nokayind eq n_elements(satref0) then begin
         printlog,logf,'No saturated stars in image'
+        count = 0
         return
       endif
       remove,ind1[okayind],satref0
@@ -416,6 +434,7 @@ endif else begin
     satref = satref0[satind]
   endif else begin
     printlog,logf,'No saturated stars in image'
+    count = 0
     return
   endelse
   nsatref = n_elements(satref)
@@ -428,15 +447,9 @@ printlog,logf,'Maximum radius is ',stringize(dcr,ndec=2),' arcsec'
 res = matchall_sph(satref.ra,satref.dec,cat.ra,cat.dec,dcr/3600,nmatch,distance=distance)
 ; res gives reverse indices
 
-; Get extension names for CCDs
-case instrument of:
-'c4d': chipstr = importascii('~/projects/noaosourcecatalog/params/decam_chips.txt',/header,/silent)
-'k4m': chipstr = importascii('~/projects/noaosourcecatalog/params/k4m_chips.txt',/header,/silent)
-'ksb': chipstr = importascii('~/projects/noaosourcecatalog/params/ksb_chips.txt',/header,/silent)
-else: stop,instrument+' not supported'
-endcase
 
 ; Loop through bright sources and find close neighbors
+;-----------------------------------------------------
 undefine,allspur
 For i=0,nsatref-1 do begin
   sat1 = satref[i]
@@ -451,29 +464,18 @@ For i=0,nsatref-1 do begin
     dist = distance[res[i]-res[0]:res[i+1]-1-res[0]]*3600
     ccdnum = cat[ind[0]].ccdnum
     ;printlog,logf,'Gmag=',stringize(sat1.gmag,ndec=2)
-    printlog,logf,strtrim(i+1,2),'/',strtrim(nsatref,2),' gmag=',stringize(sat1.gmag,ndec=2),$
-          '  nmatches=',strtrim(nind,2)
     ;printlog,logf,'     NUMBER     DISTANCE      CMAG      FLAGS      SNR      ELLIPTICITY'
-    verbose = 0
     if keyword_set(verbose) then begin
-      printlog,logf,'  NUM   DIST  CMAG  CPFLAGS SEFLAGS   SNR   FWHM  ELLIPTICITY'
-      writecol,-1,indgen(nind)+1,dist,cat[ind].cmag,cat[ind].imaflags_iso,$
-               cat[ind].flags,1/cat[ind].cerr,cat[ind].fwhm_world*3600,cat[ind].ellipticity,$
-               fmt='(I5,F7.2,F7.2,2I7,F9.1,F6.1,F9.2)'
+      printlog,logf,strtrim(i+1,2),'/',strtrim(nsatref,2),' gmag=',stringize(sat1.gmag,ndec=2),$
+            '  nmatches=',strtrim(nind,2)
+      printlog,logf,'Limiting radius = ',stringize(sat1.rlim,ndec=1),' pixels = ',stringize(sat1.rlim*ccdstr1.pixscale,ndec=2),' arcsec'
+      if verbose eq 2 then begin
+        printlog,logf,'  NUM   DIST  CMAG  CPFLAGS SEFLAGS   SNR   FWHM  ELLIPTICITY'
+        writecol,-1,indgen(nind)+1,dist,cat[ind].cmag,cat[ind].imaflags_iso,$
+                 cat[ind].flags,1/cat[ind].cerr,cat[ind].fwhm_world*3600,cat[ind].ellipticity,$
+                 fmt='(I5,F7.2,F7.2,2I7,F9.1,F6.1,F9.2)'
+      endif
     endif
-
-    ; Load the image
-    ;imfile = '/mss1/archive/pipeline/Q20141118/DEC13B/20140105/c4d_140108_022046_ooi_z_v1.fits.fz'
-    ;imfile = expdir+'/'+base+'.fits'
-    ;ccdind = where(ccdstr.ccdnum eq ccdnum,nccdind)
-    ;fits_read,imfile,im,head,extname=ccdstr[ccdind].detpos
-
-    ;maskfile='/net/mss1/archive/pipeline/Q20141119/DEC13B/20140105/c4d_140108_022046_ood_z_v1.fits.fz'
-    ;tempfile = mktemp('mask',outdir=expdir)
-    ;file_delete,tempfile
-    ;spawn,['funpack','-E',ccdstr[ccdind].detpos,'-O',tempfile,maskfile],out,errout,/noshell
-    ;fits_read,tempfile,mask,mhead
-    ;file_delete,tempfile
 
     ; Select spurious sources
     ;spurind = where(dist le sat1.rlim*ccdstr1.pixscale and (cat[ind].cmag-sat1.model_mag) > 1 and $
@@ -484,12 +486,11 @@ For i=0,nsatref-1 do begin
       push,allspur,spur
     endif
     ; elliptical, fwhm, SE flags
-    printlog,logf,strtrim(nspur,2),' spurious source(s) found'
-
+    if keyword_set(verbose) then $
+      printlog,logf,strtrim(nspur,2),' spurious source(s) found'
 
     ; Plotting
-    pl = 0  ;1
-    if keyword_set(pl) then begin
+    if keyword_set(diagplot) then begin
       ; Filenames
       fluxfile = meta.file
       if strmid(mssdir,0,4) eq '/net' and strmid(fluxfile,0,4) ne '/net' then fluxfile='/net'+fluxfile
@@ -500,7 +501,7 @@ For i=0,nsatref-1 do begin
       ; Load the flux file
       chipind = where(chipstr.ccdnum eq ccdnum,nchipind)
       ;imfile = '/mss1/archive/pipeline/Q20141118/DEC13B/20140105/c4d_140108_022046_ooi_z_v1.fits.fz'
-      fits_read,fluxfile,im,head,extname=chipstr[chipind].extname
+      FITS_READ,fluxfile,im,head,extname=chipstr[chipind].extname
 
       ; Load the mask image
       ;maskfile='/net/mss1/archive/pipeline/Q20141119/DEC13B/20140105/c4d_140108_022046_ood_z_v1.fits.fz'
@@ -542,30 +543,38 @@ For i=0,nsatref-1 do begin
         ;coords = ellipsecoords(cat1.a_world,cat1.b_world,cat1.ra,cat1.dec,cat1.theta_world)
         oplot,coords[0,*],coords[1,*],co=80
       endfor
+      dum = ''
+      read,'Hit any key to continue',dum
     endif ; plotting    
-
-    ;stop
   endif ;else printlog,logf,'no matches'
 
-Endfor
+Endfor  ; bright, saturated star loop
 
-; Get unique elements
-ui = uniq(allspur,sort(allspur))
-spurind = allspur[ui]
-nspur = n_elements(spurind)
-printlog,logf,strtrim(nspur,2),' final spurious sources'
-spurious = cat[spurind]
+; Some spurious sources found
+if n_elements(allspur) gt 0 then begin
+  ; Get unique elements
+  ui = uniq(allspur,sort(allspur))
+  spurind = allspur[ui]
+  nspur = n_elements(spurind)
+  printlog,logf,strtrim(nspur,2),' final spurious sources'
+  spurious = cat[spurind]
 
-; Final good indices
-gdind = lindgen(n_elements(cat))
-remove,spurind,gdind
+  ; Final good indices
+  gdind = lindgen(n_elements(cat))
+  remove,spurind,gdind
 
-printlog,logf,'dt = ',systime(1)-t00,' sec'
+; No spurious sources
+endif else begin
+  printlog,logf,'No spurious sources found'
+endelse
+count = n_elements(spurind)
+
+printlog,logf,'dt = ',stringize(systime(1)-t00,ndec=4),' sec'
 
 ; 20s on a "normal" uncrowded field
 ; 10s without using the mask
 ; Sped up to ~6s now
 
-stop
+if keyword_set(stp) then stop
 
 end
