@@ -56,10 +56,11 @@ endfor
 remove,torem,imstr
 
 ; Make new structure with minimal columns
-str = replicate({sp_id:'',sb_recno:0L,dtnsanam:'',dtacqnam:'',rawname:'',expnum:'',data_product_id:0L,uri:'',prop_id:'',ra:0.0d0,dec:0.0d0,$
+str = replicate({instrument:'',sp_id:'',sb_recno:0L,dtnsanam:'',dtacqnam:'',rawname:'',expnum:'',data_product_id:0L,uri:'',prop_id:'',ra:0.0d0,dec:0.0d0,$
                  exposure:0.0,release_date:'',date_obs:'',filter:'',mjd_obs:0.0d0,obstype:'',plver:'',proctype:'',prodtype:'',$
                  filename:'',pldname:'',fluxfile:'',maskfile:'',wtfile:''},nrname)
 STRUCT_ASSIGN,imstr,str
+str.instrument = 'k4m'  ; KPNO-4m+Mosaic3
 str.rawname = file_basename(str.dtacqnam)
 str.fluxfile = strtrim(str.uri,2)
 
