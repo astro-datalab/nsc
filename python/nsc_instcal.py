@@ -3,18 +3,9 @@
 import os
 import sys
 import numpy as np
-#import scipy
 import warnings
 from astropy.io import fits
 from astropy.utils.exceptions import AstropyWarning
-#import photutils
-#from skimage import measure, morphology
-#from scipy.cluster import vq
-#import gaps
-#import matplotlib.pyplot as plt
-#import pylab
-#from scipy.signal import argrelmin
-#import scipy.ndimage.filters as filters
 import time
 import shutil
 import re
@@ -25,8 +16,7 @@ import socket
 
 if __name__ == "__main__":
 
-
-# Run SExtractor on one FULL DECam stacked image
+# Run SExtractor on one FULL DECam/Mosaic3/Bok InstCal image
 
     hostname = socket.gethostname()
     host = hostname.split('.')[0]
@@ -37,8 +27,6 @@ if __name__ == "__main__":
        version = sys.argv[4]
        verdir = version if version.endswith('/') else version+"/"
 
-    #dir = "/datalab/users/dnidever/decamcatalog/instcal/"
-    #tmproot = "/data0/dnidever/decamcatalog/instcal/tmp/"
     # on thing/hulk use
     if (host == "thing") | (host == "hulk"):
         dir = "/dl1/users/dnidever/nsc/instcal/"+verdir
@@ -47,6 +35,13 @@ if __name__ == "__main__":
     if (host == "gp09") | (host == "gp08") | (host == "gp07"):
         dir = "/net/dl1/users/dnidever/nsc/instcal/"+verdir
         tmproot = "/data0/dnidever/nsc/instcal/"+verdir+"tmp/"
+
+    # Make sure the directories exist
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+    if not os.path.exists(tmproot):
+        os.makedirs(tmproot)
+
 
     t0 = time.time()
 
@@ -57,19 +52,6 @@ if __name__ == "__main__":
     if n < 4:
         print "Syntax - nsc_instcal.py fluxfile wtfile maskfile version"
         sys.exit()
-
-    #fluxfile = "/net/mss1/archive/pipeline/Q20160307/DECALS/201209/c4d_120914_040214_osi_r_a1.fits.fz"
-    #wtfile = "/net/mss1/archive/pipeline/Q20160307/DECALS/201209/c4d_120914_040214_osw_r_a1.fits.fz"
-    #maskfile = "/net/mss1/archive/pipeline/Q20160307/DECALS/201209/c4d_120914_040214_osd_r_a1.fits.fz"
-
-    # SMASH 20160101
-    # 178 c4d_160102_063033_ood_g_v1.fits.fz  00507860  Field33  2016-01-02T06:25:16.518568  g  267.000  4:57:28.15  -84:18:05.4
-    # 179 c4d_160102_063033_ooi_g_v1.fits.fz  00507860  Field33  2016-01-02T06:25:16.518568  g  267.000  4:57:28.15  -84:18:05.4
-    # 180 c4d_160102_063033_oow_g_v1.fits.fz  00507860  Field33  2016-01-02T06:25:16.518568  g  267.000  4:57:28.15  -84:18:05.4
-    #fluxfile = "/net/mss1/archive/pipeline/Q20160107/DEC15B/20160101/c4d_160102_063033_ooi_g_v1.fits.fz"
-    #wtfile = "/net/mss1/archive/pipeline/Q20160107/DEC15B/20160101/c4d_160102_063033_oow_g_v1.fits.fz"
-    #maskfile = "/net/mss1/archive/pipeline/Q20160107/DEC15B/20160101/c4d_160102_063033_ood_g_v1.fits.fz"
-
 
     # File names
     fluxfile = sys.argv[1]
@@ -120,16 +102,6 @@ if __name__ == "__main__":
     rootLogger.addHandler(consoleHandler)
     rootLogger.setLevel(logging.NOTSET)
 
-    # Setting up logging
-    ##logging.getLogger().addHandler(logging.StreamHandler())
-    #logger = logging.getLogger('nsc_fullstack')
-    #logfile = tmpdir+"/"+base+".log"
-    #hdlr = logging.FileHandler(logfile)
-    #formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-    #hdlr.setFormatter(formatter)
-    #logger.addHandler(hdlr)
-    ##logger.setLevel(logging.WARNING)
-
     rootLogger.info("Running SExtractor on "+base)
     rootLogger.info("  Temporary directory is: "+tmpdir)
 
@@ -174,11 +146,11 @@ if __name__ == "__main__":
       rootLogger.info("  This is CTIO DECam data")
 
     # Make final output directory
-    if not os.path.exists(dir+verdir+instcode+"/"+night):
-        os.mkdir(dir+verdir+instcode+"/"+night)
-    if not os.path.exists(dir+verdir+instcode+"/"+night+"/"+base):
-        os.mkdir(dir+verdir+instcode+"/"+night+"/"+base)
-        rootLogger.info("  Making output directory: "+dir+verdir+instcode+"/"+night+"/"+base)
+    if not os.path.exists(dir+instcode+"/"+night):
+        os.mkdir(dir+instcode+"/"+night)
+    if not os.path.exists(dir+instcode+"/"+night+"/"+base):
+        os.mkdir(dir+instcode+"/"+night+"/"+base)
+        rootLogger.info("  Making output directory: "+dir+instcode+"/"+night+"/"+base)
 
     # LOOP through the HDUs/chips
     #----------------------------
@@ -197,7 +169,7 @@ if __name__ == "__main__":
 
         # FWHM values are ONLY in the extension headers
         fwhm_map = { 'c4d': 1.5 if fhead.get('FWHM') is None else fhead.get('FWHM')*0.27, 
-                     'k4m': 1.5 if fhead.get('FWHM') is None else fhead.get('FWHM')*0.258,
+                     'k4m': 1.5 if fhead.get('SEEING1') is None else fhead.get('SEEING1'),
                      'ksb': 1.5 if fhead.get('SEEING1') is None else fhead.get('SEEING1') }
         fwhm = fwhm_map[instcode]
 
@@ -208,7 +180,10 @@ if __name__ == "__main__":
 
         # Turn the mask from integer to bitmask
         if ((instcode=='c4d') & (plver>='V3.5.0')) | (instcode=='k4m') | (instcode=='ksb'):
-             mask = 2**mask
+             omask = mask.copy()
+             mask *= 0
+             nonzero = (omask>0)
+             mask[nonzero] = 2**((omask-1)[nonzero])    # This takes about 1 sec
         # Fix the DECam Pre-V3.5.0 masks
         if (instcode=='c4d') & (plver<'V3.5.0'):
           # --CP bit masks, Pre-V3.5.0 (PLVER)
@@ -263,12 +238,12 @@ if __name__ == "__main__":
         # Gain, saturation, pixscale
         gainmap = { 'c4d': lambda x: 0.5*(x.get('gaina')+x.get('gainb')),
                     'k4m': lambda x: x.get('gain'),
-                    'ksb': lambda x: [1.3,1.5,1.4,1.4][ccdnum] }  # bok gain in HDU0, use list here
+                    'ksb': lambda x: [1.3,1.5,1.4,1.4][ccdnum-1] }  # bok gain in HDU0, use list here
         gain = gainmap[instcode](fhead)
         saturatemap = { 'c4d': fhead.get('SATURATE'),
                         'k4m': fhead.get('SATURATE'),
                         'ksb': head0.get('SATURATE') }
-        saturate = saturemap[instcode]
+        saturate = saturatemap[instcode]
         pixmap = { 'c4d': 0.27, 'k4m': 0.258, 'ksb': 0.45 }
         pixscale = pixmap[instcode]
 
@@ -300,10 +275,10 @@ if __name__ == "__main__":
             if m != None:
                 lines[cnt] = "WEIGHT_IMAGE  wt.fits    # Weight image name.\n"
                 #print "WEIGHT line ", cnt
-            # PHOT_APERTURES
+            # PHOT_APERTURES, aperture diameters in pixels
             m = re.search('^PHOT_APERTURES',l)
             if m != None:
-                aper_world = np.array([ 0.5, 0.75, 1.0, 1.5, 2.0, 3.5, 5.0, 7.0])
+                aper_world = np.array([ 0.5, 0.75, 1.0, 1.5, 2.0, 3.5, 5.0, 7.0]) * 2  # radius->diameter
                 aper_pix = aper_world / pixscale
                 lines[cnt] = "PHOT_APERTURES  "+', '.join(np.array(np.round(aper_pix,2),dtype='str'))+"            # MAG_APER aperture diameter(s) in pixels\n"            
             cnt = cnt+1
@@ -344,14 +319,13 @@ if __name__ == "__main__":
             #rootLogger.info(sys.stderr+"SExtractor Execution failed:"+str(e))            
             rootLogger.info("SExtractor Execution failed:"+str(e))
 
-
         # Catch the output and put it in a logfile
 
         # 3d) Load the catalog (and logfile) and write final output file
         # Move the file to final location
         if os.path.exists("cat.fits"):
-            outcatfile = dir+verdir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".fits"
-            outconfigfile = dir+verdir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".config"
+            outcatfile = dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".fits"
+            outconfigfile = dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".config"
             #outcatfile = "/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".fits"
             # Clobber if it already exists
             if os.path.exists(outcatfile):
@@ -377,7 +351,7 @@ if __name__ == "__main__":
     # Move the log file
     #os.rename(logfile,"/datalab/users/dnidever/decamcatalog/"+night+"/"+base+"/"+base+".log")
     # The above rename gave an error on gp09, OSError: [Errno 18] Invalid cross-device link
-    shutil.move(logfile,dir+verdir+instcode+"/"+night+"/"+base+"/"+base+".log")
+    shutil.move(logfile,dir+instcode+"/"+night+"/"+base+"/"+base+".log")
     #shutil.move(logfile,"/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base+"/"+base+".log")
 
     # Delete temporary files and directory
