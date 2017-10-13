@@ -159,7 +159,7 @@ endif else rawrap=0
 ; Search radius
 radius = 1.1 * sqrt( (0.5*rarange)^2 + (0.5*decrange)^2 )
 
-; Get the reference catalogs
+; Get the reference catalogs and model magnitudes
 ref = GETREFDATA(filter,cenra,cendec,radius)
 
 ; Only keep sources in the observed region
@@ -439,6 +439,7 @@ endif else begin
   endelse
   nsatref = n_elements(satref)
 endelse
+printlog,logf,strtrim(nsatref,2),' saturated stars in image'
 
 ; Find candidate spurious nearby sources
 ;  use MATCHALL_SPH to find the closest matches
@@ -463,17 +464,20 @@ For i=0,nsatref-1 do begin
     nind = n_elements(ind)
     dist = distance[res[i]-res[0]:res[i+1]-1-res[0]]*3600
     ccdnum = cat[ind[0]].ccdnum
-    ;printlog,logf,'Gmag=',stringize(sat1.gmag,ndec=2)
-    ;printlog,logf,'     NUMBER     DISTANCE      CMAG      FLAGS      SNR      ELLIPTICITY'
+
     if keyword_set(verbose) then begin
+      clsind = where(dist le sat1.rlim*ccdstr1.pixscale,ncls)   ; within the limiting radius for THIS star
       printlog,logf,strtrim(i+1,2),'/',strtrim(nsatref,2),' gmag=',stringize(sat1.gmag,ndec=2),$
-            '  nmatches=',strtrim(nind,2)
+            '  nmatches=',strtrim(ncls,2)
       printlog,logf,'Limiting radius = ',stringize(sat1.rlim,ndec=1),' pixels = ',stringize(sat1.rlim*ccdstr1.pixscale,ndec=2),' arcsec'
-      if verbose eq 2 then begin
+      if verbose eq 2 and ncls gt 0 then begin
         printlog,logf,'  NUM   DIST  CMAG  CPFLAGS SEFLAGS   SNR   FWHM  ELLIPTICITY'
-        writecol,-1,indgen(nind)+1,dist,cat[ind].cmag,cat[ind].imaflags_iso,$
-                 cat[ind].flags,1/cat[ind].cerr,cat[ind].fwhm_world*3600,cat[ind].ellipticity,$
+        writecol,-1,indgen(ncls)+1,dist[clsind],cat[ind[clsind]].cmag,cat[ind[clsind]].imaflags_iso,$
+                 cat[ind[clsind]].flags,1/cat[ind[clsind]].cerr,cat[ind[clsind]].fwhm_world*3600,cat[ind[clsind]].ellipticity,$
                  fmt='(I5,F7.2,F7.2,2I7,F9.1,F6.1,F9.2)'
+        ;writecol,-1,indgen(nind)+1,dist,cat[ind].cmag,cat[ind].imaflags_iso,$
+        ;         cat[ind].flags,1/cat[ind].cerr,cat[ind].fwhm_world*3600,cat[ind].ellipticity,$
+        ;         fmt='(I5,F7.2,F7.2,2I7,F9.1,F6.1,F9.2)'
       endif
     endif
 

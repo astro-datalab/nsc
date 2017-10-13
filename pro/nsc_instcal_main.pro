@@ -67,16 +67,30 @@ list3 = MRDFITS(dir+'/lists/bok90prime_instcal_list.fits',1)
 str = [list1,list2,list3]
 undefine,list1,list2,list3
 nstr = n_elements(str)
+str.fluxfile = strtrim(str.fluxfile,2)
+str.maskfile = strtrim(str.maskfile,2)
+str.wtfile = strtrim(str.wtfile,2)
 print,strtrim(nstr,2),' InstCal images'
 
+; Only run exposures for our 6 test fields
+healpix = [37391, 64471, 153437, 153728, 190278, 194240]
+undefine,base
+for i=0,n_elements(healpix)-1 do begin
+  expstr = mrdfits('/net/dl1/users/dnidever/nsc/qa/'+strtrim(healpix[i],2)+'.fits.gz',1,/silent)
+  push,base,strtrim(expstr.base,2)
+endfor
+allbase = file_basename(str.fluxfile,'.fits.fz')
+MATCH,allbase,base,ind1,ind2,/sort
+gdexp = ind1
+ngdexp = n_elements(gdexp)
 
 ;glactc,str.ra,str.dec,2000.0,glon,glat,1,/deg
 ;gal2mag,glon,glat,mlon,mlat
 ;filt = strmid(str.filter,0,1)
 ;exptime = str.exposure
 
-gdexp = lindgen(nstr)
-ngdexp = nstr
+;gdexp = lindgen(nstr)
+;ngdexp = nstr
 
 ; Check the exposures
 print,'Checking on the exposures'
@@ -107,7 +121,7 @@ for i=0,ngdexp-1 do begin
   night = strmid(dateobs,0,4)+strmid(dateobs,5,2)+strmid(dateobs,8,2)
   baseroot = file_basename(base,'.fits.fz')
   ;outfile = dldir+'users/dnidever/decamcatalog/instcal/'+night+'/'+baseroot+'/'+baseroot+'_'+strtrim(1,2)+'.fits'
-  outfile = dir+'/'+instrument+'/'+night+'/'+baseroot+'/'+baseroot+'_'+strtrim(1,2)+'.fits'
+  outfile = dir+instrument+'/'+night+'/'+baseroot+'/'+baseroot+'_'+strtrim(1,2)+'.fits'
   expstr[i].outfile = outfile
 
   ; Do all three files exist?
@@ -178,7 +192,7 @@ for i=0,ntosubmit-1 do begin
 endfor
 
 ; Saving the structure of jobs to run
-runfile = dir+'logs/nsc_instcal_main.'+logtime+'_run.fits'
+runfile = dir+'lists/nsc_instcal_main.'+logtime+'_run.fits'
 print,'Writing running information to ',runfile
 MWRFITS,expstr,runfile,/create
 

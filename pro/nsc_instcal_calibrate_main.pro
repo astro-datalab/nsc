@@ -1,10 +1,12 @@
-pro nsc_instcal_calibrate_main,nmulti=nmulti,redo=redo
+pro nsc_instcal_calibrate_main,version,nmulti=nmulti,redo=redo
 
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
-dir = dldir+"users/dnidever/nsc/"
+if n_elements(version) eq 0 then version='v2'
+dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 ;dir = dldir+"users/dnidever/decamcatalog/"
 ;dir = "/datalab/users/dnidever/decamcatalog/"
+if file_test(dir,/directory) eq 0 then file_mkdir,dir+'logs/'
 
 ; Log file
 ;------------------
@@ -22,21 +24,21 @@ sminute = strtrim(minute,2)
 if minute lt 10 then sminute='0'+sminute
 ssecond = strtrim(round(second),2)
 if second lt 10 then ssecond='0'+ssecond
-logfile = dir+'nsc_instcal_calibrate_main.'+smonth+sday+syear+shour+sminute+ssecond+'.log'
+logfile = dir+'logs/nsc_instcal_calibrate_main.'+smonth+sday+syear+shour+sminute+ssecond+'.log'
 JOURNAL,logfile
 
 if n_elements(nmulti) eq 0 then nmulti = 20
 wait = 1
 
-print, "Calibrating DECam InstCal SExtractor catalogs"
+print, "Calibrating DECam/Mosiac3/Bok InstCal SExtractor catalogs"
 
 ; Find all of the directories
 print,'Getting the exposure directories'
-c4d_expdirs = file_search(dir+'instcal/c4d/20??????/*',/test_directory,count=nc4d_expdirs)
+c4d_expdirs = file_search(dir+'c4d/20??????/*',/test_directory,count=nc4d_expdirs)
 if nc4d_expdirs gt 0 then push,expdirs,c4d_expdirs
-k4m_expdirs = file_search(dir+'instcal/k4m/20??????/*',/test_directory,count=nk4m_expdirs)
+k4m_expdirs = file_search(dir+'k4m/20??????/*',/test_directory,count=nk4m_expdirs)
 if nk4m_expdirs gt 0 then push,expdirs,k4m_expdirs
-ksb_expdirs = file_search(dir+'instcal/ksb/20??????/*',/test_directory,count=nksb_expdirs)
+ksb_expdirs = file_search(dir+'ksb/20??????/*',/test_directory,count=nksb_expdirs)
 if nksb_expdirs gt 0 then push,expdirs,ksb_expdirs
 ; GDL file_search doesn't have /test_directory
 ;expdirs = file_search(dir+'instcal/20??????/*',count=nexpdirs)
@@ -47,7 +49,7 @@ print,strtrim(nexpdirs,2),' exposure directories'
 
 cmd = 'nsc_instcal_calibrate,"'+expdirs+'"'
 if keyword_set(redo) then cmd+=',/redo'
-dirs = strarr(nexpdirs)+localdir+'/dnidever/nsc/instcal/tmp/'
+dirs = strarr(nexpdirs)+localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 ;dirs = strarr(nexpdirs)+'/data0/dnidever/decamcatalog/instcal/tmp/'
 
 ; ----- Run the LAF and Stripe82 exposures ----
@@ -172,9 +174,9 @@ endfor
 chstr = chstr[0:chcnt-1]
 gd = where(expstr.success eq 1,ngd)
 print,strtrim(ngd,2),' exposure successfully calibrated'
-print,'Writing summary file to ',dir+'instcal/nsc_instcal_calibrate.fits'
-MWRFITS,expstr,dir+'instcal/nsc_instcal_calibrate.fits',/create
-MWRFITS,chstr,dir+'instcal/nsc_instcal_calibrate.fits'
+print,'Writing summary file to ',dir+'lists/nsc_instcal_calibrate.fits'
+MWRFITS,expstr,dir+'lists/nsc_instcal_calibrate.fits',/create
+MWRFITS,chstr,dir+'lists/nsc_instcal_calibrate.fits',/silent
 
 ; End logfile
 ;------------

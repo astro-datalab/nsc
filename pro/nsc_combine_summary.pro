@@ -1,14 +1,15 @@
-pro nsc_combine_summary
+pro nsc_combine_summary,version=version
 
 ; Create a summary file of all the Healpix combined files
 
 ; Combine all of the data
 NSC_ROOTDIRS,dldir,mssdir,localdir
-dir = dldir+'users/dnidever/nsc/instcal/'
+if n_elements(version) eq 0 then version='v2'
+dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 nside = 128
 radeg = 180.0d0 / !dpi
 
-index = mrdfits(dir+'combine/nsc_healpix_list.fits',2,/silent)
+index = mrdfits(dir+'lists/nsc_healpix_list.fits',2,/silent)
 npix = n_elements(index)
 
 ; Load all the summary/metadata files
@@ -20,7 +21,7 @@ sumstr.pix = index.pix
 PIX2ANG_RING,nside,sumstr.pix,theta,phi
 sumstr.ra = phi*radeg
 sumstr.dec = 90-theta*radeg
-files = dir+'combine/'+strtrim(sumstr.pix,2)+'.fits.gz'
+files = dir+'combine/'+strtrim(sumstr.pix/1000,2)+'/'+strtrim(sumstr.pix,2)+'.fits.gz'
 info = file_info(files)
 sumstr.file = info.name
 sumstr.exists = info.exists
@@ -94,8 +95,8 @@ for i=0,npix-1 do begin
 endfor
 gd = where(sumstr.success eq 1,ngd)
 print,strtrim(ngd,2),' Healpix successfully processed'
-print,'Writing summary file to ',dir+'combine/nsc_instcal_combine.fits'
-MWRFITS,sumstr,dir+'combine/nsc_instcal_combine.fits',/create
+print,'Writing summary file to ',dir+'lists/nsc_instcal_combine.fits'
+MWRFITS,sumstr,dir+'lists/nsc_instcal_combine.fits',/create
 
 stop
 

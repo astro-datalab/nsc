@@ -355,6 +355,7 @@ for i=0,nrefcat-1 do begin
       file_delete,refcattemp,/allow
       file_delete,refcatfile,/allow
       spawn,cmd,out,outerr
+
       ; Load ASCII file and create the FITS file
       ref = importascii(refcattemp,/header,delim='|',skipline=2,/silent)
       if keyword_set(saveref) then MWRFITS,ref,refcatfile,/create      ; only save if necessary

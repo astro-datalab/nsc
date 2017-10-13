@@ -135,8 +135,10 @@ for i=0,nrefcat-1 do begin
     printlog,logf,'Loading ',refcat[i],' reference catalog'
 
   ; Load the catalog
-  ref1 = getrefcat(cenra,cendec,radius,refcat[i],count=nref1,silent=silent)
+  ref1 = GETREFCAT(cenra,cendec,radius,refcat[i],count=nref1,silent=silent)
   tags1 = tag_names(ref1)
+
+
 
   ; First one, initialize the catalog
   if i eq 0 then begin
@@ -149,11 +151,6 @@ for i=0,nrefcat-1 do begin
     struct_assign,ref1,ref,/nozero
     ref.ra = ref.ra_icrs
     ref.dec = ref.de_icrs
-
-    ; Add reddening
-    glactc,ref.ra,ref.dec,2000.0,glon,glat,1,/deg
-    ebv = dust_getval(glon,glat,/noloop,/interp)
-    ref.ebv = ebv
 
   ; Crossmatch and add magnitudes
   endif else begin
@@ -192,11 +189,52 @@ for i=0,nrefcat-1 do begin
       else: stop,catname+' NOT SUPPORTED'
       endcase
     endif
+
+    ; Add leftover ones
+    if nmatch lt n_elements(ref1) then begin
+      left1 = ref1
+      remove,ind2,left1
+      nleft1 = n_elements(left1)
+      new = replicate(schema,nleft1)
+      new.ra = left1.(raind)
+      new.dec = left1.(decind)
+      
+      case refcat[i] of
+      '2MASS-PSC': begin
+         new.jmag = left1.jmag
+         new.kmag = left1.kmag
+      end
+      'PS': begin
+         new.ps_gmag = left1.gmag
+         new.ps_rmag = left1.rmag
+         new.ps_zmag = left1.zmag
+      end
+      'APASS': begin
+         new.apass_gmag = left1.g_mag
+         new.apass_rmag = left1.r_mag
+      end
+      'II/312/ais': new.nuv = left1.nuv
+      else: stop,catname+' NOT SUPPORTED'
+      endcase
+      
+      ; Combine the two
+      old = ref
+      ref = replicate(schema,n_elements(old)+nleft1)
+      ref[0:n_elements(old)-1] = old
+      ref[n_elements(old):*] = new
+      undefine,old,new,left1
+    endif
+
   endelse  ; second reference catalog
 endfor
 
+; Add reddening
+glactc,ref.ra,ref.dec,2000.0,glon,glat,1,/deg
+ebv = dust_getval(glon,glat,/noloop,/interp)
+ref.ebv = ebv
+
 ; Get the model magnitudes
-model_mag = getmodelmag(ref,filter)
+model_mag = GETMODELMAG(ref,filter)
 ref.model_mag = model_mag
 gmodel = where(ref.model_mag lt 50,ngmodel)
 if not keyword_set(silent) then $
