@@ -12,7 +12,7 @@
 ;  =maxjobs  The maximum number of exposures to attempt to process.
 ;              The default is 40,000.
 ;  /silent   Don't print much to the screen.
-;  /unlock   Ignore the lock the files.
+;  /unlock   Ignore the lock files.
 ;
 ; OUTPUTS:
 ;  A log "journal" file is put in ROOTDIR+users/dnidever/nsc/instcal/logs/
@@ -34,6 +34,8 @@ if n_elements(maxjobs) eq 0 then maxjobs=4e4
 if n_elements(nmulti) eq 0 then nmulti=30
 if n_elements(version) eq 0 then version='v2'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
+tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
+if file_test(tmpdir,/directory) eq 0 then file_mkdir,tmpdir
 
 t0 = systime(1)
 
@@ -152,7 +154,7 @@ for i=0,ngdexp-1 do begin
     ;if file_test(file_dirname(outfile),/directory) eq 0 then file_mkdir,file_dirname(outfile)  ; make directory
     ;if testlock eq 0 then touchzero,outfile+'.lock'  ; this is fast
     expstr[i].cmd = '/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal.py '+fluxfile+' '+wtfile+' '+maskfile+' '+version
-    expstr[i].cmddir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
+    expstr[i].cmddir = tmpdir
     expstr[i].torun = 1
   ; Lock file exists
   endif else begin
