@@ -6,7 +6,9 @@ if n_elements(version) eq 0 then version='v2'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 ;dir = dldir+"users/dnidever/decamcatalog/"
 ;dir = "/datalab/users/dnidever/decamcatalog/"
+tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 if file_test(dir,/directory) eq 0 then file_mkdir,dir+'logs/'
+if file_test(tmpdir,/directory) eq 0 then file_mkdir,tmpdir
 
 ; Log file
 ;------------------
@@ -49,7 +51,7 @@ print,strtrim(nexpdirs,2),' exposure directories'
 
 cmd = 'nsc_instcal_calibrate,"'+expdirs+'"'
 if keyword_set(redo) then cmd+=',/redo'
-dirs = strarr(nexpdirs)+localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
+dirs = strarr(nexpdirs)+tmpdir
 ;dirs = strarr(nexpdirs)+'/data0/dnidever/decamcatalog/instcal/tmp/'
 
 ; ----- Run the LAF and Stripe82 exposures ----
