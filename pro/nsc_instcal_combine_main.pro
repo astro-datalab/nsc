@@ -1,4 +1,4 @@
-pro nsc_instcal_combine_main,redo=redo,version=version,makelist=makelist,nmulti=nmulti,nocuts=nocuts
+pro nsc_instcal_combine_main,version,redo=redo,makelist=makelist,nmulti=nmulti,nocuts=nocuts
 
 ; Combine all of the data
 NSC_ROOTDIRS,dldir,mssdir,localdir
