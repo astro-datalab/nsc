@@ -325,7 +325,7 @@ endif else begin
 endelse
 
 ; Make the commands
-cmd = "nsc_instcal_combine,"+strtrim(index.pix,2)+",nside="+strtrim(nside,2)
+cmd = "nsc_instcal_combine,"+strtrim(index.pix,2)+",nside="+strtrim(nside,2)+",version='"+version+"'"
 if keyword_set(redo) then cmd+=',/redo'
 cmddir = strarr(npix)+localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 
