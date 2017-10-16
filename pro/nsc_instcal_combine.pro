@@ -234,20 +234,22 @@ FOR i=0,nlist-1 do begin
   ; case of an OR or AND FLAG TYPE.
 
   ; Make a cut on quality mask flag (IMAFLAGS_ISO)
-  ;   Don't use "difference image masking" for pre-V3.5 or so version
-  ;   because it had problems.  We don't have PLVER but just use
-  ;   the maximum IMAFLAGS_ISO value
-  if max(cat1.imaflags_iso) gt 10 then begin
-    bdcat = where(cat1.imaflags_iso gt 0 and cat1.imaflags_iso lt 120,nbdcat)
-  ;THIS IS A BITMASK, make sure none of the lower values are set
-  ; bdcat = where(cat1.imaflags_iso gt 0 and cat1.imagflags_iso ne 128,nbdcat)
-  endif else begin
-    bdcat = where(cat1.imaflags_iso gt 0,nbdcat)
-  endelse
+  bdcat = where(cat1.imaflags_iso gt 0,nbdcat)
   if nbdcat gt 0 then begin
-    print,'  Removing ',strtrim(nbdcat,2),' sources contaminated by bad pixels.'
+    print,'  Removing ',strtrim(nbdcat,2),' sources with bad CP flags.'
     if nbdcat eq ncat1 then goto,BOMB
     REMOVE,bdcat,cat1
+    ncat1 = n_elements(cat1)
+  endif
+
+  ; Make cuts on SE FLAGS
+  ;   this removes problematic truncatd sources near chip edges
+  bdseflags = where( ((cat1.flags and 8) eq 8) or $             ; object truncated
+                     ((cat1.flags and 16) eq 16),nbdseflags)    ; aperture truncate
+  if nbdseflags gt 0 then begin
+    print,'  Removing ',strtrim(nbdseflags,2),' truncated sources'
+    if nbdseflags eq ncat1 then goto,BOMB
+    REMOVE,bdseflags,cat1
     ncat1 = n_elements(cat1)
   endif
 

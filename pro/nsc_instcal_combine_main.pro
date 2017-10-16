@@ -6,6 +6,7 @@ if n_elements(version) eq 0 then version='v2'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 if file_test(dir+'combine/',/directory) eq 0 then file_mkdir,dir+'combine/'
 if file_test(dir+'combine/logs/',/directory) eq 0 then file_mkdir,dir+'combine/logs/'
+if file_test(localdir+'dnidever/nsc/instcal/'+version+'/') eq 0 then file_mkdir,localdir+'dnidever/nsc/instcal/'+version+'/'
 nside = 128
 nmulti = 30
 radeg = 180.0d0 / !dpi
