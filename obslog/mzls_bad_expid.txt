@@ -1903,7 +1903,7 @@
 108563 depfac<0.3
 108564 depfac<0.3
 108575 trans<0.5 depfac<0.3
-
+ 
 #2017-02-15
 108765  empty frame, timeout 
 
@@ -2003,7 +2003,7 @@
 111755 out of focus
 111756 out of focus
 111757 mirror covers were closed
-#anything before-111792 Due to a cloudy weather, the dome is closed (no useful data tonight)
+anything before-111792 Due to a cloudy weather, the dome is closed (no useful data tonight)
 113282 counts > 50k
 113283 counts > 50k
 113284 counts > 50k
@@ -2230,3 +2230,1056 @@
 122770 trans < 30
 122771 trans < 30
 122822 tracking dropped with power. Trailed. 
+
+#2017-04-18
+123153 bad amp ccd1
+123154 bad amp ccd1
+123155 bad amp ccd1
+123156 bad amp ccd1
+123157 bad amp ccd1
+123158 bad amp ccd1
+123288 mirror off air
+
+#2017-04-19
+123459 TO
+123543 TO
+
+#2017-04-20
+123666 Null image after detector timeout
+123672 Null image after detector timeout
+123682 Null image after detector timeout
+123690 Null image after detector timeout
+123695 Null image after detector timeout
+
+#2017-04-20
+123907 bad focus
+123996 Trefoil PSF
+123997 Trefoil PSF
+124084 E-W elongated PSF
+124085 E-W elongated PSF
+124086 E-W elongated PSF
+
+#2017-04-22
+124112 Null image after detector timeout
+124113 Junk image after detector timeout
+124161 Null image after detector timeout
+124162 Junk image after detector timeout
+124213 Null image after detector timeout
+124222 Null image after detector timeout
+124223 Junk image after detector timeout
+124255 Null image after detector timeout
+124296 Null image after detector timeout
+124297 Junk image after detector timeout
+124317 Null image
+
+#2017-04-23
+124373 Null image after detector timeout
+124374 Junk image after detector timeout
+124385 Null image after detector timeout
+124484 Bad exposure mistake on focus entry
+124485 Bad exposure mistake on focus entry
+
+#2017-04-26
+124887 Junk image after detector timeout
+124888 Null image after detector timeout
+124889 Null image after detector timeout
+124890 Junk image 0 transparency
+124891 Junk image 0 transparency
+124892 Junk image 0 transparency
+124893 Junk image 0 transparency
+124894 Junk image 0 transparency
+
+#2017-04-27
+124956 Amp 7 inoperable
+124957 Amp 7 inoperable
+124958 Amp 7 inoperable
+124959 Amp 7 inoperable
+124960 Amp 7 inoperable
+124961 Amp 7 inoperable
+124962 Amp 7 inoperable
+124965 Null image after pause for weather
+124971 time out occurred on this frame
+124972 Null image after detector timeout
+124981 Null image after detector timeout
+
+#2017-04-28
+125095 Null image after detector timeout
+125132 Transparency equals 0
+125135 Pointing test
+125136 Pointing test
+125137 Focus test, cloud cover midway through
+125138 Pointing test
+125139 Focus test, cloud cover midway through
+
+#2017-05-01
+125959 corrupt frame (looks like zero instead of science)
+
+#2017-05-05
+126806 transparency < 0.3
+126807 transparency < 0.3
+126808 transparency < 0.3
+126809 transparency < 0.3
+126810 transparency < 0.3
+126811 transparency < 0.3
+126812 transparency < 0.3
+126813 transparency < 0.3
+126814 transparency < 0.3
+126815 transparency < 0.3
+126816 transparency < 0.3
+126822 transparency < 0.3
+126823 transparency < 0.3
+126824 transparency < 0.3
+126825 transparency < 0.3
+126826 transparency < 0.3
+126827 transparency < 0.3
+126828 transparency < 0.3
+126829 transparency < 0.3
+# 2017-05-10
+127337 mirror off air / telescope moving
+
+# 2017-05-13
+127964 high background (24,000)
+127965 high background (30,000)
+127966 hit the Dark button to avoid overexposing
+127967 high background, short exposure
+
+# 2017-05-14 
+128006  Depth factor = 0.300  0.847     3.342 MzLS_577116_
+128034  Depth factor = 0.156  0.281    15.995
+128035  Depth factor = 0.207  0.294    12.100
+128036  Depth factor = 0.113  0.232    22.076
+128037  Depth factor = 0.119  0.266    21.069
+128038  Depth factor = 0.004  0.055   671.043
+128039  Depth factor = 0.060  0.231    41.594
+128041  Depth factor = 0.057  0.210    44.199
+128044  Depth factor = 0.053  0.234    47.269
+128045  Depth factor = 0.076  0.224    33.047
+128046  Depth factor = 0.096  0.287    26.117
+128047 Depth factor = 0.166  0.413    15.049 MzLS_651823_
+128048 Depth factor = 0.096  0.354    25.932 MzLS_654196_
+128049 Depth factor = 0.220  0.484    11.375 MzLS_654206_
+128050 Depth factor = 0.177  0.474    11.323 MzLS_649443_
+128051 Depth factor = 0.062  0.320    32.077 MzLS_649443_
+128052 Depth factor = 0.217  0.517     9.206 MzLS_649443_
+128053 Depth factor = 0.124  0.396    16.117 MzLS_649443_
+128054 Depth factor = 0.266  0.546     7.530 MzLS_649443_
+128055 Depth factor = 0.268  0.577     7.454 MzLS_649443_
+
+# 2017-05-15
+128182 Depth factor = 0.146  0.963     6.839 MzLS_563506_
+128183 Depth factor = 0.180  0.940     5.575 MzLS_569834_
+128184 Depth factor = 0.267  0.963     5.359 MzLS_572967_
+
+# 2017-05-17
+129585 timeout error, bad image
+
+# 2017-05-19
+128937 Depth factor = 0.095  0.942     8.414 MzLS_651734_
+
+# 2017-05-20
+129168 coordinate shift applied while exposing
+
+# 2017-05-21
+129512 timeout error, corrupted image
+
+# 2017-05-29
+130712 Depth factor = 0.015  0.147    54.685
+130713 Depth factor = 0.017  0.156    46.684
+130714 Depth factor = 0.083  0.206    27.203
+130715 Depth factor = 0.074  0.202    30.762
+130716 Depth factor = 0.060  0.176    38.532
+130717 Depth factor = 0.038  0.155    62.042
+130718 Depth factor = 0.032  0.132    74.103
+130719 Depth factor = 0.051  0.154    48.179
+130720 Depth factor = 0.075  0.182    32.913
+130721 Depth factor = 0.118  0.226    21.135
+130722 Depth factor = 0.206  0.294    12.132
+130723 Depth factor = 0.087  0.185    28.746
+130724 Depth factor = 0.011  0.069   230.218
+130725 Depth factor = 0.011  0.070   225.855
+130726 Depth factor = 0.045  0.143    56.098
+130727 Depth factor = 0.120  0.225    19.997
+130728 Depth factor = 0.046  0.131    54.579
+130729 Depth factor = 0.145  0.237    17.286
+130731 Depth factor = 0.070  0.154    35.693
+130732 Depth factor = 0.061  0.142    41.246
+130733 Depth factor = 0.075  0.158    33.535
+130735 Depth factor = 0.019  0.076   129.437
+130736 Depth factor = 0.076  0.145    32.922
+130737 Depth factor = 0.307  0.299     8.137
+130738 Depth factor = 0.263  0.252     9.525
+130739 Depth factor = 0.017  0.065   149.616
+130740 Depth factor = 0.099  0.146    25.325
+130741 Depth factor = 0.032  0.087    79.066
+130742 Depth factor = 0.040  0.095    62.382
+130743 Depth factor = 0.025  0.075    98.757
+130744 Depth factor = 0.060  0.114    41.889
+130745 Depth factor = 0.015  0.053   163.027
+130746 Depth factor = 0.000  0.009  6125.325
+130747 Depth factor = 0.003  0.023   866.297
+130748 Depth factor = 0.006  0.034   452.593
+130749 Depth factor = 0.072  0.125    34.912
+130750 Depth factor = 0.121  0.149    20.682
+130751 Depth factor = 0.354  0.256     7.073
+130753 Depth factor = 0.351  0.244     7.126
+130754 Depth factor = 0.376  0.244     6.652
+130757 Depth factor = 0.164  0.202    15.225
+130789 Depth factor = 0.171  0.225    11.212
+
+# 2017-05-30
+130584 Depth factor = 0.000  
+130856 very bad weather, cloudy
+130857 
+130858
+130859
+130860
+130861 Depth factor = 0.000  0.08   
+130862
+130863
+130864  
+130865
+130866
+130867
+130868 Depth factor = 0.01 0.09
+130869 
+130870
+130871
+130872 Depth factor = 0.06
+130873 Depth factor = 0.14
+130874 Depth factor = 0.18 
+130945 Depth factor = 0.27 cirrus passing by
+130946 Depth factor = 0.08 
+130948 Depth factor = 0.01 
+130949 Depth factor = 0.03 
+130950 Depth factor = 0.04
+130957 Depth factor = 0.15
+130968 Depth factor = 0.03 
+130969 Depth factor = 0.10  0.27
+130970 Depth factor = 0.18
+
+# 2017-05-31
+131031 Depth factor = 0.00 
+131032 Depth factor = 0.00 
+131033 Depth factor = 0.00 
+131034 Depth factor = 0.00 
+131035 Depth factor = 0.14 
+131036 Depth factor = 0.17 
+131039 Depth factor = 0.21
+131040 Depth factor = 0.13
+131041 Depth factor = 0.10
+131051 Depth factor = 0.21
+131052 Depth factor = 0.16
+131053 Depth factor = 0.08
+131054 Depth factor = 0.22
+131055 Depth factor = 0.05
+131056 Depth factor = 0.25
+131057 Depth factor = 0.07
+131058 Depth factor = 0.08
+131059 Depth factor = 0.00
+131060 Depth factor = 0.02
+131061 Depth factor = 0.24
+131062 Depth factor = 0.20
+131063 Depth factor = 0.13
+131064 Depth factor = 0.04
+131065 Depth factor = 0.00
+131066 Depth factor = 0.02
+131067 Depth factor = 0.06
+131068 Depth factor = 0.04
+131069 Depth factor = 0.05 0.21
+131069 Depth factor = 0.05
+131070 Depth factor = 0.15
+131071 Depth factor = 0.19 0.37
+131082 Depth factor = 0.17 
+131084 Depth factor = 0.01 
+131085 Depth factor = 0.01 
+131086 Depth factor = 0.00 
+131087 Depth factor = 0.00
+131088 Depth factor = 0.00
+131089 Depth factor = 0.00
+131091 Depth factor = 0.00 Test image
+131092 Depth factor = 0.00 Test image
+131094 Depth factor = 0.01 bad weather 
+131095 Depth factor = 0.00 
+131096 Depth factor = 0.00 
+131097 Depth factor = 0.06
+131098 Depth factor = 0.07
+131099 Depth factor = 0.11
+131100 Depth factor = 0.26  0.15 transparency
+131101 Depth factor = 0.11
+131102 Depth factor = 0.11
+131103 Depth factor = 0.02 
+131104 Depth factor = 0.04 0.34
+131108 Depth factor = 0.14 0.15 no matched stars
+131109 no matched stars
+131110 Depth factor = 0.08 
+131111 Depth factor = 0.01 
+131112 Depth factor = 0.009 
+
+# 2017-06-01
+131154 Depth factor = 0.268  0.823     2.991 MzLS_650993_
+131155 Depth factor = 0.103  0.766     7.743 MzLS_669269_
+131160 Depth factor = 0.182  0.760     4.408 MzLS_675640_
+
+# 2017-06-02
+131580 Depth factor = 0.267  0.721     3.751 MzLS_592354_
+
+# 2017-06-03
+131761 Depth factor = 0.151  0.756     5.302 MzLS_591376_
+131762 Depth factor = 0.158  0.784     5.071 MzLS_594349_
+
+# 2017-06-04
+131820 Bad image by detector timeout
+
+# 2017-06-05
+
+131942 Depth factor = 0.054  0.535    14.914 MzLS_597288_
+131943 Depth factor = 0.067  0.552    12.009 MzLS_597289_
+131944 Depth factor = 0.028  0.414    37.165 MzLS_564605_
+131945 Depth factor = 0.033  0.436    36.942 MzLS_564607_
+131946 Depth factor = 0.045  0.468    21.101 MzLS_574051_
+131947 Depth factor = 0.061  0.463    15.716 MzLS_567781_
+131948 Depth factor = 0.093  0.471    14.948 MzLS_577161_
+131949 Depth factor = 0.055  0.428    26.236 MzLS_574062_
+131950 Depth factor = 0.068  0.453    22.214 MzLS_577170_
+131951 Depth factor = 0.072  0.428    20.185 MzLS_577177_
+131952 Depth factor = 0.102  0.447    14.674 MzLS_564638_
+131953 Depth factor = 0.131  0.512    11.607 MzLS_577221_
+131954 Depth factor = 0.240  0.569     6.332 MzLS_577232_
+131969 Depth factor = 0.233  0.611     3.444 MzLS_691201_
+131970 Depth factor = 0.168  0.538     4.776 MzLS_691198_
+131977 Depth factor = 0.206  0.413    12.129 MzLS_672165_
+131978 Depth factor = 0.100  0.329    19.673 MzLS_674268_
+131979 Depth factor = 0.089  0.337    18.421 MzLS_678389_
+131980 Depth factor = 0.113  0.401    12.081 MzLS_678393_
+131981 Depth factor = 0.070  0.372    19.591 MzLS_680403_
+131982 Depth factor = 0.042  0.303    35.628 MzLS_680402_
+131983 Depth factor = 0.040  0.294    37.155 MzLS_678387_
+131984 Depth factor = 0.047  0.318    27.104 MzLS_682384_
+131985 Depth factor = 0.068  0.354    18.583 MzLS_682385_
+131986 Depth factor = 0.082  0.371    15.522 MzLS_682386_
+131987 Depth factor = 0.076  0.379    17.995 MzLS_682387_
+131988 Depth factor = 0.109  0.407    13.061 MzLS_682388_
+131989 Depth factor = 0.108  0.414    13.117 MzLS_682391_
+131990 Depth factor = 0.136  0.434    10.979 MzLS_682397_
+131991 Depth factor = 0.253  0.516     5.851 MzLS_682401_
+131992 Depth factor = 0.284  0.516     5.635 MzLS_682403_
+131993 Depth factor = 0.231  0.474     6.916 MzLS_682404_
+131994 Depth factor = 0.181  0.410    10.209 MzLS_682406_
+131995 Depth factor = 0.203  0.442     8.419 MzLS_680449_
+131996 Depth factor = 0.174  0.436     9.170 MzLS_634378_
+131997 Depth factor = 0.233  0.484     6.739 MzLS_670076_
+131998 Depth factor = 0.174  0.498     7.901 MzLS_676368_
+131999 Depth factor = 0.139  0.436    11.601 MzLS_684339_
+132000 Depth factor = 0.133  0.445    12.293 MzLS_684340_
+132001 Depth factor = 0.154  0.448    10.678 MzLS_684342_
+132002 Depth factor = 0.111  0.404    13.384 MzLS_684344_
+132003 Depth factor = 0.079  0.368    18.940 MzLS_684347_
+132004 Depth factor = 0.065  0.339    21.221 MzLS_684351_
+132005 Depth factor = 0.085  0.407    15.251 MzLS_684354_
+132006 Depth factor = 0.163  0.506     7.682 MzLS_684356_
+132007 Depth factor = 0.067  0.460    12.008 MzLS_722533_
+132008 Depth factor = 0.075  0.473    10.687 MzLS_722534_
+132012 Depth factor = 0.290  0.591     7.831 MzLS_682431_
+132013 Depth factor = 0.181  0.534    12.352 MzLS_680458_
+132014 Depth factor = 0.157  0.505    14.192 MzLS_680462_
+132016 Depth factor = 0.048  0.406    16.776 MzLS_722554_
+132017 Depth factor = 0.042  0.369    18.983 MzLS_722553_
+132018 Depth factor = 0.083  0.348    22.027 MzLS_684385_
+132019 Depth factor = 0.114  0.373    15.480 MzLS_684386_
+132020 Depth factor = 0.059  0.307    25.170 MzLS_682442_
+132021 Depth factor = 0.121  0.404    12.573 MzLS_682444_
+132022 Depth factor = 0.149  0.456     9.105 MzLS_682446_
+132023 Depth factor = 0.170  0.432     9.394 MzLS_682447_
+132024 Depth factor = 0.260  0.491     6.838 MzLS_684392_
+132025 Depth factor = 0.295  0.527     5.739 MzLS_684394_
+132026 Depth factor = 0.247  0.536     7.989 MzLS_680469_
+132027 Depth factor = 0.237  0.526     8.725 MzLS_680466_
+132028 Depth factor = 0.274  0.598     7.961 MzLS_601311_
+132029 Depth factor = 0.068  0.368    31.305 MzLS_686266_
+132030 Depth factor = 0.051  0.334    34.259 MzLS_686269_
+132031 Depth factor = 0.060  0.376    23.874 MzLS_686271_
+132032 Depth factor = 0.102  0.438    13.342 MzLS_686273_
+132033 Depth factor = 0.174  0.501     8.169 MzLS_686274_
+132034 Depth factor = 0.145  0.454    10.851 MzLS_686276_
+132035 Depth factor = 0.132  0.432    13.560 MzLS_686277_
+132036 Depth factor = 0.197  0.491     8.752 MzLS_686279_
+132037 Depth factor = 0.184  0.459     8.638 MzLS_686281_
+132045 Depth factor = 0.217  0.375     9.348 MzLS_686287_
+132049 Depth factor = 0.221  0.321    11.332 MzLS_682465_
+132050 Depth factor = 0.223  0.313    11.199 MzLS_684411_
+132051 Depth factor = 0.162  0.276    14.965 MzLS_682468_
+132052 Depth factor = 0.092  0.241    27.048 MzLS_684413_
+132053 Depth factor = 0.158  0.269    15.785 MzLS_682470_
+132054 Depth factor = 0.255  0.327     9.814 MzLS_682473_
+132055 Depth factor = 0.239  0.267    10.468 MzLS_680494_
+132067 Depth factor = 0.220  0.339    11.367 MzLS_621118_
+
+# 2017-06-06
+132238 Depth factor = 0.078  0.262    28.685 MzLS_714476_
+132240 Depth factor = 0.100  0.425     8.009 MzLS_711841_
+132241 Depth factor = 0.048  0.351    16.695 MzLS_710468_
+132242 Depth factor = 0.083  0.402     9.625 MzLS_706134_
+132246 Depth factor = 0.079  0.299    15.752 MzLS_714478_
+132247 Depth factor = 0.128  0.346    10.565 MzLS_713179_
+
+# 2017-06-07
+132293 Depth factor = 0.263  0.723     3.051 MzLS_600218_
+132294 Depth factor = 0.276  0.744     2.907 MzLS_608875_
+132376 Depth factor = 0.282  0.488     5.571 MzLS_682445_
+132400 Depth factor = 0.188  0.407    10.262 MzLS_678484_
+132401 Depth factor = 0.059  0.276    30.596 MzLS_682473_
+132402 Depth factor = 0.158  0.418     9.307 MzLS_680495_
+132403 Depth factor = 0.192  0.506     5.640 MzLS_670132_
+132407 Depth factor = 0.048  0.216    49.026 MzLS_665764_
+132408 Depth factor = 0.025  0.169    72.664 MzLS_647073_
+132409 Depth factor = 0.003  0.083   441.861 MzLS_626529_
+132410 Depth factor = 0.008  0.135   175.342 MzLS_629194_
+132411 Depth factor = 0.025  0.247    34.788 MzLS_618374_
+132412 Depth factor = 0.027  0.240    32.240 MzLS_612807_
+132413 Depth factor = 0.087  0.326    13.597 MzLS_598447_
+132414 Depth factor = 0.033  0.217    39.591 MzLS_601366_
+132415 Depth factor = 0.018  0.139    98.371 MzLS_604245_
+132416 Depth factor = 0.005  0.083   306.737 MzLS_595491_
+132417 Depth factor = 0.000  0.025  4377.427 MzLS_592526_
+
+# 2017-06-08
+132458 Depth factor = 0.223  0.792     3.587 MzLS_566748_
+132459 Depth factor = 0.232  0.855     3.450 MzLS_573035_
+132460 Depth factor = 0.291  0.789     8.158 MzLS_564607_
+132462 Depth factor = 0.236  0.814     7.034 MzLS_567781_
+132463 Depth factor = 0.276  0.808     6.562 MzLS_580238_
+
+# 2017-06-09
+132651 Depth factor = 0.014  0.440   139.406 MzLS_564605_
+132652 Depth factor = 0.016  0.416   124.063 MzLS_564606_
+132653 Depth factor = 0.014  0.404   142.565 MzLS_564607_
+132691 Depth factor = 0.108  0.679     7.434 MzLS_690012_
+132692 Depth factor = 0.134  0.717     5.969 MzLS_690013_
+
+# 2017-06-10
+132784 Depth factor = 0.259  0.902     3.091 MzLS_600210_
+132785 Depth factor = 0.263  0.914     3.044 MzLS_597281_
+
+# 2017-06-11
+132953 Dome wasn't tracking
+
+# 2017-06-12
+133007 Depth factor = 0.177  1.005     4.523 MzLS_600208_
+133008 Depth factor = 0.191  0.975     4.190 MzLS_608851_
+
+# 2017-06-13
+133217 Dome obstructing the telescope
+133218 Dome vignetting
+133222 Depth factor = 0.23 (depth of previous exposure marginal (0.37))
+
+# 2017-06-15
+133623 Seeing = 2.60, depth factor = 0.38
+133624 Seeing = 2.39, depth factor = 0.45
+133625 Seeing = 2.25
+
+
+# 2017-08-01
+135517 very thick clouds
+135518 very thick clouds
+135519 very thick clouds
+
+# 2017-08-04
+135778 expfactor=0.239  MzLS_697086_
+135825 expfactor=0.015  MzLS_698229_
+135826 expfactor=0.021  MzLS_698232_
+135827 expfactor=0.001  MzLS_698233_
+135830 expfactor=0.000  MzLS_601380_
+135831 expfactor=0.003  MzLS_604277_
+135832 expfactor=0.003  MzLS_604278_
+135833 expfactor=0.224  MzLS_601382_
+135872 expfactor=0.237  MzLS_664844_
+135873 expfactor=0.282  MzLS_681664_
+135874 expfactor=0.143  MzLS_628976_
+
+#2017-08-05
+135916  expfactor=0.001 MzLS_725473_
+135917  expfactor=0.031 MzLS_726372_
+135918  expfactor=0.220 MzLS_727235_
+135919  expfactor=0.017 MzLS_727236_
+135920  expfactor=0.021 MzLS_727237_
+135921  expfactor=0.183 MzLS_726374_
+135922  nmatched < 10
+136019  expfactor=0.181 MzLS_689298_
+136024  expfactor=0.206 MzLS_641901_
+
+# 2017-08-06
+136221 expfactor=0.288 MzLS_696393_
+136225 expfactor=0.266 MzLS_653328_
+
+# 2017-08-07
+136395 expfactor=0.166 MzLS_660325_
+136396 expfactor=0.175 MzLS_648504_
+136398 expfactor=0.161 MzLS_623614_
+136399 expfactor< 0.3  MzLS_620894_
+
+#2017-08-08
+136573 expfactor=0.17 MzLS_637030_
+136577 expfactor=0.27 MzLS_642109_
+136578 expfactor=0.29 MzLS_642111_
+136616 expfactor=0.01 MzLS_651942_
+136617 expfactor=0.17 MzLS_658998_
+136618 expfactor=0.045 MzLS_661290_
+136619 expfactor=0.06 test exposure
+
+# 2017-08-20
+136951 expfactor=0.291 MzLS_651934_
+136952 expfactor=0.293 MzLS_656667_
+136953 expfactor=0.18 MzLS_656668_
+136965 expfactor=0.25 MzLS_658994_
+
+# 2017-08-28
+137044 expfactor=0.07 MzLS_661284_
+137045 expfactor=0.00 MzLS_661285_
+137046 expfactor=0.00,seeing=2.07 MzLS_663547_
+137047 expfactor=0.14 MzLS_665778_
+137057 expfactor=0.04 MzLS_661094_
+137058 expfactor=0.00,seeing=2.07 MzLS_654122_
+137059 expfactor=0.15 MzLS_618148_
+137061 expfactor=0.18 MzLS_649325_
+137078 expfactor=0.20 MzLS_589331_
+
+# 2017-08-29
+# 2017-08-30
+# 2017-08-31
+
+137700 expfactor=0.094  MzLS_570896_
+137701 expfactor=0.056  MzLS_567751_
+137706 expfactor=0.105  MzLS_580219_
+
+# 2017-09-01
+137769 expfactor=0.133  MzLS_710904_
+137770 expfactor=0.120  MzLS_710905_
+137771 expfactor=0.071  MzLS_709504_
+137772 expfactor=0.004  MzLS_709505_
+137773 expfactor=0.001  MzLS_710907_
+137774 expfactor=0.000  MzLS_709509_
+137775 expfactor=0.018  MzLS_710909_
+137776 expfactor=0.132  MzLS_708080_
+137777 expfactor=0.196  MzLS_706613_
+137778 expfactor=0.290  MzLS_708083_
+137780 expfactor=0.021  MzLS_709525_
+137781 expfactor=0.004  MzLS_709526_
+137782 expfactor=0.000  MzLS_709527_
+137783 expfactor=0.000  MzLS_709528_
+137784 expfactor=0.002  MzLS_709530_
+137785 expfactor=0.000  MzLS_705124_
+137786 expfactor=0.000  MzLS_703589_
+137787 expfactor=0.000  MzLS_705126_
+137788 expfactor=0.003  MzLS_702021_
+137789 expfactor=0.001  MzLS_698772_
+137790 expfactor=0.000  MzLS_698773_
+137791 expfactor=0.000  MzLS_697096_
+137792 expfactor=0.000  MzLS_695389_
+137793 expfactor=0.000  MzLS_693645_
+137794 expfactor=0.000  MzLS_690056_
+137795 expfactor=*****  MzLS_688210_
+137796 expfactor=0.001  MzLS_690056_
+137797 expfactor=0.000  MzLS_688210_
+137798 expfactor=0.000  MzLS_678491_
+137799 expfactor=0.000  MzLS_676450_
+137800 expfactor=*****  MzLS_667966_
+137801 expfactor=*****  MzLS_665766_
+137802 expfactor=0.000  MzLS_661275_
+137803 expfactor=0.002  MzLS_658984_
+137804 expfactor=0.015  MzLS_654310_
+137805 expfactor=0.005  MzLS_651930_
+137806 expfactor=0.030  MzLS_647075_
+137807 expfactor=0.005  MzLS_639582_
+137808 expfactor=0.001  MzLS_642112_
+137809 expfactor=0.008  MzLS_649521_
+137810 expfactor=0.047  MzLS_656667_
+137811 expfactor=0.079  MzLS_656665_
+137816 expfactor=0.251  MzLS_665767_
+137817 expfactor=0.079  MzLS_665768_
+137818 expfactor=0.045  MzLS_663540_
+137819 expfactor=0.082  MzLS_663543_
+137820 expfactor=0.006  MzLS_663544_
+137821 expfactor=0.158  MzLS_656668_
+137822 expfactor=0.249  MzLS_651934_
+137823 expfactor=0.034  MzLS_649523_
+137824 expfactor=0.021  MzLS_642117_
+137825 expfactor=0.111  MzLS_623847_
+137826 expfactor=0.214  MzLS_571136_
+137828 expfactor=0.206  MzLS_654317_
+137830 expfactor=0.289  MzLS_651938_
+137840 expfactor=0.062  MzLS_670138_
+137841 expfactor=0.113  MzLS_670139_
+137842 expfactor=0.227  MzLS_670140_
+137915 expfactor=0.217  MzLS_580217_
+137916 expfactor=0.160  MzLS_567761_
+137917 expfactor=*****  MzLS_577141_
+
+# 2017-09-02
+
+137966 expfactor=0.010  MzLS_709514_
+137967 expfactor=0.040  MzLS_708081_
+137968 expfactor=0.005  MzLS_709516_
+137969 expfactor=0.001  MzLS_710911_
+137970 expfactor=0.000  MzLS_710913_
+137971 expfactor=*****  MzLS_709518_
+137972 expfactor=1.311  MzLS_709519_
+137973 expfactor=3.643  MzLS_708086_
+137974 expfactor=0.000  MzLS_710914_
+137975 expfactor=0.001  MzLS_710924_
+137976 expfactor=0.001  MzLS_710925_
+137977 expfactor=0.015  MzLS_710926_
+137978 expfactor=0.010  MzLS_697097_
+137979 expfactor=0.007  MzLS_695390_
+137980 expfactor=0.007  MzLS_690057_
+137981 expfactor=0.011  MzLS_676451_
+137982 expfactor=0.006  MzLS_674377_
+137983 expfactor=0.037  MzLS_672272_
+137984 expfactor=0.082  MzLS_674378_
+137985 expfactor=0.019  MzLS_676452_
+137986 expfactor=0.002  MzLS_672274_
+137987 expfactor=0.003  MzLS_672276_
+137988 expfactor=0.001  MzLS_672278_
+137989 expfactor=0.001  MzLS_674380_
+137990 expfactor=0.005  MzLS_676453_
+137991 expfactor=0.001  MzLS_676454_
+137992 expfactor=0.000  MzLS_676455_
+137993 expfactor=0.003  MzLS_676456_
+137994 expfactor=0.001  MzLS_676457_
+137995 expfactor=0.007  MzLS_674384_
+137996 expfactor=0.000  MzLS_680516_
+137997 expfactor=0.000  MzLS_680517_
+137998 expfactor=0.053  MzLS_680518_
+137999 expfactor=0.039  MzLS_680522_
+138000 expfactor=0.032  MzLS_672281_
+138001 expfactor=0.068  MzLS_678498_
+138002 expfactor=0.118  MzLS_678499_
+138005 expfactor=0.075  MzLS_678504_
+138006 expfactor=0.001  MzLS_678508_
+138007 expfactor=0.000  MzLS_678510_
+138008 expfactor=0.073  MzLS_678495_
+138009 expfactor=0.000  MzLS_678496_
+138010 expfactor=0.215  MzLS_678497_
+138019 expfactor=0.218  MzLS_682499_
+138020 expfactor=0.207  MzLS_688228_
+138022 expfactor=0.098  MzLS_684443_
+138024 expfactor=0.016  MzLS_669957_
+138025 expfactor=0.013  MzLS_665583_
+138026 expfactor=0.000  MzLS_688057_
+138029 expfactor=0.031  MzLS_667791_
+138030 expfactor=0.065  MzLS_669965_
+138031 expfactor=0.192  MzLS_674212_
+138032 expfactor=0.072  MzLS_676289_
+138033 expfactor=0.015  MzLS_667794_
+138034 expfactor=0.001  MzLS_654122_
+138035 expfactor=0.043  MzLS_672107_
+138036 expfactor=0.005  MzLS_669971_
+138037 expfactor=0.030  MzLS_667801_
+138038 expfactor=0.042  MzLS_649328_
+138039 expfactor=0.230  MzLS_667802_
+138040 expfactor=0.189  MzLS_646888_
+138041 expfactor=0.233  MzLS_634248_
+138042 expfactor=0.231  MzLS_631636_
+138043 expfactor=0.000  MzLS_595279_
+138047 expfactor=0.003  MzLS_636836_
+138048 expfactor=0.032  MzLS_634253_
+138049 expfactor=0.209  MzLS_631641_
+138050 expfactor=0.083  MzLS_634255_
+138051 expfactor=0.071  MzLS_629005_
+138053 expfactor=0.067  MzLS_636847_
+138054 expfactor=0.060  MzLS_636849_
+138055 expfactor=0.102  MzLS_634266_
+138056 expfactor=0.069  MzLS_636855_
+138057 expfactor=0.046  MzLS_574029_
+138058 expfactor<0.3    MzLS_574034_
+
+# 2017-09-03
+138144 expfactor=0.00 MzLS_712267_
+138145 expfactor=0.01 MzLS_712268_
+138146 expfactor=0.01 MzLS_710915_
+138147 expfactor=0.01 MzLS_709506_
+138148 expfactor=0.01 MzLS_712262_
+138149 expfactor=0.01 MzLS_712260_
+138150 expfactor=0.01 MzLS_712259_
+138151 expfactor=0.01 MzLS_712258_
+138152 expfactor=0.00 MzLS_710894_
+138153 expfactor=0.00 MzLS_710895_
+138154 expfactor=0.00 MzLS_710896_
+138157 expfactor=0.00 MzLS_710899_
+138158 expfactor=0.00 MzLS_710900_
+138160 expfactor=0.00 MzLS_710902_
+138161 expfactor=0.00 MzLS_710903_
+138162 expfactor=0.00 MzLS_710906_
+138163 expfactor=0.00 MzLS_710910_
+138164 expfactor=0.00 MzLS_710906_
+138165 expfactor=0.00 MzLS_710910_
+138166 expfactor=0.00 MzLS_710912_
+138170 expfactor=0.04 MzLS_703591_
+138171 expfactor=0.07 MzLS_700415_
+138172 expfactor=0.11 MzLS_700416_
+138173 expfactor=0.12 MzLS_700417_
+138174 expfactor=0.17 MzLS_693646_
+138175 expfactor=0.16 MzLS_691867_
+138176 expfactor=0.15 MzLS_680500_
+138177 expfactor=0.17 MzLS_680501_
+138178 expfactor=0.15 MzLS_678493_
+138179 expfactor=0.16 MzLS_672273_
+138180 expfactor=0.17 MzLS_672275_
+138181 expfactor=0.19 MzLS_678494_
+138182 expfactor=0.25 MzLS_682479_
+138201 expfactor=0.06 MzLS_672280_
+138202 expfactor=0.04 MzLS_680508_
+138203 expfactor=0.16 MzLS_678500_
+138204 expfactor=0.25 MzLS_680510_
+
+# 2017-09-04
+
+138316 expfactor=0.295 MzLS_678491_
+138323 expfactor=0.292 MzLS_571136_
+
+# 2017-09-05
+138466 flats with lamp off
+138467 flats with lamp off
+138506 telescope is slewing when taking exposure
+138511 test zero
+138596 test zero
+138506 expfactor=0.016 MzLS_603313_
+138531 expfactor=0.251 MzLS_674384_
+138532 expfactor=0.253 MzLS_674384_
+138544 expfactor=0.267 MzLS_684437_
+138545 expfactor=0.239 MzLS_706144_
+138546 expfactor=0.295 MzLS_680518_
+138548 expfactor=0.280 MzLS_682499_
+138549 expfactor=0.273 MzLS_707629_
+138550 expfactor=0.280 MzLS_684440_
+138551 expfactor=0.265 MzLS_688228_
+138552 expfactor=0.219 MzLS_706154_
+138553 expfactor=0.229 MzLS_707632_
+138554 expfactor=0.277 MzLS_686355_
+138555 expfactor=0.266 MzLS_690077_
+138556 expfactor=0.213 MzLS_707633_
+138557 expfactor=0.159 MzLS_706155_
+138558 expfactor=0.198 MzLS_707634_
+138559 expfactor=0.143 MzLS_707635_
+138560 expfactor=0.128 MzLS_709079_
+138561 expfactor=0.185 MzLS_709078_
+138562 expfactor=0.187 MzLS_710486_
+138563 expfactor=0.169 MzLS_710485_
+138564 expfactor=0.133 MzLS_690077_
+138565 expfactor=0.198 MzLS_672101_
+138566 expfactor=0.254 MzLS_669965_
+138571 expfactor=0.281 MzLS_630748_
+138573 expfactor=0.280 MzLS_649328_
+138597 expfactor=0.120 MzLS_567768_
+138598 expfactor=0.070 MzLS_567771_
+138599 expfactor=0.079 MzLS_635983_
+
+# 2017-09-06
+138665 expfactor=0.279 MzLS_709504_
+138666 expfactor=0.253 MzLS_710902_
+138669 expfactor=0.252 MzLS_710905_
+138680 expfactor=0.002 MzLS_727239_
+138681 expfactor=0.000 MzLS_725476_
+138683 expfactor=0.005 MzLS_725479_
+138684 expfactor=0.283 MzLS_709529_
+138685 expfactor=0.001 MzLS_703589_
+138686 expfactor<0.3   MzLS_705126_
+138687 expfactor=0.142 MzLS_703591_
+138689 expfactor=0.164 MzLS_698773_
+138690 expfactor=0.016 MzLS_697096_
+138691 expfactor=0.000 MzLS_697097_
+138692 expfactor=0.000 MzLS_693645_
+138693 expfactor=0.005 MzLS_670138_
+138695 expfactor=0.000 MzLS_672273_
+138696 expfactor<0.3   MzLS_674377_
+138697 expfactor<0.3   MzLS_674378_
+138698 expfactor=0.092 MzLS_674379_
+138700 expfactor=0.000 MzLS_674395_
+138704 expfactor=0.000 MzLS_573218_
+138705 expfactor=0.000 MzLS_573220_
+138706 expfactor=0.285 MzLS_672284_
+138707 expfactor=0.204 MzLS_672282_
+138709 expfactor=0.059 MzLS_603313_
+138710 expfactor=0.016 MzLS_672281_
+138711 expfactor=0.000 MzLS_672278_
+138712 expfactor=0.187 MzLS_676453_
+138713 expfactor=0.283 MzLS_678492_
+138715 expfactor=0.000 MzLS_691274_
+138717 expfactor=0.148 MzLS_658227_
+138718 expfactor=0.055 MzLS_678494_
+138719 expfactor=0.199 MzLS_676454_
+138724 expfactor=0.000 MzLS_676457_
+138725 expfactor=0.000 MzLS_701496_
+138727 expfactor=0.160 MzLS_678498_
+138728 expfactor=0.054 MzLS_678504_
+138729 expfactor<0.3   MzLS_678509_
+138731 expfactor=0.207 MzLS_676464_
+138732 expfactor=0.281 MzLS_680501_
+138733 expfactor=0.247 MzLS_680502_
+138736 expfactor=0.148 MzLS_678499_
+138737 expfactor=0.148 MzLS_678500_
+138739 expfactor=0.155 MzLS_682483_
+138740 expfactor=0.147 MzLS_682484_
+
+# 2017-09-07
+
+138886 expfactor=0.274 MzLS_680513_
+138887 expfactor=0.259 MzLS_680517_
+138888 expfactor<0.3   MzLS_680522_
+138889 expfactor<0.3   MzLS_688230_
+138890 expfactor<0.3   MzLS_688229_
+138892 expfactor=0.177 MzLS_690070_
+138893 expfactor=0.119 MzLS_688224_
+138894 expfactor=0.103 MzLS_691884_
+138895 expfactor=0.035 MzLS_690074_
+138896 expfactor=0.000 MzLS_691885_
+138897 expfactor=0.018 MzLS_691886_
+138898 expfactor=0.000 MzLS_691887_
+138899 expfactor=0.003 MzLS_691888_
+138900 expfactor=0.015 MzLS_691889_
+138901 expfactor=0.094 MzLS_691889_
+138902 expfactor=0.196 MzLS_682320_
+138903 expfactor=0.085 MzLS_686181_
+138904 expfactor=0.117 MzLS_686182_
+138905 expfactor=0.187 MzLS_682321_
+138906 expfactor=0.187 MzLS_680342_
+138907 expfactor=0.162 MzLS_678330_
+138908 expfactor=0.023 MzLS_680344_
+138909 expfactor=0.007 MzLS_680345_
+138910 expfactor=0.000 MzLS_678334_
+138911 expfactor=0.001 MzLS_674212_
+138912 expfactor=0.005 MzLS_667791_
+138913 expfactor=0.011 MzLS_665590_
+138914 expfactor=0.111 MzLS_654122_
+138915 expfactor=0.002 MzLS_669969_
+138916 expfactor=0.104 MzLS_674216_
+138917 expfactor<0.3   MzLS_676292_
+138918 expfactor=0.085 MzLS_678335_
+
+# 2017-09-09
+139012 Elongated PSF
+139016 Corrupt image after readout failure
+139026 Elongated PSF
+139074 Corrupt image after readout failure
+139078 expfactor=0.166  MzLS_629028_
+
+
+# 2017-09-10
+139123 expfactor=0.151  0.465     6.616 MzLS_676435_
+139125 expfactor=0.192  0.310    13.046 MzLS_690023_
+139239 Corrupt image after readout failure
+139256 expfactor=0.001  0.065  2720.123 MzLS_646890_
+
+# 2017-09-11
+139310 expfactor=0.072  0.203    12.208 MzLS_680474_ Clouds. Not enough stars
+139319 expfactor=0.084  0.131    20.160 MzLS_680480_ Clouds. Not enough stars
+139320 expfactor=0.183  0.253     6.192 MzLS_678468_ Clouds. Not enough stars
+139321 expfactor=0.151  0.161    16.607 MzLS_682450_ Clouds. Not enough stars
+139322 expfactor=0.016  0.053   158.825 MzLS_682449_ Clouds. Not enough stars
+139323 expfactor=0.140  0.176    17.865 MzLS_686298_ Clouds. Not enough stars
+139326 expfactor=0.184  0.163    13.600 MzLS_684401_ Clouds. Not enough stars
+139327 expfactor=0.002  0.023   472.157 MzLS_684403_ Clouds. Not enough stars
+139328 expfactor=0.712  0.224     3.515 MzLS_676441_ Clouds. Not enough stars
+139343 expfactor=0.013  0.100    93.532 MzLS_684423_ Clouds. Not enough stars
+139345 expfactor=0.047  0.135    53.290 MzLS_682481_ Clouds. Not enough stars
+139347 expfactor=0.084  0.150    29.825 MzLS_684429_ Clouds. Not enough stars
+139356 expfactor=0.101  0.260    13.642 MzLS_690067_ Clouds. Not enough stars
+139358 expfactor=0.047  0.173    53.609 MzLS_691879_ Clouds. Not enough stars
+139359 expfactor=0.038  0.227    40.135 MzLS_686347_ Clouds. Not enough stars
+139361 expfactor=0.045  0.183    54.174 MzLS_690071_ Clouds. Not enough stars
+139397 expfactor=0.000  0.007 ********* MzLS_729043_ Clouds. Not enough stars
+139398 expfactor=0.054  0.392    20.601 MzLS_729783_ Clouds. Not enough stars
+139399 expfactor=0.000  0.007 37850.688 MzLS_730485_ Clouds. Not enough stars
+139400 expfactor=0.006  0.111   171.080 MzLS_731146_ Clouds. Not enough stars
+
+# 2017-09-12
+139655 Not enough stars for no apparent reason. MzLS_733901 expfactor=0.002
+139657 Not enough stars for no apparent reason. MzLS_733424 expfactor=0.005
+139660 Not enough stars, bad transparency? MzLS_731152 expfactor=0.005
+
+# 2017-09-13
+139800 expfactor=0.293 MzLS_691868_
+139801 expfactor=0.062 MzLS_695396_
+139802 expfactor=0.246 MzLS_695399_
+139804 expfactor=0.205, Streaks, probably due to loss of telescope control.
+139815 expfactor=0.185 MzLS_716065_
+139819 expfactor=0.024 MzLS_719617_
+139820 expfactor=0.034 MzLS_720729_
+
+# 2017-09-23
+140522 expfactor=0.21 seeing=2.63 MzLS_676399
+140523 seeing=2.65 MzLS_676402
+140524 seeing=2.74 MzLS_680450
+140525 seeing=2.86 MzLS_684370
+140526 seeing=3.20 MzLS_684376
+140527 seeing=3.19 MzLS_684379
+140528 expfactor=0.26 seeing=3.38 MzLS_688166
+140529 expfactor=0.21 seeing=3.72 MzLS_688168
+140530 seeing=2.74 MzLS_686297
+140531 expfactor=0.29 seeing=3.22 MzLS_688172
+140532 expfactor=0.26 seeing=3.43 MzLS_691837
+140533 seeing=3.08 MzLS_691838
+140536 seeing=2.30 MzLS_637024
+140537 expfactor=0.23 seeing=3.56 MzLS_676432
+140538 expfactor=0.27 seeing=3.44 MzLS_680480
+140539 expfactor=0.17 seeing=3.90 MzLS_691845
+140540 expfactor=0.12 seeing=4.25 MzLS_702001
+140541 expfactor=0.15 seeing=4.06 MzLS_702009
+140542 expfactor=0.14 seeing=3.98 MzLS_693632
+140543 seeing=3.23 MzLS_693635
+140544 expfactor=0.24 seeing=3.48 MzLS_700410
+140545 expfactor=0.15 seeing=3.70 MzLS_665766
+140546 expfactor=0.25 seeing=3.37 MzLS_615612
+149547 expfactor=0.10 seeing=4.4- MzLS_656668
+140548 seeing=3.17 MzLS_676457
+140549 expfactor=0.13 seeing=4.08 MzLS_690061
+140550 expfactor=0.12 seeing=4.06 MzLS_690059
+140551 expfactor=0.14 seeing=3.54 MzLS_693645
+140552 expfactor=0.20 seeing=3.55 MzLS_693646
+140553 seeing=2.29 MzLS_691870
+140554 seeing=3.04 MzLS_684422
+140555 expfactor=0.19 seeing=3.58 MzLS_661287
+140556 expfactor=0.23 seeing=3.50 MzLS_676549
+140557 expfactor=0.22 seeing=3.37 MzLS_688215
+140558 expfactor=0.21 seeing=3.35 MzLS_688216
+140559 expfactor=0.26 seeing=3.23 MzLS_686342
+140560 seeing=2.75 MzLS_690066
+140561 seeing=2.77 MzLS_680510
+140562 seeing=2.76 MzLS_672283
+140563 seeing=2.70 MzLS_688223
+140564 seeing=2.82 MzLS_688225
+140565 seeing=2.16 MzLS_674395
+140566 seeing=2.29 MzLS_361773
+140567 seeing=2.06 MzLS_365523
+140575 seeing=2.05 MzLS_698794
+140576 seeing=2.07 MzLS_703613
+
+# 2017-09-24
+140724 Very bad pointing
+140725 Very bad pointing
+140726 Very bad pointing
+140727 Very bad pointing
+140736 seeing=2.08 MzLS_691846
+140737 seeing=2.13 MzLS_702001
+140743 seeing=2.28 MzLS_702010
+140745 seeing=2.12 MzLS_680492
+140746 seeing=2.15 MzLS_647075
+140747 seeing=2.12 MzLS_639580
+140748 seeing=2.19 MzLS_626537
+140750 corrupt image (timeout error)
+140753 seeing=2.78 MzLS_676457
+140754 seeing=2.05 MzLS_661287
+140755 seeing=2.22 MzLS_676460
+140756 seeing=2.07 MzLS_686342
+140757 seeing=2.55 MzLS_691870
+140758 seeing=3.17 expfactor=0.29 MzLS_688216
+140759 seeing=3.00 MzLS_686340
+140760 seeing=2.77 MzLS_676459
+140761 seeing=2.50 MzLS_672283
+140762 seeing=2.28 MzLS_680510
+140763 seeing=2.48 MzLS_691874
+140764 seeing=3.03 MzLS_688221
+140765 seeing=2.22 MzLS_674395
+140766 seeing=2.22 MzLS_682490
+140767 seeing=2.33 MzLS_691875
+140768 seeing=2.46 MzLS_691878
+140769 seeing=2.38 MzLS_686347
+140770 seeing=2.08 MzLS_690071
+140771 seeing=2.15 MzLS_691879
+140772 seeing=2.01 MzLS_691882
+140774 seeing=2.14 MzLS_703612
+
+# 2017-09-25
+140881 seeing=2.34 MzLS_647075
+140914 seeing=2.20 MzLS_695406
+140915 seeing=2.36 MzLS_698790
+140916 seeing=2.47 MzLS_697111
+140917 seeing=3.03 expfactor=0.20 MzLS690072
+140918 seeing=2.78 MzLS_682492
+140919 seeing=2.11 MzLS_674395
+140920 pointing off by (113,-27.9)
+140921 pointing off by (58.5,162.4)
+140922 pointing off by (183.1, -66.7)
+140923 pointing off by (-111.9, -27.1)
+
+# 2017-09-26
+141002 expfactor=0.09 MzLS_700408
+141008 expfactor=0.24 MzLS_702015
+141009 expfactor=0.25 MzLS_706620
+141015 seeing=2.00 MzLS_697099
+141038 seeing=2.14 MzLS_691879
+141040 seeing=2.09 MzLS_676466
+
+# 2017-09-28
+141262 seeing=2.05 MzLS_703556
+141263 seeing=2.35 MzLS_709502
+141333 seeing=2.30 MzLS_705134
+
+# 2017-09-29
+141413 seeing=2.04 MzLS_709506
+141214 seeing=2.26 MzLS_709502
+141215 seeing=2.30 MzLS_710900
+141217 seeing=2.04 MzLS_712265
+141444 seeing=2.45 MzLS_706634
+141446 seeing=2.13 MzLS_703597
+141448 seeing=2.11 MzLS_697104
+141449 seeing=2.21 MzLS_680510
+141450 seeing=2.06 MzLS_682492
+141451 seeing=2.30 MzLS_698782
+141452 seeing=2.26 MzLS_698784
+141453 seeing=2.19 MzLS_702031
+141454 seeing=2.61 MzLS_706635
+
+# 2017-09-30
+141628 bad image produced by detector time out
+141641 lost tracking due to hitting hour angle limit
+141671 bad image produced by detector time out
+141712 bad image produced by detector time out
+
+# 2017-10-01
+141833 egg-shaped PSF most likely due to wind, also selected as pass 1 when conditions were clearly not
+141842 slight dome vignetting
+
+# 2017-10-02
+141941 bad image produced by detector time out
+
+# 2017-10-03
+141985  expfactor=0.154  0.797     6.508 MzLS_714871_
+141986  expfactor=0.149  0.793     6.707 MzLS_710896_
+141996  expfactor=0.245  0.780     9.693 MzLS_716131_
+141998  expfactor=0.018  0.157   133.422 MzLS_716135_
+142001  expfactor=0.065  0.765    15.306 MzLS_714871_
+142002  expfactor=0.001  0.031  1027.475 MzLS_710896_ bad image produced by mosbot timeout
+142006  expfactor=0.284  0.781     3.524 MzLS_713615_
+142017 bad image produced by detector time out
+142021  expfactor=0.219  0.783     4.575 MzLS_705143_
+142022  expfactor=0.242  0.789     4.141 MzLS_703608_
+142026  expfactor=0.289  0.304     8.662 MzLS_706644_
+142028  expfactor=0.170  0.790     5.882 MzLS_710939_
+142029  expfactor=0.010  0.157    99.933 MzLS_710940_
+142030  expfactor=0.167  0.809     5.980 MzLS_710939_
+142031  expfactor=0.147  0.787     6.832 MzLS_710940_
+142046  expfactor=0.278  0.861     7.454 MzLS_717384_
+
+#2017-10-04
+142309 clouds caused very low transparency
+142310 very low transparency
+142311 very low transparency
+142312 very low transparency
+142313 very low transparency
+
+#2017-10-06
+142627 detector timeout
+142653 Weird extra observation in focus script
+
+#2017-10-07
+142830 expfactor
+142831 expfactor
+142892 timeout
+142894 dome drive tripped
+142904-142908 dome drive tripped
+
+# 2017-10-08
+143017 dome not tracking
+143018 dome not tracking
+143021 pre-timeout
+143043 expfactor=0.01 (twi)
