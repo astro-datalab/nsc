@@ -11,9 +11,11 @@
 ;  refcat    Reference catalog name (e.g. 2MASS, Gaia, etc.).
 ;  =file     The file to save to or search for existing catalog.
 ;  /saveref  Save the output to FILE.
+;  /silent   Don't print anything to the screen.
 ;
 ; OUTPUTS:
 ;  ref       Search results from the reference catalog.
+;  =count    Number of elements in REF.
 ;
 ; USAGE:
 ;  IDL>cat = getrefcat(cenra,cendec,radius,refcat,file=file,saveref=saveref)
@@ -21,9 +23,10 @@
 ; By D. Nidever  Sep 2017
 ;-
 
-function getrefcat,cenra,cendec,radius,refcat,file=file,saveref=saveref
+function getrefcat,cenra,cendec,radius,refcat,count=count,file=file,saveref=saveref,silent=silent
 
 undefine,ref
+count = 0
 
 ; Not enough inputs
 if n_elements(cenra) eq 0 or n_elements(cendec) eq 0 or n_elements(radius) eq 0 or $
@@ -50,15 +53,17 @@ if refname eq 'GAIA/GAIA' then refname='GAIA'
 
 if n_elements(file) eq 0 then file='/tmp/ref_'+stringize(cenra,ndec=5)+'_'+stringize(cendec,ndec=5)+'_'+stringize(radius,ndec=3)+'_'+refname+'.fits'
 
-printlog,logf,'Querying '+refname+': RA='+stringize(cenra,ndec=5)+' DEC='+stringize(cendec,ndec=5)+' Radius='+stringize(radius,ndec=3)
+if not keyword_set(silent) then $
+  printlog,logf,'Querying '+refname+': RA='+stringize(cenra,ndec=5)+' DEC='+stringize(cendec,ndec=5)+' Radius='+stringize(radius,ndec=3)
 
-; Loading previously loaded file                                                                                                                                                   
+; Loading previously loaded file
 if file_test(file) eq 1 then begin
-  printlog,logf,'Loading previously-saved file ',file
+  if not keyword_set(silent) then $
+    printlog,logf,'Loading previously-saved file ',file
   ref = MRDFITS(file,1,/silent)
 
-; Do the Query                                                                                                                                                                     
-;--------------                                                                                                                                                                    
+; Do the Query
+;--------------
 endif else begin
 
   ; Use DataLab database search for Gaia and 2MASS if density is high                                                                                                              
@@ -88,7 +93,7 @@ endif else begin
     file_delete,refcattemp,/allow
     file_delete,file,/allow
     spawn,cmd,out,outerr
-    ;  Load ASCII file and create the FITS file                                                                                                                                     
+    ;  Load ASCII file and create the FITS file
     ref = importascii(refcattemp,/header,delim='|',skipline=2,/silent)
     if keyword_set(saveref) then begin
       printlog,logf,'Saving catalog to file '+file
@@ -96,13 +101,13 @@ endif else begin
     endif
     file_delete,refcattemp,/allow
 
-  ; Use QUERYVIZIER                                                                                                                                                                
-  ;   for low density with 2MASS/GAIA and always for GALEX and APASS                                                                                                               
+  ; Use QUERYVIZIER
+  ;   for low density with 2MASS/GAIA and always for GALEX and APASS
   endif else begin
-    if refcat[i] eq 'APASS' then cfa=0 else cfa=1  ; cfa doesn't have APASS                                                                                                        
-    ref = QUERYVIZIER(refcat[i],[cenra,cendec],radius*60,cfa=cfa)
+    if refcat eq 'APASS' then cfa=0 else cfa=1  ; cfa doesn't have APASS                                                                                                        
+    ref = QUERYVIZIER(refcat,[cenra,cendec],radius*60,cfa=cfa)
 
-    ; Fix/homogenize the GAIA tags                                                                                                                                                 
+    ; Fix/homogenize the GAIA tags
     if refname eq 'GAIA' then begin
       nref = n_elements(ref)
       orig = ref
@@ -113,7 +118,7 @@ endif else begin
       ref.gmag = orig._gmag_
       undefine,orig
     endif
-    ; Fix/homogenize the 2MASS tags                                                                                                                                                
+    ; Fix/homogenize the 2MASS tags
     if refname eq 'TMASS' then begin
       nref = n_elements(ref)
       orig = ref
@@ -123,15 +128,19 @@ endif else begin
       undefine,orig
     endif
 
-    ; Save the file                                                                                                                                                                
+    ; Save the file
     if keyword_set(saveref) then begin
-      printlog,logf,'Saving catalog to file '+file
+      if not keyword_set(silent) then $
+        printlog,logf,'Saving catalog to file '+file
       MWRFITS,ref,file,/create  ; only save if necessary
     endif
   endelse
 endelse
 
-printlog,logf,strtrim(n_elements(ref),2)+' sources found'
+if not keyword_set(silent) then $
+  printlog,logf,strtrim(n_elements(ref),2)+' sources found'
+
+count = n_elements(ref)
 
 return,ref
 

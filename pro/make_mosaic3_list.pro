@@ -4,9 +4,12 @@ pro make_mosaic3_list,all
 NSC_ROOTDIRS,dldir,mssdir,localdir
 dir = dldir+'users/dnidever/nsc/'
 
+version = 'v2'
+
 ; Load all of the instcal exposures
 if n_elements(all) eq 0 then begin
-  all = mrdfits(dir+"mosaic3_archive_info.fits.gz",1)
+  ;all = mrdfits(dir+"mosaic3_archive_info.fits.gz",1)
+  all = mrdfits(dir+'instcal/'+version+'/lists/mosaic3_archive_info.fits.gz',1)
   all.dtnsanam = strtrim(all.dtnsanam,2)
   all.dtacqnam = strtrim(all.dtacqnam,2)
   all.proctype = strtrim(all.proctype,2)
@@ -53,10 +56,11 @@ endfor
 remove,torem,imstr
 
 ; Make new structure with minimal columns
-str = replicate({sp_id:'',sb_recno:0L,dtnsanam:'',dtacqnam:'',rawname:'',expnum:'',data_product_id:0L,uri:'',prop_id:'',ra:0.0d0,dec:0.0d0,$
+str = replicate({instrument:'',sp_id:'',sb_recno:0L,dtnsanam:'',dtacqnam:'',rawname:'',expnum:'',data_product_id:0L,uri:'',prop_id:'',ra:0.0d0,dec:0.0d0,$
                  exposure:0.0,release_date:'',date_obs:'',filter:'',mjd_obs:0.0d0,obstype:'',plver:'',proctype:'',prodtype:'',$
                  filename:'',pldname:'',fluxfile:'',maskfile:'',wtfile:''},nrname)
 STRUCT_ASSIGN,imstr,str
+str.instrument = 'k4m'  ; KPNO-4m+Mosaic3
 str.rawname = file_basename(str.dtacqnam)
 str.fluxfile = strtrim(str.uri,2)
 
@@ -116,8 +120,22 @@ str[bd[ind2]].wtfile = all[ind1].uri
 gd3 = where(str.fluxfile ne '' and str.maskfile ne '' and str.wtfile ne '',ngd3,comp=bd3,ncomp=nbd3)
 print,strtrim(nbd3,2),' exposures do NOT have flux/mask/wtmap files'
 str = str[gd3]
-print,strtrim(ngd3,2),' final exposures will the information we need'
+print,strtrim(ngd3,2),' final exposures with the information we need'
 
+; APPLY RELEASE DATE CUTS
+release_date = strtrim(str.release_date,2)
+release_year = long(strmid(release_date,0,4))
+release_month = long(strmid(release_date,5,2))
+release_day = long(strmid(release_date,8,2))
+release_mjd = JULDAY(release_month,release_day,release_year)-2400000.5d0
+;release_cutoff = [2017,4,24]  ; v1 - April 24, 2017
+release_cutoff = [2017,10,11]  ; v2 - Oct 11, 2017
+release_cutoff_mjd = JULDAY(release_cutoff[1],release_cutoff[2],release_cutoff[0])-2400000.5d0
+gdrelease = where(release_mjd le release_cutoff_mjd,ngdrelease,comp=bdrelease,ncomp=nbdrelease)
+print,strtrim(ngdrelease,2),' exposures are PUBLIC'
+str = str[gdrelease]  ; impose the public data cut
+
+;MWRFITS,str,dir+'instcal/'+version+'/lists/mosaic3_instcal_list.fits',/create
 ;MWRFITS,str,dir+'mosaic3_instcal_list.fits',/create
 
 stop

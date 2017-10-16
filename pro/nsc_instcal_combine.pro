@@ -1,4 +1,4 @@
-pro nsc_instcal_combine,pix,nside=nside,redo=redo,stp=stp,outdir=outdir
+pro nsc_instcal_combine,pix,version=version,nside=nside,redo=redo,stp=stp,outdir=outdir
 
 t0 = systime(1)
 
@@ -6,19 +6,21 @@ t0 = systime(1)
 ;nside = 256
 if n_elements(nside) eq 0 then nside = 128
 NSC_ROOTDIRS,dldir,mssdir,localdir
-dir = dldir+'users/dnidever/nsc/instcal/'
+if n_elements(version) eq 0 then version='v2'
+dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 ;dir = '/datalab/users/dnidever/decamcatalog/instcal/'
 radeg = 180.0d0 / !dpi
 
 ; Not enough inputs
 if n_elements(pix) eq 0 then begin
-  print,'Syntax - nsc_instcal_combine,pix,nside=nside,redo=redo,stp=stp'
+  print,'Syntax - nsc_instcal_combine,pix,version=version,nside=nside,redo=redo,stp=stp'
   return
 endif
 
 ; Check if output file already exists
 if n_elements(outdir) eq 0 then outdir=dir+'combine/'
-outfile = outdir+strtrim(pix,2)+'.fits'
+subdir = strtrim(long(pix)/1000,2)    ; use the thousands to create subdirectory grouping
+outfile = outdir+'/'+subdir+'/'+strtrim(pix,2)+'.fits'
 if (file_test(outfile) eq 1 or file_test(outfile+'.gz') eq 1) and not keyword_set(redo) then begin
   print,outfile,' EXISTS already and /redo not set'
   return
@@ -27,9 +29,7 @@ endif
 print,'Combining InstCal SExtractor catalogs for Healpix pixel = ',strtrim(pix,2)
 
 ; Load the list
-listfile = localdir+'dnidever/nsc/instcal/nsc_healpix_list.fits'
-;listfile = dir+'combine/nsc_healpix_list.fits'
-;listfile = dir+'combine/lists/'+strtrim(pix,2)+'.fits'
+listfile = localdir+'dnidever/nsc/instcal/'+version+'/nsc_healpix_list.fits'
 if file_test(listfile) eq 0 then begin
   print,listfile,' NOT FOUND'
   return
@@ -111,7 +111,7 @@ idcnt = 0LL
 
 ; Initialize the object structure
 schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,raerr:0.0d0,decerr:0.0d0,pmra:0.0d0,$
-              pmdec:0.0d0,pmraerr:0.0d0,pmdecerr:0.0d0,mjd:0.0d0,deltamjd:0.0,ndet:0L,$
+              pmdec:0.0d0,pmraerr:0.0d0,pmdecerr:0.0d0,mjd:0.0d0,deltamjd:0.0,ndet:0L,nphot:0L,$
               ndetu:0,nphotu:0,umag:0.0,urms:0.0,uerr:0.0,uasemi:0.0,ubsemi:0.0,utheta:0.0,$
               ndetg:0,nphotg:0,gmag:0.0,grms:0.0,gerr:0.0,gasemi:0.0,gbsemi:0.0,gtheta:0.0,$
               ndetr:0,nphotr:0,rmag:0.0,rrms:0.0,rerr:0.0,rasemi:0.0,rbsemi:0.0,rtheta:0.0,$
@@ -119,10 +119,12 @@ schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,raerr:0.0d0,decerr:0.0d0,pmra:0.0d
               ndetz:0,nphotz:0,zmag:0.0,zrms:0.0,zerr:0.0,zasemi:0.0,zbsemi:0.0,ztheta:0.0,$
               ndety:0,nphoty:0,ymag:0.0,yrms:0.0,yerr:0.0,yasemi:0.0,ybsemi:0.0,ytheta:0.0,$
               ndetvr:0,nphotvr:0,vrmag:0.0,vrrms:0.0,vrerr:0.0,vrasemi:0.0,vrbsemi:0.0,vrtheta:0.0,$
-              x2:0.0,x2err:0.0,y2:0.0,y2err:0.0,xy:0.0,xyerr:0.0,cxx:0.0,cxxerr:0.0,$
-              cxy:0.0,cxyerr:0.0,cyy:0.0,cyyerr:0.0,asemi:0.0,asemierr:0.0,bsemi:0.0,$
-              bsemierr:0.0,theta:0.0,thetaerr:0.0,elongation:0.0,$
-              ellipticity:0.0,fwhm:0.0,flags:0,class_star:0.0,ebv:0.0}
+              x2:0.0,x2err:0.0,y2:0.0,y2err:0.0,xy:0.0,xyerr:0.0,asemi:0.0,asemierr:0.0,bsemi:0.0,$
+              bsemierr:0.0,theta:0.0,thetaerr:0.0,ellipticity:0.0,fwhm:0.0,flags:0,class_star:0.0,ebv:0.0}
+;              x2:0.0,x2err:0.0,y2:0.0,y2err:0.0,xy:0.0,xyerr:0.0,cxx:0.0,cxxerr:0.0,$
+;              cxy:0.0,cxyerr:0.0,cyy:0.0,cyyerr:0.0,asemi:0.0,asemierr:0.0,bsemi:0.0,$
+;              bsemierr:0.0,theta:0.0,thetaerr:0.0,elongation:0.0,$
+;              ellipticity:0.0,fwhm:0.0,flags:0,class_star:0.0,ebv:0.0}
 tags = tag_names(schema_obj)
 obj = replicate(schema_obj,5e5)
 nobj = n_elements(obj)
@@ -144,7 +146,7 @@ FOR i=0,nlist-1 do begin
   print,'  ',strtrim(ncat1,2),' sources'
 
   ; Make sure it's in the right format
-  if n_tags(cat1) ne 49 then begin
+  if n_tags(cat1) ne 43 then begin   ; 49 for v1
     print,'  This catalog does not have the right format. Skipping'
     goto,BOMB
   endif
@@ -237,6 +239,8 @@ FOR i=0,nlist-1 do begin
   ;   the maximum IMAFLAGS_ISO value
   if max(cat1.imaflags_iso) gt 10 then begin
     bdcat = where(cat1.imaflags_iso gt 0 and cat1.imaflags_iso lt 120,nbdcat)
+  ;THIS IS A BITMASK, make sure none of the lower values are set
+  ; bdcat = where(cat1.imaflags_iso gt 0 and cat1.imagflags_iso ne 128,nbdcat)
   endif else begin
     bdcat = where(cat1.imaflags_iso gt 0,nbdcat)
   endelse
@@ -247,6 +251,16 @@ FOR i=0,nlist-1 do begin
     ncat1 = n_elements(cat1)
   endif
 
+  ; Removing low-S/N sources
+  ;  snr = 1.087/err
+  snrcut = 5.0
+  bdcatsnr = where(1.087/cat1.magerr_auto lt snrcut,nbdcatsnr)
+  if nbdcatsnr gt 0 then begin
+    print,'  Removing ',strtrim(nbdcatsnr,2),' sources with S/N<',strtrim(snrcut,2)
+    if nbdcatsnr eq ncat1 then goto,BOMB
+    REMOVE,bdcatsnr,cat1
+    ncat1 = n_elements(cat1)
+  endif
 
   ; Only include sources inside Boundary+Buffer zone
   ;  -use ROI_CUT
@@ -325,19 +339,19 @@ FOR i=0,nlist-1 do begin
     newexp.y2err = cat.erry2_world^2
     newexp.xy = cat.xy_world
     newexp.xyerr = cat.errxy_world^2
-    newexp.cxx = cat.cxx_world
-    newexp.cxxerr = cat.errcxx_world^2
-    newexp.cyy = cat.cyy_world
-    newexp.cyyerr = cat.errcyy_world^2
-    newexp.cxy = cat.cxy_world
-    newexp.cxyerr = cat.errcxy_world^2
+    ;newexp.cxx = cat.cxx_world
+    ;newexp.cxxerr = cat.errcxx_world^2
+    ;newexp.cyy = cat.cyy_world
+    ;newexp.cyyerr = cat.errcyy_world^2
+    ;newexp.cxy = cat.cxy_world
+    ;newexp.cxyerr = cat.errcxy_world^2
     newexp.asemi = cat.a_world
     newexp.asemierr = cat.erra_world^2
     newexp.bsemi = cat.b_world
     newexp.bsemierr = cat.errb_world^2
     newexp.theta = cat.theta_world
     newexp.thetaerr = cat.errtheta_world^2
-    newexp.elongation = cat.elongation
+    ;newexp.elongation = cat.elongation
     newexp.ellipticity = cat.ellipticity
     newexp.fwhm = cat.fwhm_world*3600  ; in arcsec
     newexp.flags = cat.flags
@@ -421,19 +435,19 @@ FOR i=0,nlist-1 do begin
       cmb.y2err += newcat.erry2_world^2
       cmb.xy += newcat.xy_world
       cmb.xyerr += newcat.errxy_world^2
-      cmb.cxx += newcat.cxx_world
-      cmb.cxxerr += newcat.errcxx_world^2
-      cmb.cyy += newcat.cyy_world
-      cmb.cyyerr += newcat.errcyy_world^2
-      cmb.cxy += newcat.cxy_world
-      cmb.cxyerr += newcat.errcxy_world^2
+      ;cmb.cxx += newcat.cxx_world
+      ;cmb.cxxerr += newcat.errcxx_world^2
+      ;cmb.cyy += newcat.cyy_world
+      ;cmb.cyyerr += newcat.errcyy_world^2
+      ;cmb.cxy += newcat.cxy_world
+      ;cmb.cxyerr += newcat.errcxy_world^2
       cmb.asemi += newcat.a_world
       cmb.asemierr += newcat.erra_world^2
       cmb.bsemi += newcat.b_world
       cmb.bsemierr += newcat.errb_world^2
       cmb.theta += newcat.theta_world
       cmb.thetaerr += newcat.errtheta_world^2
-      cmb.elongation += newcat.elongation
+      ;cmb.elongation += newcat.elongation
       cmb.ellipticity += newcat.ellipticity
       cmb.fwhm += newcat.fwhm_world*3600  ; in arcsec
       cmb.flags OR= newcat.flags
@@ -520,19 +534,19 @@ FOR i=0,nlist-1 do begin
       newexp.y2err = cat.erry2_world^2
       newexp.xy = cat.xy_world
       newexp.xyerr = cat.errxy_world^2
-      newexp.cxx = cat.cxx_world
-      newexp.cxxerr = cat.errcxx_world^2
-      newexp.cyy = cat.cyy_world
-      newexp.cyyerr = cat.errcyy_world^2
-      newexp.cxy = cat.cxy_world
-      newexp.cxyerr = cat.errcxy_world^2
+      ;newexp.cxx = cat.cxx_world
+      ;newexp.cxxerr = cat.errcxx_world^2
+      ;newexp.cyy = cat.cyy_world
+      ;newexp.cyyerr = cat.errcyy_world^2
+      ;newexp.cxy = cat.cxy_world
+      ;newexp.cxyerr = cat.errcxy_world^2
       newexp.asemi = cat.a_world
       newexp.asemierr = cat.erra_world^2
       newexp.bsemi = cat.b_world
       newexp.bsemierr = cat.errb_world^2
       newexp.theta = cat.theta_world
       newexp.thetaerr = cat.errtheta_world^2
-      newexp.elongation = cat.elongation
+      ;newexp.elongation = cat.elongation
       newexp.ellipticity = cat.ellipticity
       newexp.fwhm = cat.fwhm_world*3600  ; in arcsec
       newexp.flags = cat.flags
@@ -584,6 +598,9 @@ totobj = totobj[0:cnt-1]
 nobj = n_elements(obj)
 print,strtrim(nobj,2),' final objects'
 idstr = idstr[0:idcnt-1]
+
+; Make NPHOT from NPHOTX
+obj.nphot = obj.nphotu+obj.nphotg+obj.nphotr+obj.nphoti+obj.nphotz+obj.nphoty+obj.nphotvr
 
 ; Convert total(mjd*ra) to true proper motion values
 ;  the slope of RA vs. MJD is
@@ -691,7 +708,8 @@ for i=0,nfilters-1 do begin
 endfor
 
 ; Average the morphology parameters, Need a separate counter for that maybe?
-mtags = ['x2','y2','xy','cxx','cyy','cxy','asemi','bsemi','theta','elongation','ellipticity','fwhm','class_star']
+;mtags = ['x2','y2','xy','cxx','cyy','cxy','asemi','bsemi','theta','elongation','ellipticity','fwhm','class_star']
+mtags = ['x2','y2','xy','asemi','bsemi','theta','ellipticity','fwhm','class_star']
 nmtags = n_elements(mtags)
 gdet = where(obj.ndet gt 0,ngdet,comp=bdet,ncomp=nbdet)
 for i=0,nmtags-1 do begin
@@ -702,7 +720,8 @@ for i=0,nmtags-1 do begin
 endfor
 
 ; Get the average error
-metags = ['x2err','y2err','xyerr','cxxerr','cyyerr','cxyerr','asemierr','bsemierr','thetaerr']
+;metags = ['x2err','y2err','xyerr','cxxerr','cyyerr','cxyerr','asemierr','bsemierr','thetaerr']
+metags = ['x2err','y2err','xyerr','asemierr','bsemierr','thetaerr']
 nmetags = n_elements(metags)
 for i=0,nmetags-1 do begin
   ind = where(tags eq strupcase(metags[i]),nind)
@@ -775,6 +794,8 @@ sumstr[ind1].nobjects = numobjexp
 
 ; Write the output file
 print,'Writing combined catalog to ',outfile
+if file_test(outdir,/directory) eq 0 then file_mkdir,outdir
+if file_test(outdir+'/'+subdir,/directory) eq 0 then file_mkdir,outdir+'/'+subdir
 MWRFITS,sumstr,outfile,/create      ; first, summary table
 MWRFITS,obj,outfile,/silent         ; second, catalog
 MWRFITS,idstr,outfile,/silent       ; third, ID table

@@ -185,10 +185,16 @@ endif else rawrap=0
 ; Load the logfile and get absolute flux filename
 READLINE,expdir+'/'+base+'.log',loglines
 ind = where(stregex(loglines,'Step #2: Copying InstCal images from mass store archive',/boolean) eq 1,nind)
-line = loglines[ind[0]+1]
-lo = strpos(line,'/archive')
+fline = loglines[ind[0]+1]
+lo = strpos(fline,'/archive')
 ; make sure the mss1 directory is correct for this server
-fluxfile = mssdir+strtrim(strmid(line,lo+1),2)
+fluxfile = mssdir+strtrim(strmid(fline,lo+1),2)
+wline = loglines[ind[0]+2]
+lo = strpos(wline,'/archive')
+wtfile = mssdir+strtrim(strmid(wline,lo+1),2)
+mline = loglines[ind[0]+3]
+lo = strpos(mline,'/archive')
+maskfile = mssdir+strtrim(strmid(mline,lo+1),2)
 
 ; Load the meta-data from the original header
 ;READLINE,expdir+'/'+base+'.head',head
@@ -349,6 +355,7 @@ for i=0,nrefcat-1 do begin
       file_delete,refcattemp,/allow
       file_delete,refcatfile,/allow
       spawn,cmd,out,outerr
+
       ; Load ASCII file and create the FITS file
       ref = importascii(refcattemp,/header,delim='|',skipline=2,/silent)
       if keyword_set(saveref) then MWRFITS,ref,refcatfile,/create      ; only save if necessary
@@ -481,9 +488,10 @@ cat.ebv = ebv
 ; Do it on the exposure level
 printlog,logf,'' & printlog,logf,'Step 4. Photometric calibration'
 printlog,logf,'-------------------------------'
-expstr = {file:fluxfile,instrument:'',base:base,expnum:long(expnum),ra:0.0d0,dec:0.0d0,dateobs:string(dateobs),mjd:0.0d,filter:filter,exptime:float(exptime),$
-          airmass:0.0,nsources:long(ncat),fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,zpterm:999999.0,zptermerr:99999.0,$
-          zptermsig:999999.0,zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L,depth95:99.99,depth10sig:99.99}
+expstr = {file:fluxfile,wtfile:wtfile,maskfile:maskfile,instrument:'',base:base,expnum:long(expnum),ra:0.0d0,dec:0.0d0,dateobs:string(dateobs),$
+          mjd:0.0d,filter:filter,exptime:float(exptime),airmass:0.0,nsources:long(ncat),fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,$
+          zpterm:999999.0,zptermerr:99999.0,zptermsig:999999.0,zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L,$
+          depth95:99.99,depth10sig:99.99}
 expstr.instrument = instrument
 expstr.ra = cenra
 expstr.dec = cendec

@@ -1,0 +1,5 @@
+# ccdnum  extname
+1     ccd1
+2     ccd2
+3     ccd3
+4     ccd4

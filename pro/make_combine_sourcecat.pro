@@ -52,7 +52,10 @@ nidstr = n_elements(idstr)
 for i=0,nmeta-1 do begin
   dateobs = meta[i].dateobs
   night = strmid(dateobs,0,4)+strmid(dateobs,5,2)+strmid(dateobs,8,2)
-  catfile = dir+night+'/'+meta[i].base+'/'+meta[i].base+'_cat.fits'
+  teltype = 'c4d'
+  if stregex(meta[i].base,'k4m',/boolean) eq 1 then teltype='k4m'
+  if stregex(meta[i].base,'ksb',/boolean) eq 1 then teltype='ksb'
+  catfile = dir+teltype+'/'+night+'/'+meta[i].base+'/'+meta[i].base+'_cat.fits'
   cat = MRDFITS(catfile,1,/silent)
   ncat = n_elements(cat)
   ; Initializing the source schema and catalog

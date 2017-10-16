@@ -1,8 +1,11 @@
-pro nsc_instcal_combine_main,redo=redo,makelist=makelist,nmulti=nmulti
+pro nsc_instcal_combine_main,version,redo=redo,makelist=makelist,nmulti=nmulti,nocuts=nocuts
 
 ; Combine all of the data
 NSC_ROOTDIRS,dldir,mssdir,localdir
-dir = dldir+'users/dnidever/nsc/instcal/'
+if n_elements(version) eq 0 then version='v2'
+dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
+if file_test(dir+'combine/',/directory) eq 0 then file_mkdir,dir+'combine/'
+if file_test(dir+'combine/logs/',/directory) eq 0 then file_mkdir,dir+'combine/logs/'
 nside = 128
 nmulti = 30
 radeg = 180.0d0 / !dpi
@@ -23,14 +26,14 @@ sminute = strtrim(minute,2)
 if minute lt 10 then sminute='0'+sminute
 ssecond = strtrim(round(second),2)
 if second lt 10 then ssecond='0'+ssecond
-logfile = dir+'combine/nsc_instcal_combine_main.'+smonth+sday+syear+shour+sminute+ssecond+'.log'
+logfile = dir+'combine/logs/nsc_instcal_combine_main.'+smonth+sday+syear+shour+sminute+ssecond+'.log'
 JOURNAL,logfile
 
 print, "Combining NOAO InstCal catalogs"
 
 
 ; Restore the calibration summary file
-temp = MRDFITS(dir+'nsc_instcal_calibrate.fits',1,/silent)
+temp = MRDFITS(dir+'lists/nsc_instcal_calibrate.fits',1,/silent)
 schema = temp[0]
 struct_assign,{dum:''},schema
 schema = create_struct(schema,'chipindx',-1LL)
@@ -46,7 +49,7 @@ gd = where(str.success eq 1,nstr)
 str = str[gd]
 si = sort(str.expdir)
 str = str[si]
-chstr = mrdfits(dir+'nsc_instcal_calibrate.fits',2,/silent)
+chstr = mrdfits(dir+'lists/nsc_instcal_calibrate.fits',2,/silent)
 chstr.expdir = strtrim(chstr.expdir,2)
 chstr.instrument = strtrim(chstr.instrument,2)
 nchstr = n_elements(chstr)
@@ -63,9 +66,9 @@ str.nchips = nchexp
 ; Fixing absolute paths of flux filename
 file = str.file
 g1 = where(stregex(file,'/net/mss1/',/boolean) eq 1,ng1)
-file[g1] = strmid(file[g1],10)
+if ng1 gt 0 then file[g1] = strmid(file[g1],10)
 g2 = where(stregex(file,'/mss1/',/boolean) eq 1,ng2)
-file[g2] = strmid(file[g2],6)
+if ng2 gt 0 then file[g2] = strmid(file[g2],6)
 
 ; Fix instrument in STR and CHSTR
 print,'FIXING INSTRUMENT IN STR AND CHSTR'
@@ -78,9 +81,9 @@ for i=0,n_elements(type)-1 do begin
 endfor
 
 ; APPLY RELEASE-DATE CUTS
-list1 = MRDFITS(dir+'decam_instcal_list.fits',1)
-list2 = MRDFITS(dir+'mosaic3_instcal_list.fits',1)
-list3 = MRDFITS(dir+'bok90prime_instcal_list.fits',1)
+list1 = MRDFITS(dir+'lists/decam_instcal_list.fits',1)
+list2 = MRDFITS(dir+'lists/mosaic3_instcal_list.fits',1)
+list3 = MRDFITS(dir+'lists/bok90prime_instcal_list.fits',1)
 list = [list1,list2,list3]
 list.fluxfile = strtrim(list.fluxfile,2)
 fluxfile = strmid(list.fluxfile,10)
@@ -93,7 +96,8 @@ release_year = long(strmid(release_date,0,4))
 release_month = long(strmid(release_date,5,2))
 release_day = long(strmid(release_date,8,2))
 release_mjd = JULDAY(release_month,release_day,release_year)-2400000.5d0
-release_cutoff = [2017,4,24]  ; April 24, 2017 for now
+;release_cutoff = [2017,4,24]  ; v1 - April 24, 2017
+release_cutoff = [2017,10,11]  ; v2 - Oct 11, 2017
 release_cutoff_mjd = JULDAY(release_cutoff[1],release_cutoff[2],release_cutoff[0])-2400000.5d0
 gdrelease = where(release_mjd le release_cutoff_mjd,ngdrelease,comp=bdrelease,ncomp=nbdrelease)
 print,strtrim(ngdrelease,2),' exposures are PUBLIC'
@@ -131,86 +135,95 @@ zpstr[9].amcoef = [-4.11, 0.0]
 nzpstr = n_elements(zpstr)
 
 ; APPLY QA CUTS IN ZEROPOINT AND SEEING
-print,'APPLY QA CUTS IN ZEROPOINT AND SEEING'
-fwhmthresh = 3.0  ; arcsec
-;filters = ['u','g','r','i','z','Y','VR']
-;nfilters = n_elements(filters)
-;zpthresh = [2.0,2.0,2.0,2.0,2.0,2.0,2.0]
-;zpthresh = [0.5,0.5,0.5,0.5,0.5,0.5,0.5]
-badmask = bytarr(n_elements(str)) + 1
+If not keyword_set(nocuts) then begin
+  print,'APPLY QA CUTS IN ZEROPOINT AND SEEING'
+  fwhmthresh = 3.0  ; arcsec
+  ;filters = ['u','g','r','i','z','Y','VR']
+  ;nfilters = n_elements(filters)
+  ;zpthresh = [2.0,2.0,2.0,2.0,2.0,2.0,2.0]
+  ;zpthresh = [0.5,0.5,0.5,0.5,0.5,0.5,0.5]
+  badmask = bytarr(n_elements(str)) + 1
 
-for i=0,nzpstr-1 do begin
-  ind = where(str.instrument eq zpstr[i].instrument and str.filter eq zpstr[i].filter and str.success eq 1,nind)
-  print,zpstr[i].instrument,'-',zpstr[i].filter,' ',strtrim(nind,2),' exposures'
-  if nind gt 0 then begin
-    zpterm = str[ind].zpterm
-    am = str[ind].airmass
-    mjd = str[ind].mjd
-    ; Correct for airmass extinction effect
-    zpterm -= poly(am,zpstr[i].amcoef)
-    ; Remove temporal variations
-    ;gd1 = where(abs(zpterm) lt 2,ngd1)
-    ;si = sort(mjd[gd1])
-    ;BINDATA,mjd[gd1[si]],zpterm[gd1[si]],xbin,ybin,binsize=60,/med,gdind=gdind
-    ;xbin = xbin[gdind] & ybin=ybin[gdind]
-    ; this doesn't work so well
+  for i=0,nzpstr-1 do begin
+    ind = where(str.instrument eq zpstr[i].instrument and str.filter eq zpstr[i].filter and str.success eq 1,nind)
+    print,zpstr[i].instrument,'-',zpstr[i].filter,' ',strtrim(nind,2),' exposures'
+    if nind gt 0 then begin
+      zpterm = str[ind].zpterm
+      am = str[ind].airmass
+      mjd = str[ind].mjd
+      ; Correct for airmass extinction effect
+      zpterm -= poly(am,zpstr[i].amcoef)
+      ; Remove temporal variations
+      ;gd1 = where(abs(zpterm) lt 2,ngd1)
+      ;si = sort(mjd[gd1])
+      ;BINDATA,mjd[gd1[si]],zpterm[gd1[si]],xbin,ybin,binsize=60,/med,gdind=gdind
+      ;xbin = xbin[gdind] & ybin=ybin[gdind]
+      ; this doesn't work so well
 
-    ;sigzp = mad(str[ind].zpterm)
-    ; We are using ADDITIVE zpterm 
-    ;  calmag = instmag + zpterm
-    ; if there are clouds then instmag is larger/fainter
-    ;  and zpterm is smaller (more negative)
-    ;bdind = where(str[ind].zpterm-medzp lt -zpthresh[i],nbdind)
-    gdind = where(zpterm ge -zpstr[i].thresh and zpterm le zpstr[i].thresh,ngdind,comp=bdind,ncomp=nbdind)
-    print,'  ',strtrim(nbdind,2),' exposures with ZPTERM below the threshold'    
-    if nbdind gt 0 then badmask[ind[gdind]] = 0
+      ;sigzp = mad(str[ind].zpterm)
+      ; We are using ADDITIVE zpterm 
+      ;  calmag = instmag + zpterm
+      ; if there are clouds then instmag is larger/fainter
+      ;  and zpterm is smaller (more negative)
+      ;bdind = where(str[ind].zpterm-medzp lt -zpthresh[i],nbdind)
+      gdind = where(zpterm ge -zpstr[i].thresh and zpterm le zpstr[i].thresh,ngdind,comp=bdind,ncomp=nbdind)
+      print,'  ',strtrim(nbdind,2),' exposures with ZPTERM below the threshold'    
+      if ngdind gt 0 then badmask[ind[gdind]] = 0
+    endif
+  endfor
+  ; Get bad DECaLS and SMASH exposures
+  badexp = bytarr(n_elements(str))
+  READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/smash_badexposures.txt',smashexpnum,format='A',comment='#',/silent
+  MATCH,long(str.expnum),long(smashexpnum),ind1,ind2,/sort,count=nmatch
+  if nmatch gt 0 then begin
+    badexp[ind1] = 1
+    badexp[ind1] = badexp[ind1] AND (str[ind1].instrument eq 'c4d')   ; make sure they are DECam exposures
   endif
-endfor
-; Get bad DECaLS and SMASH exposures
-badexp = bytarr(n_elements(str))
-READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/smash_badexposures.txt',smashexpnum,format='A',comment='#',/silent
-MATCH,long(str.expnum),long(smashexpnum),ind1,ind2,/sort,count=nmatch
-badexp[ind1] = 1
-badexp[ind1] = badexp[ind1] AND (str[ind1].instrument eq 'c4d')   ; make sure they are DECam exposures
-READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/decals_bad_expid.txt',decalsexpnum,format='A',comment='#',/silent
-MATCH,long(str.expnum),long(decalsexpnum),ind1,ind2,/sort,count=nmatch
-badexp[ind1] = 1
-badexp[ind1] = badexp[ind1] AND (str[ind1].instrument eq 'c4d')   ; make sure they are DECam exposures
-READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/mzls_bad_expid.txt',mzlsexpnum,format='A',comment='#',/silent
-MATCH,long(str.expnum),long(mzlsexpnum),ind1,ind2,/sort,count=nmatch
-badexp[ind1] = 1
-badexp[ind1] = badexp[ind1] AND (str[ind1].instrument eq 'k4m')   ; make sure they are Mosaic3 exposures
+  READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/decals_bad_expid.txt',decalsexpnum,format='A',comment='#',/silent
+  MATCH,long(str.expnum),long(decalsexpnum),ind1,ind2,/sort,count=nmatch
+  if nmatch gt 0 then begin
+    badexp[ind1] = 1
+    badexp[ind1] = badexp[ind1] AND (str[ind1].instrument eq 'c4d')   ; make sure they are DECam exposures
+  endif
+  READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/mzls_bad_expid.txt',mzlsexpnum,format='A',comment='#',/silent
+  MATCH,long(str.expnum),long(mzlsexpnum),ind1,ind2,/sort,count=nmatch
+  if nmatch gt 0 then begin
+    badexp[ind1] = 1
+    badexp[ind1] = badexp[ind1] AND (str[ind1].instrument eq 'k4m')   ; make sure they are Mosaic3 exposures
+  endif
 
-; Final QA cuts
-;  Many of the short u-band exposures have weird ZPTERMs, not sure why
-;  There are a few exposures with BAD WCS, RA>360!
-bdexp = where(str.fwhm gt fwhmthresh or str.ra gt 360 or badmask eq 1 or badexp eq 1 or $
-              str.rarms gt 0.2 or str.decrms gt 0.2 or $
-              (str.instrument eq 'c4d' and str.zpspatialvar_nccd gt 5 and str.zpspatialvar_rms gt 0.1),nbdexp)
-; rarms/decrms, nrefmatch
-print,'QA cuts remove ',strtrim(nbdexp,2),' exposures'
-; Remove
-torem = bytarr(nchstr)
-for i=0,nbdexp-1 do torem[str[bdexp[i]].chipindx:str[bdexp[i]].chipindx+str[bdexp[i]].nchips-1]=1
-bdchstr = where(torem eq 1,nbdchstr)
-REMOVE,bdchstr,chstr
-REMOVE,bdexp,str
-; Get new CHIPINDEX values
-;   make two arrays of old and new indices to transfer 
-;   the new index values into an array with the size of
-;   the old CHSTR
-trimoldindex = lindgen(nchstr)                    ; index into original array, but "bad" ones removed/trimed
-remove,bdchstr,trimoldindex
-trimnewindex = lindgen(n_elements(trimoldindex))  ; new index of trimmed array
-newindex = lonarr(nchstr)-1
-newindex[trimoldindex] = trimnewindex             ; new index in original array
-newchipindex = newindex[str.chipindx]
-str.chipindx = newchipindex
-nstr = n_elements(str)
+  ; Final QA cuts
+  ;  Many of the short u-band exposures have weird ZPTERMs, not sure why
+  ;  There are a few exposures with BAD WCS, RA>360!
+  bdexp = where(str.fwhm gt fwhmthresh or str.ra gt 360 or badmask eq 1 or badexp eq 1 or $
+                str.rarms gt 0.2 or str.decrms gt 0.2 or $
+                (str.instrument eq 'c4d' and str.zpspatialvar_nccd gt 5 and str.zpspatialvar_rms gt 0.1),nbdexp)
+  ; rarms/decrms, nrefmatch
+  print,'QA cuts remove ',strtrim(nbdexp,2),' exposures'
+  ; Remove
+  torem = bytarr(nchstr)
+  for i=0,nbdexp-1 do torem[str[bdexp[i]].chipindx:str[bdexp[i]].chipindx+str[bdexp[i]].nchips-1]=1
+  bdchstr = where(torem eq 1,nbdchstr)
+  REMOVE,bdchstr,chstr
+  REMOVE,bdexp,str
+  ; Get new CHIPINDEX values
+  ;   make two arrays of old and new indices to transfer 
+  ;   the new index values into an array with the size of
+  ;   the old CHSTR
+  trimoldindex = lindgen(nchstr)                    ; index into original array, but "bad" ones removed/trimed
+  remove,bdchstr,trimoldindex
+  trimnewindex = lindgen(n_elements(trimoldindex))  ; new index of trimmed array
+  newindex = lonarr(nchstr)-1
+  newindex[trimoldindex] = trimnewindex             ; new index in original array
+  newchipindex = newindex[str.chipindx]
+  str.chipindx = newchipindex
+  nstr = n_elements(str)
+Endif else print,'SKIPPING QA CUTS'
 
 ; CREATE LIST OF HEALPIX AND OVERLAPPING EXPOSURES
 ; Which healpix pixels have data
-if keyword_set(makelist) then begin
+listfile = dir+'lists/nsc_healpix_list.fits'
+if keyword_set(makelist) or file_test(listfile) eq 0 then begin
   print,'Finding the Healpix pixels with data'
   radius = 1.1
   healstr = replicate({file:'',base:'',pix:0L},1e5)
@@ -294,30 +307,31 @@ if keyword_set(makelist) then begin
   healstr.file = repstr(healstr.file,'/net/dl1/','/dl1/')
 
   ; Write the full list plus an index
-  print,'Writing list to ',dir+'combine/nsc_healpix_list.fits'
-  MWRFITS,healstr,dir+'combine/nsc_healpix_list.fits',/create
-  MWRFITS,index,dir+'combine/nsc_healpix_list.fits',/silent
+  print,'Writing list to ',listfile
+  MWRFITS,healstr,listfile,/create
+  MWRFITS,index,listfile,/silent
   ; Copy to local directory for faster reading speed
-  file_copy,dir+'combine/nsc_healpix_list.fits',localdir+'dnidever/nsc/instcal/',/over
+  file_copy,listfile,localdir+'dnidever/nsc/instcal/'+version+'/',/over
   ; PUT NSIDE IN HEADER!!
 ; Using existing list
 endif else begin
-  print,'Reading list from ',dir+'combine/nsc_healpix_list.fits'
-  healstr = MRDFITS(dir+'combine/nsc_healpix_list.fits',1)
-  index = MRDFITS(dir+'combine/nsc_healpix_list.fits',2)
+  print,'Reading list from ',listfile
+  healstr = MRDFITS(listfile,1)
+  index = MRDFITS(listfile,2)
+  upix = index.pix
   npix = n_elements(index)
   ; Copy to local directory for faster reading speed
-  file_copy,dir+'combine/nsc_healpix_list.fits',localdir+'dnidever/nsc/instcal/',/over
+  file_copy,listfile,localdir+'dnidever/nsc/instcal/'+version+'/',/over
 endelse
 
 ; Make the commands
-cmd = "nsc_instcal_combine,"+strtrim(index.pix,2)+",nside="+strtrim(nside,2)
+cmd = "nsc_instcal_combine,"+strtrim(index.pix,2)+",nside="+strtrim(nside,2)+",version='"+version+"'"
 if keyword_set(redo) then cmd+=',/redo'
-cmddir = strarr(npix)+localdir+'dnidever/nsc/instcal/tmp/'
+cmddir = strarr(npix)+localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 
 ; Check if the output file exists
 if not keyword_set(redo) then begin
-  outfiles = dir+'combine/'+strtrim(upix,2)+'.fits.gz'
+  outfiles = dir+'combine/'+strtrim(upix/1000,2)+'/'+strtrim(upix,2)+'.fits.gz'
   test = file_test(outfiles)
   gd = where(test eq 0,ngd,comp=bd,ncomp=nbd)
   if nbd gt 0 then begin

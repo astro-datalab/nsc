@@ -3,18 +3,9 @@
 import os
 import sys
 import numpy as np
-#import scipy
 import warnings
 from astropy.io import fits
 from astropy.utils.exceptions import AstropyWarning
-#import photutils
-#from skimage import measure, morphology
-#from scipy.cluster import vq
-#import gaps
-#import matplotlib.pyplot as plt
-#import pylab
-#from scipy.signal import argrelmin
-#import scipy.ndimage.filters as filters
 import time
 import shutil
 import re
@@ -25,22 +16,32 @@ import socket
 
 if __name__ == "__main__":
 
-
-# Run SExtractor on one FULL DECam stacked image
+# Run SExtractor on one FULL DECam/Mosaic3/Bok InstCal image
 
     hostname = socket.gethostname()
     host = hostname.split('.')[0]
 
-    #dir = "/datalab/users/dnidever/decamcatalog/instcal/"
-    #tmproot = "/data0/dnidever/decamcatalog/instcal/tmp/"
+    # Version
+    verdir = ""
+    if len(sys.argv) > 4:
+       version = sys.argv[4]
+       verdir = version if version.endswith('/') else version+"/"
+
     # on thing/hulk use
     if (host == "thing") | (host == "hulk"):
-        dir = "/dl1/users/dnidever/nsc/instcal/"
-        tmproot = "/d0/dnidever/nsc/instcal/tmp/"
+        dir = "/dl1/users/dnidever/nsc/instcal/"+verdir
+        tmproot = "/d0/dnidever/nsc/instcal/"+verdir+"tmp/"
     # on gp09 use
     if (host == "gp09") | (host == "gp08") | (host == "gp07"):
-        dir = "/net/dl1/users/dnidever/nsc/instcal/"
-        tmproot = "/data0/dnidever/nsc/instcal/tmp/"
+        dir = "/net/dl1/users/dnidever/nsc/instcal/"+verdir
+        tmproot = "/data0/dnidever/nsc/instcal/"+verdir+"tmp/"
+
+    # Make sure the directories exist
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+    if not os.path.exists(tmproot):
+        os.makedirs(tmproot)
+
 
     t0 = time.time()
 
@@ -49,21 +50,8 @@ if __name__ == "__main__":
     # Not enough inputs
     n = len(sys.argv)
     if n < 4:
-        print "Syntax - nsc_instcal.py fluxfile wtfile maskfile"
+        print "Syntax - nsc_instcal.py fluxfile wtfile maskfile version"
         sys.exit()
-
-    #fluxfile = "/net/mss1/archive/pipeline/Q20160307/DECALS/201209/c4d_120914_040214_osi_r_a1.fits.fz"
-    #wtfile = "/net/mss1/archive/pipeline/Q20160307/DECALS/201209/c4d_120914_040214_osw_r_a1.fits.fz"
-    #maskfile = "/net/mss1/archive/pipeline/Q20160307/DECALS/201209/c4d_120914_040214_osd_r_a1.fits.fz"
-
-    # SMASH 20160101
-    # 178 c4d_160102_063033_ood_g_v1.fits.fz  00507860  Field33  2016-01-02T06:25:16.518568  g  267.000  4:57:28.15  -84:18:05.4
-    # 179 c4d_160102_063033_ooi_g_v1.fits.fz  00507860  Field33  2016-01-02T06:25:16.518568  g  267.000  4:57:28.15  -84:18:05.4
-    # 180 c4d_160102_063033_oow_g_v1.fits.fz  00507860  Field33  2016-01-02T06:25:16.518568  g  267.000  4:57:28.15  -84:18:05.4
-    #fluxfile = "/net/mss1/archive/pipeline/Q20160107/DEC15B/20160101/c4d_160102_063033_ooi_g_v1.fits.fz"
-    #wtfile = "/net/mss1/archive/pipeline/Q20160107/DEC15B/20160101/c4d_160102_063033_oow_g_v1.fits.fz"
-    #maskfile = "/net/mss1/archive/pipeline/Q20160107/DEC15B/20160101/c4d_160102_063033_ood_g_v1.fits.fz"
-
 
     # File names
     fluxfile = sys.argv[1]
@@ -79,7 +67,6 @@ if __name__ == "__main__":
     if os.path.exists(maskfile) == False:
         print maskile, "file NOT FOUND"
         sys.exit()
-
 
     base = os.path.basename(fluxfile)
     base = os.path.splitext(os.path.splitext(base)[0])[0]
@@ -115,16 +102,6 @@ if __name__ == "__main__":
     rootLogger.addHandler(consoleHandler)
     rootLogger.setLevel(logging.NOTSET)
 
-    # Setting up logging
-    ##logging.getLogger().addHandler(logging.StreamHandler())
-    #logger = logging.getLogger('nsc_fullstack')
-    #logfile = tmpdir+"/"+base+".log"
-    #hdlr = logging.FileHandler(logfile)
-    #formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-    #hdlr.setFormatter(formatter)
-    #logger.addHandler(hdlr)
-    ##logger.setLevel(logging.WARNING)
-
     rootLogger.info("Running SExtractor on "+base)
     rootLogger.info("  Temporary directory is: "+tmpdir)
 
@@ -141,16 +118,6 @@ if __name__ == "__main__":
     rootLogger.info("  "+maskfile)
     os.symlink(os.path.basename(maskfile),"bigmask.fits.fz")
 
-    #file = "/net/mss1/archive/pipeline/Q20160307/DECALS/201209/c4d_120914_040214_ose_r_a1.fits.fz"
-    #filebase = os.path.basename(file)
-    # this is trimming the fits.fz extension
-    #shutil.copyfile(file,tmpdir+"/"+filebase)
-    #print tmpdir+"/"+filebase
-    ##cmd = 'rsync -av --password-file=/home/dnidever/.password dnidever@zeus1.sdm.noao.edu:'+file+' .'
-    #cmd = 'scp -B dnidever@zeus1.sdm.noao.edu:'+file+' .'
-    #spawn,cmd,out,errout
-    # maybe use the DL SIA service
-
     # Get number of extensions
     hdulist = fits.open("bigflux.fits.fz")
     nhdu = len(hdulist)
@@ -159,11 +126,9 @@ if __name__ == "__main__":
     # 3) Run Sextractor on all subimages
     rootLogger.info("Step #3: Running SExtractor on all subimages")
     head0 = fits.getheader("bigflux.fits.fz",0)
-    #fwhmpix = head0.get("fwhm")
-    #if fwhmpix is None:
-    #    fwhm = 1.5
-    #else:
-    #    fwhm = fwhmpix*0.27
+    plver = head0.get('PLVER')
+    if plver is None:
+        plver = 'V1.0'
     dateobs = head0.get("DATE-OBS")
     night = dateobs[0:4]+dateobs[5:7]+dateobs[8:10]
     # instrument, c4d, k4m or ksb
@@ -186,13 +151,9 @@ if __name__ == "__main__":
     if not os.path.exists(dir+instcode+"/"+night+"/"+base):
         os.mkdir(dir+instcode+"/"+night+"/"+base)
         rootLogger.info("  Making output directory: "+dir+instcode+"/"+night+"/"+base)
-    #if not os.path.exists("/datalab/users/dnidever/decamcatalog/instcal/"+night):
-    #    os.mkdir("/datalab/users/dnidever/decamcatalog/instcal/"+night)
-    #if not os.path.exists("/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base):
-    #    os.mkdir("/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base)
-    #    rootLogger.info("  Making output directory: /datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base)
 
     # LOOP through the HDUs/chips
+    #----------------------------
     for i in xrange(1,nhdu):
         rootLogger.info(" Processing subimage "+str(i))
         try:
@@ -207,28 +168,53 @@ if __name__ == "__main__":
         rootLogger.info("  CCDNUM = "+str(ccdnum))
 
         # FWHM values are ONLY in the extension headers
-        fwhmpix = fhead.get("fwhm")
-        if fwhmpix is None:
-            fwhm = 1.5
-        else:
-            fwhm = fwhmpix*0.27
+        fwhm_map = { 'c4d': 1.5 if fhead.get('FWHM') is None else fhead.get('FWHM')*0.27, 
+                     'k4m': 1.5 if fhead.get('SEEING1') is None else fhead.get('SEEING1'),
+                     'ksb': 1.5 if fhead.get('SEEING1') is None else fhead.get('SEEING1') }
+        fwhm = fwhm_map[instcode]
 
         # 3a) Make subimages for flux, weight, mask
-
         if os.path.exists("flux.fits"):
             os.remove("flux.fits")
         fits.writeto("flux.fits",flux,header=fhead,output_verify='warn')
 
-        # Mask bad pixels
-        #  set wt=0 for mask>0 pixels
-        #wt *= (mask == 0)
-        #wt[mask > 0] = 1e-40
-        wt[mask > 0] = 1e-7
-        #wt[mask > 0] = -2
+        # Turn the mask from integer to bitmask
+        if ((instcode=='c4d') & (plver>='V3.5.0')) | (instcode=='k4m') | (instcode=='ksb'):
+             omask = mask.copy()
+             mask *= 0
+             nonzero = (omask>0)
+             mask[nonzero] = 2**((omask-1)[nonzero])    # This takes about 1 sec
+        # Fix the DECam Pre-V3.5.0 masks
+        if (instcode=='c4d') & (plver<'V3.5.0'):
+          # --CP bit masks, Pre-V3.5.0 (PLVER)
+          # Bit   DQ Type  PROCTYPE
+          # 1  detector bad pixel          ->  1 
+          # 2  saturated                   ->  2^3=8
+          # 4  interpolated                ->  2^6=64
+          # 16  single exposure cosmic ray ->  2^5=32
+          # 64  bleed trail                ->  2^4=16
+          # 128  multi-exposure transient  ->  0 TURN OFF
+          # --CP bit masks, V3.5.0 on (after ~10/28/2014), integer masks
+          #  1 = bad (in static bad pixel mask)
+          #  2 = no value (for stacks)
+          #  3 = saturated
+          #  4 = bleed mask
+          #  5 = cosmic ray
+          #  6 = low weight
+          #  7 = diff detect
+          omask = mask.copy()
+          mask *= 0     # re-initialize
+          mask += (np.bitwise_and(omask,1)==1) * 1    # bad pixels
+          mask += (np.bitwise_and(omask,2)==2) * 8    # saturated
+          mask += (np.bitwise_and(omask,4)==4) * 64   # interpolated
+          mask += (np.bitwise_and(omask,16)==16) * 32  # cosmic ray
+          mask += (np.bitwise_and(omask,64)==64) * 16  # bleed trail
 
-        # I think we might need to set the weight map pixels 
-        #  that are "bad" to 5e30
-        # I think wt=0 for bad pixels
+
+        # Mask out bad pixels in WEIGHT image
+        #  set wt=0 for mask>0 pixels
+        wt[ (mask>0) | (wt<0) ] = 0   # CP sets bad pixels to wt=0 or sometimes negative
+
         if os.path.exists("wt.fits"):
             os.remove("wt.fits")
         fits.writeto("wt.fits",wt,header=whead,output_verify='warn')
@@ -240,21 +226,30 @@ if __name__ == "__main__":
 
         # 3b) Make SExtractor config files
         # Copy the default files
-        shutil.copyfile(dir+"default.conv",tmpdir+"/default.conv")
-        shutil.copyfile(dir+"default.nnw",tmpdir+"/default.nnw")
-        shutil.copyfile(dir+"default.param",tmpdir+"/default.param")
+        shutil.copyfile(dir+"config/default.conv",tmpdir+"/default.conv")
+        shutil.copyfile(dir+"config/default.nnw",tmpdir+"/default.nnw")
+        shutil.copyfile(dir+"config/default.param",tmpdir+"/default.param")
 
-        # fix gain, rdnoise in header
-        # Read in the SExtractor config file and change gain
-        f = open(dir+'default.config', 'r') # 'r' = read
-        #f = open('/datalab/users/dnidever/decamcatalog/instcal/default.config', 'r') # 'r' = read
+        # Read in configuration file and modify for this image
+        f = open(dir+'config/default.config', 'r') # 'r' = read
         lines = f.readlines()
         f.close()
+
+        # Gain, saturation, pixscale
+        gainmap = { 'c4d': lambda x: 0.5*(x.get('gaina')+x.get('gainb')),
+                    'k4m': lambda x: x.get('gain'),
+                    'ksb': lambda x: [1.3,1.5,1.4,1.4][ccdnum-1] }  # bok gain in HDU0, use list here
+        gain = gainmap[instcode](fhead)
+        saturatemap = { 'c4d': fhead.get('SATURATE'),
+                        'k4m': fhead.get('SATURATE'),
+                        'ksb': head0.get('SATURATE') }
+        saturate = saturatemap[instcode]
+        pixmap = { 'c4d': 0.27, 'k4m': 0.258, 'ksb': 0.45 }
+        pixscale = pixmap[instcode]
 
         # Things to change
         # SATUR_LEVEL     59000.00         # level (in ADUs) at which arises saturation
         # GAIN            43.52             # detector gain in e-/ADU.
-        # PIXEL_SCALE     0.26282645             # size of pixel in arcsec (0=use FITS WCS info).
         # SEEING_FWHM     1.46920            # stellar FWHM in arcsec
         # WEIGHT_IMAGE  F4-00507860_01_comb.mask.fits
 
@@ -263,18 +258,13 @@ if __name__ == "__main__":
             # SATUR_LEVEL
             m = re.search('^SATUR_LEVEL',l)
             if m != None:
-                lines[cnt] = "SATUR_LEVEL     59000.00         # level (in ADUs) at which arises saturation\n"
+                lines[cnt] = "SATUR_LEVEL     "+str(saturate)+"         # level (in ADUs) at which arises saturation\n"
                 #print "SATUR line ", cnt
             # Gain
             m = re.search('^GAIN',l)
             if m != None:
-                lines[cnt] = "GAIN            1.0             # detector gain in e-/ADU.\n"
+                lines[cnt] = "GAIN            "+str(gain)+"            # detector gain in e-/ADU.\n"
                 #print "GAIN line ", cnt
-            # PIXEL_SCALE
-            m = re.search('^PIXEL_SCALE',l)
-            if m != None:
-                lines[cnt] = "PIXEL_SCALE     0.27             # size of pixel in arcsec (0=use FITS WCS info). \n"
-                #print "PIXEL_SCALE line ", cnt
             # SEEING_FWHM
             m = re.search('^SEEING_FWHM',l)
             if m != None:
@@ -285,6 +275,12 @@ if __name__ == "__main__":
             if m != None:
                 lines[cnt] = "WEIGHT_IMAGE  wt.fits    # Weight image name.\n"
                 #print "WEIGHT line ", cnt
+            # PHOT_APERTURES, aperture diameters in pixels
+            m = re.search('^PHOT_APERTURES',l)
+            if m != None:
+                aper_world = np.array([ 0.5, 0.75, 1.0, 1.5, 2.0, 3.5, 5.0, 7.0]) * 2  # radius->diameter
+                aper_pix = aper_world / pixscale
+                lines[cnt] = "PHOT_APERTURES  "+', '.join(np.array(np.round(aper_pix,2),dtype='str'))+"            # MAG_APER aperture diameter(s) in pixels\n"            
             cnt = cnt+1
         # Write out the new config file
         if os.path.exists("default.config"):
@@ -323,13 +319,13 @@ if __name__ == "__main__":
             #rootLogger.info(sys.stderr+"SExtractor Execution failed:"+str(e))            
             rootLogger.info("SExtractor Execution failed:"+str(e))
 
-
         # Catch the output and put it in a logfile
 
         # 3d) Load the catalog (and logfile) and write final output file
-        # Move the file to final locaation
+        # Move the file to final location
         if os.path.exists("cat.fits"):
             outcatfile = dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".fits"
+            outconfigfile = dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".config"
             #outcatfile = "/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".fits"
             # Clobber if it already exists
             if os.path.exists(outcatfile):
@@ -337,6 +333,7 @@ if __name__ == "__main__":
                 rootLogger.info("  Copying final catalog to "+outcatfile)
             # Copy to final directory
             shutil.copyfile("cat.fits",outcatfile)
+            shutil.copyfile("default.config",outconfigfile)
         else:
             rootLogger.info("  No output catalog")
 

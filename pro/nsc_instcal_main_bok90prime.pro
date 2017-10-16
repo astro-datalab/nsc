@@ -25,6 +25,11 @@
 ; By D.Nidever  Feb 2017
 ;-
 
+;###############################################################
+;#  THIS PROGRAM WAS USED FOR V1 BUT IS NOW DEPRICATED!!!!!
+;###############################################################
+
+
 pro nsc_instcal_main_bok90prime,redo=redo,nmulti=nmulti,maxjobs=maxjobs,silent=silent,unlock=unlock
 
 ; Main NOAO DECam source catalog

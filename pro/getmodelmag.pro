@@ -1,3 +1,23 @@
+;+
+;
+; GETMODELMAG
+;
+; This calculates the model magnitudes for the NSC catalog
+; given a catalog with the appropriate information
+;
+; INPUTS:
+;  cat        Structure of source with appropriate magnitude
+;               columns.
+;  filter     Short filter name, e.g. 'g' or 'c4d-g'.
+;
+; OUTPUTS:
+;  model_mag  The model magnitudes for each source.
+;
+; USAGE:
+;  IDL>model_mag = getmodelmag(cat,'g')
+;
+; By D. Nidever  Sep 2017
+;-
 
 function getmodelmag,cat,filter
 
@@ -11,9 +31,29 @@ function getmodelmag,cat,filter
 ; APASS_RMAG - APASS r magnitude
 ; EBV  - E(B-V) reddening
 
-CASE filter of
+; Not enough inputs
+if n_elements(cat) eq 0 or n_elements(filter) eq 0 then begin
+  print,'Syntax - model_mag = getmodelmag(cat,filter)'
+  return,-1
+endif
+
+; If no instrument is given then assume DECam
+instfilt = filter
+if strpos(filter,'-') eq -1 then instfilt='c4d-'+filter
+
+tags = tag_names(cat)
+CASE instfilt of
 ; ---- DECam u-band ----
-'u': begin
+'c4d-u': begin
+  ; Double-check that we have the right columns
+  needtags = ['GMAG','JMAG','NUV','EBV']
+  MATCH,tags,needtags,ind1,ind2,/sort,count=ntagmatch  
+  if ntagmatch lt n_elements(needtags) then begin
+    leftind = indgen(n_elements(needtags))
+    if ntagmatch gt 0 then remove,ind2,leftind
+    print,'Needed columns missing. '+strjoin(needtags[leftind],' ')
+  endif
+  ; Selected sources with the needed information
   gd = where(cat.gmag lt 50 and cat.jmag lt 50 and cat.nuv lt 50,ngd)
   model_mag = fltarr(n_elements(cat))+99.99
   if ngd gt 0 then begin
@@ -25,7 +65,16 @@ CASE filter of
 end
 
 ;---- DECam g-band ----
-'g': begin
+'c4d-g': begin
+  ; Double-check that we have the right columns
+  needtags = ['JMAG','KMAG','APASS_GMAG','EBV']
+  MATCH,tags,needtags,ind1,ind2,/sort,count=ntagmatch  
+  if ntagmatch lt n_elements(needtags) then begin
+    leftind = indgen(n_elements(needtags))
+    if ntagmatch gt 0 then remove,ind2,leftind
+    print,'Needed columns missing. '+strjoin(needtags[leftind],' ')
+  endif
+  ; Selected sources with the needed information
   gd = where(cat.jmag lt 50 and cat.kmag lt 50 and cat.apass_gmag lt 50,ngd)
   model_mag = fltarr(n_elements(cat))+99.99
   if ngd gt 0 then begin
@@ -37,7 +86,16 @@ end
 end
 
 ; ---- DECam r-band ----
-'r': begin
+'c4d-r': begin
+  ; Double-check that we have the right columns
+  needtags = ['JMAG','KMAG','APASS_RMAG','EBV']
+  MATCH,tags,needtags,ind1,ind2,/sort,count=ntagmatch  
+  if ntagmatch lt n_elements(needtags) then begin
+    leftind = indgen(n_elements(needtags))
+    if ntagmatch gt 0 then remove,ind2,leftind
+    print,'Needed columns missing. '+strjoin(needtags[leftind],' ')
+  endif
+  ; Selected sources with the needed information
   gd = where(cat.jmag lt 50 and cat.kmag lt 50 and cat.apass_rmag lt 50,ngd)
   model_mag = fltarr(n_elements(cat))+99.99
   if ngd gt 0 then begin
@@ -49,7 +107,16 @@ end
 end
 
 ; ---- DECam i-band ----
-'i': begin
+'c4d-i': begin
+  ; Double-check that we have the right columns
+  needtags = ['JMAG','KMAG','GMAG','EBV']
+  MATCH,tags,needtags,ind1,ind2,/sort,count=ntagmatch  
+  if ntagmatch lt n_elements(needtags) then begin
+    leftind = indgen(n_elements(needtags))
+    if ntagmatch gt 0 then remove,ind2,leftind
+    print,'Needed columns missing. '+strjoin(needtags[leftind],' ')
+  endif
+  ; Selected sources with the needed information
   gd = where(cat.jmag lt 50 and cat.kmag lt 50 and cat.gmag lt 50,ngd)
   model_mag = fltarr(n_elements(cat))+99.99
   if ngd gt 0 then begin
@@ -61,7 +128,16 @@ end
 end
 
 ; ---- DECam z-band ----
-'z': begin
+'c4d-z': begin
+  ; Double-check that we have the right columns
+  needtags = ['JMAG','KMAG','EBV']
+  MATCH,tags,needtags,ind1,ind2,/sort,count=ntagmatch  
+  if ntagmatch lt n_elements(needtags) then begin
+    leftind = indgen(n_elements(needtags))
+    if ntagmatch gt 0 then remove,ind2,leftind
+    print,'Needed columns missing. '+strjoin(needtags[leftind],' ')
+  endif
+  ; Selected sources with the needed information
   gd = where(cat.jmag lt 50 and cat.kmag lt 50,ngd)
   model_mag = fltarr(n_elements(cat))+99.99
   if ngd gt 0 then begin
@@ -73,7 +149,16 @@ end
 end
 
 ; ---- DECam Y-band ----
-'Y': begin
+'c4d-Y': begin
+  ; Double-check that we have the right columns
+  needtags = ['JMAG','KMAG','EBV']
+  MATCH,tags,needtags,ind1,ind2,/sort,count=ntagmatch  
+  if ntagmatch lt n_elements(needtags) then begin
+    leftind = indgen(n_elements(needtags))
+    if ntagmatch gt 0 then remove,ind2,leftind
+    print,'Needed columns missing. '+strjoin(needtags[leftind],' ')
+  endif
+  ; Selected sources with the needed information
   gd = where(cat.jmag lt 50 and cat.kmag lt 50,ngd)
   model_mag = fltarr(n_elements(cat))+99.99
   if ngd gt 0 then begin
@@ -85,10 +170,67 @@ end
 end
 
 ; ---- DECam VR-band ----
-'VR': begin
+'c4d-VR': begin
+  ; Double-check that we have the right columns
+  needtags = ['GMAG','EBV']
+  MATCH,tags,needtags,ind1,ind2,/sort,count=ntagmatch  
+  if ntagmatch lt n_elements(needtags) then begin
+    leftind = indgen(n_elements(needtags))
+    if ntagmatch gt 0 then remove,ind2,leftind
+    print,'Needed columns missing. '+strjoin(needtags[leftind],' ')
+  endif
+  ; Selected sources with the needed information
   gd = where(cat.gmag lt 50,ngd)
   model_mag = fltarr(n_elements(cat))+99.99
   if ngd gt 0 then model_mag[gd] = cat[gd].gmag
+end
+
+
+; ---- Bok+90Prime g-band ----
+'ksb-g': begin
+  ; Double-check that we have the right columns
+  needtags = ['PS_GMAG','EBV']
+  MATCH,tags,needtags,ind1,ind2,/sort,count=ntagmatch  
+  if ntagmatch lt n_elements(needtags) then begin
+    leftind = indgen(n_elements(needtags))
+    if ntagmatch gt 0 then remove,ind2,leftind
+    print,'Needed columns missing. '+strjoin(needtags[leftind],' ')
+  endif
+  ; Selected sources with the needed information
+  gd = where(cat.ps_gmag lt 50,ngd)
+  model_mag = fltarr(n_elements(cat))+99.99
+  if ngd gt 0 then model_mag[gd] = cat[gd].ps_gmag
+end
+
+; ---- Bok+90Prime r-band ----
+'ksb-r': begin  ; Double-check that we have the right columns
+  needtags = ['PS_RMAG','EBV']
+  MATCH,tags,needtags,ind1,ind2,/sort,count=ntagmatch  
+  if ntagmatch lt n_elements(needtags) then begin
+    leftind = indgen(n_elements(needtags))
+    if ntagmatch gt 0 then remove,ind2,leftind
+    print,'Needed columns missing. '+strjoin(needtags[leftind],' ')
+  endif
+  ; Selected sources with the needed information
+  gd = where(cat.ps_rmag lt 50,ngd)
+  model_mag = fltarr(n_elements(cat))+99.99
+  if ngd gt 0 then model_mag[gd] = cat[gd].ps_rmag
+end
+
+; ---- Mosaic3 z-band ----
+'k4m-z': begin
+  ; Double-check that we have the right columns
+  needtags = ['PS_ZMAG','EBV']
+  MATCH,tags,needtags,ind1,ind2,/sort,count=ntagmatch  
+  if ntagmatch lt n_elements(needtags) then begin
+    leftind = indgen(n_elements(needtags))
+    if ntagmatch gt 0 then remove,ind2,leftind
+    print,'Needed columns missing. '+strjoin(needtags[leftind],' ')
+  endif
+  ; Selected sources with the needed information
+  gd = where(cat.ps_zmag lt 50,ngd)
+  model_mag = fltarr(n_elements(cat))+99.99
+  if ngd gt 0 then model_mag[gd] = cat[gd].ps_zmag
 end
 else: stop,filter+' not supported'
 ENDCASE
