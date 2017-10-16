@@ -55,12 +55,15 @@
 347789	1
 347790	1
 348295	3	DECAL lights on top ring turned on
+393679	2
 393680	2
 393681	2
 393682	2
 393683	2
 393684	2
 393685	2
+393686  2
+393687  2
 396101	3
 396131	3	active optics failure
 425616	3	guiding failed
@@ -232,6 +235,7 @@
 583111  2 	depth factor < 0.2	
 583114  2 	depth factor < 0.2	
 583115  2 	depth factor < 0.2	
+583120  2  expfactor < 0.3
 583194  1 	between 10.7 and 12 twilight end of night	
 583195  1 	between 10.7 and 12 twilight end of night	
 583196  1 	between 10.7 and 12 twilight end of night	
@@ -251,6 +255,7 @@
 592875  3       insufficient exposure time
 592876  3       insufficient exposure time
 592877  3       insufficient exposure time
+592882  3  expfactor < 0.3
 592883  3	telescope brakes activated, dome got in front of camera
 592884  3	telescope brakes activated, dome got in front of camera
 604729  3       taken as pass2 but should have been pass3, bad seeing       
@@ -266,13 +271,729 @@
 604742  3       taken as pass2 but should have been pass3, bad seeing
 604743  3       taken as pass2 but should have been pass3, bad seeing
 604744  3       taken as pass2 but should have been pass3, bad seeing
+604756  3 expfactor < 0.3
+604757  3 expfactor < 0.3
+604759  3 expfactor < 0.3
+604760  3 expfactor < 0.3
+604761  3 expfactor < 0.3
 604788  3       short exposure time and wrongly pass2 after decbot crash
 604789  3       short exposure time and wrongly pass2 after decbot crash
 604790  3       short exposure time and wrongly pass2 after decbot crash
+605009  3 expfactor < 0.3
+605011  3 expfactor < 0.3
 607932	3	telescope moving for pointing correction ~4s early
-625105	1	bright, weird structures.  20k counts
+624436  3  expfactor < 0.3
+624437  3  expfactor < 0.3
+624438  3  expfactor < 0.3
+624439  3  expfactor < 0.3
+624445  3  expfactor < 0.3
+624446  3  expfactor < 0.3
+625105  3  expfactor < 0.3
+625225  3  expfactor < 0.3
+625226  3  expfactor < 0.3
+625626  3  expfactor < 0.3
+625955  3  expfactor < 0.3
+625956  3  expfactor < 0.3
+630649  3 expfactor < 0.3
 630869  3       4MAPS down; telescope slewing - junk
+631097  3 expfactor < 0.3
 634312  3       pointing is -91, -20 off
 634313  3       trailed. 
 634314  3       pointing off -104, -13.
 634315  3       pointing off 50, -99. 
+635116  3 expfactor < 0.3
+635117  3 expfactor < 0.3
+635503  3 expfactor < 0.3
+635504  3 expfactor < 0.3
+635505  3 expfactor < 0.3
+635506  3 expfactor < 0.3
+635942  3 expfactor < 0.3
+635945  3 expfactor < 0.3
+635946  3 expfactor < 0.3
+635948  3 expfactor < 0.3
+635949  3 expfactor < 0.3
+637652  3 expfactor < 0.3
+637653  3 expfactor < 0.3
+637654  3 expfactor < 0.3
+637658  3 expfactor < 0.3
+640618  3 expfactor < 0.3
+640619  3 expfactor < 0.3
+640686  3 expfactor < 0.3
+640687  3 expfactor < 0.3
+640689  3 expfactor < 0.3
+640690  3 expfactor < 0.3
+640692  3 expfactor < 0.3
+640693  3 expfactor < 0.3
+640694  3 expfactor < 0.3
+640695  3 expfactor < 0.3
+640696  3 expfactor < 0.3
+640697  3 expfactor < 0.3
+640698  3 expfactor < 0.3
+640700  3 expfactor < 0.3
+640706  3 expfactor < 0.3
+640707  3 expfactor < 0.3
+640710  3 expfactor < 0.3
+640711  3 expfactor < 0.3
+641983  3 expfactor < 0.3
+641984  3 expfactor < 0.3
+641985  3 expfactor < 0.3
+641986  3 expfactor < 0.3
+646227  2       transparency < 0.3, depth factor < 0.2
+646228  2       transparency < 0.3, depth factor < 0.2
+646229  2       transparency < 0.3, depth factor < 0.2
+646230  2       transparency < 0.3, depth factor < 0.2
+646231  2       transparency < 0.3, depth factor < 0.2
+646232  2       transparency < 0.3, depth factor < 0.2
+646233  2       transparency < 0.3, depth factor < 0.2
+646235  2       depth factor < 0.2
+646236  2       transparency < 0.3, depth factor < 0.2
+646237  2       transparency < 0.3, depth factor < 0.2
+646238  2       transparency < 0.3, depth factor < 0.2
+646239  2       transparency < 0.3, depth factor < 0.2
+646240  2       transparency < 0.3, depth factor < 0.2
+646241  2       transparency < 0.3, depth factor < 0.2
+646243  2       transparency < 0.3, depth factor < 0.2
+646244  2       transparency < 0.3, depth factor < 0.2
+646245  2       transparency < 0.3, depth factor < 0.2
+646246  2       transparency < 0.3, depth factor < 0.2
+646247  2       transparency < 0.3, depth factor < 0.2
+646248  2       transparency < 0.3, depth factor < 0.2
+646249  2       transparency < 0.3, depth factor < 0.2
+646250  2       transparency < 0.3, depth factor < 0.2
+646251  2       transparency < 0.3, depth factor < 0.2
+646252  2       transparency < 0.3, depth factor < 0.2
+646253  2       transparency < 0.3, depth factor < 0.2
+646254  2       transparency < 0.3, depth factor < 0.2
+646255  2       transparency < 0.3, depth factor < 0.2
+646256  2       transparency < 0.3, depth factor < 0.2
+646257  2       transparency < 0.3, depth factor < 0.2
+646258  2       transparency < 0.3, depth factor < 0.2
+646259  2       transparency < 0.3, depth factor < 0.2
+646260  2       transparency < 0.3, depth factor < 0.2
+646261  2       transparency < 0.3, depth factor < 0.2
+646262  2       transparency < 0.3, depth factor < 0.2
+646263  2       transparency < 0.3, depth factor < 0.2
+646264  2       transparency < 0.3, depth factor < 0.2
+646265  2       transparency < 0.3, depth factor < 0.2
+646266  2       transparency < 0.3, depth factor < 0.2
+646267  2       transparency < 0.3, depth factor < 0.2
+646675  3     expfactor < 0.3
+646809  3       depth factor < 0.2
+646810  3       depth factor < 0.2
+646811  3       depth factor < 0.2
+646812  3       depth factor < 0.2
+647320	1	bright sky
+647321	1	bright sky
+647322	1	bright sky
+647323	1	bright sky
+647324	1	bright sky
+647325	1	bright sky
+647326	1	bright sky
+647327	1	bright sky
+647328	1	bright sky
+647329	1	bright sky
+647330	1	bright sky
+647331	1	bright sky
+647332	1	bright sky
+647333	1	bright sky
+647334	1	bright sky
+647335	1	bright sky
+647988  3  expfactor < 0.3
+647989  3  expfactor < 0.3
+647990  3  expfactor < 0.3
+647991  3  expfactor < 0.3
+648001  3  expfactor < 0.3
+648002  3  expfactor < 0.3
+648003  3  expfactor < 0.3
+648004  3  expfactor < 0.3
+648007  3  expfactor < 0.3
+648009  3  expfactor < 0.3
+648037  3  expfactor < 0.3
+648051  3  expfactor < 0.3
+648057  3  expfactor < 0.3
+648057  3  expfactor < 0.3
+648058  3  expfactor < 0.3
+648059  3  expfactor < 0.3
+648061  3  expfactor < 0.3
+648062  3  expfactor < 0.3
+648063  3  expfactor < 0.3
+648064  3  expfactor < 0.3
+648067  3  expfactor < 0.3
+648068  3  expfactor < 0.3
+648070  3  expfactor < 0.3
+648072  3  expfactor < 0.3
+648073  3  expfactor < 0.3
+648074  3  expfactor < 0.3
+648075  3  expfactor < 0.3
+648076  3 expfactor < 0.3
+648079  3 expfactor < 0.3
+648081  3 expfactor < 0.3
+648082  3 expfactor < 0.3
+648083  3 expfactor < 0.3
+648091  3 expfactor < 0.3
+648092  3 expfactor < 0.3
+648093  3 expfactor < 0.3
+648094  3 expfactor < 0.3
+648095  3 expfactor < 0.3
+648099  3 expfactor < 0.3
+648100  3 expfactor < 0.3
+648101  3 expfactor < 0.3
+648102  3 expfactor < 0.3
+648103  3 expfactor < 0.3
+648104  3 expfactor < 0.3
+648105  3 expfactor < 0.3
+649384  3 expfactor < 0.3
+649385  3 expfactor < 0.3
+649566  3 expfactor < 0.3
+650054    2   transparency < 0.3
+650070    2   transparency < 0.3
+650180    2   transparency < 0.3
+650187    2   transparency < 0.3
+650188    2   transparency < 0.3
+650189    2   transparency < 0.3
+650190    2   transparency < 0.3
+650191    2   transparency < 0.3
+650195    2   transparency < 0.3
+650202    2   transparency < 0.3
+650203    2   transparency < 0.3
+650204    2   transparency < 0.3
+650205    2   transparency < 0.3
+650206    2   transparency < 0.3
+650207    2   transparency < 0.3
+650208    2   transparency < 0.3
+650209    2   transparency < 0.3
+650210    2   transparency < 0.3
+650211    2   transparency < 0.3
+650212    2   transparency < 0.3
+650213    2   transparency < 0.3
+650217    2   transparency < 0.3
+650219    2   transparency < 0.3
+650220    2   transparency < 0.3
+650224    2   transparency < 0.3
+650225    2   transparency < 0.3
+650226    2   transparency < 0.3
+650227    2   transparency < 0.3
+650228    2   transparency < 0.3
+650229    2   transparency < 0.3
+650230    2   transparency < 0.3
+650232    2   transparency < 0.3
+650233    2   transparency < 0.3
+650234    2   transparency < 0.3
+650235    2   transparency < 0.3
+650236    2   transparency < 0.3
+650237    2   transparency < 0.3
+650238    2   transparency < 0.3
+650239    3   guiding failed
+650240    2   transparency < 0.3
+650241    2   transparency < 0.3
+650242    2   transparency < 0.3
+650243    2   transparency < 0.3
+650244    2   transparency < 0.3
+650245    2   transparency < 0.3
+650246    2   transparency < 0.3
+650247    2   transparency < 0.3
+650248    2   transparency < 0.3
+650249    2   transparency < 0.3
+650250    2   transparency < 0.3
+650251    2   transparency < 0.3
+650252    2   transparency < 0.3
+650253    2   transparency < 0.3
+650254    2   transparency < 0.3
+650255    2   transparency < 0.3
+650256    2   transparency < 0.3
+650257    2   transparency < 0.3
+650258    2   transparency < 0.3
+650259    2   transparency < 0.3
+650260    2   transparency < 0.3
+650261    2   transparency < 0.3
+650262    2   transparency < 0.3
+650263    2   transparency < 0.3
+650264    2   transparency < 0.3
+650265    2   transparency < 0.3
+650266    2   transparency < 0.3
+650267    2   transparency < 0.3
+650268    2   transparency < 0.3
+650269    2   transparency < 0.3
+650270    2   transparency < 0.3
+650271    2   transparency < 0.3
+650272    2   transparency < 0.3
+650273    2   transparency < 0.3
+650274    3   guiding failed
+650275    3   guiding failed
+650276    3   guiding failed
+650277    3   guiding failed
+650278    3   guiding failed
+650398    3  expfactor < 0.3
+650401    3  expfactor < 0.3
+650403    3  expfactor < 0.3
+650409    3  expfactor < 0.3
+650410    3  expfactor < 0.3
+650411    3  expfactor < 0.3
+650412    3  expfactor < 0.3
+650413    3  expfactor < 0.3
+650414    3  expfactor < 0.3
+650428    3  expfactor < 0.3
+650429    3  expfactor < 0.3
+660128    3   transparency < 0.3
+660172    3  expfactor<0.3
+660198    3  expfactor<0.3
+660206    3  expfactor<0.3
+660208    3  expfactor<0.3
+660209    3  expfactor<0.3
+660210    3  expfactor<0.3
+660211    3  expfactor<0.3
+660212    3  expfactor<0.3
+660212    3  expfactor<0.3
+660213    3  expfactor<0.3
+660217    3  expfactor<0.3
+660218    3  expfactor<0.3
+660343    3   transparency < 0.3
+660344    3   transparency < 0.3
+660345    3   transparency < 0.3
+660346    3   transparency < 0.3
+660350    3   transparency < 0.3
+660352    3   transparency < 0.3
+660367    3   transparency < 0.3
+660386    3   transparency < 0.3
+660390    3   transparency < 0.3
+660391    3   transparency < 0.3
+660395    3   transparency < 0.3
+660396    3   transparency < 0.3
+660397    3   transparency < 0.3
+660398    3   transparency < 0.3
+660399    3   transparency < 0.3
+660400    3   transparency < 0.3
+660401    3   transparency < 0.3
+660402    3   transparency < 0.3
+660406    3   transparency < 0.3
+660409    3   transparency < 0.3
+650410    2   transparency < 0.3
+660411    3   transparency < 0.3
+660413    3   transparency < 0.3
+650414    2   transparency < 0.3
+650428    3   guiding failure
+660434    3   transparency < 0.3
+660439    3   transparency < 0.3
+660453    3   transparency < 0.3
+660734    3   transparency < 0.3
+661180    3   windshake. DIQ>3" E-W elong
+661181    3   same
+661182    3   same
+661183    3   same
+661191    3   abort, TCS fail
+661195    3   exp factor < 0.3
+661196    3   exp factor = 0.33
+661207    3   exp factor = 0.33
+661208    3   exp factor < 0.3 
+661209    3   exp factor < 0.3 
+661210    3   exp factor < 0.3 
+661211    3   exp factor < 0.3 
+661212    3   exp factor < 0.3 
+661213    3   exp factor < 0.3 
+661214    3   exp factor < 0.3 
+661222    3   exp factor < 0.3 
+661226    3   exp factor < 0.3 
+661227    3   exp factor < 0.3 
+661228    3   exp factor < 0.3 
+661249    3   exp factor < 0.3 
+661252    3   exp factor < 0.3 
+661253    3   exp factor < 0.3 
+661269    3   exp factor < 0.3 
+661290    3   abort
+661291    3   abort
+661292    3   abort
+661309    3   abort
+661327    3   exp factor < 0.3
+661360    3   exp factor < 0.3
+661481    3   exp factor < 0.3
+661482    3   exp factor < 0.3
+661483    3   exp factor < 0.3
+661489    3   exp factor < 0.3
+661490    3   exp factor < 0.3
+661491    3   exp factor < 0.3
+661492    3   exp factor < 0.3
+661505    3   exp factor < 0.3
+661506    3   exp factor < 0.3
+661507    3   exp factor < 0.3
+661508    3   exp factor < 0.3
+661509    3   exp factor < 0.3
+661511    3   exp factor < 0.3
+661514    3   exp factor < 0.3
+661516    3   exp factor < 0.3
+661518    3   exp factor < 0.3
+661519    3   exp factor < 0.3
+661520    3   exp factor < 0.3
+661522    3   exp factor < 0.3
+661528    3   exp factor < 0.3
+661529    3   exp factor < 0.3
+661530    3   exp factor < 0.3
+661532    3   exp factor < 0.3
+661533    3   exp factor < 0.3
+661534    3   exp factor < 0.3
+661647    3   exp factor < 0.3
+661656    3   exp factor < 0.3
+661686    3   exp factor < 0.3
+661811    3   dome partially in the way
+662164    3   exp factor < 0.3
+662166    3   exp factor < 0.3
+662167    3   exp factor < 0.3
+662175    3   exp factor < 0.3
+662177    3   exp factor < 0.3
+662178    3   exp factor < 0.3
+662179    3   exp factor < 0.3
+662180    3   exp factor < 0.3
+662182    3   exp factor < 0.3
+662184    3   exp factor < 0.3
+662185    3   exp factor < 0.3
+662187    3   exp factor < 0.3
+662190    3   exp factor < 0.3
+662193    3   exp factor < 0.3
+662194    3   exp factor < 0.3
+662197    3   exp factor < 0.3
+662421    3   exp factor < 0.3
+662425    3   exp factor < 0.3
+662557    3   exp factor < 0.3
+662558    3   exp factor < 0.3
+662565    3   exp factor < 0.3
+662567    3   exp factor < 0.3
+662570    3   exp factor < 0.3
+662571    3   exp factor < 0.3
+662572    3   exp factor < 0.3
+662573    3   exp factor < 0.3
+662574    3   exp factor < 0.3
+662575    3   exp factor < 0.3
+662576    3   exp factor < 0.3
+662577    3   exp factor < 0.3
+662578    3   exp factor < 0.3
+662579    3   exp factor < 0.3
+662580    3   exp factor < 0.3
+662582    3   exp factor < 0.3
+662590    3   exp factor < 0.3
+662591    3   exp factor < 0.3
+662592    3   exp factor < 0.3
+662596    3   exp factor < 0.3
+662597    3   exp factor < 0.3
+662598    3   exp factor < 0.3
+662599    3   exp factor < 0.3
+662600    3   exp factor < 0.3
+662601    3   exp factor < 0.3
+662602    3   exp factor < 0.3
+662603    3   exp factor < 0.3
+662604    3   exp factor < 0.3
+662605    3   exp factor < 0.3
+662606    3   exp factor < 0.3
+662607    3   exp factor < 0.3
+662608    3   exp factor < 0.3
+662609    3   exp factor < 0.3
+662610    3   exp factor < 0.3
+662611    3   exp factor < 0.3
+662612    3   exp factor < 0.3
+662613    3   exp factor < 0.3
+662614    3   exp factor < 0.3
+662615    3   exp factor < 0.3
+662616    3   exp factor < 0.3
+662617    3   exp factor < 0.3
+662618    3   exp factor < 0.3
+662621    3   exp factor < 0.3
+662622    3   exp factor < 0.3
+662623    3   exp factor < 0.3
+662624    3   exp factor < 0.3
+662625    3   exp factor < 0.3
+662626    3   exp factor < 0.3
+662627    3   exp factor < 0.3
+662628    3   exp factor < 0.3
+662629    3   exp factor < 0.3
+662630    3   exp factor < 0.3
+662631    3   exp factor < 0.3
+662646    3   exp factor < 0.3 and elliptical PSF
+662647    3   exp factor < 0.3
+662648    3   pass=2, but seeing > 1.3 and transparency poor
+662685    3   exp factor < 0.3
+662692    3   exp factor < 0.3
+662693    3   exp factor < 0.3
+662703    3   exp factor < 0.3
+662704    3   exp factor < 0.3
+662705    3   exp factor < 0.3
+662706    3   exp factor < 0.3
+662707    3   exp factor < 0.3
+662708    3   exp factor < 0.3
+662709    3   exp factor < 0.3
+662716    3   exp factor < 0.3
+662719    3   exp factor < 0.3
+662720    3   exp factor < 0.3
+662721    3   exp factor < 0.3
+662722    3   exp factor < 0.3
+662724    3   exp factor < 0.3
+662726    3   exp factor < 0.3
+662727    3   exp factor < 0.3
+662728    3   exp factor < 0.3
+662729    3   exp factor < 0.3
+662730    3   exp factor < 0.3
+662731    3   exp factor < 0.3
+662732    3   exp factor < 0.3
+662733    3   exp factor < 0.3
+662734    3   exp factor < 0.3
+662735    3   exp factor < 0.3
+662736    3   exp factor < 0.3
+662737    3   exp factor < 0.3
+662738    3   exp factor < 0.3
+662739    3   exp factor < 0.3
+662740    3   exp factor < 0.3
+662741    3   exp factor < 0.3
+662742    3   exp factor < 0.3
+662743    3   exp factor < 0.3
+662744    3   exp factor < 0.3
+662745    3   exp factor < 0.3
+662746    3   exp factor < 0.3
+662747    3   exp factor < 0.3
+662748    3   exp factor < 0.3
+662749    3   exp factor < 0.3
+662750    3   exp factor < 0.3
+662751    3   exp factor < 0.3
+662752    3   exp factor < 0.3
+662753    3   exp factor < 0.3
+662754    3   exp factor < 0.3
+662755    3   exp factor < 0.3
+662756    3   exp factor < 0.3
+662757    3   exp factor < 0.3
+662758    3   exp factor < 0.3
+662759    3   exp factor < 0.3
+662760    3   exp factor < 0.3
+662771    3   exp factor < 0.3
+662773    3   exp factor < 0.3
+662774    3   exp factor < 0.3
+662775    3   exp factor < 0.3
+662783    3   exp factor < 0.3
+662784    3   exp factor < 0.3
+662785    3   exp factor < 0.3
+662786    3   exp factor < 0.3
+662787    3   exp factor < 0.3
+662796    3   exp factor < 0.3
+662797    3   exp factor < 0.3
+662798    3   exp factor < 0.3
+662799    3   exp factor < 0.3
+662800    3   exp factor < 0.3
+662801    3   exp factor < 0.3
+662802    3   exp factor < 0.3
+662811    3   exp factor < 0.3
+662812    3   exp factor < 0.3
+662813    3   exp factor < 0.3
+662814    3   exp factor < 0.3
+662815    3   exp factor < 0.3
+662816    3   exp factor < 0.3
+662817    3   exp factor < 0.3
+662818    3   exp factor < 0.3
+662819    3   exp factor < 0.3
+662820    3   exp factor < 0.3
+662821    3   exp factor < 0.3
+662822    3   exp factor < 0.3
+662823    3   exp factor < 0.3
+662824    3   exp factor < 0.3
+662825    3   exp factor < 0.3
+662826    3   exp factor < 0.3
+662827    3   exp factor < 0.3
+662828    3   exp factor < 0.3
+662829    3   exp factor < 0.3
+662830    3   exp factor < 0.3
+662831    3   exp factor < 0.3
+662832    3   exp factor < 0.3
+662833    3   exp factor < 0.3
+662834    3   exp factor < 0.3
+662835    3   exp factor < 0.3
+662836    3   exp factor < 0.3
+662837    3   exp factor < 0.3
+662838    3   exp factor < 0.3
+662839    3   exp factor < 0.3
+662841    3   exp factor < 0.3
+662843    3   exp factor < 0.3
+662848    3   exp factor < 0.3
+662849    3   exp factor < 0.3
+662850    3   exp factor < 0.3
+662858    3   exp factor < 0.3
+662877    3   exp factor < 0.3
+662878    3   exp factor < 0.3
+662883    3   exp factor < 0.3
+662884    3   exp factor < 0.3
+662885    3   exp factor < 0.3
+662886    3   exp factor < 0.3
+662887    3   exp factor < 0.3
+662888    3   exp factor < 0.3
+662894    3   exp factor < 0.3
+662895    3   exp factor < 0.3
+662896    3   exp factor < 0.3
+662905    3   exp factor < 0.3
+662906    3   exp factor < 0.3
+662907    3   exp factor < 0.3
+662908    3   exp factor < 0.3
+662909    3   exp factor < 0.3
+662910    3   exp factor < 0.3
+662911    3   exp factor < 0.3
+662912    3   exp factor < 0.3
+662913    3   exp factor < 0.3
+662914    3   exp factor < 0.3
+662915    3   exp factor < 0.3
+662916    3   exp factor < 0.3
+662917    3   exp factor < 0.3
+662918    3   exp factor < 0.3
+662919    3   exp factor < 0.3
+662920    3   exp factor < 0.3
+662921    3   exp factor < 0.3
+662922    3   exp factor < 0.3
+662923    3   exp factor < 0.3
+662924    3   exp factor < 0.3
+662925    3   exp factor < 0.3
+662927    3   exp factor < 0.3
+662928    3   exp factor < 0.3
+662930    3   exp factor < 0.3
+662931    3   exp factor < 0.3
+662932    3   exp factor < 0.3
+662933    3   exp factor < 0.3
+662934    3   exp factor < 0.3
+662935    3   exp factor < 0.3
+662936    3   exp factor < 0.3
+662937    3   exp factor < 0.3
+662938    3   exp factor < 0.3
+662939    3   exp factor < 0.3
+662940    3   exp factor < 0.3
+662941    3   exp factor < 0.3
+662942    3   exp factor < 0.3
+662943    3   exp factor < 0.3
+662944    3   exp factor < 0.3
+663067   2  expfactor<0.3  DECaLS_18046
+663068   2  expfactor<0.3  DECaLS_18046
+663069   2  expfactor<0.3  DECaLS_18056
+663070   2  expfactor<0.3  DECaLS_18083
+663072   2  expfactor<0.3  DECaLS_18039
+663073   2  expfactor<0.3  DECaLS_18039
+663074   2  expfactor<0.3  DECaLS_18049
+663075   2  expfactor<0.3  DECaLS_18022
+663078   2  expfactor<0.3  DECaLS_34017
+663081   2  expfactor<0.3  DECaLS_34111
+663082   2  expfactor<0.3  DECaLS_34121
+663083   2  expfactor<0.3  DECaLS_34109
+663084   2  expfactor<0.3  DECaLS_34092
+663085   2  expfactor<0.3  DECaLS_34047
+663088   2  expfactor<0.3  DECaLS_34133
+663089   2  expfactor<0.3  DECaLS_34118
+663090   2  expfactor<0.3  DECaLS_34080
+663091   2  expfactor<0.3  DECaLS_34038
+663092   2  expfactor<0.3  DECaLS_34036
+663092   2  expfactor<0.3  DECaLS_34036
+663093   2  expfactor<0.3  DECaLS_44344
+663093   2  expfactor<0.3  DECaLS_44344
+663095   2  expfactor<0.3  DECaLS_44362
+663097   2  expfactor<0.3  DECaLS_44402
+663098   2  expfactor<0.3  DECaLS_34089
+663099   2  expfactor<0.3  DECaLS_34027
+663100   2  expfactor<0.3  DECaLS_36586
+663102   2  expfactor<0.3  DECaLS_34091
+663212   2  expfactor<0.3  DECaLS_46918
+663213   2  expfactor<0.3  DECaLS_46918
+663214   2  expfactor<0.3  DECaLS_46953
+663215   2  expfactor<0.3  DECaLS_46974
+663216   2  expfactor<0.3  DECaLS_46997
+663217   2  expfactor<0.3  DECaLS_47040
+663218   2  expfactor<0.3  DECaLS_47044
+663219   2  expfactor<0.3  DECaLS_46985
+663220   2  expfactor<0.3  DECaLS_47008
+663221   2  expfactor<0.3  DECaLS_47071
+663222   2  expfactor<0.3  DECaLS_47068
+663223   2  expfactor<0.3  DECaLS_47073
+663224   2  expfactor<0.3  DECaLS_31831
+663225   2  expfactor<0.3  DECaLS_35350
+663226   2  expfactor<0.3  DECaLS_35328
+663227   2  expfactor<0.3  DECaLS_46946
+663228   2  expfactor<0.3  DECaLS_34561
+663229   2  expfactor<0.3  DECaLS_34656
+663230   2  expfactor<0.3  DECaLS_47082
+663231   2  expfactor<0.3  DECaLS_34658
+663232   2  expfactor<0.3  DECaLS_34542
+663233   2  expfactor<0.3  DECaLS_34628
+663234   2  expfactor<0.3  DECaLS_34670
+663235   2  expfactor<0.3  DECaLS_34610
+663236   2  expfactor<0.3  DECaLS_32337
+663237   2  expfactor<0.3  DECaLS_43406
+663238   2  expfactor<0.3  DECaLS_43420
+663239   2  expfactor<0.3  DECaLS_43422
+663240   2  expfactor<0.3  DECaLS_43436
+663241   2  expfactor<0.3  DECaLS_43444
+663242   2  expfactor<0.3  DECaLS_43457
+663243   2  expfactor<0.3  DECaLS_43462
+663244   2  expfactor<0.3  DECaLS_43453
+663245   2  expfactor<0.3  DECaLS_43484
+663246   2  expfactor<0.3  DECaLS_36818
+663247   2  expfactor<0.3  DECaLS_43502
+663248   2  expfactor<0.3  DECaLS_43521
+663249   2  expfactor<0.3  DECaLS_43560
+663250   2  expfactor<0.3  DECaLS_43528
+663251   2  expfactor<0.3  DECaLS_36826
+663252   2  expfactor<0.3  DECaLS_43583
+663253   2  expfactor<0.3  DECaLS_43602
+663254   2  expfactor<0.3  DECaLS_43619
+663255   2  expfactor<0.3  DECaLS_43625
+663256   2  expfactor<0.3  DECaLS_36837
+663257   2  expfactor<0.3  DECaLS_36850
+663258   2  expfactor<0.3  DECaLS_43553
+663259   2  expfactor<0.3  DECaLS_45762
+663260   2  expfactor<0.3  DECaLS_43641
+663261   2  expfactor<0.3  DECaLS_43650
+663262   2  expfactor<0.3  DECaLS_45656
+663263   2  expfactor<0.3  DECaLS_39672
+663264   2  expfactor<0.3  DECaLS_39684
+663339   3  pass1 taken with transparency<1 DECaLS_13908_g  
+663340   3  pass1 taken with transparency<1 DECaLS_13888_g  
+663341   3  pass1 taken with transparency<1 DECaLS_13838_g  
+663362   2  expfactor<0.3  DECaLS_39592
+663366   2  expfactor<0.3  DECaLS_45578
+663367   2  expfactor<0.3  DECaLS_45562
+663368   2  expfactor<0.3  DECaLS_44361
+663369   2  expfactor<0.3  DECaLS_44383
+663370   2  expfactor<0.3  DECaLS_44404
+663371   2  expfactor<0.3  DECaLS_44403
+663372   2  expfactor<0.3  DECaLS_45549
+663373   2  expfactor<0.3  DECaLS_33945
+663373   2  expfactor<0.3  DECaLS_33945
+663374   2  expfactor<0.3  DECaLS_33963
+663376   2  expfactor<0.3  DECaLS_33907
+663381   2  expfactor<0.3  DECaLS_34014
+663382   2  expfactor<0.3  DECaLS_34016
+663383   2  expfactor<0.3  DECaLS_34037
+663497   2  expfactor<0.3  
+663498   2  expfactor<0.3  
+663499   2  expfactor<0.3  
+663500   2  expfactor<0.3  
+663501   2  expfactor<0.3  
+663612   2  expfactor<0.3
+663613   2  expfactor<0.3
+663770   2  expfactor < 0.3 DECaLS_33963
+663799   2  expfactor < 0.3 DECaLS_36589
+663784   3  shows features like clouds but OA says totally clear
+669424   3  no guiding star found. seeing 2"; ellipiticity looks ok.
+670843   3  SISPI broken; image did not read out properly
+# 2017-09-14
+677658   3  expfactor < 0.3 too shallow ; seeing > 3"
+677659   3  expfactor < 0.3 too shallow ; seeing > 3"
+677660   3  expfactor < 0.3 too shallow ; seeing > 3"
+677661   3  expfactor < 0.3 too shallow ; seeing > 3"
+677662   3  expfactor < 0.3 too shallow ; seeing ~ 3"
+677663   3  expfactor < 0.3 too shallow ; seeing ~ 3"
+677664   3  expfactor < 0.3 too shallow ; seeing ~ 3"
+677665   3  expfactor < 0.3 too shallow ; seeing ~ 3"
+677666   3  expfactor < 0.3 too shallow ; seeing ~ 2.5"
+677671   3  expfactor < 0.3 too shallow ; seeing ~ 2.5"
+677673   3  expfactor < 0.3 too shallow ; seeing ~ 2.5"
+677674   3  expfactor < 0.3 too shallow ; seeing ~ 2.5"
+677692   3  dome occulted telescope field during part of this exposure
+677724   3  expfactor < 0.3 too shallow ; seeing ~ 2.5"
+#297-09-15
+677930   3 expfactor=0.01,seeing=4.10 MzLS_43648_
+677931   3 expfactor=0.03,seeing=3.48 MzLS_43648_
+677932   3 expfactor=0.05,seeing=3.07 MzLS_43649_
+677934   3 expfactor=0.13,seeing=3.15 MzLS_43616_
+677935   3 expfactor=0.18,seeing=2.69 MzLS_36879_
+677936   3 expfactor=0.21,seeing=2.55 MzLS_43642_
+677938   3 expfactor=0.18,seeing=3.03 MzLS_45634_
+678007   3  dome occulted telescope field during part of this exposure
+678115   3  dome occulted telescope field during part of this exposure
+
+
