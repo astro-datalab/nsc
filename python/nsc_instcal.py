@@ -32,7 +32,7 @@ if __name__ == "__main__":
         dir = "/dl1/users/dnidever/nsc/instcal/"+verdir
         tmproot = "/d0/dnidever/nsc/instcal/"+verdir+"tmp/"
     # on gp09 use
-    if (host == "gp09") | (host == "gp08") | (host == "gp07"):
+    if (host == "gp09") | (host == "gp08") | (host == "gp07") | (host == "gp06") | (host == "gp05"):
         dir = "/net/dl1/users/dnidever/nsc/instcal/"+verdir
         tmproot = "/data0/dnidever/nsc/instcal/"+verdir+"tmp/"
 
