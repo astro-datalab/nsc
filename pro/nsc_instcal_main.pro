@@ -78,7 +78,7 @@ print,strtrim(nstr,2),' InstCal images'
 healpix = [37391, 64471, 153437, 153728, 190278, 194240]
 undefine,base
 for i=0,n_elements(healpix)-1 do begin
-  expstr = mrdfits('/net/dl1/users/dnidever/nsc/qa/v1/'+strtrim(healpix[i],2)+'.fits.gz',1,/silent)
+  expstr = mrdfits(dldir+'users/dnidever/nsc/qa/v1/'+strtrim(healpix[i],2)+'.fits.gz',1,/silent)
   push,base,strtrim(expstr.base,2)
 endfor
 allbase = file_basename(str.fluxfile,'.fits.fz')
