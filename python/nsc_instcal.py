@@ -180,6 +180,13 @@ if __name__ == "__main__":
 
         # Turn the mask from integer to bitmask
         if ((instcode=='c4d') & (plver>='V3.5.0')) | (instcode=='k4m') | (instcode=='ksb'):
+             #  1 = bad (in static bad pixel mask) -> 1
+             #  2 = no value (for stacks)          -> 2
+             #  3 = saturated                      -> 4
+             #  4 = bleed mask                     -> 8
+             #  5 = cosmic ray                     -> 16
+             #  6 = low weight                     -> 32
+             #  7 = diff detect                    -> 64
              omask = mask.copy()
              mask *= 0
              nonzero = (omask>0)
@@ -189,10 +196,10 @@ if __name__ == "__main__":
           # --CP bit masks, Pre-V3.5.0 (PLVER)
           # Bit   DQ Type  PROCTYPE
           # 1  detector bad pixel          ->  1 
-          # 2  saturated                   ->  2^3=8
-          # 4  interpolated                ->  2^6=64
-          # 16  single exposure cosmic ray ->  2^5=32
-          # 64  bleed trail                ->  2^4=16
+          # 2  saturated                   ->  4
+          # 4  interpolated                ->  32
+          # 16  single exposure cosmic ray ->  16
+          # 64  bleed trail                ->  8
           # 128  multi-exposure transient  ->  0 TURN OFF
           # --CP bit masks, V3.5.0 on (after ~10/28/2014), integer masks
           #  1 = bad (in static bad pixel mask)
@@ -205,10 +212,10 @@ if __name__ == "__main__":
           omask = mask.copy()
           mask *= 0     # re-initialize
           mask += (np.bitwise_and(omask,1)==1) * 1    # bad pixels
-          mask += (np.bitwise_and(omask,2)==2) * 8    # saturated
-          mask += (np.bitwise_and(omask,4)==4) * 64   # interpolated
-          mask += (np.bitwise_and(omask,16)==16) * 32  # cosmic ray
-          mask += (np.bitwise_and(omask,64)==64) * 16  # bleed trail
+          mask += (np.bitwise_and(omask,2)==2) * 4    # saturated
+          mask += (np.bitwise_and(omask,4)==4) * 32   # interpolated
+          mask += (np.bitwise_and(omask,16)==16) * 16  # cosmic ray
+          mask += (np.bitwise_and(omask,64)==64) * 8   # bleed trail
 
 
         # Mask out bad pixels in WEIGHT image
@@ -278,7 +285,8 @@ if __name__ == "__main__":
             # PHOT_APERTURES, aperture diameters in pixels
             m = re.search('^PHOT_APERTURES',l)
             if m != None:
-                aper_world = np.array([ 0.5, 0.75, 1.0, 1.5, 2.0, 3.5, 5.0, 7.0]) * 2  # radius->diameter
+                #aper_world = np.array([ 0.5, 0.75, 1.0, 1.5, 2.0, 3.5, 5.0, 7.0]) * 2  # radius->diameter
+                aper_world = np.array([ 0.5, 1.0, 2.0, 3.0, 4.0]) * 2  # radius->diameter, 1, 2, 4, 6, 8"
                 aper_pix = aper_world / pixscale
                 lines[cnt] = "PHOT_APERTURES  "+', '.join(np.array(np.round(aper_pix,2),dtype='str'))+"            # MAG_APER aperture diameter(s) in pixels\n"            
             cnt = cnt+1
@@ -334,6 +342,11 @@ if __name__ == "__main__":
             # Copy to final directory
             shutil.copyfile("cat.fits",outcatfile)
             shutil.copyfile("default.config",outconfigfile)
+            # Copy check files
+            shutil.copyfile("miniback.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_miniback.fits")
+            shutil.copyfile("objects.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_objects.fits")
+            shutil.copyfile("segment.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_segment.fits")
+            shutil.copyfile("apertures.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_apertures.fits")
         else:
             rootLogger.info("  No output catalog")
 
