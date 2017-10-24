@@ -421,8 +421,21 @@ For i=0,nchips-1 do begin
     cat[chind2] = cat1
     goto,BOMB
   endif
-  gaia2 = gaia[ind1]
-  cat2 = cat1[ind2]
+  gaia1b = gaia[ind1]
+  cat1b = cat1[ind2]
+  ; Apply quality cuts
+  qcuts1 = where(cat1b.imaflags_iso eq 0 and not ((cat1b.flags and 8) eq 8) and not ((cat1b.flags and 16) eq 16),nqcuts1)
+  if nqcuts1 eq 0 then begin
+    print,'Not enough stars after quality cuts'
+    ; Add threshold to astrometric errors
+    cat1.raerr = sqrt(cat1.raerr^2 + 0.100^2)
+    cat1.decerr = sqrt(cat1.decerr^2 + 0.100^2)
+    cat[chind2] = cat1
+    goto,BOMB
+  endif
+  gaia2 = gaia1b[qcuts1]
+  cat2 = cat1b[qcuts1]
+
   ROTSPHCEN,gaia2.ra_icrs,gaia2.de_icrs,chstr[i].cenra,chstr[i].cendec,gaialon,gaialat,/gnomic
   ROTSPHCEN,cat2.alpha_j2000,cat2.delta_j2000,chstr[i].cenra,chstr[i].cendec,lon1,lat1,/gnomic
   ; Fit RA as function of RA/DEC
@@ -470,6 +483,7 @@ For i=0,nchips-1 do begin
   chstr[i].racoef = racoef
   chstr[i].decrms = decrms
   chstr[i].deccoef = deccoef
+;stop
   BOMB:
 Endfor
 
@@ -533,12 +547,14 @@ CASE instfilt of
   gmagerr = 2.5*alog10(1.0+gaia1.e_fg/gaia1.fg)
   ; (G-J)o = G-J-1.12*EBV
   col = gaia1.gmag - tmass1.jmag - 1.12*cat1.ebv
-  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+  gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
                 tmass1.e_jmag lt 0.05 and finite(galex1.nuv) eq 1 and col ge 0.8 and col le 1.1,ngdcat)
   ;  if the seeing is bad then class_star sometimes doens't work well
   if medfwhm gt 1.8 and ngdcat lt 100 then begin
-    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
                   tmass1.e_jmag lt 0.05 and finite(galex1.nuv) eq 1 and col ge 0.8 and col le 1.1,ngdcat)
   endif
@@ -586,12 +602,14 @@ end
   apass1 = apass[index[gd,1]]
   ; Make quality and error cuts
   col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
-  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+  gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
                 tmass1.e_jmag lt 0.05 and apass1.e_g_mag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
   ;  if the seeing is bad then class_star sometimes doens't work well
   if medfwhm gt 1.8 and ngdcat lt 100 then begin
-    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
                   tmass1.e_jmag lt 0.05 and apass1.e_g_mag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
   endif
@@ -636,12 +654,14 @@ end
   apass1 = apass[index[gd,1]]
   ; Make quality and error cuts
   col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
-  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+  gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
                 tmass1.e_jmag lt 0.05 and apass1.e_r_mag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
   ;  if the seeing is bad then class_star sometimes doens't work well
   if medfwhm gt 1.8 and ngdcat lt 100 then begin
-    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
                   tmass1.e_jmag lt 0.05 and apass1.e_r_mag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
   endif
@@ -687,12 +707,14 @@ end
   ; Make quality and error cuts
   gmagerr = 2.5*alog10(1.0+gaia1.e_fg/gaia1.fg)
   col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
-  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+  gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
                 tmass1.e_jmag lt 0.05 and col ge 0.25 and col le 0.65,ngdcat)
   ;  if the seeing is bad then class_star sometimes doens't work well
   if medfwhm gt 1.8 and ngdcat lt 100 then begin
-    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
                   tmass1.e_jmag lt 0.05 and col ge 0.25 and col le 0.65,ngdcat)
   endif
@@ -732,12 +754,14 @@ end
   tmass1 = tmass[index[gd]]
   ; Make quality and error cuts
   col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
-  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+  gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
                 tmass1.e_jmag lt 0.05 and col ge 0.4 and col le 0.65,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
   if medfwhm gt 1.8 and ngdcat lt 100 then begin
-    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
                   tmass1.e_jmag lt 0.05 and col ge 0.4 and col le 0.65,ngdcat)
   endif
@@ -775,12 +799,14 @@ end
   tmass1 = tmass[index[gd]]
   ; Make quality and error cuts
   col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
-  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+  gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
                 tmass1.e_jmag lt 0.05 and col ge 0.4 and col le 0.7,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
   if medfwhm gt 1.8 and ngdcat lt 100 then begin
-    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
                   tmass1.e_jmag lt 0.05 and col ge 0.4 and col le 0.7,ngdcat)
   endif
@@ -821,12 +847,14 @@ end
   ; Make quality and error cuts
   gmagerr = 2.5*alog10(1.0+gaia1.e_fg/gaia1.fg)
   col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
-  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+  gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
                 tmass1.e_jmag lt 0.05 and col ge 0.2 and col le 0.6,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
   if medfwhm gt 2 and ngdcat lt 100 then begin
-    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
                   tmass1.e_jmag lt 0.05 and col ge 0.2 and col le 0.6,ngdcat)
   endif
@@ -865,15 +893,18 @@ end
   gaia1 = gaia[index[gd,0]]
   ps1 = ps[index[gd,1]]
   ; Make quality and error cuts
-  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+  gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and ps1.gmag lt 21.0,ngdcat)
   ; Don't use CLASS_STAR threshold if not enough sources are selected
   if ngdcat lt 10 then $
-    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ps1.gmag lt 21.0,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
   if medfwhm gt 2 and ngdcat lt 100 then begin
-    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ps1.gmag lt 21.0,ngdcat)
   endif
   if ngdcat eq 0 then begin
@@ -910,15 +941,18 @@ end
   gaia1 = gaia[index[gd,0]]
   ps1 = ps[index[gd,1]]
   ; Make quality and error cuts
-  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+  gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and ps1.rmag lt 21.0,ngdcat)
   ; Don't use CLASS_STAR threshold if not enough sources are selected
   if ngdcat lt 10 then $
-    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ps1.rmag lt 21.0,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
   if medfwhm gt 1.8 and ngdcat lt 100 then begin
-    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ps1.rmag lt 21.0,ngdcat)
   endif
   if ngdcat eq 0 then begin
@@ -955,15 +989,18 @@ end
   gaia1 = gaia[index[gd,0]]
   ps1 = ps[index[gd,1]]
   ; Make quality and error cuts
-  gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+  gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and ps1.zmag lt 21.0,ngdcat)
   ; Don't use CLASS_STAR threshold if not enough sources are selected
   if ngdcat lt 10 then $
-    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ps1.zmag lt 21.0,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
   if medfwhm gt 1.8 and ngdcat lt 100 then begin
-    gdcat = where(cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ps1.zmag lt 21.0,ngdcat)
   endif
   if ngdcat eq 0 then begin
@@ -1027,6 +1064,8 @@ if ngdmag gt 0 then begin
   expstr.depth10sig = depth10sig
   chstr.depth10sig = depth10sig
 endif
+
+;stop
 
 ; Step 5. Write out the final catalogs and metadata
 ;--------------------------------------------------
