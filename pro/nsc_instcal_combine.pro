@@ -146,7 +146,7 @@ FOR i=0,nlist-1 do begin
   print,'  ',strtrim(ncat1,2),' sources'
 
   ; Make sure it's in the right format
-  if n_tags(cat1) ne 43 then begin   ; 49 for v1
+  if n_tags(cat1) ne 45 then begin   ; 49 for v1
     print,'  This catalog does not have the right format. Skipping'
     goto,BOMB
   endif
