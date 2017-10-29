@@ -30,7 +30,7 @@ pro nsc_instcal_main,version,redo=redo,nmulti=nmulti,maxjobs=maxjobs,silent=sile
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
 ;dir = "/datalab/users/dnidever/decamcatalog/"
-if n_elements(maxjobs) eq 0 then maxjobs=4e4
+if n_elements(maxjobs) eq 0 then maxjobs=48300L
 if n_elements(nmulti) eq 0 then nmulti=30
 if n_elements(version) eq 0 then version='v2'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
@@ -91,8 +91,8 @@ print,strtrim(nstr,2),' InstCal images'
 ;filt = strmid(str.filter,0,1)
 ;exptime = str.exposure
 
-;gdexp = lindgen(nstr)
-;ngdexp = nstr
+gdexp = lindgen(nstr)
+ngdexp = nstr
 
 ; Check the exposures
 print,'Checking on the exposures'
@@ -127,7 +127,8 @@ for i=0,ngdexp-1 do begin
   expstr[i].outfile = outfile
 
   ; Do all three files exist?
-  if file_test(fluxfile) eq 1 and file_test(wtfile) eq 1 and file_test(maskfile) eq 1 then expstr[i].allexist=1
+  ;if file_test(fluxfile) eq 1 and file_test(wtfile) eq 1 and file_test(maskfile) eq 1 then expstr[i].allexist=1
+  expstr[i].allexist = 1    ; THIS TAKES TOO LONG!!!
   ; Does the output file exist
   if file_test(outfile) eq 1 or file_test(outfile+'.gz') eq 1 then expstr[i].done = 1
 
