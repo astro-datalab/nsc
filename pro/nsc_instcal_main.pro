@@ -74,17 +74,17 @@ str.maskfile = strtrim(str.maskfile,2)
 str.wtfile = strtrim(str.wtfile,2)
 print,strtrim(nstr,2),' InstCal images'
 
-; Only run exposures for our 6 test fields
-healpix = [37391, 64471, 153437, 153728, 190278, 194240]
-undefine,base
-for i=0,n_elements(healpix)-1 do begin
-  expstr = mrdfits(dldir+'users/dnidever/nsc/qa/v1/'+strtrim(healpix[i],2)+'.fits.gz',1,/silent)
-  push,base,strtrim(expstr.base,2)
-endfor
-allbase = file_basename(str.fluxfile,'.fits.fz')
-MATCH,allbase,base,ind1,ind2,/sort
-gdexp = ind1
-ngdexp = n_elements(gdexp)
+;; Only run exposures for our 6 test fields
+;healpix = [37391, 64471, 153437, 153728, 190278, 194240]
+;undefine,base
+;for i=0,n_elements(healpix)-1 do begin
+;  expstr = mrdfits(dldir+'users/dnidever/nsc/qa/v1/'+strtrim(healpix[i],2)+'.fits.gz',1,/silent)
+;  push,base,strtrim(expstr.base,2)
+;endfor
+;allbase = file_basename(str.fluxfile,'.fits.fz')
+;MATCH,allbase,base,ind1,ind2,/sort
+;gdexp = ind1
+;ngdexp = n_elements(gdexp)
 
 ;glactc,str.ra,str.dec,2000.0,glon,glat,1,/deg
 ;gal2mag,glon,glat,mlon,mlat
