@@ -381,10 +381,10 @@ if __name__ == "__main__":
             shutil.copyfile("cat.fits",outcatfile)
             shutil.copyfile("default.config",outconfigfile)
             # Copy check files
-            shutil.copyfile("miniback.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_miniback.fits")
-            shutil.copyfile("objects.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_objects.fits")
-            shutil.copyfile("segment.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_segment.fits")
-            shutil.copyfile("apertures.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_apertures.fits")
+            #shutil.copyfile("miniback.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_miniback.fits")
+            #shutil.copyfile("objects.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_objects.fits")
+            #shutil.copyfile("segment.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_segment.fits")
+            #shutil.copyfile("apertures.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_apertures.fits")
         else:
             rootLogger.info("  No output catalog")
 
