@@ -245,10 +245,14 @@ if __name__ == "__main__":
         f.close()
 
         # Gain, saturation, pixscale
-        gainmap = { 'c4d': lambda x: 0.5*(x.get('gaina')+x.get('gainb')),
-                    'k4m': lambda x: x.get('gain'),
-                    'ksb': lambda x: [1.3,1.5,1.4,1.4][ccdnum-1] }  # bok gain in HDU0, use list here
-        gain = gainmap[instcode](fhead)
+        try:
+            gainmap = { 'c4d': lambda x: 0.5*(x.get('gaina')+x.get('gainb')),
+                        'k4m': lambda x: x.get('gain'),
+                        'ksb': lambda x: [1.3,1.5,1.4,1.4][ccdnum-1] }  # bok gain in HDU0, use list here
+            gain = gainmap[instcode](fhead)
+        except:
+            gainmap_avg = { 'c4d': 3.9845419, 'k4m': 1.8575, 'ksb': 1.4}
+            gain = gainmap_avg[instcode]
         saturatemap = { 'c4d': fhead.get('SATURATE'),
                         'k4m': fhead.get('SATURATE'),
                         'ksb': head0.get('SATURATE') }
