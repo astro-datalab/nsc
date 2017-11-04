@@ -104,7 +104,7 @@ if __name__ == "__main__":
     rootLogger.addHandler(consoleHandler)
     rootLogger.setLevel(logging.NOTSET)
 
-    rootLogger.info("Running SExtractor on "+base)
+    rootLogger.info("Running SExtractor on "+base+" on host="+host)
     rootLogger.info("  Temporary directory is: "+tmpdir)
 
     # 2) Copy over images from zeus1:/mss

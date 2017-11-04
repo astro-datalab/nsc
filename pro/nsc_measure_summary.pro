@@ -20,7 +20,7 @@ nexpdirs = n_elements(expdirs)
 print,strtrim(nexpdirs,2),' exposure directories'
 
 ; Create structure
-expstr = replicate({dir:'',instrument:'',base:'',nchips:0L,success:0,dt:0.0},nexpdirs)
+expstr = replicate({dir:'',instrument:'',base:'',nchips:0L,nsources:0L,success:0,dt:0.0},nexpdirs)
 expstr.dir = expdirs
 undefine,instrument
 if nc4d_expdirs gt 0 then push,instrument,strarr(nc4d_expdirs)+'c4d'
@@ -37,6 +37,11 @@ for i=0,nexpdirs-1 do begin
   ; Get chip files
   chipfiles = file_search(dir1+'/'+base1+'_*.fits',count=nchipfiles)
   expstr[i].nchips = nchipfiles
+  ; Get sources
+  for j=0,nchipfiles-1 do begin
+    hd = headfits(chipfiles[j],exten=2)
+    expstr[i].nsources += sxpar(hd,'naxis2')
+  endfor
   ; It succeeded if the final log file exists
   expstr[i].success = file_test(dir1+'/'+base1+'.log')
   ; dt, need chip files
