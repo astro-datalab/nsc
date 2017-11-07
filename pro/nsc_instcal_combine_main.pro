@@ -219,7 +219,14 @@ If not keyword_set(nocuts) then begin
   newchipindex = newindex[str.chipindx]
   str.chipindx = newchipindex
   nstr = n_elements(str)
+
+; SHOULD INCLUDE CUTS ON ZTERMERR OR NPHOTMATCH
+STOP,'SHOULD INCLUDE CUTS ON ZTERMERR OR NPHOTMATCH'
+
 Endif else print,'SKIPPING QA CUTS'
+
+
+
 
 ; CREATE LIST OF HEALPIX AND OVERLAPPING EXPOSURES
 ; Which healpix pixels have data
@@ -397,7 +404,7 @@ endif
 stop
 
 ; Now run the combination program on each healpix pixel
-PBS_DAEMON,cmd,cmddir,/hyperthread,/idle,prefix='nsccmb',jobs=jobs,nmulti=nmulti,wait=1
+PBS_DAEMON,cmd,cmddir,jobs=jobs,/hyperthread,/idle,prefix='nsccmb',jobs=jobs,nmulti=nmulti,wait=1
 
 ; RUN NSC_COMBINE_SUMMARY WHEN IT'S DONE!!!
 
