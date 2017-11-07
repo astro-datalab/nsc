@@ -202,7 +202,7 @@ MWRFITS,expstr,runfile,/create
 ; Run PBS_DAEMON
 stop
 a = '' & read,a,prompt='Press RETURN to start'
-PBS_DAEMON,cmd,cmddir,/hyperthread,prefix='nsc',wait=5,nmulti=nmulti
+PBS_DAEMON,cmd,cmddir,jobs=jobs,/hyperthread,prefix='nsc',wait=5,nmulti=nmulti
 
 ; Unlocking files
 print,'Unlocking processed files'
