@@ -200,10 +200,83 @@ spawn,['epstopdf',file+'.eps'],/noshell
 push,plots,file
 
 
+; G-g vs. J-Ks
+;--------------
+jk0 = str1.tmass_jmag-str1.tmass_kmag-0.17*str1.ebv
+gg = where(jk0 ge 0.2 and jk0 le 0.7 and str1.ps1_gerr gt 0,ngg)
+initpar = [0.0, 0.0, 0.0, 0.0]
+fa = {x1:str1[gg].gaia_gmag,x2:jk0[gg],x3:str1[gg].ebv}
+;fa = {x1:str1[gg].gaia_gmag,x2:str1[gg].tmass_jmag,x3:str1[gg].tmass_kmag,x4:str1[gg].ebv}
+;fa = {x1:str1[gg].gaia_gmag,x2:str1[gg].tmass_jmag,x3:str1[gg].ebv}
+x = findgen(ngg)
+y = str1[gg].ps1_gmag
+err = str1[gg].ps1_gerr > 0.01
+parinfo = replicate({limited:[0,0],limits:[0.0,0.0],fixed:0},n_elements(initpar))
+initpar[0] = 1.0
+parinfo[0].fixed = 1
+; FIXING THE EXTINCTION TERM
+;initpar[2] = 0.0  ;0.04
+;parinfo[2].fixed = 1
+;initpar[3] = 0.223
+;parinfo[3].fixed = 1
+par = mpfitfun('superfit',x,y,err,initpar,functargs=fa,parinfo=parinfo,status=status,yfit=yfit,/quiet)
+print,'g-band:'
+print,par
+;  1.00000      1.15316     0.727602    0.0105591
+faall = {x1:str1.gaia_gmag,x2:jk0,x3:str1.ebv}
+;faall = {x1:str1.gaia_gmag,x2:str1.tmass_jmag,x3:str1.tmass_kmag,x4:str1.ebv}
+;faall = {x1:str1.gaia_gmag,x2:str1.tmass_jmag,x3:str1.ebv}
+yfitall = superfit(str1.ps1_gmag*0,par,_extra=faall)
+
+plotc,str1.ebv,yfitall-str1.ps1_gmag,ps=1,sym=0.5,xr=[0,1],yr=[-0.5,0.5] 
+oplot,[-1,4],[0,0],linestyle=2,co=250
+
+; Scatter plot
+file = 'plots/nsc_color_relations_stripe82_super_g_jk_scatter2'
+ps_open,file,/color,thick=4,/encap
+plotc,jk0,yfitall-str1.ps1_gmag,str1.ebv,ps=1,sym=0.5,xr=[-0.5,1.5],yr=[-0.5,0.5],$
+      xtit='(J-Ks)!d0!n',ytit='Residuals',tit='g-band (color-coded by E[B-V])'
+oplot,[-1,3],[0,0],co=255
+oplot,[0.3,0.7],[0,0],co=0
+al_legend,stringize(par[0],ndec=3)+'*G'+stringize(par[1],ndec=3)+'*JK0'+$
+          stringize(par[2],ndec=3)+'*E(B-V)+'+stringize(par[3],ndec=3),textcolor=250,/top,/left,charsize=1.2
+ps_close
+ps2png,file+'.eps',/eps
+spawn,['epstopdf',file+'.eps'],/noshell
+;push,plots,file
+
+; Density plot
+file = 'plots/nsc_color_relations_stripe82_super_g_jk_density2'
+ps_open,file,/color,thick=4,/encap
+hess,jk0,yfitall-str1.ps1_gmag,str1.ebv,dx=0.02,dy=0.02,xr=[-0.5,1.5],yr=[-0.5,0.5],$
+      xtit='(J-Ks)!d0!n',ytit='Residuals',tit='g-band fit',/log
+oplot,[-1,3],[0,0],co=255
+oplot,[0.3,0.7],[0,0],co=0
+al_legend,stringize(par[0],ndec=3)+'*G'+stringize(par[1],ndec=3)+'*JK0'+$
+          stringize(par[2],ndec=3)+'*E(B-V)+'+stringize(par[3],ndec=3),textcolor=250,/top,/left,charsize=1.2
+rms = mad(yfitall[gg]-str1[gg].ps1_imag)
+al_legend,['RMS='+stringize(rms,ndec=3)+' mag'],textcolor=250,/bottom,/left,charsize=1.2
+ps_close
+ps2png,file+'.eps',/eps
+spawn,['epstopdf',file+'.eps'],/noshell
+push,plots,file
+
+; Extinction plot
+file = 'plots/nsc_color_relations_stripe82_super_g_ebv_jk2'
+ps_open,file,/color,thick=4,/encap
+plotc,str1[gg].ebv,yfitall[gg]-str1[gg].ps1_gmag,jk0[gg],ps=1,sym=0.5,xr=[0,0.8],yr=[-0.5,0.5],xs=1,ys=1,$
+      xtit='E(B-V)',ytit='Residuals',tit='g-band (color-coded by [J-Ks]!d0!n)'
+oplot,[-1,3],[0,0],co=250
+ps_close
+ps2png,file+'.eps',/eps
+spawn,['epstopdf',file+'.eps'],/noshell
+push,plots,file
+
+
 ; G-i vs. J-Ks
 ;--------------
 jk0 = str1.tmass_jmag-str1.tmass_kmag-0.17*str1.ebv
-gg = where(jk0 ge 0.3 and jk0 le 0.7 and str1.ps1_ierr gt 0,ngg)
+gg = where(jk0 ge 0.3 and jk0 le 0.6 and str1.ps1_ierr gt 0,ngg)
 initpar = [0.0, 0.0, 0.0, 0.0]
 fa = {x1:str1[gg].gaia_gmag,x2:jk0[gg],x3:str1[gg].ebv}
 ;fa = {x1:str1[gg].gaia_gmag,x2:str1[gg].tmass_jmag,x3:str1[gg].tmass_kmag,x4:str1[gg].ebv}

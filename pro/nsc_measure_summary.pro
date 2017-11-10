@@ -1,4 +1,4 @@
-pro nsc_measure_summary,version
+pro nsc_measure_summary,version,nosources=nosources
 
 ; Make a summary file of all of the exposures that were Source Extracted
 
@@ -20,7 +20,7 @@ nexpdirs = n_elements(expdirs)
 print,strtrim(nexpdirs,2),' exposure directories'
 
 ; Create structure
-expstr = replicate({dir:'',instrument:'',base:'',nchips:0L,nsources:0L,success:0,dt:0.0},nexpdirs)
+expstr = replicate({dir:'',instrument:'',base:'',nchips:0L,nsources:0L,success:0,dt:0.0,chip1date:0LL,logdate:0LL},nexpdirs)
 expstr.dir = expdirs
 undefine,instrument
 if nc4d_expdirs gt 0 then push,instrument,strarr(nc4d_expdirs)+'c4d'
@@ -31,19 +31,24 @@ expstr.base = file_basename(expdirs)
 
 ; Loop through the exposure directories
 for i=0,nexpdirs-1 do begin
-  if i mod 10000 eq 0 then print,i
+  if i mod 5000 eq 0 then print,i
   dir1 = expdirs[i]
   base1 = expstr[i].base
   ; Get chip files
   chipfiles = file_search(dir1+'/'+base1+'_*.fits',count=nchipfiles)
   expstr[i].nchips = nchipfiles
-  ; Get sources
-  for j=0,nchipfiles-1 do begin
-    hd = headfits(chipfiles[j],exten=2)
-    expstr[i].nsources += sxpar(hd,'naxis2')
-  endfor
+  ; First chip date
+  if nchipfiles gt 0 then begin
+    info1 = file_info(chipfiles[0])
+    expstr[i].chip1date = info1.mtime
+  endif
   ; It succeeded if the final log file exists
-  expstr[i].success = file_test(dir1+'/'+base1+'.log')
+  logfile = dir1+'/'+base1+'.log'
+  expstr[i].success = file_test(logfile)
+  if expstr[i].success gt 0 then begin
+    loginfo = file_info(logfile)
+    expstr[i].logdate = loginfo.mtime
+  endif
   ; dt, need chip files
   if nchipfiles gt 0 then begin
     info1 = file_info(chipfiles[0])
@@ -52,6 +57,30 @@ for i=0,nexpdirs-1 do begin
     ; this is the time between the end of first chip and last chip
     ;  correct for that
     expstr[i].dt = dt * nchipfiles / (nchipfiles-1.0)
+  endif
+  ; Get sources
+  ;for j=0,nchipfiles-1 do begin
+  ;  hd = headfits(chipfiles[j],exten=2,errmsg=errmsg)
+  ;  if errmsg eq '' then begin
+  ;    nsources = sxpar(hd,'naxis2')
+  ;    expstr[i].nsources += sxpar(hd,'naxis2')
+  ;  endif
+  ;endfor
+  if expstr[i].success eq 1 and not keyword_set(nosources) then begin
+    READLINE,logfile,lines
+    g = where(stregex(lines,'sextracted',/boolean) eq 1,ng)
+    for j=0,ng-1 do begin
+      line1 = lines[g[j]]
+      arr = strsplit(line1,'\',/extract)
+      g2 = where(stregex(arr,'Objects: detected',/boolean) eq 1,ng2)
+      if ng2 eq 0 then goto,BOMB1
+      line2 = arr[g2[0]]
+      pos = strpos(line2,'sextracted')
+      if pos eq -1 then goto,BOMB1
+      nsrc = long(strmid(line2,pos+10))
+      expstr[i].nsources += nsrc
+      BOMB1:
+    endfor
   endif
 endfor
 

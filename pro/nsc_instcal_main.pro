@@ -130,7 +130,8 @@ for i=0,ngdexp-1 do begin
   ;if file_test(fluxfile) eq 1 and file_test(wtfile) eq 1 and file_test(maskfile) eq 1 then expstr[i].allexist=1
   expstr[i].allexist = 1    ; THIS TAKES TOO LONG!!!
   ; Does the output file exist
-  if file_test(outfile) eq 1 or file_test(outfile+'.gz') eq 1 then expstr[i].done = 1
+  ;if file_test(outfile) eq 1 or file_test(outfile+'.gz') eq 1 then expstr[i].done = 1
+  expstr[i].done = 0
 
   ; Not all three files exist
   if expstr[i].allexist eq 0 then begin
@@ -146,7 +147,8 @@ for i=0,ngdexp-1 do begin
 
   ;lock = djs_lockfile(outfile)
   lockfile = outfile+'.lock'
-  testlock = file_test(lockfile)  
+  ;testlock = file_test(lockfile)  
+  testlock = 0
 
   ; No lock file
   ;if lock eq 1 or keyword_set(unlock) then begin
@@ -165,6 +167,42 @@ for i=0,ngdexp-1 do begin
   endelse
   BOMB:
 endfor
+
+; Have hulk help out gp09, ran last 10,000 of gp09's jobs
+;torun = lindgen(10000)-10000+41633
+;expstr.torun = 0
+;expstr[torun].torun = 1
+;ntorun = 10000L
+
+;; Rerunning fails from all 7 machines
+;readline,'/d0/dnidever/nsc/instcal/v2/fails.txt',fails
+;ui = uniq(fails,sort(fails))  ; 4 duplicates
+;fails = fails[ui]
+;exp = file_basename(expstr.fluxfile,'.fits.fz')
+;MATCH,exp,fails,ind1,ind2,count=nmatch
+;expstr.torun = 0
+;expstr[ind1].torun = 1
+
+; help out gp09 and thing
+; 1800 for gp09 and 2600 for thing
+;torun = [lindgen(1800)-1800+28633, lindgen(2600)-2599+138377]
+;expstr[torun].torun = 1
+;dum = where(expstr.torun eq 1,ntorun)
+
+; Also help out gp09/gp05/gp06/gp07
+; 3000 each from end, but remember that gp08 is already taking off
+; last 6667 exposures, and hulk already ran 10,000 for gp09
+;torun = [lindgen(3000)-2999+48299L-6667L-10000L, lindgen(3000)-2999+96599L-6667L, lindgen(3000)-2999+193199L-6667L, lindgen(3000)-2999+241499L-6667L]
+;expstr[torun].torun=1
+;ntorun = n_elements(torun)
+
+; Rerun the failures
+sum = mrdfits('/dl1/users/dnidever/nsc/instcal/v2/lists/nsc_measure_summary.fits',1)
+bad = where(sum.success eq 0 or sum.chip1date gt sum.logdate,nbad)
+exp = file_basename(strtrim(expstr.fluxfile,2),'.fits.fz')
+MATCH,exp,strtrim(sum[bad].base,2),ind1,ind2,/sort,count=nmatch
+expstr.torun = 0
+expstr[ind1].torun = 1
 
 torun = where(expstr.torun eq 1,ntorun)
 stop
