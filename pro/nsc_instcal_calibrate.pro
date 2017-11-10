@@ -97,8 +97,8 @@ add_tag,schema,'MJD',0.0d0,schema
 cat = REPLICATE(schema,ncat)
 ; Start the chips summary structure
 chstr = replicate({expdir:'',instrument:'',filename:'',ccdnum:0L,nsources:0L,cenra:999999.0d0,cendec:999999.0d0,$
-                   gaianmatch:0L,rarms:999999.0,racoef:dblarr(4),decrms:999999.0,$
-                   deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,$
+                   gaianmatch:0L,rarms:999999.0,rastderr:999999.0,racoef:dblarr(4),decrms:999999.0,$
+                   decstderr:999999.0,deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,$
                    zptermerr:999999.0,nrefmatch:0L,depth95:99.99,depth10sig:99.99},nchips)
 chstr.expdir = expdir
 chstr.instrument = instrument
@@ -167,6 +167,7 @@ if ngdchip eq 0 then begin
   print,'No good chip catalogs with good WCS.'
   return
 endif
+; Central coordinates of the entire field
 cendec = mean(minmax(chstr[gdchip].cendec))
 decrange = range(chstr[gdchip].cendec)
 cenra = mean(minmax(chstr[gdchip].cenra))
@@ -181,6 +182,11 @@ if range(minmax(chstr[gdchip].cenra)) gt 100 then begin
  rarange = range(ra)*cos(cendec/!radeg)
  rawrap = 1
 endif else rawrap=0
+
+; Measure median seeing FWHM
+gdcat = where(cat.mag_auto lt 50 and cat.magerr_auto lt 0.05 and cat.class_star gt 0.8,ngdcat)
+medfwhm = median(cat[gdcat].fwhm_world*3600.)
+print,'FWHM = ',stringize(medfwhm,ndec=2),' arcsec'
 
 ; Load the logfile and get absolute flux filename
 READLINE,expdir+'/'+base+'.log',loglines
@@ -405,14 +411,23 @@ endfor
 ; At the chip level, linear fits in RA/DEC
 printlog,logf,'' & printlog,logf,'Step 3. Astrometric calibration'
 printlog,logf,'--------------------------------'
+; Match everything to Gaia at once, this is much faster!
+SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat.alpha_j2000,cat.delta_j2000,1.0,ind1,ind2,/sph,count=ngmatch
+allgaiaind = lonarr(ncat)-1
+allgaiaind[ind2] = ind1
+allgaiadist = fltarr(ncat)+999999.
+allgaiadist[ind2] = sphdist(gaia[ind1].ra_icrs,gaia[ind1].de_icrs,cat[ind2].alpha_j2000,cat[ind2].delta_j2000,/deg)*3600
 ; CCD loop
 For i=0,nchips-1 do begin
   if chstr[i].nsources eq 0 then goto,BOMB
-  ; Relative to center of chip
+  ; Get chip sources using CCDNUM
   MATCH,chstr[i].ccdnum,cat.ccdnum,chind1,chind2,/sort,count=nchmatch
   cat1 = cat[chind2]
-  SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat1.alpha_j2000,cat1.delta_j2000,0.5,ind1,ind2,/sph,count=ngmatch
-  if ngmatch eq 0 then SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat1.alpha_j2000,cat1.delta_j2000,1.0,ind1,ind2,/sph,count=ngmatch
+  ; Gaia matches for this chip
+  gaiaind1 = allgaiaind[chind2]
+  gaiadist1 = allgaiadist[chind2]
+  gmatch = where(gaiaind1 gt -1 and gaiadist1 le 0.5,ngmatch)  ; get sources with Gaia matches
+  if ngmatch eq 0 then gmatch = where(gaiaind1 gt -1 and gaiadist1 le 1.0,ngmatch)
   if ngmatch lt 5 then begin
     print,'Not enough Gaia matches'
     ; Add threshold to astrometric errors
@@ -421,10 +436,16 @@ For i=0,nchips-1 do begin
     cat[chind2] = cat1
     goto,BOMB
   endif
-  gaia1b = gaia[ind1]
-  cat1b = cat1[ind2]
+  ;gaia1b = gaia[ind1]
+  ;cat1b = cat1[ind2]
+  gaia1b = gaia[gaiaind1[gmatch]]
+  cat1b = cat1[gmatch]
   ; Apply quality cuts
-  qcuts1 = where(cat1b.imaflags_iso eq 0 and not ((cat1b.flags and 8) eq 8) and not ((cat1b.flags and 16) eq 16),nqcuts1)
+  ;  no bad CP flags
+  ;  no SE truncated or incomplete data flags
+  ;  must have good photometry
+  qcuts1 = where(cat1b.imaflags_iso eq 0 and not ((cat1b.flags and 8) eq 8) and not ((cat1b.flags and 16) eq 16) and $
+                 cat1b.mag_auto lt 50,nqcuts1)
   if nqcuts1 eq 0 then begin
     print,'Not enough stars after quality cuts'
     ; Add threshold to astrometric errors
@@ -436,36 +457,60 @@ For i=0,nchips-1 do begin
   gaia2 = gaia1b[qcuts1]
   cat2 = cat1b[qcuts1]
 
+  ; Cut based on FWHM
+  ; weight based on S/N
+  ;snr = 1.087/cat2.magerr_auto
+  ;coorderr = cat2.fwhm_world*3600 / snr
+
+  ; Rotate to coordinates relative to the center of the field
   ROTSPHCEN,gaia2.ra_icrs,gaia2.de_icrs,chstr[i].cenra,chstr[i].cendec,gaialon,gaialat,/gnomic
   ROTSPHCEN,cat2.alpha_j2000,cat2.delta_j2000,chstr[i].cenra,chstr[i].cendec,lon1,lat1,/gnomic
-  ; Fit RA as function of RA/DEC
+  ; ---- Fit RA as function of RA/DEC ----
   londiff = gaialon-lon1
+  err = sqrt(gaia2.e_ra_icrs^2 + cat2.raerr^2)
   lonmed = median(londiff)
   lonsig = mad(londiff)
   gdlon = where(abs(londiff-lonmed) lt 3.0*lonsig,ngdlon)  ; remove outliers
-  err = gaia2.e_ra_icrs
   npars = 4
   initpars = dblarr(npars)
   initpars[0] = median(londiff)
   parinfo = REPLICATE({limited:[0,0],limits:[0.0,0.0],fixed:0},npars)
   racoef = MPFIT2DFUN('func_poly2d',lon1[gdlon],lat1[gdlon],londiff[gdlon],err[gdlon],initpars,status=status,dof=dof,$
                   bestnorm=chisq,parinfo=parinfo,perror=perror,yfit=yfit,/quiet)
-  rarms = sqrt(mean((londiff[gdlon]-yfit)*3600.)^2)
-  ; Fit DEC as function of RA/DEC
+  yfitall = FUNC_POLY2D(lon1,lat1,racoef)
+  rarms1 = MAD((londiff[gdlon]-yfit)*3600.)
+  rastderr = rarms1/sqrt(ngdlon)
+  ; Use bright stars to get a better RMS estimate
+  gdstars = where(cat2.fwhm_world*3600 lt 2*medfwhm and 1.087/cat2.magerr_auto gt 50,ngdstars)
+  if ngdstars lt 20 then gdstars = where(cat2.fwhm_world*3600 lt 2*medfwhm and 1.087/cat2.magerr_auto gt 30,ngdstars)
+  if ngdstars gt 5 then begin
+    diff = (londiff-yfitall)*3600.
+    rarms = MAD(diff[gdstars])
+    rastderr = rarms/sqrt(ngdstars)
+  endif else rarms=rarms1
+  ; ---- Fit DEC as function of RA/DEC -----
   latdiff = gaialat-lat1
+  err = sqrt(gaia2.e_de_icrs^2 + cat2.decerr^2)
   latmed = median(latdiff)
   latsig = mad(latdiff)
   gdlat = where(abs(latdiff-latmed) lt 3.0*latsig,ngdlat)  ; remove outliers
-  err = gaia2.e_de_icrs
   npars = 4
   initpars = dblarr(npars)
   initpars[0] = median(latdiff)
   parinfo = REPLICATE({limited:[0,0],limits:[0.0,0.0],fixed:0},npars)
   deccoef = MPFIT2DFUN('func_poly2d',lon1[gdlat],lat1[gdlat],latdiff[gdlat],err[gdlat],initpars,status=status,dof=dof,$
                        bestnorm=chisq,parinfo=parinfo,perror=perror,yfit=yfit,/quiet)
-  decrms = sqrt(mean((latdiff[gdlat]-yfit)*3600.)^2)
-  printlog,logf,'  CCDNUM=',strtrim(chstr[i].ccdnum,2),'  NSOURCES=',strtrim(nchmatch,2),'  ',strtrim(ngmatch,2),' GAIA matches  RMS(RA)=',$
-       stringize(rarms,ndec=3),' RMS(DEC)=',stringize(decrms,ndec=3),' arcsec'
+  yfitall = FUNC_POLY2D(lon1,lat1,deccoef)
+  decrms1 = MAD((latdiff[gdlat]-yfit)*3600.)
+  decstderr = decrms1/sqrt(ngdlat)
+  ; Use bright stars to get a better RMS estimate
+  if ngdstars gt 5 then begin
+    diff = (latdiff-yfitall)*3600.
+    decrms = MAD(diff[gdstars])
+    decstderr = decrms/sqrt(ngdstars)
+  endif else decrms=decrms1
+  printlog,logf,'  CCDNUM=',strtrim(chstr[i].ccdnum,2),'  NSOURCES=',strtrim(nchmatch,2),'  ',strtrim(ngmatch,2),' GAIA matches  RMS(RA/DEC)=',$
+       stringize(rarms,ndec=3)+'/'+stringize(decrms,ndec=3),' STDERR(RA/DEC)=',stringize(rastderr,ndec=4)+'/'+stringize(decstderr,ndec=4),' arcsec'
   ; Apply to all sources
   ROTSPHCEN,cat1.alpha_j2000,cat1.delta_j2000,chstr[i].cenra,chstr[i].cendec,lon,lat,/gnomic
   lon2 = lon + FUNC_POLY2D(lon,lat,racoef)
@@ -480,17 +525,13 @@ For i=0,nchips-1 do begin
   cat[chind2] = cat1
   chstr[i].gaianmatch = ngmatch
   chstr[i].rarms = rarms
+  chstr[i].rastderr = rastderr
   chstr[i].racoef = racoef
   chstr[i].decrms = decrms
+  chstr[i].decstderr = decstderr
   chstr[i].deccoef = deccoef
-;stop
   BOMB:
 Endfor
-
-; Measure median seeing FWHM
-gdcat = where(cat.mag_auto lt 50 and cat.magerr_auto lt 0.05 and cat.class_star gt 0.8,ngdcat)
-medfwhm = median(cat[gdcat].fwhm_world*3600.)
-print,'FWHM = ',stringize(medfwhm,ndec=2),' arcsec'
 
 ; Get reddening
 glactc,cat.ra,cat.dec,2000.0,glon,glat,1,/deg
@@ -637,7 +678,7 @@ end
 'c4d-r': begin
   ; Use 2MASS and APASS to calibrate
   index = lonarr(ncat,2)-1
-  dcr = 0.5
+  dcr = 1.0  ;0.5
   SRCMATCH,tmass.raj2000,tmass.dej2000,cat.ra,cat.dec,dcr,tind1,tind2,/sph,count=ntmatch
   if ntmatch gt 0 then index[tind2,0] = tind1
   SRCMATCH,apass.raj2000,apass.dej2000,cat.ra,cat.dec,dcr,aind1,aind2,/sph,count=namatch
@@ -1065,7 +1106,7 @@ if ngdmag gt 0 then begin
   chstr.depth10sig = depth10sig
 endif
 
-;stop
+stop
 
 ; Step 5. Write out the final catalogs and metadata
 ;--------------------------------------------------
