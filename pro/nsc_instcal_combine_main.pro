@@ -397,7 +397,7 @@ endif
 stop
 
 ; Now run the combination program on each healpix pixel
-PBS_DAEMON,cmd,cmddir,/hyperthread,/idle,prefix='nsccmb',jobs=jobs,nmulti=nmulti,wait=1
+PBS_DAEMON,cmd,cmddir,jobs=jobs,/hyperthread,/idle,prefix='nsccmb',jobs=jobs,nmulti=nmulti,wait=1
 
 ; RUN NSC_COMBINE_SUMMARY WHEN IT'S DONE!!!
 
