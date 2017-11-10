@@ -1,4 +1,4 @@
-pro nsc_instcal_calibrate,expdir,redo=redo,saveref=saveref,ncpu=ncpu,stp=stp
+pro nsc_instcal_calibrate,expdir,inpref,redo=redo,saveref=saveref,ncpu=ncpu,stp=stp
 
 ; Calibrate catalogs for one exposure
 
@@ -6,7 +6,7 @@ NSC_ROOTDIRS,dldir,mssdir,localdir
 
 ; Not enough inputs
 if n_elements(expdir) eq 0 then begin
-  print,'Syntax - nsc_instcal_calibrate,expdir,redo=redo,saveref=saveref,ncpu=ncpu,stp=stp'
+  print,'Syntax - nsc_instcal_calibrate,expdir,inpref,redo=redo,saveref=saveref,ncpu=ncpu,stp=stp'
   return
 endif
 
@@ -245,172 +245,46 @@ cat.filter = filter
 cat.mjd = mjd
 cat.sourceid = instrument+'.'+strtrim(expnum,2)+'.'+strtrim(cat.ccdnum,2)+'.'+strtrim(cat.number,2)
 
+
 ; Step 2. Load the reference catalogs
 ;------------------------------------
 printlog,logf,'' & printlog,logf,'Step 2. Load the reference catalogs'
 printlog,logf,'------------------------------------'
-refcat = 'GAIA/GAIA'                ; always need this one
-instfilt = instrument+'-'+filter    ; instrument-filter combination
-CASE instfilt of
-; DECam u-band
-'c4d-u': begin
-  ; Use GAIA, 2MASS and GALEX to calibrate
-  push,refcat,['2MASS-PSC','II/312/ais']
-end
-; DECam g-band
-'c4d-g': begin
-  ; Use 2MASS and APASS to calibrate
-  push,refcat,['2MASS-PSC','APASS']
-end
-; DECam r-band
-'c4d-r': begin
-  ; Use 2MASS and APASS to calibrate
-  push,refcat,['2MASS-PSC','APASS']
-end
-; DECam i-band
-'c4d-i': begin
-  ; Use GAIA and 2MASS to calibrate
-  push,refcat,['2MASS-PSC']
-end
-; DECam z-band
-'c4d-z': begin
-  ; Use GAIA and 2MASS to calibrate  
-  push,refcat,['2MASS-PSC']
-end
-; DECam Y-band
-'c4d-Y': begin
-  ; Use 2MASS to calibrate
-  push,refcat,['2MASS-PSC']
-end
-; DECam VR-band
-'c4d-VR': begin
-  ; Use GAIA G-band to calibrate
-  push,refcat,['2MASS-PSC']
-end
-; Bok+90Prime g-band
-'ksb-g': begin
-  ; Use PS1
-  push,refcat,'PS'
-end
-; Bok+90Prime r-band
-'ksb-r': begin
-  ; Use PS1
-  push,refcat,'PS'
-end
-; Mosaic3 z-band
-'k4m-z': begin
-  ; Use PS1
-  push,refcat,'PS'
-end
-else: begin
-  printlog,logf,filter,' not currently supported'
-  return
-end
-ENDCASE
 
-; Load the necessary catalogs
-nrefcat = n_elements(refcat)
-printlog,logf,'  ',strtrim(nrefcat,2),' reference catalogs to load'
-for i=0,nrefcat-1 do begin
-  t0 = systime(1)
-  printlog,logf,'  Loading ',refcat[i],' reference catalog'
-  varname = refcat[i]
-  if varname eq 'II/312/ais' then varname='GALEX'
-  if varname eq '2MASS-PSC' then varname='TMASS'
-  if varname eq 'GAIA/GAIA' then varname='GAIA'
-  refcatfile = expdir+'/'+base+'_'+varname+'.fits'
-
+; Getting reference catalogs
+if n_elements(inpref) eq 0 then begin
   ; Search radius
-  radius = 1.1 * sqrt( (0.5*rarange)^2 + (0.5*decrange)^2 )  
-
-  ;if file_test(refcatfile) eq 1 and not keyword_set(redo) then begin
-  ; Loading previously loaded file
-  if file_test(refcatfile) eq 1 then begin
-    printlog,logf,'  Loading previously-saved file ',refcatfile
-    (SCOPE_VARFETCH(varname,/enter)) = MRDFITS(refcatfile,1,/silent)
-    ref = SCOPE_VARFETCH(varname)
-
-  ; Do the Query
-  ;--------------
+  radius = 1.1 * sqrt( (0.5*rarange)^2 + (0.5*decrange)^2 ) 
+  ref = GETREFDATA(filter,cenra,cendec,radius,count=count)
+  if count eq 0 then begin
+    printlog,logfi,'No Reference Data'
+    return
+ endif
+; Using input reference catalog
+endif else begin
+  print,'Reference catalogs input'
+  if rawrap eq 0 then begin
+    gdref = where(inpref.ra ge min(cat.alpha_j2000)-0.01 and inpref.ra le max(cat.alpha_j2000)+0.01 and $
+                  inpref.dec ge min(cat.delta_j2000)-0.01 and inpref.dec le max(cat.delta_j2000)+0.01,ngdref)
   endif else begin
-
-    ; Use DataLab database search for Gaia and 2MASS if density is high
-    if (varname eq 'TMASS' or varname eq 'GAIA' or varname eq 'PS') then begin
-      if varname eq 'TMASS' then begin
-        tablename = 'twomass.psc'
-        cols = 'designation,ra as raj2000,dec as dej2000,j_m as jmag,j_cmsig as e_jmag,h_m as hmag,h_cmsig as e_hmag,k_m as kmag,k_cmsig as e_kmag,ph_qual as qflg'
-        server = 'dldb1.sdm.noao.edu'
-      endif
-      if varname eq 'GAIA' then begin
-        tablename = 'gaia_dr1.gaia_source'
-        cols = 'source_id as source,ra as ra_icrs,ra_error as e_ra_icrs,dec as de_icrs,dec_error as e_de_icrs,'+$
-               'phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,phot_g_mean_mag as gmag'
-        server = 'dldb1.sdm.noao.edu'
-      endif
-      if varname eq 'PS' then begin
-        tablename = 'cp_calib.ps1'
-        cols = 'ra, dec, g as gmag, r as rmag, i as imag, z as zmag, y as ymag'
-        server = 'gp02.datalab.noao.edu'
-      endif
-
-      ; Use Postgres command with q3c cone search
-      refcattemp = repstr(refcatfile,'.fits','.txt')
-      cmd = "psql -h "+server+" -U datalab -d tapdb -w --pset footer -c 'SELECT "+cols+" FROM "+tablename+$
-            " WHERE q3c_radial_query(ra,dec,"+stringize(cenra,ndec=4,/nocomma)+","+stringize(cendec,ndec=4,/nocomma)+$
-            ","+stringize(radius,ndec=3)+")' > "+refcattemp
-      file_delete,refcattemp,/allow
-      file_delete,refcatfile,/allow
-      spawn,cmd,out,outerr
-
-      ; Load ASCII file and create the FITS file
-      ref = importascii(refcattemp,/header,delim='|',skipline=2,/silent)
-      if keyword_set(saveref) then MWRFITS,ref,refcatfile,/create      ; only save if necessary
-      file_delete,refcattemp,/allow
-      (SCOPE_VARFETCH(varname,/enter)) = ref
-
-    ; Use QUERYVIZIER
-    ;   for low density with 2MASS/GAIA and always for GALEX and APASS
-    endif else begin
-      ;ref = QUERYVIZIER(refcat[i],[cenra,cendec],[rarange*1.1*60,decrange*1.1*60],/cfa)
-      if refcat[i] eq 'APASS' then cfa=0 else cfa=1  ; cfa doesn't have APASS
-      ref = QUERYVIZIER(refcat[i],[cenra,cendec],radius*60,cfa=cfa)
-
-      ; Fix/homogenize the GAIA tags
-      if varname eq 'GAIA' then begin
-        nref = n_elements(ref)
-        orig = ref
-        ref = replicate({source:0LL,ra_icrs:0.0d0,e_ra_icrs:0.0d0,de_icrs:0.0d0,e_de_icrs:0.0d0,fg:0.0d0,e_fg:0.0d0,gmag:0.0d0},nref)
-        struct_assign,orig,ref
-        ref.fg = orig._fg_
-        ref.e_fg = orig.e__fg_
-        ref.gmag = orig._gmag_
-        undefine,orig
-      endif
-      ; Fix/homogenize the 2MASS tags
-      if varname eq 'TMASS' then begin
-        nref = n_elements(ref)
-        orig = ref
-        ref = replicate({designation:'',raj2000:0.0d0,dej2000:0.0d0,jmag:0.0,e_jmag:0.0,hmag:0.0,e_hmag:0.0,kmag:0.0,e_kmag:0.0,qflg:''},nref)
-        struct_assign,orig,ref
-        ref.designation = orig._2mass
-        undefine,orig
-      endif
-
-      (SCOPE_VARFETCH(varname,/enter)) = ref
-      ; Save the file
-      if keyword_set(saveref) then MWRFITS,ref,refcatfile,/create  ; only save if necessary
-    endelse
+    ra = cat.alpha_j2000
+    bdra = where(ra gt 180,nbdra)
+    if nbdra gt 0 then ra[bdra]-=360
+    gdref = where((inpref.ra le max(ra)+0.01 or inpref.ra ge min(ra+360)-0.01) and $
+                  inpref.dec ge min(cat.delta_j2000)-0.01 and inpref.dec le max(cat.delta_j2000)+0.01,ngdref)
   endelse
-  nref = n_elements(ref)
-  dt = systime(1)-t0
-  printlog,logf,'  ',strtrim(nref,2),' sources   dt=',stringize(dt,ndec=1),' sec.'
-endfor
+  ref = inpref[gdref]
+  printlog,logf,strtrim(ngdref,2),' reference stars in our region'
+endelse
 
 ; Step 3. Astrometric calibration
 ;----------------------------------
 ; At the chip level, linear fits in RA/DEC
 printlog,logf,'' & printlog,logf,'Step 3. Astrometric calibration'
 printlog,logf,'--------------------------------'
+; Get reference catalog with Gaia values
+gdgaia = where(ref.source gt 0,ngdgaia)
+gaia = ref[gdgaia]
 ; Match everything to Gaia at once, this is much faster!
 SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat.alpha_j2000,cat.delta_j2000,1.0,ind1,ind2,/sph,count=ngmatch
 allgaiaind = lonarr(ncat)-1
@@ -538,6 +412,7 @@ glactc,cat.ra,cat.dec,2000.0,glon,glat,1,/deg
 ebv = dust_getval(glon,glat,/noloop,/interp)
 cat.ebv = ebv
 
+
 ; Step 4. Photometric calibration
 ;--------------------------------
 ; Do it on the exposure level
@@ -561,211 +436,186 @@ expstr.gaianmatch = median(chstr.gaianmatch)
 expstr.fwhm = medfwhm
 cat.mjd = expstr.mjd
 
+instfilt = instrument+'-'+filter    ; instrument-filter combination
+
+
 CASE instfilt of
 ; ---- DECam u-band ----
 'c4d-u': begin
   ; Use GAIA, 2MASS and GALEX to calibrate
-  index = lonarr(ncat,3)-1
+  printlog,logf,'Calibrating with GAIA, 2MASS and GALEX'
   dcr = 1.0
-  SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat.ra,cat.dec,dcr,gind1,gind2,/sph,count=ngmatch
-  if ngmatch gt 0 then index[gind2,0] = gind1
-  SRCMATCH,tmass.raj2000,tmass.dej2000,cat.ra,cat.dec,dcr,tind1,tind2,/sph,count=ntmatch
-  if ntmatch gt 0 then index[tind2,1] = tind1
-  SRCMATCH,galex.raj2000,galex.dej2000,cat.ra,cat.dec,dcr,aind1,aind2,/sph,count=namatch
-  if namatch gt 0 then index[aind2,2] = aind1
-  gd = where(total(index gt -1,2) eq 3,ngd)
-  printlog,logf,strtrim(ngd,2),' matches to GAIA, 2MASS and GALEX'
-  if ngd eq 0 then begin
-    printlog,logf,'No matches to GAIA, 2MASS and GALEX'
+  SRCMATCH,ref.ra,ref.dec,cat.ra,cat.dec,dcr,ind1,ind2,/sph,count=nmatch
+  printlog,logf,strtrim(nmatch,2),' matches to reference catalog'
+  if nmatch eq 0 then begin
+    printlog,logf,'No matches to reference catalog'
     goto,ENDBOMB
   endif
   ; Matched catalogs
-  cat1 = cat[gd]
-  gaia1 = gaia[index[gd,0]]
-  tmass1 = tmass[index[gd,1]]
-  galex1 = galex[index[gd,2]]
+  cat1 = cat[ind2]
+  ref1 = ref[ind1]
   ; Make quality and error cuts
-  gmagerr = 2.5*alog10(1.0+gaia1.e_fg/gaia1.fg)
+  gmagerr = 2.5*alog10(1.0+ref1.e_fg/ref1.fg)
   ; (G-J)o = G-J-1.12*EBV
-  col = gaia1.gmag - tmass1.jmag - 1.12*cat1.ebv
+  col = ref1.gmag - ref1.jmag - 1.12*cat1.ebv
   gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                 cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
-                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05 and finite(galex1.nuv) eq 1 and col ge 0.8 and col le 1.1,ngdcat)
+                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and ref1.qflg eq 'AAA' and $
+                ref1.e_jmag lt 0.05 and finite(ref1.nuv) eq 1 and col ge 0.8 and col le 1.1,ngdcat)
   ;  if the seeing is bad then class_star sometimes doens't work well
   if medfwhm gt 1.8 and ngdcat lt 100 then begin
     gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                   cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
-                  cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                  tmass1.e_jmag lt 0.05 and finite(galex1.nuv) eq 1 and col ge 0.8 and col le 1.1,ngdcat)
+                  cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and dref1.qflg eq 'AAA' and $
+                  ref1.e_jmag lt 0.05 and finite(ref1.nuv) eq 1 and col ge 0.8 and col le 1.1,ngdcat)
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     goto,ENDBOMB
   endif
   cat2 = cat1[gdcat]
-  gaia2 = gaia1[gdcat]
-  tmass2 = tmass1[gdcat]
-  galex2 = galex1[gdcat]
+  ref2 = ref1[gdcat]
   gmagerr2 = gmagerr[gdcat]
   col2 = col[gdcat]
   ; Fit zpterm using color-color relation
   mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
-  err = sqrt(cat2.magerr_auto^2 + galex2.e_nuv^2 + gmagerr2^2)
+  err = sqrt(cat2.magerr_auto^2 + ref2.e_nuv^2 + gmagerr2^2)
   ;diff = galex2.nuv-mag
   ; see nsc_color_relations_smashuband.pro
   ; u = 0.30874*NUV + 0.6955*G + 0.424*EBV + 0.0930  ; for 0.7<GJ0<1.1
   ;model_mag = 0.30874*galex2.nuv + 0.6955*gaia2.gmag + 0.424*cat2.ebv + 0.0930
   ; ADJUSTED EQUATION
   ; u = 0.2469*NUV + 0.7501*G + 0.5462*GJ0 + 0.6809*EBV + 0.0052  ; for 0.8<GJ0<1.1
-  model_mag = 0.2469*galex2.nuv + 0.7501*gaia2.gmag + 0.5462*col2 + 0.6809*cat2.ebv + 0.0052
+  model_mag = 0.2469*ref2.nuv + 0.7501*ref2.gmag + 0.5462*col2 + 0.6809*cat2.ebv + 0.0052
   ; Matched structure
   mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
 ;---- DECam g-band ----
 'c4d-g': begin
   ; Use 2MASS and APASS to calibrate
-  index = lonarr(ncat,2)-1
+  printlog,logf,'Calibrating with 2MASS and APASS'
   dcr = 0.5
-  SRCMATCH,tmass.raj2000,tmass.dej2000,cat.ra,cat.dec,dcr,tind1,tind2,/sph,count=ntmatch
-  if ntmatch gt 0 then index[tind2,0] = tind1
-  SRCMATCH,apass.raj2000,apass.dej2000,cat.ra,cat.dec,dcr,aind1,aind2,/sph,count=namatch
-  if namatch gt 0 then index[aind2,1] = aind1
-  gd = where(total(index gt -1,2) eq 2,ngd)
-  printlog,logf,strtrim(ngd,2),' matches to 2MASS and APASS'
-  if ngd eq 0 then begin
-    printlog,logf,'No matches to 2MASS and APASS'
+  SRCMATCH,ref.ra,ref.dec,cat.ra,cat.dec,dcr,ind1,ind2,/sph,count=nmatch
+  printlog,logf,strtrim(nmatch,2),' matches to reference catalog'
+  if nmatch eq 0 then begin
+    printlog,logf,'No matches to reference catalog'
     goto,ENDBOMB
   endif
   ; Matched catalogs
-  cat1 = cat[gd]
-  tmass1 = tmass[index[gd,0]]
-  apass1 = apass[index[gd,1]]
+  cat1 = cat[ind2]
+  ref1 = ref[ind1]
   ; Make quality and error cuts
-  col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
+  col = ref1.jmag-ref1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
   gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                 cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
-                cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05 and apass1.e_g_mag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
+                cat1.fwhm_world*3600 lt 2*medfwhm and ref1.qflg eq 'AAA' and $
+                ref1.e_jmag lt 0.05 and ref1.e_apass_gmag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
   ;  if the seeing is bad then class_star sometimes doens't work well
   if medfwhm gt 1.8 and ngdcat lt 100 then begin
     gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                   cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
-                  cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
-                  tmass1.e_jmag lt 0.05 and apass1.e_g_mag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
+                  cat1.fwhm_world*3600 lt 2*medfwhm and ref1.qflg eq 'AAA' and $
+                  ref1.e_jmag lt 0.05 and ref1.e_apas_gmag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     goto,ENDBOMB
   endif
   cat2 = cat1[gdcat]
-  tmass2 = tmass1[gdcat]
-  apass2 = apass1[gdcat]
+  ref2 = ref1[gdcat]
   col2 = col[gdcat]
   ; Take a robust mean relative to model GMAG
   mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
-  err = sqrt(cat2.magerr_auto^2 + apass2.e_g_mag^2)  ; leave off JK error for now
+  err = sqrt(cat2.magerr_auto^2 + ref2.e_apass_gmag^2)  ; leave off JK error for now
   ; see nsc_color_relations_stripe82_superposition.pro
   ; g = APASS_G - 0.1433*JK0 - 0.05*EBV - 0.0138
   ;model_mag = apass2.g_mag - 0.1433*col2 - 0.05*cat2.ebv - 0.0138
   ; ADJUSTED EQUATION
   ; g = APASS_G - 0.0421*JK0 - 0.05*EBV - 0.0620
-  model_mag = apass2.g_mag - 0.0421*col2 - 0.05*cat2.ebv - 0.0620
+  model_mag = ref2.apass_gmag - 0.0421*col2 - 0.05*cat2.ebv - 0.0620
   ; Matched structure
   mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
 ; ---- DECam r-band ----
 'c4d-r': begin
   ; Use 2MASS and APASS to calibrate
-  index = lonarr(ncat,2)-1
-  dcr = 1.0  ;0.5
-  SRCMATCH,tmass.raj2000,tmass.dej2000,cat.ra,cat.dec,dcr,tind1,tind2,/sph,count=ntmatch
-  if ntmatch gt 0 then index[tind2,0] = tind1
-  SRCMATCH,apass.raj2000,apass.dej2000,cat.ra,cat.dec,dcr,aind1,aind2,/sph,count=namatch
-  if namatch gt 0 then index[aind2,1] = aind1
-  gd = where(total(index gt -1,2) eq 2,ngd)
-  printlog,logf,strtrim(ngd,2),' matches to 2MASS and APASS'
-  if ngd eq 0 then begin
-    printlog,logf,'No matches to 2MASS and APASS'
+  printlog,logf,'Calibrating with 2MASS and APASS'
+  dcr = 0.5
+  SRCMATCH,ref.ra,ref.dec,cat.ra,cat.dec,dcr,ind1,ind2,/sph,count=nmatch
+  printlog,logf,strtrim(nmatch,2),' matches to reference catalog'
+  if nmatch eq 0 then begin
+    printlog,logf,'No matches to reference catalog'
     goto,ENDBOMB
   endif
   ; Matched catalogs
-  cat1 = cat[gd]
-  tmass1 = tmass[index[gd,0]]
-  apass1 = apass[index[gd,1]]
+  cat1 = cat[ind2]
+  ref1 = ref[ind1]
   ; Make quality and error cuts
-  col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
+  col = ref1.jmag-ref1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
   gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                 cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
-                cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05 and apass1.e_r_mag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
+                cat1.fwhm_world*3600 lt 2*medfwhm and ref1.qflg eq 'AAA' and $
+                ref1.e_jmag lt 0.05 and ref1.e_apass_rmag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
   ;  if the seeing is bad then class_star sometimes doens't work well
   if medfwhm gt 1.8 and ngdcat lt 100 then begin
     gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                   cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
-                  cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
-                  tmass1.e_jmag lt 0.05 and apass1.e_r_mag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
+                  cat1.fwhm_world*3600 lt 2*medfwhm and ref1.qflg eq 'AAA' and $
+                  ref1.e_jmag lt 0.05 and ref1.e_apass_rmag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     goto,ENDBOMB
   endif
   cat2 = cat1[gdcat]
-  tmass2 = tmass1[gdcat]
-  apass2 = apass1[gdcat]
+  ref2 = ref1[gdcat]
   col2 = col[gdcat]
   ; Take a robust mean relative to model RMAG
   mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
-  err = sqrt(cat2.magerr_auto^2 + apass2.e_r_mag^2)  ; leave off JK error for now
+  err = sqrt(cat2.magerr_auto^2 + ref2.e_apass_rmag^2)  ; leave off JK error for now
   ; see nsc_color_relations_stripe82_superposition.pro
   ; r = APASS_r + 0.00740*JK0 + 0.0*EBV + 0.000528
   ;model_mag = apass2.r_mag + 0.00740*col2 + 0.000528
   ; ADJUSTED EQUATION
   ; r = APASS_r - 0.0861884*JK0 + 0.0*EBV + 0.0548607
-  model_mag = apass2.r_mag - 0.0861884*col2 + 0.0548607
+  model_mag = ref2.apass_rmag - 0.0861884*col2 + 0.0548607
   ; Matched structure
   mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
 ; ---- DECam i-band ----
 'c4d-i': begin
   ; Use GAIA and 2MASS to calibrate
-  index = lonarr(ncat,2)-1
+  printlog,logf,'Calibrating with GAIA and 2MASS'
   dcr = 0.5
-  SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat.ra,cat.dec,dcr,gind1,gind2,/sph,count=ngmatch
-  if ngmatch gt 0 then index[gind2,0] = gind1
-  SRCMATCH,tmass.raj2000,tmass.dej2000,cat.ra,cat.dec,dcr,tind1,tind2,/sph,count=ntmatch
-  if ntmatch gt 0 then index[tind2,1] = tind1
-  gd = where(total(index gt -1,2) eq 2,ngd)
-  printlog,logf,strtrim(ngd,2),' matches to GAIA and 2MASS'
-  if ngd eq 0 then begin
-    printlog,logf,'No matches to GAIA and 2MASS'
+  SRCMATCH,ref.ra,ref.dec,cat.ra,cat.dec,dcr,ind1,ind2,/sph,count=nmatch
+  printlog,logf,strtrim(nmatch,2),' matches to reference catalog'
+  if nmatch eq 0 then begin
+    printlog,logf,'No matches to reference catalog'
     goto,ENDBOMB
   endif
   ; Matched catalogs
-  cat1 = cat[gd]
-  gaia1 = gaia[index[gd,0]]
-  tmass1 = tmass[index[gd,1]]
+  cat1 = cat[ind2]
+  ref1 = ref[ind1]
   ; Make quality and error cuts
-  gmagerr = 2.5*alog10(1.0+gaia1.e_fg/gaia1.fg)
-  col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
+  gmagerr = 2.5*alog10(1.0+ref1.e_fg/ref1.fg)
+  col = ref1.jmag-ref1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
   gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                 cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
-                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05 and col ge 0.25 and col le 0.65,ngdcat)
+                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and ref1.qflg eq 'AAA' and $
+                ref1.e_jmag lt 0.05 and col ge 0.25 and col le 0.65,ngdcat)
   ;  if the seeing is bad then class_star sometimes doens't work well
   if medfwhm gt 1.8 and ngdcat lt 100 then begin
     gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                   cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
-                  cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                  tmass1.e_jmag lt 0.05 and col ge 0.25 and col le 0.65,ngdcat)
+                  cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and ref1.qflg eq 'AAA' and $
+                  ref1.e_jmag lt 0.05 and col ge 0.25 and col le 0.65,ngdcat)
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     goto,ENDBOMB
   endif
   cat2 = cat1[gdcat]
-  gaia2 = gaia1[gdcat]
-  tmass2 = tmass1[gdcat]
+  ref2 = ref1[gdcat]
   gmagerr2 = gmagerr[gdcat]
   col2 = col[gdcat]
   ; Take a robust mean relative to model IMAG
@@ -773,288 +623,260 @@ end
   err = sqrt(cat2.magerr_auto^2 + gmagerr2^2)  ; leave off the JK error for now
   ; see nsc_color_relations_stripe82_superposition.pro
   ; i = G - 0.4587*JK0 - 0.276*EBV + 0.0967721
-  model_mag = gaia2.gmag - 0.4587*col2 - 0.276*cat2.ebv + 0.0967721
+  model_mag = ref2.gmag - 0.4587*col2 - 0.276*cat2.ebv + 0.0967721
   ; Matched structure
   mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
 ; ---- DECam z-band ----
 'c4d-z': begin
   ; Use 2MASS to calibrate  
-  index = lonarr(ncat)-1
+  printlog,logf,'Calibrating with 2MASS'
   dcr = 0.5
-  SRCMATCH,tmass.raj2000,tmass.dej2000,cat.ra,cat.dec,dcr,tind1,tind2,/sph,count=ntmatch
-  if ntmatch gt 0 then index[tind2] = tind1
-  gd = where(index gt -1,ngd)
-  printlog,logf,strtrim(ngd,2),' matches to 2MASS'
-  if ngd eq 0 then begin
-    printlog,logf,'No matches to 2MASS'
+  SRCMATCH,ref.ra,ref.dec,cat.ra,cat.dec,dcr,ind1,ind2,/sph,count=nmatch
+  printlog,logf,strtrim(nmatch,2),' matches to reference catalog'
+  if nmatch eq 0 then begin
+    printlog,logf,'No matches to reference catalog'
     goto,ENDBOMB
   endif
   ; Matched catalogs
-  cat1 = cat[gd]
-  tmass1 = tmass[index[gd]]
+  cat1 = cat[ind2]
+  ref1 = ref[ind1]
   ; Make quality and error cuts
-  col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
+  col = ref1.jmag-ref1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
   gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                 cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
-                cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05 and col ge 0.4 and col le 0.65,ngdcat)
+                cat1.fwhm_world*3600 lt 2*medfwhm and ref1.qflg eq 'AAA' and $
+                ref1.e_jmag lt 0.05 and col ge 0.4 and col le 0.65,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
   if medfwhm gt 1.8 and ngdcat lt 100 then begin
     gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                   cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
-                  cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
-                  tmass1.e_jmag lt 0.05 and col ge 0.4 and col le 0.65,ngdcat)
+                  cat1.fwhm_world*3600 lt 2*medfwhm and ref1.qflg eq 'AAA' and $
+                  ref1.e_jmag lt 0.05 and col ge 0.4 and col le 0.65,ngdcat)
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     goto,ENDBOMB
   endif
   cat2 = cat1[gdcat]
-  tmass2 = tmass1[gdcat]
+  ref2 = ref1[gdcat]
   col2 = col[gdcat]
   ; Take a robust mean relative to model ZMAG
   mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
-  err = sqrt(cat2.magerr_auto^2 + tmass2.e_jmag^2)
+  err = sqrt(cat2.magerr_auto^2 + ref2.e_jmag^2)
   ; see nsc_color_relations_stripe82_superposition.pro
   ; z = J + 0.765720*JK0 + 0.40*EBV +  0.605658
-  model_mag = tmass2.jmag + 0.765720*col2 + 0.40*cat2.ebv +  0.605658
+  model_mag = ref2.jmag + 0.765720*col2 + 0.40*cat2.ebv +  0.605658
   ; Matched structure
   mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
 ; ---- DECam Y-band ----
 'c4d-Y': begin
   ; Use 2MASS to calibrate
-  index = lonarr(ncat)-1
+  printlog,logf,'Calibrating with 2MASS'
   dcr = 0.5
-  SRCMATCH,tmass.raj2000,tmass.dej2000,cat.ra,cat.dec,dcr,tind1,tind2,/sph,count=ntmatch
-  if ntmatch gt 0 then index[tind2] = tind1
-  gd = where(index gt -1,ngd)
-  printlog,logf,strtrim(ngd,2),' matches to 2MASS'
-  if ngd eq 0 then begin
-    printlog,logf,'No matches to 2MASS'
+  SRCMATCH,ref.ra,ref.dec,cat.ra,cat.dec,dcr,ind1,ind2,/sph,count=nmatch
+  printlog,logf,strtrim(nmatch,2),' matches to reference catalog'
+  if nmatch eq 0 then begin
+    printlog,logf,'No matches to reference catalog'
     goto,ENDBOMB
   endif
   ; Matched catalogs
-  cat1 = cat[gd]
-  tmass1 = tmass[index[gd]]
+  cat1 = cat[ind2]
+  ref1 = ref[ind1]
   ; Make quality and error cuts
-  col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
+  col = ref1.jmag-ref1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
   gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                 cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
-                cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05 and col ge 0.4 and col le 0.7,ngdcat)
+                cat1.fwhm_world*3600 lt 2*medfwhm and ref1.qflg eq 'AAA' and $
+                ref1.e_jmag lt 0.05 and col ge 0.4 and col le 0.7,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
   if medfwhm gt 1.8 and ngdcat lt 100 then begin
     gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                   cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
-                  cat1.fwhm_world*3600 lt 2*medfwhm and tmass1.qflg eq 'AAA' and $
-                  tmass1.e_jmag lt 0.05 and col ge 0.4 and col le 0.7,ngdcat)
+                  cat1.fwhm_world*3600 lt 2*medfwhm and ref1.qflg eq 'AAA' and $
+                  ref1.e_jmag lt 0.05 and col ge 0.4 and col le 0.7,ngdcat)
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     goto,ENDBOMB
   endif
   cat2 = cat1[gdcat]
-  tmass2 = tmass1[gdcat]
+  ref2 = ref1[gdcat]
   col2 = col[gdcat]
   ; Take a robust mean relative to model YMAG
   mag = cat2.mag_auto + 2.5*alog10(exptime) ; correct for the exposure time
-  err = sqrt(cat2.magerr_auto^2 + tmass2.e_jmag^2)
+  err = sqrt(cat2.magerr_auto^2 + ref2.e_jmag^2)
   ; see nsc_color_relations_stripe82_superposition.pro
   ; Y = J + 0.54482*JK0 + 0.20*EBV + 0.663380
-  model_mag = tmass2.jmag + 0.54482*col2 + 0.20*cat2.ebv + 0.663380
+  model_mag = ref2.jmag + 0.54482*col2 + 0.20*cat2.ebv + 0.663380
   mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
 ; ---- DECam VR-band ----
 'c4d-VR': begin
   ; Use GAIA G-band to calibrate
-  index = lonarr(ncat,2)-1
+  printlog,logf,'Calibrating with GAIA'
   dcr = 0.5
-  SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat.ra,cat.dec,dcr,gind1,gind2,/sph,count=ngmatch
-  if ngmatch gt 0 then index[gind2,0] = gind1
-  SRCMATCH,tmass.raj2000,tmass.dej2000,cat.ra,cat.dec,dcr,tind1,tind2,/sph,count=ntmatch
-  if ntmatch gt 0 then index[tind2,1] = tind1
-  gd = where(total(index gt -1,2) eq 2,ngd)
-  printlog,logf,strtrim(ngd,2),' matches to GAIA and 2MASS'
-  if ngd eq 0 then begin
-    printlog,logf,'No matches to GAIA and 2MASS'
+  SRCMATCH,ref.ra,ref.dec,cat.ra,cat.dec,dcr,ind1,ind2,/sph,count=nmatch
+  printlog,logf,strtrim(nmatch,2),' matches to reference catalog'
+  if nmatch eq 0 then begin
+    printlog,logf,'No matches to reference catalog'
     goto,ENDBOMB
   endif
   ; Matched catalogs
-  cat1 = cat[gd]
-  gaia1 = gaia[index[gd,0]]
-  tmass1 = tmass[index[gd,1]]
+  cat1 = cat[ind2]
+  ref1 = ref[ind1]
   ; Make quality and error cuts
-  gmagerr = 2.5*alog10(1.0+gaia1.e_fg/gaia1.fg)
-  col = tmass1.jmag-tmass1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
+  gmagerr = 2.5*alog10(1.0+ref1.e_fg/ref1.fg)
+  col = ref1.jmag-ref1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
   gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                 cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
-                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                tmass1.e_jmag lt 0.05 and col ge 0.2 and col le 0.6,ngdcat)
+                cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and ref1.qflg eq 'AAA' and $
+                ref1.e_jmag lt 0.05 and col ge 0.2 and col le 0.6,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
   if medfwhm gt 2 and ngdcat lt 100 then begin
     gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                   cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
-                  cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and tmass1.qflg eq 'AAA' and $
-                  tmass1.e_jmag lt 0.05 and col ge 0.2 and col le 0.6,ngdcat)
+                  cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and ref1.qflg eq 'AAA' and $
+                  ref1.e_jmag lt 0.05 and col ge 0.2 and col le 0.6,ngdcat)
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     goto,ENDBOMB
   endif
   cat2 = cat1[gdcat]
-  gaia2 = gaia1[gdcat]
+  ref2 = ref1[gdcat]
   col2 = col[gdcat]
   gmagerr2 = gmagerr[gdcat]
-  tmass2 = tmass1[gdcat]
   ; Take a robust mean relative to GAIA GMAG
   mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
   err = sqrt(cat2.magerr_auto^2 + gmagerr2^2)
-  model_mag = gaia2.gmag
+  model_mag = ref2.gmag
   mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
 ; ---- Bok+90Prime g-band ----
 'ksb-g': begin
   ; Use PS1 g-band to calibrate
-  index = lonarr(ncat,2)-1
+  printlog,logf,'Calibrating with PS1'
   dcr = 0.5
-  SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat.ra,cat.dec,dcr,gind1,gind2,/sph,count=ngmatch
-  if ngmatch gt 0 then index[gind2,0] = gind1
-  SRCMATCH,ps.ra,ps.dec,cat.ra,cat.dec,dcr,tind1,tind2,/sph,count=ntmatch
-  if ntmatch gt 0 then index[tind2,1] = tind1
-  gd = where(total(index gt -1,2) eq 2,ngd)
-  printlog,logf,strtrim(ngd,2),' matches to GAIA and PS1'
-  if ngd eq 0 then begin
-    printlog,logf,'No matches to GAIA and PS1'
+  SRCMATCH,ref.ra,ref.dec,cat.ra,cat.dec,dcr,ind1,ind2,/sph,count=nmatch
+  printlog,logf,strtrim(nmatch,2),' matches to reference catalog'
+  if nmatch eq 0 then begin
+    printlog,logf,'No matches to reference catalog'
     goto,ENDBOMB
   endif
   ; Matched catalogs
-  cat1 = cat[gd]
-  gaia1 = gaia[index[gd,0]]
-  ps1 = ps[index[gd,1]]
+  cat1 = cat[ind2]
+  ref1 = ref[ind1]
   ; Make quality and error cuts
   gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                 cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
-                cat1.fwhm_world*3600 lt 2*medfwhm and ps1.gmag lt 21.0,ngdcat)
+                cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_gmag lt 21.0,ngdcat)
   ; Don't use CLASS_STAR threshold if not enough sources are selected
   if ngdcat lt 10 then $
     gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                   cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
-                  cat1.fwhm_world*3600 lt 2*medfwhm and ps1.gmag lt 21.0,ngdcat)
+                  cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_gmag lt 21.0,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
   if medfwhm gt 2 and ngdcat lt 100 then begin
     gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                   cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
-                  cat1.fwhm_world*3600 lt 2*medfwhm and ps1.gmag lt 21.0,ngdcat)
+                  cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_gmag lt 21.0,ngdcat)
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     goto,ENDBOMB
   endif
   cat2 = cat1[gdcat]
-  gaia2 = gaia1[gdcat]
-  ps2 = ps1[gdcat]
+  ref2 = ref1[gdcat]
   ; Take a robust mean relative to GAIA GMAG
   mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
   err = cat2.magerr_auto
-  model_mag = ps2.gmag
+  model_mag = ref2.ps_gmag
   col2 = fltarr(n_elements(mag))
   mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
 ; ---- Bok+90Prime r-band ----
 'ksb-r': begin
   ; Use PS1 r-band to calibrate
-  index = lonarr(ncat,2)-1
+  printlog,logf,'Calibrating with PS1'
   dcr = 0.5
-  SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat.ra,cat.dec,dcr,gind1,gind2,/sph,count=ngmatch
-  if ngmatch gt 0 then index[gind2,0] = gind1
-  SRCMATCH,ps.ra,ps.dec,cat.ra,cat.dec,dcr,tind1,tind2,/sph,count=ntmatch
-  if ntmatch gt 0 then index[tind2,1] = tind1
-  gd = where(total(index gt -1,2) eq 2,ngd)
-  printlog,logf,strtrim(ngd,2),' matches to GAIA and PS1'
-  if ngd eq 0 then begin
-    printlog,logf,'No matches to GAIA and PS1'
+  SRCMATCH,ref.ra,ref.dec,cat.ra,cat.dec,dcr,ind1,ind2,/sph,count=nmatch
+  printlog,logf,strtrim(nmatch,2),' matches to reference catalog'
+  if nmatch eq 0 then begin
+    printlog,logf,'No matches to reference catalog'
     goto,ENDBOMB
   endif
   ; Matched catalogs
-  cat1 = cat[gd]
-  gaia1 = gaia[index[gd,0]]
-  ps1 = ps[index[gd,1]]
+  cat1 = cat[ind2]
+  ref1 = ref[ind1]
   ; Make quality and error cuts
   gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                 cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
-                cat1.fwhm_world*3600 lt 2*medfwhm and ps1.rmag lt 21.0,ngdcat)
+                cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_rmag lt 21.0,ngdcat)
   ; Don't use CLASS_STAR threshold if not enough sources are selected
   if ngdcat lt 10 then $
     gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                   cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
-                  cat1.fwhm_world*3600 lt 2*medfwhm and ps1.rmag lt 21.0,ngdcat)
+                  cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_rmag lt 21.0,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
   if medfwhm gt 1.8 and ngdcat lt 100 then begin
     gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                   cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
-                  cat1.fwhm_world*3600 lt 2*medfwhm and ps1.rmag lt 21.0,ngdcat)
+                  cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_rmag lt 21.0,ngdcat)
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     goto,ENDBOMB
   endif
   cat2 = cat1[gdcat]
-  gaia2 = gaia1[gdcat]
-  ps2 = ps1[gdcat]
+  ref2 = ref1[gdcat]
   ; Take a robust mean relative to GAIA GMAG
   mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
   err = cat2.magerr_auto
-  model_mag = ps2.rmag
+  model_mag = ref2.ps_rmag
   col2 = fltarr(n_elements(mag))
   mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
 ; ---- Mosaic3 z-band ----
 'k4m-z': begin
   ; Use PS1 z-band to calibrate
-  index = lonarr(ncat,2)-1
+  printlog,logf,'Calibrating with PS1'
   dcr = 0.5
-  SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat.ra,cat.dec,dcr,gind1,gind2,/sph,count=ngmatch
-  if ngmatch gt 0 then index[gind2,0] = gind1
-  SRCMATCH,ps.ra,ps.dec,cat.ra,cat.dec,dcr,tind1,tind2,/sph,count=ntmatch
-  if ntmatch gt 0 then index[tind2,1] = tind1
-  gd = where(total(index gt -1,2) eq 2,ngd)
-  printlog,logf,strtrim(ngd,2),' matches to GAIA and PS1'
-  if ngd eq 0 then begin
-    printlog,logf,'No matches to GAIA and PS1'
+  SRCMATCH,ref.ra,ref.dec,cat.ra,cat.dec,dcr,ind1,ind2,/sph,count=nmatch
+  printlog,logf,strtrim(nmatch,2),' matches to reference catalog'
+  if nmatch eq 0 then begin
+    printlog,logf,'No matches to reference catalog'
     goto,ENDBOMB
   endif
   ; Matched catalogs
-  cat1 = cat[gd]
-  gaia1 = gaia[index[gd,0]]
-  ps1 = ps[index[gd,1]]
+  cat1 = cat[ind2]
+  ref1 = ref[ind1]
   ; Make quality and error cuts
   gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                 cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
-                cat1.fwhm_world*3600 lt 2*medfwhm and ps1.zmag lt 21.0,ngdcat)
+                cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_zmag lt 21.0,ngdcat)
   ; Don't use CLASS_STAR threshold if not enough sources are selected
   if ngdcat lt 10 then $
     gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                   cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
-                  cat1.fwhm_world*3600 lt 2*medfwhm and ps1.zmag lt 21.0,ngdcat)
+                  cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_zmag lt 21.0,ngdcat)
   ;  if the seeing is bad then class_star sometimes doesn't work well
   if medfwhm gt 1.8 and ngdcat lt 100 then begin
     gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                   cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
-                  cat1.fwhm_world*3600 lt 2*medfwhm and ps1.zmag lt 21.0,ngdcat)
+                  cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_zmag lt 21.0,ngdcat)
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
     goto,ENDBOMB
   endif
   cat2 = cat1[gdcat]
-  gaia2 = gaia1[gdcat]
-  ps2 = ps1[gdcat]
+  ref2 = ref1[gdcat]
   ; Take a robust mean relative to GAIA GMAG
   mag = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
   err = cat2.magerr_auto
-  model_mag = ps2.zmag
+  model_mag = ref2.ps_zmag
   col2 = fltarr(n_elements(mag))
   mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:long(cat2.ccdnum)}
 end
@@ -1074,7 +896,6 @@ printlog,logf,strtrim(ngdcat,2)+' good sources'
 printlog,logf,'ZPTERM=',stringize(expstr.zpterm,ndec=4),'+/-',stringize(expstr.zptermerr,ndec=4),'  SIG=',stringize(expstr.zptermsig,ndec=4),'mag'
 printlog,logf,'ZPSPATIALVAR:  RMS=',stringize(expstr.zpspatialvar_rms,ndec=3),' ',$
          'RANGE=',stringize(expstr.zpspatialvar_range,ndec=3),' NCCD=',strtrim(expstr.zpspatialvar_nccd,2)
-
 
 ; Measure the depth
 ;   need good photometry
@@ -1106,7 +927,6 @@ if ngdmag gt 0 then begin
   chstr.depth10sig = depth10sig
 endif
 
-stop
 
 ; Step 5. Write out the final catalogs and metadata
 ;--------------------------------------------------
