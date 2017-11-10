@@ -13,6 +13,8 @@ import subprocess
 import glob
 import logging
 import socket
+#from scipy.signal import convolve2d
+from scipy.ndimage.filters import convolve
 
 if __name__ == "__main__":
 
@@ -79,7 +81,7 @@ if __name__ == "__main__":
     while (os.path.exists(tmpdir)):
         tmpcntr = tmpcntr+1
         tmpdir = tmproot+base+"."+str(tmpcntr)
-        if tmpcntr > 10:
+        if tmpcntr > 20:
             print "Temporary Directory counter getting too high. Exiting"
             sys.exit()
     os.mkdir(tmpdir)
@@ -102,7 +104,7 @@ if __name__ == "__main__":
     rootLogger.addHandler(consoleHandler)
     rootLogger.setLevel(logging.NOTSET)
 
-    rootLogger.info("Running SExtractor on "+base)
+    rootLogger.info("Running SExtractor on "+base+" on host="+host)
     rootLogger.info("  Temporary directory is: "+tmpdir)
 
     # 2) Copy over images from zeus1:/mss
@@ -243,10 +245,14 @@ if __name__ == "__main__":
         f.close()
 
         # Gain, saturation, pixscale
-        gainmap = { 'c4d': lambda x: 0.5*(x.get('gaina')+x.get('gainb')),
-                    'k4m': lambda x: x.get('gain'),
-                    'ksb': lambda x: [1.3,1.5,1.4,1.4][ccdnum-1] }  # bok gain in HDU0, use list here
-        gain = gainmap[instcode](fhead)
+        try:
+            gainmap = { 'c4d': lambda x: 0.5*(x.get('gaina')+x.get('gainb')),
+                        'k4m': lambda x: x.get('gain'),
+                        'ksb': lambda x: [1.3,1.5,1.4,1.4][ccdnum-1] }  # bok gain in HDU0, use list here
+            gain = gainmap[instcode](fhead)
+        except:
+            gainmap_avg = { 'c4d': 3.9845419, 'k4m': 1.8575, 'ksb': 1.4}
+            gain = gainmap_avg[instcode]
         saturatemap = { 'c4d': fhead.get('SATURATE'),
                         'k4m': fhead.get('SATURATE'),
                         'ksb': head0.get('SATURATE') }
@@ -260,6 +266,7 @@ if __name__ == "__main__":
         # SEEING_FWHM     1.46920            # stellar FWHM in arcsec
         # WEIGHT_IMAGE  F4-00507860_01_comb.mask.fits
 
+        filter_name = ''
         cnt = 0L
         for l in lines:
             # SATUR_LEVEL
@@ -289,6 +296,10 @@ if __name__ == "__main__":
                 aper_world = np.array([ 0.5, 1.0, 2.0, 3.0, 4.0]) * 2  # radius->diameter, 1, 2, 4, 6, 8"
                 aper_pix = aper_world / pixscale
                 lines[cnt] = "PHOT_APERTURES  "+', '.join(np.array(np.round(aper_pix,2),dtype='str'))+"            # MAG_APER aperture diameter(s) in pixels\n"            
+            # Filter name
+            m = re.search('^FILTER_NAME',l)
+            if m != None:
+                filter_name = (l.split())[1]
             cnt = cnt+1
         # Write out the new config file
         if os.path.exists("default.config"):
@@ -296,6 +307,37 @@ if __name__ == "__main__":
         fo = open('default.config', 'w')
         fo.writelines(lines)
         fo.close()
+
+        # Convolve the mask file with the convolution kernel to "grow" the regions
+        # around bad pixels the SE already does to the weight map
+        if (filter_name != ''):
+            # Load the filter array
+            f = open(filter_name,'r')
+            linenum = 0
+            for line in f:
+                if (linenum == 1):
+                    shape = line.split(' ')[1]
+                    # Make it two pixels larger
+                    filter = np.ones(np.array(shape.split('x'),dtype='i')+2,dtype='i')
+                    #filter = np.zeros(np.array(shape.split('x'),dtype='i'),dtype='f')
+                #if (linenum > 1):
+                #    linedata = np.array(line.split(' '),dtype='f')
+                #    filter[:,linenum-2] = linedata
+                linenum += 1
+            f.close()
+            # Normalize the filter array
+            #filter /= np.sum(filter)
+            # Convolve with mask
+            #filter = np.ones(np.array(shape.split('x'),dtype='i'),dtype='i')
+            #mask2 = convolve2d(mask,filter,mode="same",boundary="symm")
+            mask2 = convolve(mask,filter,mode="reflect")
+            bad = ((mask == 0) & (mask2 > 0))
+            newmask = np.copy(mask)
+            newmask[bad] = 1     # mask out the neighboring pixels
+            # Write new mask
+            if os.path.exists("mask.fits"):
+                os.remove("mask.fits")
+            fits.writeto("mask.fits",newmask,header=mhead,output_verify='warn')
 
         # 3c) Run SExtractor
         #p = subprocess.Popen('sex', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -343,10 +385,10 @@ if __name__ == "__main__":
             shutil.copyfile("cat.fits",outcatfile)
             shutil.copyfile("default.config",outconfigfile)
             # Copy check files
-            shutil.copyfile("miniback.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_miniback.fits")
-            shutil.copyfile("objects.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_objects.fits")
-            shutil.copyfile("segment.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_segment.fits")
-            shutil.copyfile("apertures.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_apertures.fits")
+            #shutil.copyfile("miniback.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_miniback.fits")
+            #shutil.copyfile("objects.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_objects.fits")
+            #shutil.copyfile("segment.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_segment.fits")
+            #shutil.copyfile("apertures.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_apertures.fits")
         else:
             rootLogger.info("  No output catalog")
 

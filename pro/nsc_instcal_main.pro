@@ -30,7 +30,7 @@ pro nsc_instcal_main,version,redo=redo,nmulti=nmulti,maxjobs=maxjobs,silent=sile
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
 ;dir = "/datalab/users/dnidever/decamcatalog/"
-if n_elements(maxjobs) eq 0 then maxjobs=4e4
+if n_elements(maxjobs) eq 0 then maxjobs=48300L
 if n_elements(nmulti) eq 0 then nmulti=30
 if n_elements(version) eq 0 then version='v2'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
@@ -74,25 +74,25 @@ str.maskfile = strtrim(str.maskfile,2)
 str.wtfile = strtrim(str.wtfile,2)
 print,strtrim(nstr,2),' InstCal images'
 
-; Only run exposures for our 6 test fields
-healpix = [37391, 64471, 153437, 153728, 190278, 194240]
-undefine,base
-for i=0,n_elements(healpix)-1 do begin
-  expstr = mrdfits(dldir+'users/dnidever/nsc/qa/v1/'+strtrim(healpix[i],2)+'.fits.gz',1,/silent)
-  push,base,strtrim(expstr.base,2)
-endfor
-allbase = file_basename(str.fluxfile,'.fits.fz')
-MATCH,allbase,base,ind1,ind2,/sort
-gdexp = ind1
-ngdexp = n_elements(gdexp)
+;; Only run exposures for our 6 test fields
+;healpix = [37391, 64471, 153437, 153728, 190278, 194240]
+;undefine,base
+;for i=0,n_elements(healpix)-1 do begin
+;  expstr = mrdfits(dldir+'users/dnidever/nsc/qa/v1/'+strtrim(healpix[i],2)+'.fits.gz',1,/silent)
+;  push,base,strtrim(expstr.base,2)
+;endfor
+;allbase = file_basename(str.fluxfile,'.fits.fz')
+;MATCH,allbase,base,ind1,ind2,/sort
+;gdexp = ind1
+;ngdexp = n_elements(gdexp)
 
 ;glactc,str.ra,str.dec,2000.0,glon,glat,1,/deg
 ;gal2mag,glon,glat,mlon,mlat
 ;filt = strmid(str.filter,0,1)
 ;exptime = str.exposure
 
-;gdexp = lindgen(nstr)
-;ngdexp = nstr
+gdexp = lindgen(nstr)
+ngdexp = nstr
 
 ; Check the exposures
 print,'Checking on the exposures'
@@ -127,7 +127,8 @@ for i=0,ngdexp-1 do begin
   expstr[i].outfile = outfile
 
   ; Do all three files exist?
-  if file_test(fluxfile) eq 1 and file_test(wtfile) eq 1 and file_test(maskfile) eq 1 then expstr[i].allexist=1
+  ;if file_test(fluxfile) eq 1 and file_test(wtfile) eq 1 and file_test(maskfile) eq 1 then expstr[i].allexist=1
+  expstr[i].allexist = 1    ; THIS TAKES TOO LONG!!!
   ; Does the output file exist
   if file_test(outfile) eq 1 or file_test(outfile+'.gz') eq 1 then expstr[i].done = 1
 
@@ -201,7 +202,7 @@ MWRFITS,expstr,runfile,/create
 ; Run PBS_DAEMON
 stop
 a = '' & read,a,prompt='Press RETURN to start'
-PBS_DAEMON,cmd,cmddir,/hyperthread,prefix='nsc',wait=5,nmulti=nmulti
+PBS_DAEMON,cmd,cmddir,jobs=jobs,/hyperthread,prefix='nsc',wait=5,nmulti=nmulti
 
 ; Unlocking files
 print,'Unlocking processed files'

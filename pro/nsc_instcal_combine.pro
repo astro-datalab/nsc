@@ -146,7 +146,7 @@ FOR i=0,nlist-1 do begin
   print,'  ',strtrim(ncat1,2),' sources'
 
   ; Make sure it's in the right format
-  if n_tags(cat1) ne 43 then begin   ; 49 for v1
+  if n_tags(cat1) ne 45 then begin   ; 49 for v1
     print,'  This catalog does not have the right format. Skipping'
     goto,BOMB
   endif
@@ -381,8 +381,9 @@ FOR i=0,nlist-1 do begin
       undefine,old
     endif
     ; Add to IDSTR
-    sourceid = strtrim(meta.expnum,2)+'.'+strtrim(cat.ccdnum,2)+'.'+strtrim(cat.number,2)
-    idstr[idcnt:idcnt+ncat-1].sourceid = sourceid
+    ;sourceid = strtrim(meta.expnum,2)+'.'+strtrim(cat.ccdnum,2)+'.'+strtrim(cat.number,2)
+    ;idstr[idcnt:idcnt+ncat-1].sourceid = sourceid
+    idstr[idcnt:idcnt+ncat-1].sourceid = cat.sourceid
     idstr[idcnt:idcnt+ncat-1].exposure = meta.base
     idstr[idcnt:idcnt+ncat-1].expnum = meta.expnum
     idstr[idcnt:idcnt+ncat-1].objectid = newexp.id
@@ -477,8 +478,9 @@ FOR i=0,nlist-1 do begin
         undefine,old
       endif
       ; Add to IDSTR
-      sourceid = strtrim(meta.expnum,2)+'.'+strtrim(newcat.ccdnum,2)+'.'+strtrim(newcat.number,2)
-      idstr[idcnt:idcnt+nmatch-1].sourceid = sourceid
+      ;sourceid = strtrim(meta.expnum,2)+'.'+strtrim(newcat.ccdnum,2)+'.'+strtrim(newcat.number,2)
+      ;idstr[idcnt:idcnt+nmatch-1].sourceid = sourceid
+      idstr[idcnt:idcnt+nmatch-1].sourceid = newcat.sourceid
       idstr[idcnt:idcnt+nmatch-1].exposure = meta.base
       idstr[idcnt:idcnt+nmatch-1].expnum = meta.expnum
       idstr[idcnt:idcnt+nmatch-1].objectid = cmb.id
@@ -577,8 +579,9 @@ FOR i=0,nlist-1 do begin
         undefine,old
       endif
       ; Add to IDSTR
-      sourceid = strtrim(meta.expnum,2)+'.'+strtrim(cat.ccdnum,2)+'.'+strtrim(cat.number,2)
-      idstr[idcnt:idcnt+ncat-1].sourceid = sourceid
+      ;sourceid = strtrim(meta.expnum,2)+'.'+strtrim(cat.ccdnum,2)+'.'+strtrim(cat.number,2)
+      ;idstr[idcnt:idcnt+ncat-1].sourceid = sourceid
+      idstr[idcnt:idcnt+ncat-1].sourceid = cat.sourceid
       idstr[idcnt:idcnt+ncat-1].exposure = meta.base
       idstr[idcnt:idcnt+ncat-1].expnum = strtrim(meta.expnum,2)
       idstr[idcnt:idcnt+ncat-1].objectid = newexp.id
