@@ -12,6 +12,7 @@
 ;  =file     The file to save to or search for existing catalog.
 ;  /saveref  Save the output to FILE.
 ;  /silent   Don't print anything to the screen.
+;  =logfile  Filename for logging output.
 ;
 ; OUTPUTS:
 ;  ref       Search results from the reference catalog.
@@ -23,10 +24,11 @@
 ; By D. Nidever  Sep 2017
 ;-
 
-function getrefcat,cenra,cendec,radius,refcat,count=count,file=file,saveref=saveref,silent=silent
+function getrefcat,cenra,cendec,radius,refcat,count=count,file=file,saveref=saveref,silent=silent,logfile=logfile
 
 undefine,ref
 count = 0
+t0 = systime(1)
 
 ; Not enough inputs
 if n_elements(cenra) eq 0 or n_elements(cendec) eq 0 or n_elements(radius) eq 0 or $
@@ -42,7 +44,8 @@ if file_test(out[0]) eq 0 then begin
   return,-1
 endif
 
-logf = -1
+; Defaults
+if n_elements(logfile) eq 0 then logf=-1 else logf=logfile
 
 ; FLIP THIS AROUND, INPUT SHOULD BE THE "EASY" VERSION!!!
 refname = strupcase(refcat)
@@ -93,6 +96,14 @@ endif else begin
     file_delete,refcattemp,/allow
     file_delete,file,/allow
     spawn,cmd,out,outerr
+    ; Check for empty query
+    READLINE,refcattemp,tlines,nlineread=4
+    if n_elements(tlines) lt 4 then begin
+      if not keyword_set(silent) then printlog,logf,'No Results'
+      ref = -1
+      nref = 0
+      return,ref
+    endif
     ;  Load ASCII file and create the FITS file
     ref = importascii(refcattemp,/header,delim='|',skipline=2,/silent)
     if keyword_set(saveref) then begin
@@ -106,6 +117,14 @@ endif else begin
   endif else begin
     if refcat eq 'APASS' then cfa=0 else cfa=1  ; cfa doesn't have APASS                                                                                                        
     ref = QUERYVIZIER(refcat,[cenra,cendec],radius*60,cfa=cfa)
+   
+    ; Check for failure
+    if size(ref,/type) ne 8 then begin
+      if not keyword_set(silent) then printlog,logf,'Failure or No Results'
+      ref = -1
+      nref = 0
+      return,ref
+    endif
 
     ; Fix/homogenize the GAIA tags
     if refname eq 'GAIA' then begin
@@ -138,7 +157,7 @@ endif else begin
 endelse
 
 if not keyword_set(silent) then $
-  printlog,logf,strtrim(n_elements(ref),2)+' sources found'
+  printlog,logf,strtrim(n_elements(ref),2)+' sources found   dt=',stringize(systime(1)-t0,ndec=1),' sec.'
 
 count = n_elements(ref)
 
