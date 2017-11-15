@@ -64,24 +64,45 @@ if ng gt 0 then list[g].filter = 'z'
 
 ; Calculate the output directory
 for i=0,nstr-1 do begin
+  if i mod 1000 eq 0 then print,i
   dateobs = strtrim(str[i].date_obs,2)
   night = strmid(dateobs,0,4)+strmid(dateobs,5,2)+strmid(dateobs,8,2)
   baseroot = file_basename(strtrim(str[i].fluxfile,2),'.fits.fz')
   expdir = dir+str[i].instrument+'/'+night+'/'+baseroot+'/'
   list[i].expdir = expdir
+
+  ;; Get RA/DEC values from the FLUXFILE header
+  ;; Many of the RA/DEC values from the metadata database are incorrect
+  ;fluxfile = str[i].fluxfile
+  ;lo = strpos(fluxfile,'/mss1')
+  ;fluxfile = mssdir+strmid(fluxfile,lo+6)
+  ;head = headfits(fluxfile,exten=1)
+  ;str[i].ra = sxpar(head,'crval1')
+  ;str[i].dec = sxpar(head,'crval2')
 endfor
 
-; 318 exposures have RA=DEC=NAN
-;  get their coordinates from the fluxfile
-bdra = where(finite(str.ra) eq 0 or finite(str.dec) eq 0,nbdra)
-for i=0,nbdra-1 do begin
-  fluxfile = str[bdra[i]].fluxfile
-  lo = strpos(fluxfile,'/mss1')
-  fluxfile = mssdir+strmid(fluxfile,lo+6)
-  head = headfits(fluxfile,exten=0)
-  str[bdra[i]].ra = sxpar(head,'ra')
-  str[bdra[i]].dec = sxpar(head,'dec')
-endfor
+; Get good RA/DEC
+;  this was obtained with grabcoords_all.pro
+coords = mrdfits(dir+'lists/allcoords.fits',1)
+coords.file = strtrim(coords.file,2)
+MATCH,str.fluxfile,'/net'+coords.file,ind1,ind2,/sort
+dist=sphdist(str[ind1].ra,str[ind1].dec,coords[ind2].ra,coords[ind2].dec,/deg)
+str[ind1].ra = coords[ind2].ra
+str[ind1].dec = coords[ind2].dec
+; 7 didn't match b/c the fluxfiles aren't found, trim them out
+str = str[ind1]
+
+;; 318 exposures have RA=DEC=NAN
+;;  get their coordinates from the fluxfile
+;bdra = where(finite(str.ra) eq 0 or finite(str.dec) eq 0,nbdra)
+;for i=0,nbdra-1 do begin
+;  fluxfile = str[bdra[i]].fluxfile
+;  lo = strpos(fluxfile,'/mss1')
+;  fluxfile = mssdir+strmid(fluxfile,lo+6)
+;  head = headfits(fluxfile,exten=0)
+;  str[bdra[i]].ra = sxpar(head,'ra')
+;  str[bdra[i]].dec = sxpar(head,'dec')
+;endfor
 
 ; Calculate the healpix
 theta = (90-str.dec)/radeg
@@ -112,11 +133,24 @@ rnd = sort(randomu(0,npix))
 cmd = cmd[rnd]
 dirs = dirs[rnd]
 
+; gp09, run 1st batch, 8755
+;cmd = cmd[0:8754]
+;dirs = dirs[0:8754]
+
+; Hulk, run 2nd batch, 8755
+;cmd = cmd[8755:17509]
+;dirs = dirs[8755:17509]
+
+; Thing, run 3rd batch, 8755
+;cmd = cmd[17510:*]
+;dirs = dirs[17510:*]
+
 stop
 
 a = '' & read,a,prompt='Press RETURN to start'
 PBS_DAEMON,cmd,dirs,jobs=jobs,/hyperthread,/idle,prefix='nsccalibhpix',wait=wait,nmulti=nmulti 
 
+stop
 
 ; Load all the summary/metadata files
 print,'Creating calibration summary file'
