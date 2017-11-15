@@ -53,6 +53,18 @@ str.maskfile = strtrim(str.maskfile,2)
 str.wtfile = strtrim(str.wtfile,2)
 print,strtrim(nstr,2),' InstCal images'
 
+; Get good RA/DEC
+;  this was obtained with grabcoords_all.pro
+coords = mrdfits(dir+'lists/allcoords.fits',1)
+coords.file = strtrim(coords.file,2)
+MATCH,str.fluxfile,'/net'+coords.file,ind1,ind2,/sort
+dist=sphdist(str[ind1].ra,str[ind1].dec,coords[ind2].ra,coords[ind2].dec,/deg)
+str[ind1].ra = coords[ind2].ra
+str[ind1].dec = coords[ind2].dec
+; 7 didn't match b/c the fluxfiles aren't found, trim them out
+str = str[ind1]
+nstr = n_elements(str)
+
 ; Start output file
 list = replicate({expdir:'',pix:-1L,instrument:'',filter:''},nstr)
 list.instrument = strtrim(str.instrument,2)
@@ -64,24 +76,34 @@ if ng gt 0 then list[g].filter = 'z'
 
 ; Calculate the output directory
 for i=0,nstr-1 do begin
+  if i mod 1000 eq 0 then print,i
   dateobs = strtrim(str[i].date_obs,2)
   night = strmid(dateobs,0,4)+strmid(dateobs,5,2)+strmid(dateobs,8,2)
   baseroot = file_basename(strtrim(str[i].fluxfile,2),'.fits.fz')
   expdir = dir+str[i].instrument+'/'+night+'/'+baseroot+'/'
   list[i].expdir = expdir
+
+  ;; Get RA/DEC values from the FLUXFILE header
+  ;; Many of the RA/DEC values from the metadata database are incorrect
+  ;fluxfile = str[i].fluxfile
+  ;lo = strpos(fluxfile,'/mss1')
+  ;fluxfile = mssdir+strmid(fluxfile,lo+6)
+  ;head = headfits(fluxfile,exten=1)
+  ;str[i].ra = sxpar(head,'crval1')
+  ;str[i].dec = sxpar(head,'crval2')
 endfor
 
-; 318 exposures have RA=DEC=NAN
-;  get their coordinates from the fluxfile
-bdra = where(finite(str.ra) eq 0 or finite(str.dec) eq 0,nbdra)
-for i=0,nbdra-1 do begin
-  fluxfile = str[bdra[i]].fluxfile
-  lo = strpos(fluxfile,'/mss1')
-  fluxfile = mssdir+strmid(fluxfile,lo+6)
-  head = headfits(fluxfile,exten=0)
-  str[bdra[i]].ra = sxpar(head,'ra')
-  str[bdra[i]].dec = sxpar(head,'dec')
-endfor
+;; 318 exposures have RA=DEC=NAN
+;;  get their coordinates from the fluxfile
+;bdra = where(finite(str.ra) eq 0 or finite(str.dec) eq 0,nbdra)
+;for i=0,nbdra-1 do begin
+;  fluxfile = str[bdra[i]].fluxfile
+;  lo = strpos(fluxfile,'/mss1')
+;  fluxfile = mssdir+strmid(fluxfile,lo+6)
+;  head = headfits(fluxfile,exten=0)
+;  str[bdra[i]].ra = sxpar(head,'ra')
+;  str[bdra[i]].dec = sxpar(head,'dec')
+;endfor
 
 ; Calculate the healpix
 theta = (90-str.dec)/radeg
@@ -112,87 +134,27 @@ rnd = sort(randomu(0,npix))
 cmd = cmd[rnd]
 dirs = dirs[rnd]
 
+; gp09, run 1st batch, 8755
+;cmd = cmd[0:8754]
+;dirs = dirs[0:8754]
+
+; Hulk, run 2nd batch, 8755
+;cmd = cmd[8755:17509]
+;dirs = dirs[8755:17509]
+
+; Thing, run 3rd batch, 8755
+;cmd = cmd[17510:*]
+;dirs = dirs[17510:*]
+
 stop
+
 
 a = '' & read,a,prompt='Press RETURN to start'
 PBS_DAEMON,cmd,dirs,jobs=jobs,/hyperthread,/idle,prefix='nsccalibhpix',wait=wait,nmulti=nmulti 
 
+stop
 
-; Load all the summary/metadata files
-print,'Creating calibration summary file'
-expstr = replicate({expdir:'',instrument:'',metafile:'',success:0,file:'',base:'',expnum:0L,ra:0.0d0,dec:0.0d,dateobs:'',mjd:0.0d0,filter:'',exptime:0.0,$
-                    airmass:0.0,nsources:0L,fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,zpterm:0.0,zptermerr:0.0,zptermsig:0.0,$
-                    zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L,depth95:99.99,depth10sig:99.99},nstr)
-expstr.expdir = list.expdir
-chstr = replicate({expdir:'',instrument:'',success:0,filename:'',ccdnum:0L,nsources:0L,cenra:999999.0d0,cendec:999999.0d0,$
-                   gaianmatch:0L,rarms:999999.0,racoef:dblarr(4),decrms:999999.0,$
-                   deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,zptermerr:999999.0,nrefmatch:0L,depth95:99.99,depth10sig:99.99},nexpdirs*61)
-chcnt = 0LL
-for i=0,nstr-1 do begin
-  if (i+1) mod 5000 eq 0 then print,i+1
-  base = file_basename(expstr[i].expdir)
-  type = ['c4d','k4m','ksb']
-  obs = ['ctio','kpno','kpno']
-  obsname = 'ctio'    ; by default
-  instrument = 'c4d'  ; by default
-
-  for j=0,n_elements(type)-1 do begin
-    if stregex(expdirs[i],'/'+type[j]+'/',/boolean) eq 1 then begin
-      instrument = type[j]
-      obsname = obs[j]
-    endif
-  endfor
-
-  metafile = expstr[i].expdir+'/'+base+'_meta.fits'
-  expstr[i].metafile = metafile
-  if file_test(metafile) eq 1 then begin
-    ; Exposure structure
-    expstr1 = MRDFITS(metafile,1,/silent)
-    temp = expstr[i]
-    struct_assign,expstr1,temp,/nozero
-    expstr[i] = temp
-    expstr[i].instrument = instrument
-    expstr[i].success = 1
-    ; Chip structure
-    chstr1 = MRDFITS(metafile,2,/silent)
-    nchstr1 = n_elements(chstr1)
-    temp = chstr[chcnt:chcnt+nchstr1-1]
-    struct_assign,chstr1,temp,/nozero
-    chstr[chcnt:chcnt+nchstr1-1] = temp
-    chstr[chcnt:chcnt+nchstr1-1].expdir = expdirs[i]
-    chstr[chcnt:chcnt+nchstr1-1].instrument = instrument
-    chstr[chcnt:chcnt+nchstr1-1].success = 1
-    chcnt += nchstr1
-    
-    ; Fix missing DATE-OBS
-    if strtrim(expstr[i].dateobs,2) eq '' or strtrim(expstr[i].dateobs,2) eq '0' then begin
-      fluxfile = strtrim(expstr[i].file)
-      lo = strpos(fluxfile,'archive')
-      fluxfile = mssdir+strmid(fluxfile,lo)
-      head = headfits(fluxfile,exten=0)
-      expstr[i].dateobs = sxpar(head,'DATE-OBS')
-    endif
-    ; Fix missing AIRMASS
-    if expstr[i].airmass lt 0.9 then begin
-      OBSERVATORY,obsname,obs
-      lat = obs.latitude
-      lon = obs.longitude
-      jd = date2jd(expstr[i].dateobs)
-      ra = expstr[i].ra
-      dec = expstr[i].dec
-      expstr[i].airmass = AIRMASS(jd,ra,dec,lat,lon)
-   endif
-
- endif else expstr[i].success=0
-endfor
-; Trim CHSTR structure
-chstr = chstr[0:chcnt-1]
-gd = where(expstr.success eq 1,ngd)
-print,strtrim(ngd,2),' exposure successfully calibrated'
-print,'Writing summary file to ',dir+'lists/nsc_instcal_calibrate.fits'
-MWRFITS,expstr,dir+'lists/nsc_instcal_calibrate.fits',/create
-MWRFITS,chstr,dir+'lists/nsc_instcal_calibrate.fits',/silent
-
+; Make the summary file with nsc_calibrate_summary.pro
 
 print,'dt=',stringize(systime(1)-t0,ndec=2),' sec'
 
