@@ -82,7 +82,10 @@ for i=0,nind-1 do begin
   print,''
   print,'---- EXPOSURE ',strtrim(i+1,2),' OF ',strtrim(nind,2),' ----'
   print,''
-  NSC_INSTCAL_CALIBRATE,list1[i].expdir,ref,redo=redo
+  expdir = list1[i].expdir
+  lo = strpos(expdir,'/dl1')
+  expdir = dldir + strmid(expdir,lo+5)
+  NSC_INSTCAL_CALIBRATE,expdir,ref,redo=redo
 endfor
 
 print,''
