@@ -182,6 +182,8 @@ if range(minmax(chstr[gdchip].cenra)) gt 100 then begin
  rarange = range(ra)*cos(cendec/!radeg)
  rawrap = 1
 endif else rawrap=0
+print,'CENRA  = ',stringize(cenra,ndec=5)
+print,'CENDEC = ',stringize(cendec,ndec=5)
 
 ; Measure median seeing FWHM
 gdcat = where(cat.mag_auto lt 50 and cat.magerr_auto lt 0.05 and cat.class_star gt 0.8,ngdcat)
@@ -515,7 +517,7 @@ end
     gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                   cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ref1.qflg eq 'AAA' and $
-                  ref1.e_jmag lt 0.05 and ref1.e_apas_gmag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
+                  ref1.e_jmag lt 0.05 and ref1.e_apass_gmag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
   endif
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
