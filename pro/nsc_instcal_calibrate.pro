@@ -344,12 +344,12 @@ For i=0,nchips-1 do begin
   ; ---- Fit RA as function of RA/DEC ----
   londiff = gaialon-lon1
   err = sqrt(gaia2.e_ra_icrs^2 + cat2.raerr^2)
-  lonmed = median(londiff)
-  lonsig = mad(londiff)
+  lonmed = median([londiff])
+  lonsig = mad([londiff])
   gdlon = where(abs(londiff-lonmed) lt 3.0*lonsig,ngdlon)  ; remove outliers
-  npars = 4
+  if ngdlon gt 5 then npars = 4 else npars=1  ; use constant if not enough stars
   initpars = dblarr(npars)
-  initpars[0] = median(londiff)
+  initpars[0] = median([londiff])
   parinfo = REPLICATE({limited:[0,0],limits:[0.0,0.0],fixed:0},npars)
   racoef = MPFIT2DFUN('func_poly2d',lon1[gdlon],lat1[gdlon],londiff[gdlon],err[gdlon],initpars,status=status,dof=dof,$
                   bestnorm=chisq,parinfo=parinfo,perror=perror,yfit=yfit,/quiet)
@@ -367,12 +367,12 @@ For i=0,nchips-1 do begin
   ; ---- Fit DEC as function of RA/DEC -----
   latdiff = gaialat-lat1
   err = sqrt(gaia2.e_de_icrs^2 + cat2.decerr^2)
-  latmed = median(latdiff)
-  latsig = mad(latdiff)
+  latmed = median([latdiff])
+  latsig = mad([latdiff])
   gdlat = where(abs(latdiff-latmed) lt 3.0*latsig,ngdlat)  ; remove outliers
-  npars = 4
+  if ngdlat gt 5 then npars = 4 else npars=1  ; use constant if not enough stars
   initpars = dblarr(npars)
-  initpars[0] = median(latdiff)
+  initpars[0] = median([latdiff])
   parinfo = REPLICATE({limited:[0,0],limits:[0.0,0.0],fixed:0},npars)
   deccoef = MPFIT2DFUN('func_poly2d',lon1[gdlat],lat1[gdlat],latdiff[gdlat],err[gdlat],initpars,status=status,dof=dof,$
                        bestnorm=chisq,parinfo=parinfo,perror=perror,yfit=yfit,/quiet)
