@@ -423,8 +423,8 @@ printlog,logf,'' & printlog,logf,'Step 4. Photometric calibration'
 printlog,logf,'-------------------------------'
 expstr = {file:fluxfile,wtfile:wtfile,maskfile:maskfile,instrument:'',base:base,expnum:long(expnum),ra:0.0d0,dec:0.0d0,dateobs:string(dateobs),$
           mjd:0.0d,filter:filter,exptime:float(exptime),airmass:0.0,nsources:long(ncat),fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,$
-          zpterm:999999.0,zptermerr:99999.0,zptermsig:999999.0,zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L,$
-          depth95:99.99,depth10sig:99.99}
+          gaiagoodnmatch:0L,zpterm:999999.0,zptermerr:99999.0,zptermsig:999999.0,zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,$
+          zpspatialvar_nccd:0,nrefmatch:0L,depth95:99.99,depth10sig:99.99}
 expstr.instrument = instrument
 expstr.ra = cenra
 expstr.dec = cendec
@@ -435,7 +435,9 @@ expstr.airmass = airmass
 expstr.rarms = median(chstr.rarms)
 expstr.decrms = median(chstr.decrms)
 expstr.ebv = median(ebv)
-expstr.gaianmatch = median(chstr.gaianmatch)
+;expstr.gaianmatch = median(chstr.gaianmatch)
+expstr.gaianmatch = total(chstr.gaianmatch)
+expstr.gaiagoodnmatch = total(chstr.gaiagoodnmatch)
 expstr.fwhm = medfwhm
 cat.mjd = expstr.mjd
 
