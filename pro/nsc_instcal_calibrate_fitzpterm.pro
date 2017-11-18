@@ -6,8 +6,8 @@ n = n_elements(mstr.col)
 diff = mstr.model - mstr.mag
 err = mstr.err
 ; Make a sigma cut
-med = median(diff)
-sig = mad(diff)
+med = median([diff])
+sig = mad([diff])
 gd = where(abs(diff-med) lt 3*sig,ngd)
 x = fltarr(n)
 zpterm = dln_poly_fit(x[gd],diff[gd],0,measure_errors=err[gd],sigma=zptermerr,yerror=yerror,status=status,yfit=yfit1,/bootstrap)
