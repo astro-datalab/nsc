@@ -465,7 +465,7 @@ CASE instfilt of
   if medfwhm gt 1.8 and ngdcat lt 100 then begin
     gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
                   cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
-                  cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and dref1.qflg eq 'AAA' and $
+                  cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and ref1.qflg eq 'AAA' and $
                   ref1.e_jmag lt 0.05 and finite(ref1.nuv) eq 1 and col ge 0.8 and col le 1.1,ngdcat)
   endif
   if ngdcat eq 0 then begin
