@@ -81,6 +81,10 @@ endfor
 printlog,logf,strtrim(ncat,2),' total sources'
 ; Create structure, exten=1 has header now
 cat1 = MRDFITS(catfiles[0],2,/silent)
+if size(cat1,/type) ne 8 then begin
+  print,'Chip 1 catalog is empty.'
+  return
+endif
 schema = cat1[0]
 STRUCT_ASSIGN,{dum:''},schema   ; blank everything out
 add_tag,schema,'CCDNUM',0L,schema
