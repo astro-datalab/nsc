@@ -97,7 +97,7 @@ add_tag,schema,'MJD',0.0d0,schema
 cat = REPLICATE(schema,ncat)
 ; Start the chips summary structure
 chstr = replicate({expdir:'',instrument:'',filename:'',ccdnum:0L,nsources:0L,cenra:999999.0d0,cendec:999999.0d0,$
-                   gaianmatch:0L,rarms:999999.0,rastderr:999999.0,racoef:dblarr(4),decrms:999999.0,$
+                   gaianmatch:0L,gaiagoodnmatch:0L,rarms:999999.0,rastderr:999999.0,racoef:dblarr(4),decrms:999999.0,$
                    decstderr:999999.0,deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,$
                    zptermerr:999999.0,nrefmatch:0L,depth95:99.99,depth10sig:99.99},nchips)
 chstr.expdir = expdir
@@ -182,6 +182,8 @@ if range(minmax(chstr[gdchip].cenra)) gt 100 then begin
  rarange = range(ra)*cos(cendec/!radeg)
  rawrap = 1
 endif else rawrap=0
+print,'CENRA  = ',stringize(cenra,ndec=5)
+print,'CENDEC = ',stringize(cendec,ndec=5)
 
 ; Measure median seeing FWHM
 gdcat = where(cat.mag_auto lt 50 and cat.magerr_auto lt 0.05 and cat.class_star gt 0.8,ngdcat)
@@ -331,23 +333,18 @@ For i=0,nchips-1 do begin
   gaia2 = gaia1b[qcuts1]
   cat2 = cat1b[qcuts1]
 
-  ; Cut based on FWHM
-  ; weight based on S/N
-  ;snr = 1.087/cat2.magerr_auto
-  ;coorderr = cat2.fwhm_world*3600 / snr
-
   ; Rotate to coordinates relative to the center of the field
   ROTSPHCEN,gaia2.ra_icrs,gaia2.de_icrs,chstr[i].cenra,chstr[i].cendec,gaialon,gaialat,/gnomic
   ROTSPHCEN,cat2.alpha_j2000,cat2.delta_j2000,chstr[i].cenra,chstr[i].cendec,lon1,lat1,/gnomic
   ; ---- Fit RA as function of RA/DEC ----
   londiff = gaialon-lon1
   err = sqrt(gaia2.e_ra_icrs^2 + cat2.raerr^2)
-  lonmed = median(londiff)
-  lonsig = mad(londiff)
+  lonmed = median([londiff])
+  lonsig = mad([londiff]) > 1e-5   ; 0.036"
   gdlon = where(abs(londiff-lonmed) lt 3.0*lonsig,ngdlon)  ; remove outliers
-  npars = 4
+  if ngdlon gt 5 then npars = 4 else npars=1  ; use constant if not enough stars
   initpars = dblarr(npars)
-  initpars[0] = median(londiff)
+  initpars[0] = median([londiff])
   parinfo = REPLICATE({limited:[0,0],limits:[0.0,0.0],fixed:0},npars)
   racoef = MPFIT2DFUN('func_poly2d',lon1[gdlon],lat1[gdlon],londiff[gdlon],err[gdlon],initpars,status=status,dof=dof,$
                   bestnorm=chisq,parinfo=parinfo,perror=perror,yfit=yfit,/quiet)
@@ -365,12 +362,12 @@ For i=0,nchips-1 do begin
   ; ---- Fit DEC as function of RA/DEC -----
   latdiff = gaialat-lat1
   err = sqrt(gaia2.e_de_icrs^2 + cat2.decerr^2)
-  latmed = median(latdiff)
-  latsig = mad(latdiff)
+  latmed = median([latdiff])
+  latsig = mad([latdiff]) > 1e-5  ; 0.036"
   gdlat = where(abs(latdiff-latmed) lt 3.0*latsig,ngdlat)  ; remove outliers
-  npars = 4
+  if ngdlat gt 5 then npars = 4 else npars=1  ; use constant if not enough stars
   initpars = dblarr(npars)
-  initpars[0] = median(latdiff)
+  initpars[0] = median([latdiff])
   parinfo = REPLICATE({limited:[0,0],limits:[0.0,0.0],fixed:0},npars)
   deccoef = MPFIT2DFUN('func_poly2d',lon1[gdlat],lat1[gdlat],latdiff[gdlat],err[gdlat],initpars,status=status,dof=dof,$
                        bestnorm=chisq,parinfo=parinfo,perror=perror,yfit=yfit,/quiet)
@@ -383,8 +380,9 @@ For i=0,nchips-1 do begin
     decrms = MAD(diff[gdstars])
     decstderr = decrms/sqrt(ngdstars)
   endif else decrms=decrms1
-  printlog,logf,'  CCDNUM=',strtrim(chstr[i].ccdnum,2),'  NSOURCES=',strtrim(nchmatch,2),'  ',strtrim(ngmatch,2),' GAIA matches  RMS(RA/DEC)=',$
-       stringize(rarms,ndec=3)+'/'+stringize(decrms,ndec=3),' STDERR(RA/DEC)=',stringize(rastderr,ndec=4)+'/'+stringize(decstderr,ndec=4),' arcsec'
+  printlog,logf,'  CCDNUM=',strtrim(chstr[i].ccdnum,2),'  NSOURCES=',strtrim(nchmatch,2),'  ',strtrim(ngmatch,2),'/',strtrim(nqcuts1,2),$
+                ' GAIA matches  RMS(RA/DEC)=',stringize(rarms,ndec=3)+'/'+stringize(decrms,ndec=3),' STDERR(RA/DEC)=',$
+                stringize(rastderr,ndec=4)+'/'+stringize(decstderr,ndec=4),' arcsec'
   ; Apply to all sources
   ROTSPHCEN,cat1.alpha_j2000,cat1.delta_j2000,chstr[i].cenra,chstr[i].cendec,lon,lat,/gnomic
   lon2 = lon + FUNC_POLY2D(lon,lat,racoef)
@@ -398,6 +396,7 @@ For i=0,nchips-1 do begin
   ; Stuff back into the main structure
   cat[chind2] = cat1
   chstr[i].gaianmatch = ngmatch
+  chstr[i].gaiagoodnmatch = nqcuts1
   chstr[i].rarms = rarms
   chstr[i].rastderr = rastderr
   chstr[i].racoef = racoef
