@@ -50,7 +50,7 @@ catfiles2 = file_search(expdir+'/'+base+'_[0-9][0-9].fits',count=ncatfiles2)
 if ncatfiles2 gt 0 then push,catfiles,catfiles2
 ncatfiles = n_elements(catfiles)
 if ncatfiles eq 0 then begin
-  print,'No catalog files found'
+  printlog,logf,'No catalog files found'
   return
 endif
 nchips = ncatfiles
@@ -62,12 +62,12 @@ if stregex(expdir,'/k4m/',/boolean) eq 1 then begin
   head0 = dum.field_header_card
   pixcnt = sxpar(head0,'PIXCNT*',count=npixcnt)
   if pixcnt gt 0 then begin
-    print,'This is a Mosaic3 exposure with pixel shift problems'
+    printlog,logf,'This is a Mosaic3 exposure with pixel shift problems'
     return
   endif
   wcscal = sxpar(head0,'WCSCAL',count=nwcscal)
   if nwcscal gt 0 and strtrim(wcscal,2) eq 'Failed' then begin
-    print,'This is a Mosaic3 exposure with failed WCS calibration'
+    printlog,logf,'This is a Mosaic3 exposure with failed WCS calibration'
     return
   endif
 endif
@@ -82,7 +82,7 @@ printlog,logf,strtrim(ncat,2),' total sources'
 ; Create structure, exten=1 has header now
 cat1 = MRDFITS(catfiles[0],2,/silent)
 if size(cat1,/type) ne 8 then begin
-  print,'Chip 1 catalog is empty.'
+  printlog,logf,'Chip 1 catalog is empty.'
   return
 endif
 schema = cat1[0]
@@ -125,7 +125,7 @@ for i=0,ncatfiles-1 do begin
   ny = sxpar(hd1,'NAXIS2')
   extast,hd1,ast,noparams  ; check the WCS
   if noparams le 0 then begin
-    print,'Problem with WCS in header ',catfiles[i]
+    printlog,logf,'Problem with WCS in header ',catfiles[i]
     goto,BOMB1
   endif
   head_xyad,hd1,[0,nx-1,nx-1,0],[0,0,ny-1,ny-1],vra,vdec,/degree
@@ -168,7 +168,7 @@ endfor
 ; Exposure level values
 gdchip = where(chstr.nsources gt 0 and chstr.cenra lt 400,ngdchip)
 if ngdchip eq 0 then begin
-  print,'No good chip catalogs with good WCS.'
+  printlog,logf,'No good chip catalogs with good WCS.'
   return
 endif
 ; Central coordinates of the entire field
@@ -186,13 +186,13 @@ if range(minmax(chstr[gdchip].cenra)) gt 100 then begin
  rarange = range(ra)*cos(cendec/!radeg)
  rawrap = 1
 endif else rawrap=0
-print,'CENRA  = ',stringize(cenra,ndec=5)
-print,'CENDEC = ',stringize(cendec,ndec=5)
+printlog,logf,'CENRA  = ',stringize(cenra,ndec=5)
+printlog,logf,'CENDEC = ',stringize(cendec,ndec=5)
 
 ; Measure median seeing FWHM
 gdcat = where(cat.mag_auto lt 50 and cat.magerr_auto lt 0.05 and cat.class_star gt 0.8,ngdcat)
 medfwhm = median(cat[gdcat].fwhm_world*3600.)
-print,'FWHM = ',stringize(medfwhm,ndec=2),' arcsec'
+printlog,logf,'FWHM = ',stringize(medfwhm,ndec=2),' arcsec'
 
 ; Load the logfile and get absolute flux filename
 READLINE,expdir+'/'+base+'.log',loglines
@@ -224,7 +224,7 @@ if instrument eq 'ksb' then begin  ; Bok doesn't have expnum
   ;DTACQNAM= '/data1/batch/bok/20160102/d7390.0049.fits.fz'   
   dtacqnam = sxpar(head,'DTACQNAM',count=ndtacqnam)
   if ndtacqnam eq 0 then begin
-    print,'I cannot create an EXPNUM for this Bok exposure'
+    printlog,logf,'I cannot create an EXPNUM for this Bok exposure'
     return
   endif
   bokbase = file_basename(dtacqnam)
@@ -268,7 +268,7 @@ if n_elements(inpref) eq 0 then begin
  endif
 ; Using input reference catalog
 endif else begin
-  print,'Reference catalogs input'
+  printlog,logf,'Reference catalogs input'
   if rawrap eq 0 then begin
     gdref = where(inpref.ra ge min(cat.alpha_j2000)-0.01 and inpref.ra le max(cat.alpha_j2000)+0.01 and $
                   inpref.dec ge min(cat.delta_j2000)-0.01 and inpref.dec le max(cat.delta_j2000)+0.01,ngdref)
@@ -293,6 +293,10 @@ gdgaia = where(ref.source gt 0,ngdgaia)
 gaia = ref[gdgaia]
 ; Match everything to Gaia at once, this is much faster!
 SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat.alpha_j2000,cat.delta_j2000,1.0,ind1,ind2,/sph,count=ngmatch
+if ngmatch eq 0 then begin
+  printlog,logf,'No gaia matches'
+  return
+endif
 allgaiaind = lonarr(ncat)-1
 allgaiaind[ind2] = ind1
 allgaiadist = fltarr(ncat)+999999.
@@ -309,7 +313,7 @@ For i=0,nchips-1 do begin
   gmatch = where(gaiaind1 gt -1 and gaiadist1 le 0.5,ngmatch)  ; get sources with Gaia matches
   if ngmatch eq 0 then gmatch = where(gaiaind1 gt -1 and gaiadist1 le 1.0,ngmatch)
   if ngmatch lt 5 then begin
-    print,'Not enough Gaia matches'
+    printlog,logf,'Not enough Gaia matches'
     ; Add threshold to astrometric errors
     cat1.raerr = sqrt(cat1.raerr^2 + 0.100^2)
     cat1.decerr = sqrt(cat1.decerr^2 + 0.100^2)
@@ -327,7 +331,7 @@ For i=0,nchips-1 do begin
   qcuts1 = where(cat1b.imaflags_iso eq 0 and not ((cat1b.flags and 8) eq 8) and not ((cat1b.flags and 16) eq 16) and $
                  cat1b.mag_auto lt 50,nqcuts1)
   if nqcuts1 eq 0 then begin
-    print,'Not enough stars after quality cuts'
+    printlog,logf,'Not enough stars after quality cuts'
     ; Add threshold to astrometric errors
     cat1.raerr = sqrt(cat1.raerr^2 + 0.100^2)
     cat1.decerr = sqrt(cat1.decerr^2 + 0.100^2)
