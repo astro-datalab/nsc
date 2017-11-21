@@ -22,7 +22,7 @@ print,strtrim(nstr,2),' InstCal images'
 
 ; Submit them 10 at a time
 fluxfiles = strmid(str.fluxfile,4)
-nbin = 20
+nbin = 100
 nbatch = ceil(nstr/float(nbin))
 cmd = strarr(nbatch)
 dir = strarr(nbatch)+'/d0/dnidever/nsc/instcal/v2/tmp/coords/'
@@ -35,7 +35,7 @@ endfor
 
 stop
 
-pbs_daemon,cmd,dir,jobs=jobs,/hyperthread,/idle,prefix='coords',wait=1,nmulti=40
+pbs_daemon,cmd,dir,jobs=jobs,/hyperthread,/idle,prefix='coords',wait=1,nmulti=10,verbose=0
 
 stop
 
