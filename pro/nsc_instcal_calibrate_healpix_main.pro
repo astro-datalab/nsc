@@ -1,4 +1,4 @@
-pro nsc_instcal_calibrate_healpix_main
+pro nsc_instcal_calibrate_healpix_main,redo=redo
 
 ; Drive for NSC_INSTCAL_CALIBRATE_HEALPIX
 
@@ -65,6 +65,17 @@ str[ind1].dec = coords[ind2].dec
 str = str[ind1]
 nstr = n_elements(str)
 
+; Reruning exposures that had coordinates problems but finished
+; successfully originally
+;;test = file_test(outfile)
+;oldsum = mrdfits(dir+'lists/nsc_instcal_calibrate.fits.bak111217',1)
+;bad = where(dist gt 0.1 and oldsum.success eq 1,nbad)
+;
+;cmd = 'nsc_instcal_calibrate,"'+strtrim(oldsum[bad].expdir,2)+'",/redo'
+;dirs = strarr(nbad)+tmpdir
+;stop
+;PBS_DAEMON,cmd,dirs,jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
+
 ; Start output file
 list = replicate({expdir:'',pix:-1L,instrument:'',filter:''},nstr)
 list.instrument = strtrim(str.instrument,2)
@@ -126,7 +137,18 @@ npix = n_elements(upix)
 print,strtrim(npix,2),' healpix to run'
 ; Create the commands
 cmd = 'nsc_instcal_calibrate_healpix,'+strtrim(upix,2)
-;if keyword_set(redo) then cmd+=',/redo'
+if keyword_set(redo) then cmd+=',/redo'
+dirs = strarr(npix)+tmpdir
+
+; Only run healpix with DEC>-29
+g = where(str.dec gt -29,ng)
+uipix = uniq(list[g].pix,sort(list[g].pix))
+upix = list[g[uipix]].pix
+npix = n_elements(upix)
+print,strtrim(npix,2),' healpix to run'
+; Create the commands
+cmd = 'nsc_instcal_calibrate_healpix,'+strtrim(upix,2)
+if keyword_set(redo) then cmd+=',/redo'
 dirs = strarr(npix)+tmpdir
 
 ; RANDOMIZE
@@ -134,6 +156,21 @@ rnd = sort(randomu(0,npix))
 cmd = cmd[rnd]
 dirs = dirs[rnd]
 
+; ONLY DEC>-29
+; gp09, run 1st batch, 8755
+;cmd = cmd[0:6006]
+;dirs = dirs[0:6006]
+
+; Hulk, run 2nd batch, 8755
+;cmd = cmd[6007:12013]
+;dirs = dirs[6007:12013]
+
+; Thing, run 3rd batch, 8755
+;cmd = cmd[12014:*]
+;dirs = dirs[12014:*]
+
+
+; ALL HEALPIX
 ; gp09, run 1st batch, 8755
 ;cmd = cmd[0:8754]
 ;dirs = dirs[0:8754]
@@ -145,6 +182,29 @@ dirs = dirs[rnd]
 ; Thing, run 3rd batch, 8755
 ;cmd = cmd[17510:*]
 ;dirs = dirs[17510:*]
+
+; rerun exposures that had coordinate problems and finished
+; successfully the first time
+
+; Run healpix with failures
+;sum = mrdfits(dir+'lists/nsc_instcal_calibrate.fits',1)
+;bad = where(sum.success eq 0,nbad)
+;ui = uniq(sum[bad].pix,sort(sum[bad].pix))
+;upix = sum[bad[ui]].pix
+;npix = n_elements(upix)
+;; Create the commands
+;cmd = 'nsc_instcal_calibrate_healpix,'+strtrim(upix,2)
+;;if keyword_set(redo) then cmd+=',/redo'
+;dirs = strarr(npix)+tmpdir
+
+; Thing, run first half
+;cmd = cmd[0:317]
+;dirs = dirs[0:317]
+
+; Hulk, run second half
+;cmd = cmd[318:*]
+;dirs = dirs[318:*]
+
 
 stop
 
