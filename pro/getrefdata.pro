@@ -79,28 +79,53 @@ For i=0,n_elements(filter)-1 do begin
   end
   ; DECam g-band
   'c4d-g': begin
-    ; Use 2MASS and APASS to calibrate
-    push,refcat,['2MASS-PSC','APASS']
+    ; Use PS1 if possible
+    if cendec gt -29 then begin
+      push,refcat,['2MASS-PSC','PS']
+    endif else begin
+      ; Use 2MASS and APASS to calibrate
+      push,refcat,['2MASS-PSC','APASS']
+    endelse
   end
   ; DECam r-band
   'c4d-r': begin
-    ; Use 2MASS and APASS to calibrate
-    push,refcat,['2MASS-PSC','APASS']
+    ; Use PS1 if possible
+    if cendec gt -29 then begin
+      push,refcat,['2MASS-PSC','PS']
+    endif else begin
+      ; Use 2MASS and APASS to calibrate
+      push,refcat,['2MASS-PSC','APASS']
+    endelse
   end
   ; DECam i-band
   'c4d-i': begin
-    ; Use GAIA and 2MASS to calibrate
-    push,refcat,['2MASS-PSC']
+    ; Use PS1 if possible
+    if cendec gt -29 then begin
+      push,refcat,['2MASS-PSC','PS']
+    endif else begin
+      ; Use GAIA and 2MASS to calibrate
+      push,refcat,['2MASS-PSC']
+    endelse
   end
   ; DECam z-band
   'c4d-z': begin
-    ; Use GAIA and 2MASS to calibrate  
-    push,refcat,['2MASS-PSC']
+    ; Use PS1 if possible
+    if cendec gt -29 then begin
+      push,refcat,['2MASS-PSC','PS']
+    endif else begin
+      ; Use GAIA and 2MASS to calibrate  
+      push,refcat,['2MASS-PSC']
+    endelse
   end
   ; DECam Y-band
   'c4d-Y': begin
-    ; Use 2MASS to calibrate
-    push,refcat,['2MASS-PSC']
+    ; Use PS1 if possible
+    if cendec gt -29 then begin
+      push,refcat,['2MASS-PSC','PS']
+    endif else begin
+      ; Use 2MASS to calibrate
+      push,refcat,['2MASS-PSC']
+    endelse
   end
   ; DECam VR-band
   'c4d-VR': begin

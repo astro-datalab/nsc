@@ -83,7 +83,8 @@ endif else begin
       server = 'dldb1.sdm.noao.edu'
     endif
     if refname eq 'PS' then begin
-      tablename = 'cp_calib.ps1'
+      ;tablename = 'cp_calib.ps1'
+      tablename = 'public.ps1'
       cols = 'ra, dec, g as gmag, r as rmag, i as imag, z as zmag, y as ymag'
       server = 'gp02.datalab.noao.edu'
     endif
