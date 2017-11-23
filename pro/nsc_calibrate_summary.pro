@@ -21,16 +21,18 @@ list.instrument = strtrim(list.instrument,2)
 list.filter = strtrim(list.filter,2)
 
 ; Load all the summary/metadata files
-expstr = replicate({expdir:'',instrument:'',pix:0L,metafile:'',success:0,file:'',base:'',expnum:0L,ra:0.0d0,dec:0.0d,dateobs:'',mjd:0.0d0,filter:'',exptime:0.0,$
-                    airmass:0.0,nsources:0L,fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,zpterm:0.0,zptermerr:0.0,zptermsig:0.0,$
-                    zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L,depth95:99.99,depth10sig:99.99},nlist)
+expstr = replicate({expdir:'',instrument:'',pix:0L,metafile:'',success:0,file:'',wtfile:'',maskfile:'',base:'',expnum:0L,ra:0.0d0,dec:0.0d0,dateobs:'',$
+                    mjd:0.0d,filter:'',exptime:0.0,airmass:0.0,nsources:0L,fwhm:0.0,nchips:0L,rarms:999999.0,rastderr:999999.0,decrms:999999.0,decstderr:999999.0,$
+                    ebv:0.0,gaianmatch:0L,gaiagoodnmatch:0L,zpterm:999999.0,zptermerr:99999.0,zptermsig:999999.0,zpspatialvar_rms:999999.0,$
+                    zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L,nrefgdmatch:0L,depth95:99.99,depth10sig:99.99},nlist)
 expstr.expdir = list.expdir
 expstr.instrument = list.instrument
 expstr.filter = list.filter
 expstr.pix = list.pix
 chstr = replicate({expdir:'',instrument:'',success:0,filename:'',ccdnum:0L,nsources:0L,cenra:999999.0d0,cendec:999999.0d0,$
-                   gaianmatch:0L,rarms:999999.0,racoef:dblarr(4),decrms:999999.0,$
-                   deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,zptermerr:999999.0,nrefmatch:0L,depth95:99.99,depth10sig:99.99},nlist*61)
+                   gaianmatch:0L,gaiagoodnmatch:0L,rarms:999999.0,rastderr:999999.0,racoef:dblarr(4),decrms:999999.0,$
+                   decstderr:999999.0,deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,$
+                   zptermerr:999999.0,nrefmatch:0L,depth95:99.99,depth10sig:99.99},nlist*61)
 chcnt = 0LL
 for i=0,nlist-1 do begin
   if (i+1) mod 5000 eq 0 then print,i+1
@@ -45,6 +47,8 @@ for i=0,nlist-1 do begin
   endcase
 
   metafile = expstr[i].expdir+'/'+base+'_meta.fits'
+  lo = strpos(metafile,'/dl1')
+  metafile = dldir + strmid(metafile,lo+5)
   expstr[i].metafile = metafile
   if file_test(metafile) eq 1 then begin
     ; Exposure structure
@@ -63,7 +67,12 @@ for i=0,nlist-1 do begin
     chstr[chcnt:chcnt+nchstr1-1].instrument = expstr[i].instrument
     chstr[chcnt:chcnt+nchstr1-1].success = 1
     chcnt += nchstr1
-    
+    ; Add RASTDERR/DECSTDERR to expstr
+    if tag_exist(chstr1,'RASTDERR') then begin
+      expstr[i].rastderr = median(chstr1.rastderr)
+      expstr[i].decstderr = median(chstr1.decstderr)
+    endif    
+
     ; Fix missing DATE-OBS
     if strtrim(expstr[i].dateobs,2) eq '' or strtrim(expstr[i].dateobs,2) eq '0' then begin
       fluxfile = strtrim(expstr[i].file)
@@ -83,7 +92,7 @@ for i=0,nlist-1 do begin
       expstr[i].airmass = AIRMASS(jd,ra,dec,lat,lon)
    endif
 
- endif else expstr[i].success=0
+  endif else expstr[i].success=0
 endfor
 ; Trim CHSTR structure
 chstr = chstr[0:chcnt-1]
