@@ -116,7 +116,8 @@ endif else begin
   ; Use QUERYVIZIER
   ;   for low density with 2MASS/GAIA and always for GALEX and APASS
   endif else begin
-    if refcat eq 'APASS' then cfa=0 else cfa=1  ; cfa doesn't have APASS                                                                                                        
+    ;if refcat eq 'APASS' then cfa=0 else cfa=1  ; cfa doesn't have APASS
+    cfa = 1  ; problems with CDS VizieR and cfa has APASS now
     ref = QUERYVIZIER(refcat,[cenra,cendec],radius*60,cfa=cfa)
    
     ; Check for failure
