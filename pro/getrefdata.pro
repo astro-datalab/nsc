@@ -169,7 +169,7 @@ for i=0,nrefcat-1 do begin
   case refcat[i] of
   'GAIA/GAIA':   ; do nothing
   '2MASS-PSC': push,newtags,['jmag','e_jmag','kmag','e_kmag','qflg']
-  'PS': push,newtags,['ps_gmag','ps_rmag','ps_zmag']
+  'PS': push,newtags,['ps_gmag','ps_rmag','ps_imag','ps_zmag','ps_ymag']
   'APASS': push,newtags,['apass_gmag','e_apass_gmag','apass_rmag','e_apass_rmag']
   'II/312/ais': push,newtags,['nuv','e_nuv']  ; Galex
   else: stop,refcat[i]+' NOT SUPPORTED'
