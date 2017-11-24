@@ -239,7 +239,9 @@ for i=0,nrefcat-1 do begin
       'PS': begin
          ref[ind1].ps_gmag = ref1[ind2].gmag
          ref[ind1].ps_rmag = ref1[ind2].rmag
+         ref[ind1].ps_imag = ref1[ind2].imag
          ref[ind1].ps_zmag = ref1[ind2].zmag
+         ref[ind1].ps_ymag = ref1[ind2].ymag
       end
       'APASS': begin
          ref[ind1].apass_gmag = ref1[ind2].g_mag
