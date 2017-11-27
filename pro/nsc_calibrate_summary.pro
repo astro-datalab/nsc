@@ -52,7 +52,7 @@ for i=0,nlist-1 do begin
   expstr[i].metafile = metafile
   if file_test(metafile) eq 1 then begin
     metainfo = file_info(metafile)
-    expstr[i].metadata = metainfo.ctime
+    expstr[i].metadate = metainfo.ctime
     ; Exposure structure
     expstr1 = MRDFITS(metafile,1,/silent)
     temp = expstr[i]
