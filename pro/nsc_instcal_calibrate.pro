@@ -101,7 +101,7 @@ add_tag,schema,'MJD',0.0d0,schema
 cat = REPLICATE(schema,ncat)
 ; Start the chips summary structure
 chstr = replicate({expdir:'',instrument:'',filename:'',ccdnum:0L,nsources:0L,cenra:999999.0d0,cendec:999999.0d0,$
-                   gaianmatch:0L,gaiagoodnmatch:0L,rarms:999999.0,rastderr:999999.0,racoef:dblarr(4),decrms:999999.0,$
+                   ngaiamatch:0L,ngoodgaiamatch:0L,rarms:999999.0,rastderr:999999.0,racoef:dblarr(4),decrms:999999.0,$
                    decstderr:999999.0,deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,$
                    zptermerr:999999.0,nrefmatch:0L,depth95:99.99,depth10sig:99.99},nchips)
 chstr.expdir = expdir
@@ -188,6 +188,14 @@ if range(minmax(chstr[gdchip].cenra)) gt 100 then begin
 endif else rawrap=0
 printlog,logf,'CENRA  = ',stringize(cenra,ndec=5)
 printlog,logf,'CENDEC = ',stringize(cendec,ndec=5)
+glactc,cenra,cendec,2000.0,glon,glat,1,/deg
+printlog,logf,'GLON = ',stringize(glon,ndec=5)
+printlog,logf,'GLAT = ',stringize(glat,ndec=5)
+
+; Number of good sources
+goodsources = where(cat.imaflags_iso eq 0 and not ((cat.flags and 8) eq 8) and not ((cat.flags and 16) eq 16) and $
+                    cat.mag_auto lt 50,ngoodsources)
+printlog,logf,'GOOD SRCS = ',strtrim(ngoodsources,2)
 
 ; Measure median seeing FWHM
 gdcat = where(cat.mag_auto lt 50 and cat.magerr_auto lt 0.05 and cat.class_star gt 0.8,ngdcat)
@@ -251,6 +259,20 @@ cat.filter = filter
 cat.mjd = mjd
 cat.sourceid = instrument+'.'+strtrim(expnum,2)+'.'+strtrim(cat.ccdnum,2)+'.'+strtrim(cat.number,2)
 
+; Start the exposure-level structure
+expstr = {file:fluxfile,wtfile:wtfile,maskfile:maskfile,instrument:'',base:base,expnum:long(expnum),ra:0.0d0,dec:0.0d0,dateobs:string(dateobs),$
+          mjd:0.0d,filter:filter,exptime:float(exptime),airmass:0.0,nsources:long(ncat),ngoodsources:0L,fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,ngaiamatch:0L,$
+          ngoodgaiamatch:0L,zptype:0,zpterm:999999.0,zptermerr:99999.0,zptermsig:999999.0,zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,$
+          zpspatialvar_nccd:0,nrefmatch:0L,ngoodrefmatch:0L,depth95:99.99,depth10sig:99.99}
+expstr.instrument = instrument
+expstr.ra = cenra
+expstr.dec = cendec
+expstr.mjd = mjd
+;expstr.mjd = photred_getmjd('','CTIO',dateobs=dateobs)
+expstr.nchips = nchips
+expstr.airmass = airmass
+expstr.fwhm = medfwhm
+expstr.ngoodsources = ngoodsources
 
 ; Step 2. Load the reference catalogs
 ;------------------------------------
@@ -404,8 +426,8 @@ For i=0,nchips-1 do begin
   cat1.decerr = sqrt(cat1.decerr^2 + decrms^2)
   ; Stuff back into the main structure
   cat[chind2] = cat1
-  chstr[i].gaianmatch = ngmatch
-  chstr[i].gaiagoodnmatch = nqcuts1
+  chstr[i].ngaiamatch = ngmatch
+  chstr[i].ngoodgaiamatch = nqcuts1
   chstr[i].rarms = rarms
   chstr[i].rastderr = rastderr
   chstr[i].racoef = racoef
@@ -420,34 +442,20 @@ glactc,cat.ra,cat.dec,2000.0,glon,glat,1,/deg
 ebv = dust_getval(glon,glat,/noloop,/interp)
 cat.ebv = ebv
 
-
-; Step 4. Photometric calibration
-;--------------------------------
-; Do it on the exposure level
-printlog,logf,'' & printlog,logf,'Step 4. Photometric calibration'
-printlog,logf,'-------------------------------'
-expstr = {file:fluxfile,wtfile:wtfile,maskfile:maskfile,instrument:'',base:base,expnum:long(expnum),ra:0.0d0,dec:0.0d0,dateobs:string(dateobs),$
-          mjd:0.0d,filter:filter,exptime:float(exptime),airmass:0.0,nsources:long(ncat),fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,$
-          gaiagoodnmatch:0L,zptype:0,zpterm:999999.0,zptermerr:99999.0,zptermsig:999999.0,zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,$
-          zpspatialvar_nccd:0,nrefmatch:0L,nrefgdmatch:0L,depth95:99.99,depth10sig:99.99}
-expstr.instrument = instrument
-expstr.ra = cenra
-expstr.dec = cendec
-expstr.mjd = mjd
-;expstr.mjd = photred_getmjd('','CTIO',dateobs=dateobs)
-expstr.nchips = nchips
-expstr.airmass = airmass
+; Put in exposure-level information
 expstr.rarms = median(chstr.rarms)
 expstr.decrms = median(chstr.decrms)
 expstr.ebv = median(ebv)
 ;expstr.gaianmatch = median(chstr.gaianmatch)
-expstr.gaianmatch = total(chstr.gaianmatch)
-expstr.gaiagoodnmatch = total(chstr.gaiagoodnmatch)
-expstr.fwhm = medfwhm
-cat.mjd = expstr.mjd
+expstr.ngaiamatch = total(chstr.ngaiamatch)
+expstr.ngoodgaiamatch = total(chstr.ngoodgaiamatch)
 
+
+; Step 4. Photometric calibration
+;--------------------------------
+printlog,logf,'' & printlog,logf,'Step 4. Photometric calibration'
+printlog,logf,'-------------------------------'
 instfilt = instrument+'-'+filter    ; instrument-filter combination
-
 
 CASE instfilt of
 ; ---- DECam u-band ----
@@ -1113,9 +1121,12 @@ ENDCASE
 ; Measure the zero-point
 NSC_INSTCAL_CALIBRATE_FITZPTERM,mstr,expstr,chstr
 expstr.zptype = 1
+
+ENDBOMB:
+
 ; Use self-calibration
-if n_elements(mstr.mag) le 5 and keyword_set(selfcal) then begin
-  NSC_INSTCAL_CALIBRATE_SELFCALZPTERM,cat,expstr,chstr
+if expstr.nrefmatch le 5 and keyword_set(selfcal) then begin
+  NSC_INSTCAL_CALIBRATE_SELFCALZPTERM,expdir,cat,expstr,chstr
   expstr.zptype = 2
 endif
 ; Apply the zero-point to the full catalogs
@@ -1123,7 +1134,7 @@ gdcatmag = where(cat.mag_auto lt 50,ngd)
 cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + expstr.zpterm
 cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + expstr.zptermerr^2)  ; add calibration error in quadrature
 ; Print out the results
-printlog,logf,strtrim(ngdcat,2)+' good sources'
+printlog,logf,'NPHOTREFMATCH=',strtrim(expstr.nrefmatch,2)
 printlog,logf,'ZPTERM=',stringize(expstr.zpterm,ndec=4),'+/-',stringize(expstr.zptermerr,ndec=4),'  SIG=',stringize(expstr.zptermsig,ndec=4),'mag'
 printlog,logf,'ZPSPATIALVAR:  RMS=',stringize(expstr.zpspatialvar_rms,ndec=3),' ',$
          'RANGE=',stringize(expstr.zpspatialvar_range,ndec=3),' NCCD=',strtrim(expstr.zpspatialvar_nccd,2)
@@ -1161,7 +1172,15 @@ endif
 
 ; Step 5. Write out the final catalogs and metadata
 ;--------------------------------------------------
-ENDBOMB:
+if keyword_set(redo) and keyword_set(selfcal) and expstr.zptype eq 2 then begin
+  ; Create backup of original versions
+  printlog,logf,'Copying cat and meta files to v1 versions'
+  metafile = expdir+'/'+base+'_meta.fits'
+  if file_test(metafile) eq 1 then FILE_COPY,metafile,expdir+'/'+base+'_meta.v1.fits',/overwrite
+  if file_test(outfile) eq 1 then FILE_COPY,outfile,expdir+'/'+base+'_cat.v1.fits',/overwrite
+  if file_test(logfile) eq 1 then FILE_COPY,logf,expdir+'/'+base+'_calib.v1.log',/overwrite
+endif
+
 printlog,logf,'' & printlog,logf,'Writing final catalog to ',outfile
 MWRFITS,cat,outfile,/create
 ;if file_test(outfile+'.gz') eq 1 then file_delete,outfile+'.gz'

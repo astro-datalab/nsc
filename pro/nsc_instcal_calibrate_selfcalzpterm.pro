@@ -16,6 +16,8 @@ t0 = systime(1)
 
 if n_elements(logfile) eq 0 then logf=-1 else logf=logfile
 
+printlog,logf,'Self-calibrating'
+
 ; Set zero-point column to bad by default
 expstr.zpterm = 999999.
 expstr.zptermerr = 999999.
@@ -24,7 +26,7 @@ expstr.zpspatialvar_rms = 999999.
 expstr.zpspatialvar_range = 999999.
 expstr.zpspatialvar_nccd = 0
 expstr.nrefmatch = 0
-expstr.nrefgdmatch = 0
+expstr.ngoodrefmatch = 0
 chstr.zpterm = 999999.
 chstr.zptermerr = 999999.
 chstr.nrefmatch = 0
@@ -98,6 +100,7 @@ FOR i=0,nrefexp-1 do begin
 
   ; Load the catalog
   catfile = strtrim(refexp[i].expdir,2)+'/'+strtrim(refexp[i].base,2)+'_cat.fits'
+  if strmid(catfile,0,4) eq '/net' and strmid(dldir,0,4) ne '/net' then catfile=strmid(catfile,4)
   cat1 = MRDFITS(catfile,1,/silent)
   ; Only want good ones
   gdcat1 = where(cat1.imaflags_iso eq 0 and ((cat1.flags and 8) ne 8) and ((cat1.flags and 16) ne 16) and $
@@ -111,7 +114,7 @@ FOR i=0,nrefexp-1 do begin
 
   ; Only want sources inside the radius of the exposure
 
-  if not keyword_set(silent) then printlog,logf,i+1,ngdcat1,'   '+refexp[i].base,format='(I5,I10,A-50)'
+  if not keyword_set(silent) then printlog,logf,i+1,ngdcat1,'   '+refexp[i].base,format='(I-5,I10,A-50)'
 
   ; Some good sources
   if ngdcat1 gt 0 then begin
@@ -142,7 +145,7 @@ FOR i=0,nrefexp-1 do begin
 
       ; Crossmatch
       SRCMATCH,ref[0:refcnt-1].ra,ref[0:refcnt-1].dec,newcat.ra,newcat.dec,0.5,ind1,ind2,/sph,count=nmatch
-      if not keyword_set(silent) then printlog,logf,'   ',strtrim(nmatch,2),' crossmatches'
+      if not keyword_set(silent) then printlog,logf,'  ',strtrim(nmatch,2),' crossmatches'
 
       ; Combine crossmatches
       if nmatch gt 0 then begin
@@ -156,7 +159,7 @@ FOR i=0,nrefexp-1 do begin
 
       ; Add leftover ones
       if n_elements(newcat) gt 0 then begin
-        if not keyword_set(silent) then printlog,logf,'   Adding ',strtrim(n_elements(newcat),2),' leftovers'
+        if not keyword_set(silent) then printlog,logf,'  Adding ',strtrim(n_elements(newcat),2),' leftovers'
         ; Convert CMAG/CMAGERR to cumulative quantities
         cmag = 2.5118864d^newcat.cmag * (1.0d0/newcat.cerr^2)
         cerr = 1.0d0/newcat.cerr^2
@@ -235,7 +238,7 @@ expstr.zpterm = zpterm
 expstr.zptermerr = zptermerr
 expstr.zptermsig = sig
 expstr.nrefmatch = n
-expstr.nrefgdmatch = ngd
+expstr.ngoodrefmatch = ngd
 
 ; Measure chip-level zpterm and variations
 nchips = n_elements(chstr)
@@ -261,15 +264,15 @@ if ngdchip gt 1 then begin
 endif
 
 ; Print out the results
-if not keyword_set(silent) then begin
-  printlog,logf,'NMATCH = ',strtrim(nmatch,2)
-  printlog,logf,'ZPTERM=',stringize(expstr.zpterm,ndec=4),'+/-',stringize(expstr.zptermerr,ndec=4),'  SIG=',stringize(expstr.zptermsig,ndec=4),'mag'
-  printlog,logf,'ZPSPATIALVAR:  RMS=',stringize(expstr.zpspatialvar_rms,ndec=3),' ',$
-           'RANGE=',stringize(expstr.zpspatialvar_range,ndec=3),' NCCD=',strtrim(expstr.zpspatialvar_nccd,2)
-endif
+;if not keyword_set(silent) then begin
+;  printlog,logf,'NMATCH = ',strtrim(expstr.ngoodrefmatch,2)
+;  printlog,logf,'ZPTERM=',stringize(expstr.zpterm,ndec=4),'+/-',stringize(expstr.zptermerr,ndec=4),'  SIG=',stringize(expstr.zptermsig,ndec=4),'mag'
+;  printlog,logf,'ZPSPATIALVAR:  RMS=',stringize(expstr.zpspatialvar_rms,ndec=3),' ',$
+;           'RANGE=',stringize(expstr.zpspatialvar_range,ndec=3),' NCCD=',strtrim(expstr.zpspatialvar_nccd,2)
+;endif
 
-dt = systime(1)-t0
-if not keyword_set(silent) then printlog,logf,'dt = ',stringize(dt,ndec=2),' sec.'
+;dt = systime(1)-t0
+;if not keyword_set(silent) then printlog,logf,'dt = ',stringize(dt,ndec=2),' sec.'
 
 if keyword_set(stp) then stop
 
