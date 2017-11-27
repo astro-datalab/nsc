@@ -22,9 +22,9 @@ list.filter = strtrim(list.filter,2)
 
 ; Load all the summary/metadata files
 expstr = replicate({expdir:'',instrument:'',pix:0L,metafile:'',metadate:0LL,success:0,file:'',wtfile:'',maskfile:'',base:'',expnum:0L,ra:0.0d0,dec:0.0d0,dateobs:'',$
-                    mjd:0.0d,filter:'',exptime:0.0,airmass:0.0,nsources:0L,fwhm:0.0,nchips:0L,rarms:999999.0,rastderr:999999.0,decrms:999999.0,decstderr:999999.0,$
-                    ebv:0.0,gaianmatch:0L,gaiagoodnmatch:0L,zptype:1,zpterm:999999.0,zptermerr:99999.0,zptermsig:999999.0,zpspatialvar_rms:999999.0,$
-                    zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L,nrefgdmatch:0L,depth95:99.99,depth10sig:99.99},nlist)
+                    mjd:0.0d,filter:'',exptime:0.0,airmass:0.0,nsources:0L,ngoodsources:0L,fwhm:0.0,nchips:0L,rarms:999999.0,rastderr:999999.0,decrms:999999.0,decstderr:999999.0,$
+                    ebv:0.0,ngaiamatch:0L,ngoodgaiamatch:0L,zptype:1,zpterm:999999.0,zptermerr:99999.0,zptermsig:999999.0,zpspatialvar_rms:999999.0,$
+                    zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L,ngoodrefmatch:0L,depth95:99.99,depth10sig:99.99},nlist)
 expstr.expdir = list.expdir
 expstr.instrument = list.instrument
 expstr.filter = list.filter

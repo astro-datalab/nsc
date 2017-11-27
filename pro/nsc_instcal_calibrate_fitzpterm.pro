@@ -17,7 +17,7 @@ expstr.zpterm = zpterm
 expstr.zptermerr = zptermerr
 expstr.zptermsig = sig
 expstr.nrefmatch = n
-expstr.nrefgdmatch = ngd
+expstr.ngoodrefmatch = ngd
 
 ; Measure chip-level zpterm and variations 
 nchips = n_elements(chstr)
