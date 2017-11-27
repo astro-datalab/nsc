@@ -119,7 +119,18 @@ cmd = 'nsc_instcal_calibrate,"'+expdir+'",/redo,/selfcal'
 dirs = strarr(ng)+tmpdir
 lockfiles = expdir+file_basename(expdir)+'.lock'
 donefiles = expdir+file_basename(expdir)+'.caldone'
+done = where(file_test(donefiles) eq 1,ndone)
+if ndone gt 0 then remove,done,cmd,dirs
 
+
+; hulk
+;PBS_DAEMON,cmd[0:2781],dirs[0:2781],jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
+
+; thing
+;PBS_DAEMON,cmd[2782:5563],dirs[2782:5563],jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
+
+; hulk
+;PBS_DAEMON,cmd[5564:*],dirs[5564:*],jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
 
 stop
 
