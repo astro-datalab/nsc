@@ -1178,7 +1178,7 @@ if keyword_set(redo) and keyword_set(selfcal) and expstr.zptype eq 2 then begin
   metafile = expdir+'/'+base+'_meta.fits'
   if file_test(metafile) eq 1 then FILE_COPY,metafile,expdir+'/'+base+'_meta.v1.fits',/overwrite
   if file_test(outfile) eq 1 then FILE_COPY,outfile,expdir+'/'+base+'_cat.v1.fits',/overwrite
-  if file_test(logfile) eq 1 then FILE_COPY,logf,expdir+'/'+base+'_calib.v1.log',/overwrite
+  if file_test(logf) eq 1 then FILE_COPY,logf,expdir+'/'+base+'_calib.v1.log',/overwrite
 endif
 
 printlog,logf,'' & printlog,logf,'Writing final catalog to ',outfile

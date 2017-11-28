@@ -22,8 +22,8 @@ list.filter = strtrim(list.filter,2)
 
 ; Load all the summary/metadata files
 expstr = replicate({expdir:'',instrument:'',pix:0L,metafile:'',metadate:0LL,success:0,file:'',wtfile:'',maskfile:'',base:'',expnum:0L,ra:0.0d0,dec:0.0d0,dateobs:'',$
-                    mjd:0.0d,filter:'',exptime:0.0,airmass:0.0,nsources:0L,ngoodsources:0L,fwhm:0.0,nchips:0L,rarms:999999.0,rastderr:999999.0,decrms:999999.0,decstderr:999999.0,$
-                    ebv:0.0,ngaiamatch:0L,ngoodgaiamatch:0L,zptype:1,zpterm:999999.0,zptermerr:99999.0,zptermsig:999999.0,zpspatialvar_rms:999999.0,$
+                    mjd:0.0d,filter:'',exptime:0.0,airmass:0.0,nsources:0L,ngoodsources:-1L,fwhm:0.0,nchips:0L,rarms:999999.0,rastderr:999999.0,decrms:999999.0,decstderr:999999.0,$
+                    ebv:0.0,ngaiamatch:0L,ngoodgaiamatch:-1L,zptype:1,zpterm:999999.0,zptermerr:99999.0,zptermsig:999999.0,zpspatialvar_rms:999999.0,$
                     zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L,ngoodrefmatch:0L,depth95:99.99,depth10sig:99.99},nlist)
 expstr.expdir = list.expdir
 expstr.instrument = list.instrument
@@ -57,6 +57,10 @@ for i=0,nlist-1 do begin
     expstr1 = MRDFITS(metafile,1,/silent)
     temp = expstr[i]
     STRUCT_ASSIGN,expstr1,temp,/nozero
+    ; old versions
+    if tag_exist(expstr1,'gaianmatch') then temp.ngaiamatch=expstr1.gaianmatch
+    if tag_exist(expstr1,'gaiagoodnmatch') then temp.ngoodgaiamatch=expstr1.gaiagoodnmatch
+    if tag_exist(expstr1,'nrefgdmatch') then temp.ngoodrefmatch=expstr1.nrefgdmatch
     expstr[i] = temp
     expstr[i].success = 1
     ; Chip structure
