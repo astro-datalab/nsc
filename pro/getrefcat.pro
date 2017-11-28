@@ -47,6 +47,13 @@ endif
 ; Defaults
 if n_elements(logfile) eq 0 then logf=-1 else logf=logfile
 
+; Temporary directory
+; /tmp is often small and get get fille dup
+NSC_ROOTDIRS,dldir,mssdir,localdir
+if n_elements(version) eq 0 then version='v2'
+dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
+tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
+
 ; FLIP THIS AROUND, INPUT SHOULD BE THE "EASY" VERSION!!!
 refname = strupcase(refcat)
 if refname eq 'II/312/AIS' then refname='GALEX'
@@ -54,7 +61,7 @@ if refname eq '2MASS-PSC' then refname='TMASS'
 if refname eq '2MASS' then refname='TMASS'
 if refname eq 'GAIA/GAIA' then refname='GAIA'
 
-if n_elements(file) eq 0 then file='/tmp/ref_'+stringize(cenra,ndec=5)+'_'+stringize(cendec,ndec=5)+'_'+stringize(radius,ndec=3)+'_'+refname+'.fits'
+if n_elements(file) eq 0 then file=tmpdir+'ref_'+stringize(cenra,ndec=5)+'_'+stringize(cendec,ndec=5)+'_'+stringize(radius,ndec=3)+'_'+refname+'.fits'
 
 if not keyword_set(silent) then $
   printlog,logf,'Querying '+refname+': RA='+stringize(cenra,ndec=5)+' DEC='+stringize(cendec,ndec=5)+' Radius='+stringize(radius,ndec=3)
