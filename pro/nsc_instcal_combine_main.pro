@@ -37,7 +37,7 @@ print, "Combining NOAO InstCal catalogs"
 temp = MRDFITS(dir+'lists/nsc_instcal_calibrate.fits',1,/silent)
 schema = temp[0]
 struct_assign,{dum:''},schema
-schema = create_struct(schema,'chipindx',-1LL)
+schema = create_struct(schema,'chipindx',-1LL,'NGOODCHIPWCS',0)
 str = replicate(schema,n_elements(temp))
 struct_assign,temp,str,/nozero
 str.expdir = strtrim(str.expdir,2)
@@ -46,6 +46,21 @@ str.metafile = strtrim(str.metafile,2)
 str.file = strtrim(str.file,2)
 str.base = strtrim(str.base,2)
 str.filter = strtrim(str.filter,2)
+; Add WCSCAL and TELSTAT information
+add_tag,str,'wcscal','',str
+add_tag,str,'telstat','',str
+coords = MRDFITS(dir+'lists/allcoords.fits',1)
+coords.file = strtrim(coords.file,2)
+coords.wcscal = strtrim(coords.wcscal,2)
+coords.telstat = strtrim(coords.telstat,2)
+fluxfile = str.file
+g = where(strmid(fluxfile,0,4) eq '/net',ng)
+if ng gt 0 then fluxfile[g]=strmid(fluxfile[g],4)
+MATCH,fluxfile,coords.file,ind1,ind2,/sort
+str[ind1].wcscal = coords[ind2].wcscal    ; Failed (3153), Poor (14), Successful (308190)
+str[ind1].telstat = coords[ind2].telstat  ; NAN (68188), Not (1222), Track (241826), UNKNOWN (116), Unknown (5)
+; the 2054 failed exposures did not match b/c no fluxfile info
+; Only want exposures with successful SE processing
 gd = where(str.success eq 1,nstr)
 str = str[gd]
 si = sort(str.expdir)
@@ -57,13 +72,15 @@ nchstr = n_elements(chstr)
 ; Get indices for CHSTR
 siexp = sort(chstr.expdir)
 chstr = chstr[siexp]
-expdir = chstr[siexp].expdir
+expdir = chstr.expdir
 brklo = where(expdir ne shift(expdir,1),nbrk)
 brkhi = [brklo[1:nbrk-1]-1,n_elements(expdir)-1]
 nchexp = brkhi-brklo+1
 if nstr ne n_elements(brklo) then stop,'number of exposures in STR and CHSTR do not match'
 str.chipindx = brklo
 str.nchips = nchexp
+; Getting number of good chip WCS for each exposures
+for i=0,n_elements(str)-1 do str[i].ngoodchipwcs = total(chstr[brklo[i]:brkhi[i]].gaianmatch gt 0)
 ; Fixing absolute paths of flux filename
 file = str.file
 g1 = where(stregex(file,'/net/mss1/',/boolean) eq 1,ng1)
@@ -135,15 +152,18 @@ zpstr[9].filter = 'r'
 zpstr[9].amcoef = [-4.11, 0.0]
 nzpstr = n_elements(zpstr)
 
+STOP,'DOUBLE-CHECK THESE ZERO-POINTS!!!'
+
 ; APPLY QA CUTS IN ZEROPOINT AND SEEING
 If not keyword_set(nocuts) then begin
-  print,'APPLY QA CUTS IN ZEROPOINT AND SEEING'
-  fwhmthresh = 3.0  ; arcsec
+  print,'APPLYING QA CUTS'
+  ;fwhmthresh = 3.0  ; arcsec, v1
+  fwhmthresh = 2.0  ; arcsec, v2
   ;filters = ['u','g','r','i','z','Y','VR']
   ;nfilters = n_elements(filters)
   ;zpthresh = [2.0,2.0,2.0,2.0,2.0,2.0,2.0]
   ;zpthresh = [0.5,0.5,0.5,0.5,0.5,0.5,0.5]
-  badmask = bytarr(n_elements(str)) + 1
+  badzpmask = bytarr(n_elements(str)) + 1
 
   for i=0,nzpstr-1 do begin
     ind = where(str.instrument eq zpstr[i].instrument and str.filter eq zpstr[i].filter and str.success eq 1,nind)
@@ -169,7 +189,7 @@ If not keyword_set(nocuts) then begin
       ;bdind = where(str[ind].zpterm-medzp lt -zpthresh[i],nbdind)
       gdind = where(zpterm ge -zpstr[i].thresh and zpterm le zpstr[i].thresh,ngdind,comp=bdind,ncomp=nbdind)
       print,'  ',strtrim(nbdind,2),' exposures with ZPTERM below the threshold'    
-      if ngdind gt 0 then badmask[ind[gdind]] = 0
+      if ngdind gt 0 then badzpmask[ind[gdind]] = 0
     endif
   endfor
   ; Get bad DECaLS and SMASH exposures
@@ -196,11 +216,19 @@ If not keyword_set(nocuts) then begin
   ; Final QA cuts
   ;  Many of the short u-band exposures have weird ZPTERMs, not sure why
   ;  There are a few exposures with BAD WCS, RA>360!
-  bdexp = where(str.fwhm gt fwhmthresh or str.ra gt 360 or badmask eq 1 or badexp eq 1 or $
-                str.rarms gt 0.2 or str.decrms gt 0.2 or $
-                (str.instrument eq 'c4d' and str.zpspatialvar_nccd gt 5 and str.zpspatialvar_rms gt 0.1),nbdexp)
+  bdexp = where(str.success eq 0 or $                              ; SE failure
+                str.wcscal ne 'Successful' or $                    ; CP WCS failure
+                str.fwhm gt fwhmthresh or $                        ; bad seeing
+                str.ra gt 360 or $                                 ; bad WCS/coords
+                str.rarms gt 0.15 or str.decrms gt 0.15 or $       ; bad WCS
+                badzpmask eq 1 or $                                ; bad ZPTERM
+                str.zptermerr gt 0.05 or $                         ; bad ZPTERMERR
+                str.nrefmatch lt 5 or $                            ; few phot ref match
+                badexp eq 1 or $                                   ; bad SMASH/LS exposure
+                (str.instrument eq 'c4d' and str.zpspatialvar_nccd gt 5 and str.zpspatialvar_rms gt 0.1),nbdexp)  ; bad spatial zpterm
   ; rarms/decrms, nrefmatch
   print,'QA cuts remove ',strtrim(nbdexp,2),' exposures'
+stop
   ; Remove
   torem = bytarr(nchstr)
   for i=0,nbdexp-1 do torem[str[bdexp[i]].chipindx:str[bdexp[i]].chipindx+str[bdexp[i]].nchips-1]=1
