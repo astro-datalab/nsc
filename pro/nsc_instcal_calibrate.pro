@@ -157,6 +157,8 @@ for i=0,ncatfiles-1 do begin
       ra = cat1.alpha_j2000
       bdra = where(ra gt 180,nbdra)
       if nbdra gt 0 then ra[bdra]-=360
+      bdra2 = where(ra lt -180,nbdra2)
+      if nbdra2 gt 0 then ra[bdra2]+=360
       cenra = mean(minmax(ra))
       if cenra lt 0 then cenra+=360
     endif
@@ -181,6 +183,8 @@ if range(minmax(chstr[gdchip].cenra)) gt 100 then begin
  ra = chstr[gdchip].cenra
  bdra = where(ra gt 180,nbdra)
  if nbdra gt 0 then ra[bdra]-=360
+ bdra2 = where(ra lt -180,nbdra2)
+ if nbdra2 gt 0 then ra[bdra2]+=360
  cenra = mean(minmax(ra))
  if cenra lt 0 then cenra+=360
  rarange = range(ra)*cos(cendec/!radeg)
@@ -191,7 +195,6 @@ printlog,logf,'CENDEC = ',stringize(cendec,ndec=5)
 glactc,cenra,cendec,2000.0,glon,glat,1,/deg
 printlog,logf,'GLON = ',stringize(glon,ndec=5)
 printlog,logf,'GLAT = ',stringize(glat,ndec=5)
-
 ; Number of good sources
 goodsources = where(cat.imaflags_iso eq 0 and not ((cat.flags and 8) eq 8) and not ((cat.flags and 16) eq 16) and $
                     cat.mag_auto lt 50,ngoodsources)
