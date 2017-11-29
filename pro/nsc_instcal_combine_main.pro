@@ -225,6 +225,7 @@ If not keyword_set(nocuts) then begin
                 str.zptermerr gt 0.05 or $                         ; bad ZPTERMERR
                 str.nrefmatch lt 5 or $                            ; few phot ref match
                 badexp eq 1 or $                                   ; bad SMASH/LS exposure
+                ;str.ngoodchipwcs lt str.nchips or $                ; not all chips astrom calibrated
                 (str.instrument eq 'c4d' and str.zpspatialvar_nccd gt 5 and str.zpspatialvar_rms gt 0.1),nbdexp)  ; bad spatial zpterm
   ; rarms/decrms, nrefmatch
   print,'QA cuts remove ',strtrim(nbdexp,2),' exposures'
