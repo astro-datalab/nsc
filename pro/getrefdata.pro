@@ -24,7 +24,7 @@
 ;  =count    Number of elements in REF.
 ;
 ; USAGE:
-;  IDL>cat = getrefcat('g',cenra,cendec,radius,saveref=saveref)
+;  IDL>cat = getrefdata('g',cenra,cendec,radius,saveref=saveref)
 ;
 ; By D. Nidever  Sep 2017
 ;-
@@ -274,7 +274,9 @@ for i=0,nrefcat-1 do begin
       'PS': begin
          new.ps_gmag = left1.gmag
          new.ps_rmag = left1.rmag
+         new.ps_imag = left1.imag
          new.ps_zmag = left1.zmag
+         new.ps_ymag = left1.ymag
       end
       'APASS': begin
          new.apass_gmag = left1.g_mag
