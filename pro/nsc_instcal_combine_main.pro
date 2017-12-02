@@ -503,10 +503,26 @@ dt = dt[hsi]
 index = index[hsi]
 
 ; Divide into three using total times
-tot = total(dt>10)
-totcum = total(dt>10,/cum)
-print,min(where(totcum ge tot/3))
-print,min(where(totcum ge 2*tot/3))
+;tot = total(dt>10)
+;totcum = total(dt>10,/cum)
+;print,min(where(totcum ge tot/3))
+;print,min(where(totcum ge 2*tot/3))
+
+; Slice it up
+; hulk, 1st
+cmd = cmd[0:*:3]
+cmddir = cmddir[0:*:3]
+pix = index[0:*:3].pix
+
+; thing, 2nd
+;cmd = cmd[1:*:3]
+;cmddir = cmddir[1:*:3]
+;pix = index[1:*:3].pix
+
+; gp09, 3rd
+;cmd = cmd[2:*:3]
+;cmddir = cmddir[2:*:3]
+;pix = index[2:*:3].pix
 
 ;; Prioritize longest-running jobs FIRST
 ;; Load the DECam run times
