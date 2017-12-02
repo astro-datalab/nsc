@@ -17,6 +17,10 @@ if n_elements(pix) eq 0 then begin
   return
 endif
 
+; Setting pool thread values
+if n_elements(ncpu) eq 0 then ncpu=1
+CPU, TPOOL_NTHREADS = ncpu
+
 ; Check if output file already exists
 if n_elements(outdir) eq 0 then outdir=dir+'combine/'
 subdir = strtrim(long(pix)/1000,2)    ; use the thousands to create subdirectory grouping
