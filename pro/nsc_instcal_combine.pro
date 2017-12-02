@@ -162,6 +162,15 @@ FOR i=0,nlist-1 do begin
   ;exptime = sxpar(head,'exptime')
   print,'  FILTER=',meta.filter,'  EXPTIME=',stringize(meta.exptime,ndec=1),' sec'
 
+  ; Check that all chips were astrometrically calibrated
+  chmeta = MRDFITS(metafile,2,/silent)
+  if tag_exist(chmeta,'gaianmatch') then bdch = where(chmeta.gaianmatch eq 0,nbdch) else $
+     bdch = where(chmeta.ngaiamatch eq 0,nbdch)
+  if nbdch gt 0 then begin
+    print,'  Not all chips are astrometrically calibrated for this exposure'
+    goto,BOMB
+  endif
+
   ; Remove bad chip data
   ; Half of chip 31 for MJD>56660
   ;  c4d_131123_025436_ooi_r_v2 with MJD=56619 has problems too
