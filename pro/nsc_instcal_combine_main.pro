@@ -7,6 +7,8 @@ dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 if file_test(dir+'combine/',/directory) eq 0 then file_mkdir,dir+'combine/'
 if file_test(dir+'combine/logs/',/directory) eq 0 then file_mkdir,dir+'combine/logs/'
 if file_test(localdir+'dnidever/nsc/instcal/'+version+'/') eq 0 then file_mkdir,localdir+'dnidever/nsc/instcal/'+version+'/'
+plotsdir = dir+'plots/'
+if file_test(plotsdir,/directory) eq 0 then file_mkdir,plotsdir
 nside = 128
 nmulti = 30
 radeg = 180.0d0 / !dpi
@@ -80,13 +82,38 @@ if nstr ne n_elements(brklo) then stop,'number of exposures in STR and CHSTR do 
 str.chipindx = brklo
 str.nchips = nchexp
 ; Getting number of good chip WCS for each exposures
-for i=0,n_elements(str)-1 do str[i].ngoodchipwcs = total(chstr[brklo[i]:brkhi[i]].gaianmatch gt 0)
+for i=0,n_elements(str)-1 do str[i].ngoodchipwcs = total(chstr[brklo[i]:brkhi[i]].ngaiamatch gt 0)
 ; Fixing absolute paths of flux filename
 file = str.file
 g1 = where(stregex(file,'/net/mss1/',/boolean) eq 1,ng1)
 if ng1 gt 0 then file[g1] = strmid(file[g1],10)
 g2 = where(stregex(file,'/mss1/',/boolean) eq 1,ng2)
 if ng2 gt 0 then file[g2] = strmid(file[g2],6)
+; Fixing very negative RAs
+print,'FIXING NEGATIVE RAs in STR and CHSTR'
+;bdra = where(chstr.cenra lt -180,nbdra)
+bdra = where(chstr.cenra lt -0,nbdra)
+uibd = uniq(chstr[bdra].expdir,sort(chstr[bdra].expdir))
+MATCH,str.expdir,chstr[bdra[uibd]].expdir,ind1,ind2,/sort,count=nmatch
+for i=0,nmatch-1 do begin
+  MATCH,chstr[bdra].expdir,str[ind1[i]].expdir,ind3,ind4,/sort
+  ; Fix STR RA
+  chra = chstr[bdra[ind3]].cenra
+  bd1 = where(chra lt -180,nbd1)
+  if nbd1 gt 0 then chra[bd1]+=360
+  cenra = mean(minmax(chra))
+  if cenra lt 0 then cenra+=360
+  str[ind1[i]].ra = cenra
+  ; Fix CHSTR CENRA
+  bd2 = where(chra lt 0,nbd2)
+  if nbd2 gt 0 then chra[bd2]+=360
+  chstr[bdra[ind3]].cenra = chra
+  ; Fix CHSTR VRA
+  vra = chstr[bdra[ind3]].vra
+  bd3 = where(vra lt 0,nbd3)
+  if nbd3 gt 0 then vra[bd3]+=360
+  chstr[bdra[ind3]].vra = vra
+endfor
 
 ; Fix instrument in STR and CHSTR
 print,'FIXING INSTRUMENT IN STR AND CHSTR'
@@ -97,6 +124,24 @@ for i=0,n_elements(type)-1 do begin
   gd = where(stregex(chstr.expdir,'/'+type[i]+'/',/boolean) eq 1,ngd)
   if ngd gt 0 then chstr[gd].instrument=type[i]
 endfor
+
+;; Fix missing AIRMASS                                                                                                                                                           
+;bdam = where(str.airmass lt 0.9,nbdam)
+;for i=0,nbdam-1 do begin
+;  type = ['c4d','k4m','ksb']
+;  obs = ['ctio','kpno','kpno']
+;  MATCH,str[bdam[i]].instrument,type,ind1,ind2,/sort
+;  obsname = obs[ind2]
+;  OBSERVATORY,obsname,obstr
+;  lat = obstr.latitude
+;  lon = obstr.longitude
+;  jd = date2jd(str[bdam[i]].dateobs)
+;  ra = str[bdam[i]].ra
+;  dec = str[bdam[i]].dec
+;  str[bdam[i]].airmass = AIRMASS(jd,ra,dec,lat,lon)
+;endfor
+; THIS IS STILL RETURNING -1, IS ONE OF THE VALUES WRONG??
+
 
 ; APPLY RELEASE-DATE CUTS
 list1 = MRDFITS(dir+'lists/decam_instcal_list.fits',1)
@@ -125,34 +170,27 @@ str = str[gdrelease]  ; impose the public data cut
 zpstr = replicate({instrument:'',filter:'',amcoef:fltarr(2),thresh:0.5},10)
 zpstr[0:6].instrument = 'c4d'
 zpstr[0:6].filter = ['u','g','r','i','z','Y','VR']
-;ZP(u) = -0.38340071*X -1.6202186
-zpstr[0].amcoef = [-1.6202186,-0.38340071]
-;ZP(g) = -0.19290602*X + 0.25785509
-zpstr[1].amcoef = [0.25785509,-0.19290602]
-;ZP(r) = -0.17150109*X + 0.58451093
-zpstr[2].amcoef = [0.58451093,-0.17150109]
-;ZP(i) = -0.10241476*X + 0.39506315
-zpstr[3].amcoef = [0.39506315,-0.10241476]
-;ZP(z) = -0.07762681*X + 0.097165843
-zpstr[4].amcoef = [0.097165843,-0.07762681]
-;ZP(Y) = -0.03525268*X -1.0885863
-zpstr[5].amcoef = [-1.0885863,-0.03525268]
-;ZP(VR) = -0.091242237*X + 1.0202652
-zpstr[6].amcoef = [1.0202652,-0.091242237]
+zpstr[0].amcoef = [-1.60273, -0.375253]   ; c4d-u
+zpstr[1].amcoef = [0.277124, -0.198037]   ; c4d-g
+zpstr[2].amcoef = [0.516382, -0.115443]   ; c4d-r
+zpstr[3].amcoef = [0.380338, -0.067439]   ; c4d-i
+zpstr[4].amcoef = [0.123924, -0.096877]   ; c4d-z
+zpstr[5].amcoef = [-1.06529, -0.051967]   ; c4d-Y
+zpstr[6].amcoef = [1.004357, -0.081105]   ; c4d-VR
 ; Mosiac3 z-band
 zpstr[7].instrument = 'k4m'
 zpstr[7].filter = 'z'
-zpstr[7].amcoef = [-2.4692841,  -1.0928824]
+zpstr[7].amcoef = [-2.687201, -0.73573]   ; k4m-z
 ; Bok 90Prime, g and r
 zpstr[8].instrument = 'ksb'
 zpstr[8].filter = 'g'
-zpstr[8].amcoef = [-2.80864,  -1.46826]
+zpstr[8].amcoef = [-2.859646, -1.40837]   ; ksb-g
 zpstr[9].instrument = 'ksb'
 zpstr[9].filter = 'r'
-zpstr[9].amcoef = [-4.11, 0.0]
+zpstr[9].amcoef = [-4.008771, -0.25718]   ; ksb-r
 nzpstr = n_elements(zpstr)
 
-STOP,'DOUBLE-CHECK THESE ZERO-POINTS!!!'
+;STOP,'DOUBLE-CHECK THESE ZERO-POINTS!!!'
 
 ; APPLY QA CUTS IN ZEROPOINT AND SEEING
 If not keyword_set(nocuts) then begin
@@ -169,27 +207,102 @@ If not keyword_set(nocuts) then begin
     ind = where(str.instrument eq zpstr[i].instrument and str.filter eq zpstr[i].filter and str.success eq 1,nind)
     print,zpstr[i].instrument,'-',zpstr[i].filter,' ',strtrim(nind,2),' exposures'
     if nind gt 0 then begin
-      zpterm = str[ind].zpterm
-      am = str[ind].airmass
-      mjd = str[ind].mjd
-      ; Correct for airmass extinction effect
-      zpterm -= poly(am,zpstr[i].amcoef)
-      ; Remove temporal variations
-      ;gd1 = where(abs(zpterm) lt 2,ngd1)
-      ;si = sort(mjd[gd1])
-      ;BINDATA,mjd[gd1[si]],zpterm[gd1[si]],xbin,ybin,binsize=60,/med,gdind=gdind
-      ;xbin = xbin[gdind] & ybin=ybin[gdind]
-      ; this doesn't work so well
+      str1 = str[ind]
+      zpterm = str1.zpterm
+      bdzp = where(finite(zpterm) eq 0,nbdzp)  ; fix Infinity/NAN
+      if nbdzp gt 0 then zpterm[bdzp] = 999999.9
+      am = str1.airmass
+      mjd = str1.mjd
+      bdam = where(am lt 0.9,nbdam)
+      if nbdam gt 0 then am[bdam] = median(am)
+      glactc,str1.ra,str1.dec,2000.0,glon,glat,1,/deg
 
-      ;sigzp = mad(str[ind].zpterm)
+      ; Measure airmass dependence
+      gg0 = where(abs(zpterm) lt 50 and am lt 2.0,ngg0)
+      coef0 = robust_poly_fitq(am[gg0],zpterm[gg0],1)
+      zpf = poly(am,coef0)
+      sig0 = mad(zpterm[gg0]-zpf[gg0])
+      gg = where(abs(zpterm-zpf) lt (3.5*sig0 > 0.2),ngg)
+      coef = robust_poly_fitq(am[gg],zpterm[gg],1)
+      print,zpstr[i].instrument+'-'+zpstr[i].filter,' ',coef
+      ; Trim out bad exposures to determine the correlations and make figures
+      gg = where(abs(zpterm-zpf) lt (3.5*sig0 > 0.2) and str1.airmass lt 2.0 and str1.fwhm lt 2.0 and str1.rarms lt 0.15 and $
+                 str1.decrms lt 0.15 and str1.success eq 1 and str1.wcscal eq 'Successful' and str1.zptermerr lt 0.05 and $
+                 str1.zptermsig lt 0.08 and (str1.ngoodchipwcs eq str1.nchips) and $
+                 (str1.instrument ne 'c4d' or str1.zpspatialvar_nccd le 5 or (str1.instrument eq 'c4d' and str1.zpspatialvar_nccd gt 5 and str1.zpspatialvar_rms lt 0.1)) and $
+                 abs(glat) gt 10 and str1.nrefmatch gt 100 and str1.exptime ge 30,ngg)
+
+      ; Zpterm with airmass dependence removed
+      relzpterm = zpterm + 25   ; 25 to get "absolute" zpterm
+      relzpterm -= zpstr[i].amcoef[1]*(am-1)
+
+      ; CURRENTLY K4M/KSB HAVE EXPTIME-DEPENDENCE IN THE ZEROPOINTS!!
+      if zpstr[i].instrument eq 'k4m' or zpstr[i].instrument eq 'ksb' then begin
+        print,'REMOVING EXPTIME-DEPENDENCE IN K4M/KSB ZEROPOINTS!!!'
+        relzpterm += 2.5*alog10(str1.exptime)
+      endif
+
+      ; Fit temporal variation in zpterm
+      mjd0 = 56200L
+      xx = str1[gg].mjd-mjd0
+      yy = relzpterm[gg]
+      invvar = 1.0/str1[gg].zptermerr^2
+      nord = 3
+      bkspace = 200 ;20
+      sset1 = bspline_iterfit(xx,yy,invvar=invvar,nord=nord,bkspace=bkspace,yfit=yfit1)
+      sig1 = mad(yy-yfit1)
+      gd = where(yy-yfit1 gt -3*sig1,ngd)      
+      ; refit
+      sset = bspline_iterfit(xx[gd],yy[gd],invvar=invvar[gd],nord=nord,bkspace=bkspace)
+      yfit = bspline_valu(xx,sset)
+      allzpfit = bspline_valu(str1.mjd-mjd0,sset)
+
+      ; Make some figures
+      setdisp,/silent
+      !p.font = 0
+      ; ZPterm vs. airmass
+      file = plotsdir+zpstr[i].instrument+'-'+zpstr[i].filter+'_zpterm_airmass'
+      ps_open,file,/color,thick=4,/encap
+      hess,am[gg],relzpterm[gg],dx=0.01,dy=0.02,xr=[0.9,2.5],yr=[-0.5,0.5]+median(relzpterm[gg]),xtit='Airmass',ytit='Zero-point',$
+           tit=zpstr[i].instrument+'-'+zpstr[i].filter
+      x = scale_vector(findgen(100),0.5,2.0)
+      oplot,x,poly(x,coef),co=250
+      ps_close
+      ps2png,file+'.eps',/eps
+      ; ZPterm vs. time (density)
+      file = plotsdir+zpstr[i].instrument+'-'+zpstr[i].filter+'_zpterm_time_density'
+      ps_open,file,/color,thick=4,/encap
+      hess,str1[gg].mjd-mjd0,relzpterm[gg],dx=2,dy=0.02,yr=[-0.5,0.5]+median(relzpterm[gg]),xtit='Time (days)',ytit='Zero-point',$
+           tit=zpstr[i].instrument+'-'+zpstr[i].filter
+      oplot,str1[gg].mjd-mjd0,allzpfit[gg],ps=1,sym=0.3,co=250
+      xyouts,50,-0.45+median(relzpterm[gg]),'MJD!d0!n = '+strtrim(mjd0,2),align=0,charsize=1.2
+      ps_close
+      ps2png,file+'.eps',/eps
+      ; ZPterm vs. time (points)
+      file = plotsdir+zpstr[i].instrument+'-'+zpstr[i].filter+'_zpterm_time'
+      ps_open,file,/color,thick=4,/encap
+      plot,str1[gg].mjd-mjd0,relzpterm[gg],ps=1,sym=0.5,yr=[-0.5,0.5]+median(relzpterm[gg]),xs=1,ys=1,xtit='Time (days)',ytit='Zero-point',$
+           tit=zpstr[i].instrument+'-'+zpstr[i].filter,thick=1
+      oplot,str1[gg].mjd-mjd0,allzpfit[gg],ps=1,sym=0.3,co=250
+      xyouts,50,-0.45+median(relzpterm[gg]),'MJD!d0!n = '+strtrim(mjd0,2),align=0,charsize=1.2
+      ps_close
+      ps2png,file+'.eps',/eps
+
+      ; Remove temporal variations to get residual values
+      relzpterm -= allzpfit
+
+
+      ; Find the GOOD exposures
+      ;------------------------
       ; We are using ADDITIVE zpterm 
       ;  calmag = instmag + zpterm
       ; if there are clouds then instmag is larger/fainter
       ;  and zpterm is smaller (more negative)
       ;bdind = where(str[ind].zpterm-medzp lt -zpthresh[i],nbdind)
-      gdind = where(zpterm ge -zpstr[i].thresh and zpterm le zpstr[i].thresh,ngdind,comp=bdind,ncomp=nbdind)
+      gdind = where(relzpterm ge -zpstr[i].thresh and relzpterm le zpstr[i].thresh,ngdind,comp=bdind,ncomp=nbdind)
       print,'  ',strtrim(nbdind,2),' exposures with ZPTERM below the threshold'    
       if ngdind gt 0 then badzpmask[ind[gdind]] = 0
+
     endif
   endfor
   ; Get bad DECaLS and SMASH exposures
@@ -229,7 +342,6 @@ If not keyword_set(nocuts) then begin
                 (str.instrument eq 'c4d' and str.zpspatialvar_nccd gt 5 and str.zpspatialvar_rms gt 0.1),nbdexp)  ; bad spatial zpterm
   ; rarms/decrms, nrefmatch
   print,'QA cuts remove ',strtrim(nbdexp,2),' exposures'
-stop
   ; Remove
   torem = bytarr(nchstr)
   for i=0,nbdexp-1 do torem[str[bdexp[i]].chipindx:str[bdexp[i]].chipindx+str[bdexp[i]].nchips-1]=1
@@ -277,7 +389,7 @@ if keyword_set(makelist) or file_test(listfile) eq 0 then begin
     chstr1 = chstr[str[i].chipindx:str[i].chipindx+str[i].nchips-1]
     ;  rotate to tangent plane so it can handle RA=0/360 and poles properly
     ROTSPHCEN,chstr1.vra,chstr1.vdec,str[i].ra,str[i].dec,vlon,vlat,/gnomic
-    ;  loop over heapix
+    ;  loop over healpix
     overlap = bytarr(nlistpix)
     for j=0,nlistpix-1 do begin
       PIX2VEC_RING,nside,listpix[j],vec,vertex
@@ -297,7 +409,7 @@ if keyword_set(makelist) or file_test(listfile) eq 0 then begin
       nlistpix = 0
     endelse
 
-;if nlistpix eq 0 then stop,'No healpix for this exposure.  Something is wrong!'
+if nlistpix eq 0 then stop,'No healpix for this exposure.  Something is wrong!'
 
     ; Add new elements to array
     if cnt+nlistpix gt nhealstr then begin
@@ -382,6 +494,42 @@ if not keyword_set(redo) then begin
   cmd = cmd[gd]
   cmddir = cmddir[gd]
 endif
+
+; Prioritize longest-running jobs FIRST
+; Use prediction program
+PIX2ANG_RING,nside,index.pix,theta,phi
+ra = phi*radeg
+dec = 90-theta*radeg
+glactc,ra,dec,2000.0,glon,glat,1,/deg
+dt = predictcombtime(glon,glat,index.nexp)
+; Do the sorting
+hsi = reverse(sort(dt))
+cmd = cmd[hsi]
+cmddir = cmddir[hsi]
+dt = dt[hsi]
+index = index[hsi]
+
+; Divide into three using total times
+;tot = total(dt>10)
+;totcum = total(dt>10,/cum)
+;print,min(where(totcum ge tot/3))
+;print,min(where(totcum ge 2*tot/3))
+
+; Slice it up
+; hulk, 1st
+cmd = cmd[0:*:3]
+cmddir = cmddir[0:*:3]
+pix = index[0:*:3].pix
+
+; thing, 2nd
+;cmd = cmd[1:*:3]
+;cmddir = cmddir[1:*:3]
+;pix = index[1:*:3].pix
+
+; gp09, 3rd
+;cmd = cmd[2:*:3]
+;cmddir = cmddir[2:*:3]
+;pix = index[2:*:3].pix
 
 ;; Prioritize longest-running jobs FIRST
 ;; Load the DECam run times
