@@ -13,9 +13,35 @@ for i=0,n_elements(files)-1 do begin
     if nra eq 0 then ra=999999.
     dec = sxpar(head,'crval2',count=ndec)
     if ndec eq 0 then dec=999999.
+    ; add calibration file stuff
+    ; biasfil, bpmfil, bpm, pupfil, flatfil, illumfil, illumcor, starfil
+    biasfil = sxpar(head,'biasfil',count=nbiasfil)
+    if nbiasfil eq 0 then biasfil=''
+    bpmfil = sxpar(head,'bpmfil',count=nbpmfil)
+    if nbpmfil eq 0 then bpmfil=''
+    bpm = sxpar(head,'bpm',count=nbpm)
+    if nbpm eq 0 then bpm=''
+    pupfil = sxpar(head,'pupfil',count=npupfil)
+    if npupfil eq 0 then pupfil=''
+    flatfil = sxpar(head,'flatfil',count=nflatfil)
+    if nflatfil eq 0 then flatfil=''
+    illumfil = sxpar(head,'illumfil',count=nillumfil)
+    if nillumfil eq 0 then illumfil=''
+    illumcor = sxpar(head,'illumcor',count=nillumcor)
+    if nillumcor eq 0 then illumcor=''
+    starfil = sxpar(head,'starfil',count=nstarfil)
+    if nstarfil eq 0 then starfil=''
   endif else begin
     ra = 999999.
     dec = 999999.
+    biasfil = ''
+    bpmfil = ''
+    bpm = ''
+    pupfil = ''
+    flatfil = ''
+    illumfil = ''
+    illumcor = ''
+    starfil = ''
   endelse
 
   head0 = headfits(file,exten=0,errmsg=errmsg0)
@@ -29,7 +55,9 @@ for i=0,n_elements(files)-1 do begin
     telstat = 'NAN'
   endelse
 
-  line = file+'  '+strtrim(ra,2)+'  '+strtrim(dec,2)+'  '+strtrim(wcscal,2)+'  '+strtrim(telstat,2)
+  sep = ' | '
+  line = file+sep+strtrim(ra,2)+sep+strtrim(dec,2)+sep+strtrim(wcscal,2)+sep+strtrim(telstat,2)+sep+$
+         biasfil+sep+bpmfil+sep+bpm+sep+pupfil+sep+flatfil+sep+illumfil+sep+illumcor+sep+starfil
   base = file_basename(file,'.fits.fz')
   outfile = '/d0/dnidever/nsc/instcal/v2/tmp/coords/'+base+'_coords.txt'
   writeline,outfile,line
