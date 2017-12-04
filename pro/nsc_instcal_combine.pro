@@ -282,7 +282,12 @@ FOR i=0,nlist-1 do begin
   ;  -reproject to tangent plane first so we don't have to deal
   ;     with RA=0 wrapping or pol issues
   ROTSPHCEN,cat1.ra,cat1.dec,buffer.cenra,buffer.cendec,lon,lat,/gnomic
-  ROI_CUT,buffer.lon,buffer.lat,lon,lat,ind0,ind1,fac=1000,/silent
+  if running_gdl() eq 0 then begin
+    ROI_CUT,buffer.lon,buffer.lat,lon,lat,ind0,ind1,fac=1000,/silent
+  endif else begin
+    inmask = INSIDE(lon,lat,buffer.lon,buffer.lat)
+    ind1 = where(inmask eq 1)
+  endelse
   nmatch = n_elements(ind1)
 
   ; Only want source inside this pixel
