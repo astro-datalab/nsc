@@ -282,7 +282,12 @@ FOR i=0,nlist-1 do begin
   ;  -reproject to tangent plane first so we don't have to deal
   ;     with RA=0 wrapping or pol issues
   ROTSPHCEN,cat1.ra,cat1.dec,buffer.cenra,buffer.cendec,lon,lat,/gnomic
-  ROI_CUT,buffer.lon,buffer.lat,lon,lat,ind0,ind1,fac=100,/silent
+  if running_gdl() eq 0 then begin
+    ROI_CUT,buffer.lon,buffer.lat,lon,lat,ind0,ind1,fac=1000,/silent
+  endif else begin
+    inmask = INSIDE(lon,lat,buffer.lon,buffer.lat)
+    ind1 = where(inmask eq 1)
+  endelse
   nmatch = n_elements(ind1)
 
   ; Only want source inside this pixel
@@ -407,7 +412,8 @@ FOR i=0,nlist-1 do begin
   Endif else begin
 
     ; Match new sources to the objects
-    SRCMATCH,obj[0:cnt-1].ra,obj[0:cnt-1].dec,cat.ra,cat.dec,0.5,ind1,ind2,count=nmatch,/sph,/usehist  ; use faster histogram_nd method
+    if running_gdl() eq 1 then usehist=0 else usehist=1
+    SRCMATCH,obj[0:cnt-1].ra,obj[0:cnt-1].dec,cat.ra,cat.dec,0.5,ind1,ind2,count=nmatch,/sph,usehist=usehist  ; use faster histogram_nd method
     if nmatch gt 0 then if (max(ind2) gt ncat-1) or (max(ind1) gt cnt-1) then begin
       ; sometimes the histogram_nd method gives indices that are too large
       ; not sure why, use SRCOR method.
