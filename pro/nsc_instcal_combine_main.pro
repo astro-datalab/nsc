@@ -475,22 +475,22 @@ cmd = "nsc_instcal_combine,"+strtrim(index.pix,2)+",nside="+strtrim(nside,2)+",v
 if keyword_set(redo) then cmd+=',/redo'
 cmddir = strarr(npix)+localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 
-; Check if the output file exists
-if not keyword_set(redo) then begin
-  outfiles = dir+'combine/'+strtrim(upix/1000,2)+'/'+strtrim(upix,2)+'.fits.gz'
-  test = file_test(outfiles)
-  gd = where(test eq 0,ngd,comp=bd,ncomp=nbd)
-  if nbd gt 0 then begin
-    print,strtrim(nbd,2),' files already exist and /redo not set.'
-  endif 
-  if ngd eq 0 then begin
-    print,'No files to process'
-    return
-  endif
-  print,strtrim(ngd,2),' files left to process'
-  cmd = cmd[gd]
-  cmddir = cmddir[gd]
-endif
+;; Check if the output file exists
+;if not keyword_set(redo) then begin
+;  outfiles = dir+'combine/'+strtrim(upix/1000,2)+'/'+strtrim(upix,2)+'.fits.gz'
+;  test = file_test(outfiles)
+;  gd = where(test eq 0,ngd,comp=bd,ncomp=nbd)
+;  if nbd gt 0 then begin
+;    print,strtrim(nbd,2),' files already exist and /redo not set.'
+;  endif 
+;  if ngd eq 0 then begin
+;    print,'No files to process'
+;    return
+;  endif
+;  print,strtrim(ngd,2),' files left to process'
+;  cmd = cmd[gd]
+;  cmddir = cmddir[gd]
+;endif
 
 ; Prioritize longest-running jobs FIRST
 ; Use prediction program
@@ -514,22 +514,22 @@ index = index[hsi]
 
 ; Slice it up
 ; hulk, 1st
-cmd = cmd[0:*:3]
-cmddir = cmddir[0:*:3]
-pix = index[0:*:3].pix
+;cmd = cmd[0:*:3]
+;cmddir = cmddir[0:*:3]
+;pix = index[0:*:3].pix
 
 ; thing, 2nd
-;cmd = cmd[1:*:3]
-;cmddir = cmddir[1:*:3]
-;pix = index[1:*:3].pix
+cmd = cmd[1:*:3]
+cmddir = cmddir[1:*:3]
+pix = index[1:*:3].pix
 
 ; gp09, 3rd
 ;cmd = cmd[2:*:3]
 ;cmddir = cmddir[2:*:3]
 ;pix = index[2:*:3].pix
 
-ncmd = n_elements(cmd)
-nhalf = ncmd/2
+;ncmd = n_elements(cmd)
+;nhalf = ncmd/2
 
 ; gp05
 ;cmd = cmd[nhalf:*:4]
