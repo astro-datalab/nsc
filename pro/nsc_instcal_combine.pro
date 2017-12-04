@@ -157,7 +157,7 @@ FOR i=0,nlist-1 do begin
     goto,BOMB
   endif
 
-  metafile = repstr(list[i].file,'_cat','_meta')
+  metafile = repstr(file,'_cat','_meta')
   meta = MRDFITS(metafile,1,/silent)
   meta.base = strtrim(meta.base)
   meta.expnum = strtrim(meta.expnum)
