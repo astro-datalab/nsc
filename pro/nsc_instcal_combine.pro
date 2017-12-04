@@ -407,7 +407,8 @@ FOR i=0,nlist-1 do begin
   Endif else begin
 
     ; Match new sources to the objects
-    SRCMATCH,obj[0:cnt-1].ra,obj[0:cnt-1].dec,cat.ra,cat.dec,0.5,ind1,ind2,count=nmatch,/sph,/usehist  ; use faster histogram_nd method
+    if running_gdl() eq 1 then usehist=0 else usehist=1
+    SRCMATCH,obj[0:cnt-1].ra,obj[0:cnt-1].dec,cat.ra,cat.dec,0.5,ind1,ind2,count=nmatch,/sph,usehist=usehist  ; use faster histogram_nd method
     if nmatch gt 0 then if (max(ind2) gt ncat-1) or (max(ind1) gt cnt-1) then begin
       ; sometimes the histogram_nd method gives indices that are too large
       ; not sure why, use SRCOR method.
