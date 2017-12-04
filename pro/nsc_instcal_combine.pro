@@ -145,7 +145,9 @@ FOR i=0,nlist-1 do begin
   print,strtrim(i+1,2),' Loading ',list[i].file
 
   ; Load the exposure catalog
-  cat1 = MRDFITS(list[i].file,1,/silent)
+  file = list[i].file
+  if strmid(dldir,0,4) eq '/net' and strmid(file,0,4) ne '/net' then file='/net'+file
+  cat1 = MRDFITS(file,1,/silent)
   ncat1 = n_elements(cat1)
   print,'  ',strtrim(ncat1,2),' sources'
 
@@ -155,7 +157,7 @@ FOR i=0,nlist-1 do begin
     goto,BOMB
   endif
 
-  metafile = repstr(list[i].file,'_cat','_meta')
+  metafile = repstr(file,'_cat','_meta')
   meta = MRDFITS(metafile,1,/silent)
   meta.base = strtrim(meta.base)
   meta.expnum = strtrim(meta.expnum)
