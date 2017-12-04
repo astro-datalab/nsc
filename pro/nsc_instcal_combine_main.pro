@@ -34,6 +34,7 @@ JOURNAL,logfile
 
 print, "Combining NOAO InstCal catalogs"
 
+goto,STARTRUNNING
 
 ; Restore the calibration summary file
 temp = MRDFITS(dir+'lists/nsc_instcal_calibrate.fits',1,/silent)
@@ -362,6 +363,9 @@ If not keyword_set(nocuts) then begin
   nstr = n_elements(str)
 Endif else print,'SKIPPING QA CUTS'
 
+
+STARTRUNNING:
+
 ; CREATE LIST OF HEALPIX AND OVERLAPPING EXPOSURES
 ; Which healpix pixels have data
 listfile = dir+'lists/nsc_healpix_list.fits'
@@ -524,6 +528,29 @@ pix = index[0:*:3].pix
 ;cmddir = cmddir[2:*:3]
 ;pix = index[2:*:3].pix
 
+ncmd = n_elements(cmd)
+nhalf = ncmd/2
+
+; gp05
+;cmd = cmd[nhalf:*:4]
+;cmddir = cmddir[nhalf:*:4]
+;pix = index[nhalf:*:4].pix
+
+; gp06
+;cmd = cmd[nhalf+1:*:4]
+;cmddir = cmddir[nhalf+1:*:4]
+;pix = index[nhalf+1:*:4].pix
+
+; gp07
+;cmd = cmd[nhalf+2:*:4]
+;cmddir = cmddir[nhalf+2:*:4]
+;pix = index[nhalf+2:*:4].pix
+
+; gp08
+;cmd = cmd[nhalf+3:*:4]
+;cmddir = cmddir[nhalf+3:*:4]
+;pix = index[nhalf+3:*:4].pix
+
 ;; Prioritize longest-running jobs FIRST
 ;; Load the DECam run times
 ;sum1 = mrdfits(dir+'nsccmb_summary_hulk.fits',1)
@@ -574,7 +601,7 @@ pix = index[0:*:3].pix
 stop
 
 ; Now run the combination program on each healpix pixel
-PBS_DAEMON,cmd,cmddir,jobs=jobs,/hyperthread,/idle,prefix='nsccmb',jobs=jobs,nmulti=nmulti,wait=1
+PBS_DAEMON,cmd,cmddir,jobs=jobs,/hyperthread,/idle,prefix='nsccmb',nmulti=nmulti,wait=1
 
 ; RUN NSC_COMBINE_SUMMARY WHEN IT'S DONE!!!
 
