@@ -282,7 +282,7 @@ FOR i=0,nlist-1 do begin
   ;  -reproject to tangent plane first so we don't have to deal
   ;     with RA=0 wrapping or pol issues
   ROTSPHCEN,cat1.ra,cat1.dec,buffer.cenra,buffer.cendec,lon,lat,/gnomic
-  ROI_CUT,buffer.lon,buffer.lat,lon,lat,ind0,ind1,fac=100,/silent
+  ROI_CUT,buffer.lon,buffer.lat,lon,lat,ind0,ind1,fac=1000,/silent
   nmatch = n_elements(ind1)
 
   ; Only want source inside this pixel
