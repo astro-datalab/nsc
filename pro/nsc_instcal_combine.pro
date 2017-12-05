@@ -51,16 +51,13 @@ endif
 ind = ind[0]
 list = healstr[index[ind].lo:index[ind].hi]
 nlist = n_elements(list)
+; Fix directory
+if strmid(dldir,0,4) eq '/net' then begin
+  bd = where(strmid(list.file,0,4) ne '/net',nbd)
+  if nbd gt 0 then list[bd].file='/net'+list[bd].file
+endif
 ; Use local directory
-if keyword_set(local) then begin
-  list.file = localdir+list.file
-endif else begin
-  ; Fix directory
-  if strmid(dldir,0,4) eq '/net' then begin
-    bd = where(strmid(list.file,0,4) eq 'net',nbd)
-    if nbd gt 0 then list[bd].file='/net'+list[bd].file
-  endif
-endelse
+if keyword_set(local) then list.file=localdir+list.file
 ; Check that ALL catalog files EXIST before going on
 if keyword_set(filesexist) then begin
   test = file_test(list.file)
