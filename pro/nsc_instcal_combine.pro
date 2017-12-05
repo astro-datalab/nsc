@@ -1,4 +1,4 @@
-pro nsc_instcal_combine,pix,version=version,nside=nside,redo=redo,stp=stp,outdir=outdir
+pro nsc_instcal_combine,pix,version=version,nside=nside,redo=redo,stp=stp,outdir=outdir,local=local,filesexist=filesexist
 
 t0 = systime(1)
 
@@ -51,6 +51,25 @@ endif
 ind = ind[0]
 list = healstr[index[ind].lo:index[ind].hi]
 nlist = n_elements(list)
+; Use local directory
+if keyword_set(local) then begin
+  list.file = localdir+list.file
+endif else begin
+  ; Fix directory
+  if strmid(dldir,0,4) eq '/net' then begin
+    bd = where(strmid(list.file,0,4) eq 'net',nbd)
+    if nbd gt 0 then list[bd].file='/net'+list[bd].file
+  endif
+endelse
+; Check that ALL catalog files EXIST before going on
+if keyword_set(filesexist) then begin
+  test = file_test(list.file)
+  bdfile = where(test eq 0,nbdfile)
+  if nbdfile gt 0 then begin
+    print,strtrim(nbdfile,2),' catalog files do NOT exist.  Returning'
+    return
+  endif
+endif
 
 ; GET EXPOSURES FOR NEIGHBORING PIXELS AS WELL
 ;  so we can deal with the edge cases
@@ -146,7 +165,6 @@ FOR i=0,nlist-1 do begin
 
   ; Load the exposure catalog
   file = list[i].file
-  if strmid(dldir,0,4) eq '/net' and strmid(file,0,4) ne '/net' then file='/net'+file
   cat1 = MRDFITS(file,1,/silent)
   ncat1 = n_elements(cat1)
   print,'  ',strtrim(ncat1,2),' sources'
