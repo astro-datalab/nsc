@@ -58,15 +58,6 @@ if strmid(dldir,0,4) eq '/net' then begin
 endif
 ; Use local directory
 if keyword_set(local) then list.file=localdir+list.file
-; Check that ALL catalog files EXIST before going on
-if keyword_set(filesexist) then begin
-  test = file_test(list.file)
-  bdfile = where(test eq 0,nbdfile)
-  if nbdfile gt 0 then begin
-    print,strtrim(nbdfile,2),' needed catalog files NOT FOUND'
-    return
-  endif
-endif
 
 ; GET EXPOSURES FOR NEIGHBORING PIXELS AS WELL
 ;  so we can deal with the edge cases
@@ -84,6 +75,16 @@ ui = uniq(list.file,sort(list.file))
 list = list[ui]
 nlist = n_elements(list)
 print,strtrim(nlist,2),' exposures that overlap this pixel and neighbors'
+
+; Check that ALL catalog files EXIST before going on
+if keyword_set(filesexist) then begin
+  test = file_test(list.file)
+  bdfile = where(test eq 0,nbdfile)
+  if nbdfile gt 0 then begin
+    print,strtrim(nbdfile,2),' needed catalog files NOT FOUND'
+    return
+  endif
+endif
 
 ; Get the boundary coordinates
 ;   healpy.boundaries but not sure how to do it in IDL
