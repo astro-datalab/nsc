@@ -512,24 +512,45 @@ index = index[hsi]
 ;print,min(where(totcum ge tot/3))
 ;print,min(where(totcum ge 2*tot/3))
 
+ncmd = n_elements(cmd)
+nhalf = ncmd/2
+
+; Randomize 1st half for hulk/thing/gp09
+cmd1 = cmd[0:(nhalf-1)]
+cmddir1 = cmddir[0:(nhalf-1)]
+pix1 = index[0:(nhalf-1)].pix
+index1 = index[0:(nhalf-1)]
+; now randomize
+rnd = sort(randomu(1,n_elements(cmd1)))
+cmd1 = cmd1[rnd]
+cmddir1 = cmddir1[rnd]
+pix1 = pix1[rnd]
+index1 = index1[rnd]
+
 ; Slice it up
 ; hulk, 1st
-;cmd = cmd[0:*:3]
-;cmddir = cmddir[0:*:3]
-;pix = index[0:*:3].pix
+;cmd = cmd[0:(nhalf-1):3]
+;cmddir = cmddir[0:(nhalf-1):3]   
+;pix = index[0:(nhalf-1):3].pix
+cmd = cmd1[0:(nhalf/3)-1]
+cmddir = cmddir1[0:(nhalf/3)-1]
+pix = pix1[0:(nhalf/3)-1]
 
 ; thing, 2nd
-cmd = cmd[1:*:3]
-cmddir = cmddir[1:*:3]
-pix = index[1:*:3].pix
+;;cmd = cmd[1:(nhalf-1):3]
+;;cmddir = cmddir[1:(nhalf-1):3]
+;;pix = index[1:(nhalf-1):3].pix
+;cmd = cmd1[(nhalf/3):(2*nhalf/3)-1]
+;cmddir = cmddir1[(nhalf/3):(2*nhalf/3)-1]
+;pix = pix1[(nhalf/3):(2*nhalf/3)-1]
 
 ; gp09, 3rd
-;cmd = cmd[2:*:3]
-;cmddir = cmddir[2:*:3]
-;pix = index[2:*:3].pix
-
-;ncmd = n_elements(cmd)
-;nhalf = ncmd/2
+;;cmd = cmd[2:(nhalf-1):3]
+;;cmddir = cmddir[2:(nhalf-1):3]
+;;pix = index[2:(nhalf-1):3].pix
+;cmd = cmd1[(2*nhalf/3):*]
+;cmddir = cmddir1[(2*nhalf/3):*]
+;pix = pix1[(2*nhalf/3):*]
 
 ; gp05
 ;cmd = cmd[nhalf:*:4]
