@@ -479,7 +479,7 @@ pixlist = long(pixlist[rnd])
 print,'Running ',strtrim(npixlist,2),' jobs on ',host,' with nmult=',strtrim(nmulti,2)
 cmd = "nsc_instcal_combine,"+strtrim(pixlist,2)+",nside="+strtrim(nside,2)+",version='"+version+"',/local,/filesexist"
 if keyword_set(redo) then cmd+=',/redo'
-cmddir = strarr(npix)+localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
+cmddir = strarr(npixlist)+localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 
 ; Now run the combination program on each healpix pixel
 a = '' & read,a,prompt='Press RETURN to start'
