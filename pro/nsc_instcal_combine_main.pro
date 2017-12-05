@@ -1,7 +1,8 @@
 pro nsc_instcal_combine_main,version,redo=redo,makelist=makelist,nmulti=nmulti,nocuts=nocuts
 
 ; Combine all of the data
-NSC_ROOTDIRS,dldir,mssdir,localdir
+NSC_ROOTDIRS,dldir,mssdir,localdir,longhost
+host = first_el(strsplit(longhost,'.',/extract))
 if n_elements(version) eq 0 then version='v2'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 if file_test(dir+'combine/',/directory) eq 0 then file_mkdir,dir+'combine/'
@@ -473,10 +474,26 @@ endif else begin
   file_copy,listfile,localdir+'dnidever/nsc/instcal/'+version+'/',/over
 endelse
 
-; Make the commands
-cmd = "nsc_instcal_combine,"+strtrim(index.pix,2)+",nside="+strtrim(nside,2)+",version='"+version+"'"
+; Load the list of healpix pixels for this server to be run LOCALLY
+pixfile = dir+'lists/combine_pix_'+host+'.txt'
+READLINE,pixfile,pixlist,count=npixlist
+rnd = sort(randomu(1,npixlist))   ; RANDOMIZE!!
+pixlist = long(pixlist[rnd])
+print,'Running ',strtrim(npixlist,2),' jobs on ',host,' with nmult=',strtrim(nmulti,2)
+cmd = "nsc_instcal_combine,"+strtrim(pixlist,2)+",nside="+strtrim(nside,2)+",version='"+version+"',/local,/filesexist"
 if keyword_set(redo) then cmd+=',/redo'
 cmddir = strarr(npix)+localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
+
+; Now run the combination program on each healpix pixel
+a = '' & read,a,prompt='Press RETURN to start'
+PBS_DAEMON,cmd,cmddir,jobs=jobs,/hyperthread,/idle,prefix='nsccmb',nmulti=nmulti,wait=1
+
+stop
+
+;; Make the commands
+;cmd = "nsc_instcal_combine,"+strtrim(index.pix,2)+",nside="+strtrim(nside,2)+",version='"+version+"'"
+;if keyword_set(redo) then cmd+=',/redo'
+;cmddir = strarr(npix)+localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 
 ;; Check if the output file exists
 ;if not keyword_set(redo) then begin
@@ -495,19 +512,19 @@ cmddir = strarr(npix)+localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 ;  cmddir = cmddir[gd]
 ;endif
 
-; Prioritize longest-running jobs FIRST
-; Use prediction program
-PIX2ANG_RING,nside,index.pix,theta,phi
-ra = phi*radeg
-dec = 90-theta*radeg
-glactc,ra,dec,2000.0,glon,glat,1,/deg
-dt = predictcombtime(glon,glat,index.nexp)
-; Do the sorting
-hsi = reverse(sort(dt))
-cmd = cmd[hsi]
-cmddir = cmddir[hsi]
-dt = dt[hsi]
-index = index[hsi]
+;; Prioritize longest-running jobs FIRST
+;; Use prediction program
+;PIX2ANG_RING,nside,index.pix,theta,phi
+;ra = phi*radeg
+;dec = 90-theta*radeg
+;glactc,ra,dec,2000.0,glon,glat,1,/deg
+;dt = predictcombtime(glon,glat,index.nexp)
+;; Do the sorting
+;hsi = reverse(sort(dt))
+;cmd = cmd[hsi]
+;cmddir = cmddir[hsi]
+;dt = dt[hsi]
+;index = index[hsi]
 
 ; Divide into three using total times
 ;tot = total(dt>10)
@@ -515,29 +532,29 @@ index = index[hsi]
 ;print,min(where(totcum ge tot/3))
 ;print,min(where(totcum ge 2*tot/3))
 
-ncmd = n_elements(cmd)
-nhalf = ncmd/2
+;ncmd = n_elements(cmd)
+;nhalf = ncmd/2
 
-; Randomize 1st half for hulk/thing/gp09
-cmd1 = cmd[0:(nhalf-1)]
-cmddir1 = cmddir[0:(nhalf-1)]
-pix1 = index[0:(nhalf-1)].pix
-index1 = index[0:(nhalf-1)]
-; now randomize
-rnd = sort(randomu(1,n_elements(cmd1)))
-cmd1 = cmd1[rnd]
-cmddir1 = cmddir1[rnd]
-pix1 = pix1[rnd]
-index1 = index1[rnd]
+;; Randomize 1st half for hulk/thing/gp09
+;cmd1 = cmd[0:(nhalf-1)]
+;cmddir1 = cmddir[0:(nhalf-1)]
+;pix1 = index[0:(nhalf-1)].pix
+;index1 = index[0:(nhalf-1)]
+;; now randomize
+;rnd = sort(randomu(1,n_elements(cmd1)))
+;cmd1 = cmd1[rnd]
+;cmddir1 = cmddir1[rnd]
+;pix1 = pix1[rnd]
+;index1 = index1[rnd]
 
 ; Slice it up
-; hulk, 1st
-;cmd = cmd[0:(nhalf-1):3]
-;cmddir = cmddir[0:(nhalf-1):3]   
-;pix = index[0:(nhalf-1):3].pix
-cmd = cmd1[0:(nhalf/3)-1]
-cmddir = cmddir1[0:(nhalf/3)-1]
-pix = pix1[0:(nhalf/3)-1]
+;; hulk, 1st
+;;cmd = cmd[0:(nhalf-1):3]
+;;cmddir = cmddir[0:(nhalf-1):3]   
+;;pix = index[0:(nhalf-1):3].pix
+;cmd = cmd1[0:(nhalf/3)-1]
+;cmddir = cmddir1[0:(nhalf/3)-1]
+;pix = pix1[0:(nhalf/3)-1]
 
 ; thing, 2nd
 ;;cmd = cmd[1:(nhalf-1):3]
