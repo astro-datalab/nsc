@@ -1,8 +1,8 @@
-pro nsc_rootdirs,dldir,mssdir,localdir
+pro nsc_rootdirs,dldir,mssdir,localdir,host
 
 ; Return the root directories for various machines
 
-undefine,dldir,mssdir,localdir
+undefine,dldir,mssdir,localdir,host
 
 spawn,'hostname',out,errout,/noshell
 host = (strsplit(out[0],' ',/extract))[0]
