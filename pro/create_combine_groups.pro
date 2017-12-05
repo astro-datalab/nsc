@@ -13,30 +13,30 @@ pro create_combine_groups,list
 str = REPLICATE({glon:[0L,0L],glat:[0L,0L],server:''},7)
 str[0].server = 'gp09'
 ;str[0].glon = [-38,38]    ; -36<GLON<+36
-str[0].glon = [-2,26]     ;  0<GLON<+24
-str[0].glat = [-57,42]    ; -55<GLAT<+40
+str[0].glon = [0,24]     ;  0<GLON<+24
+str[0].glat = [-55,40]    ; -55<GLAT<+40
 str[1].server = 'thing'
 ;str[1].glon = [34,110]    ; +36<GLON<+108
-str[1].glon = [-50,2]     ; -48<GLON<0
-str[1].glat = [-57,42]    ; -55<GLAT<+40 
+str[1].glon = [-48,0]     ; -48<GLON<0
+str[1].glat = [-55,40]    ; -55<GLAT<+40 
 str[2].server = 'hulk'
 ;str[2].glon = [250,326]  ; -108<GLON<-36
-str[2].glon = [22,224]    ; 24<GLON<222
-str[2].glat = [-57,42]    ; -55<GLAT<+40 
+str[2].glon = [24,222]    ; 24<GLON<222
+str[2].glat = [-55,40]    ; -55<GLAT<+40 
 str[3].server = 'gp05'
 ;str[3].glon = [178,254] ;  -180<GLON<-108
-str[3].glon = [220,280]   ; 222<GLON<278
-str[3].glat = [-57,42]    ; -55<GLAT<+40 
+str[3].glon = [222,278]   ; 222<GLON<278
+str[3].glat = [-55,40]    ; -55<GLAT<+40 
 str[4].server = 'gp06'
 ;str[4].glon = [106,182]   ; +108<GLON<+180
-str[4].glon = [276,314]   ; 278<GLON<312
-str[4].glat = [-57,42]    ; -55<GLAT<+40 
+str[4].glon = [278,312]   ; 278<GLON<312
+str[4].glat = [-55,40]    ; -55<GLAT<+40 
 str[5].server = 'gp07'
 str[5].glon = [0,360]  ; all GLON
-str[5].glat = [38,100]    ; GLAT>+40
+str[5].glat = [40,100]    ; GLAT>+40
 str[6].server = 'gp08'
 str[6].glon = [0,360]  ; all GLON
-str[6].glat = [-100,-57]  ; GLAT<-55
+str[6].glat = [-100,-55]  ; GLAT<-55
 nstr = n_elements(str)
 
 ; Load the list
@@ -67,41 +67,63 @@ if n_elements(list) eq 0 then begin
 endif
 
 index = MRDFITS(listfile,2,/silent)
+add_tag,index,'ra',0.0d0,index
+add_tag,index,'dec',0.0d0,index
+add_tag,index,'glon',0.0d0,index
+add_tag,index,'glat',0.0d0,index
 PIX2ANG_RING,nside,index.pix,ptheta,pphi
 pra = pphi*radeg
 pdec = 90-ptheta*radeg
 glactc,pra,pdec,2000.0,pglon,pglat,1,/deg
+index.ra = pra
+index.dec = pdec
+index.glon = pglon
+index.glat = pglat
 dt = predictcombtime(pglon,pglat,index.nexp)
 
 ; Loop over the servers
+undefine,allpix
 for i=0,nstr-1 do begin
   glr = str[i].glon
   gbr = str[i].glat
   server = str[i].server
+  off = 2  ; 2 deg overlap/buffer
+  glr2 = [glr[0]-off, glr[1]+off]
+  gbr2 = [gbr[0]-off, gbr[1]+off]
 
-  ; Do the GLON/GLAT selection
-  if glr[0] lt 0 then begin
-    ind = where((list.glon le glr[1] or list.glon ge (glr[0]+360)) and $
-                 list.glat ge gbr[0] and list.glat le gbr[1],nind)
-    pind = where((pglon le glr[1] or pglon ge (glr[0]+360)) and $
-                  pglat ge gbr[0] and pglat le gbr[1],npind)
+  ; Select files on GLON/GLAT with overlap
+  if glr2[0] lt 0 then begin
+    ind = where((list.glon le glr2[1] or list.glon ge (glr2[0]+360)) and $
+                 list.glat ge gbr2[0] and list.glat le gbr2[1],nind)
   endif else begin
-    ind = where(list.glon ge glr[0] and list.glon le glr[1] and $
-                list.glat ge gbr[0] and list.glat le gbr[1],nind)
-    pind = where(pglon ge glr[0] and pglon le glr[1] and $
-                 pglat ge gbr[0] and pglat le gbr[1],npind)
+    ind = where(list.glon ge glr2[0] and list.glon le glr2[1] and $
+                list.glat ge gbr2[0] and list.glat le gbr2[1],nind)
+  endelse
+  ; Select healpix pixels using GLON/GLAT
+  if glr[0] lt 0 then begin
+    pind = where((index.glon lt glr[1] or index.glon ge (glr[0]+360)) and $
+                  index.glat ge gbr[0] and index.glat lt gbr[1],npind)
+  endif else begin
+    pind = where(index.glon ge glr[0] and index.glon lt glr[1] and $
+                 index.glat ge gbr[0] and index.glat lt gbr[1],npind)
   endelse
   tfrac = total(dt[pind])/total(dt)
   print,server,' ',strtrim(nind,2),' exposures selected.  Time fraction = ',stringize(tfrac,ndec=3)
 
-  ; catalog and metafile
+  ; Catalog and metafile list
   catfile = list[ind].file
   metafile = repstr(catfile,'_cat','_meta')
   allfiles = [catfile,metafile]
+  if server eq 'gp05' or server eq 'gp06' or server eq 'gp07' or server eq 'gp08' then allfiles='/net'+allfiles
+  ; Pixel list
+  allpix = index[pind].pix
+  push,everypix,allpix
 
   ; Write out
-  outfile = '/dl1/users/dnidever/nsc/instcal/v2/lists/combine_list_'+server+'.txt'
-  WRITELINE,outfile,allfiles
+  ;outfile = '/dl1/users/dnidever/nsc/instcal/v2/lists/combine_list_'+server+'.txt'
+  ;WRITELINE,outfile,allfiles
+  outpixfile = '/dl1/users/dnidever/nsc/instcal/v2/lists/combine_pix_'+server+'.txt'
+  WRITELINE,outpixfile,allpix
 
   ;stop
 
