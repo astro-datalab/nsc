@@ -66,7 +66,7 @@ if keyword_set(filesexist) then begin
   test = file_test(list.file)
   bdfile = where(test eq 0,nbdfile)
   if nbdfile gt 0 then begin
-    print,strtrim(nbdfile,2),' catalog files do NOT exist.  Returning'
+    print,strtrim(nbdfile,2),' needed catalog files NOT FOUND'
     return
   endif
 endif
