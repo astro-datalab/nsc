@@ -302,11 +302,12 @@ FOR i=0,nlist-1 do begin
   ROTSPHCEN,cat1.ra,cat1.dec,buffer.cenra,buffer.cendec,lon,lat,/gnomic
   if running_gdl() eq 0 then begin
     ROI_CUT,buffer.lon,buffer.lat,lon,lat,ind0,ind1,fac=1000,/silent
+    nmatch = n_elements(ind1)
   endif else begin
     inmask = INSIDE(lon,lat,buffer.lon,buffer.lat)
-    ind1 = where(inmask eq 1)
+    ind1 = where(inmask eq 1,nind1)
+    nmatch = nind1
   endelse
-  nmatch = n_elements(ind1)
 
   ; Only want source inside this pixel
   ;theta = (90-cat1.dec)/radeg
