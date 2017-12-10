@@ -76,7 +76,9 @@ for i=0,nmeta-1 do begin
   ; missing the instrument tag and expnum not correct for bok
   ;  just use ccdnum.number
   dum = strsplitter(srcid0,'.',/extract)
-  srcid = reform(dum[1,*])+'.'+reform(dum[2,*])
+  ncol = n_elements(dum[*,0])
+  srcid = reform(dum[ncol-2,*])+'.'+reform(dum[ncol-1,*])
+  ;srcid = reform(dum[1,*])+'.'+reform(dum[2,*])
   MATCH,catid,srcid,ind1,ind2,/sort,count=nmatch
   if nmatch ne nind then stop,'not all matched'
   print,strtrim(i+1,2),' ',meta[i].base,' ',strtrim(ncat,2),' ',strtrim(nmatch,2)
