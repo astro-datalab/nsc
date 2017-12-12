@@ -1,4 +1,5 @@
-pro nsc_instcal_combine,pix,version=version,nside=nside,redo=redo,stp=stp,outdir=outdir,local=local,filesexist=filesexist
+pro nsc_instcal_combine,pix,version=version,nside=nside,redo=redo,stp=stp,outdir=outdir,local=local,$
+                            filesexist=filesexist,pixfiles=pixfiles
 
 t0 = systime(1)
 
@@ -13,7 +14,8 @@ radeg = 180.0d0 / !dpi
 
 ; Not enough inputs
 if n_elements(pix) eq 0 then begin
-  print,'Syntax - nsc_instcal_combine,pix,version=version,nside=nside,redo=redo,stp=stp'
+  print,'Syntax - nsc_instcal_combine,pix,version=version,nside=nside,redo=redo,stp=stp,outdir=outdir,'
+  print,'                             local=local,filesexist=filesexist,pixfiles=pixfiles'
   return
 endif
 
@@ -63,11 +65,28 @@ for i=0,nneipix-1 do begin
     push,list,list1
   endif
 endfor
-; Get unique values
-ui = uniq(list.file,sort(list.file))
-list = list[ui]
-nlist = n_elements(list)
-print,strtrim(nlist,2),' exposures that overlap this pixel and neighbors'
+; Use entire exposure files
+if not keyword_set(pixfiles) then begin
+  ; Get unique values
+  ui = uniq(list.file,sort(list.file))
+  list = list[ui]
+  nlist = n_elements(list)
+  print,strtrim(nlist,2),' exposures that overlap this pixel and neighbors'
+; Use separate files for each exposure healpix pixel
+endif else begin
+  print,'Using separate exposure healpix files'
+  listfile = list.file
+  newlistfile = file_dirname(listfile)+'/'+file_basename(listfile,'.fits')+'.'+strtrim(list.pix,2)+'.fits'
+  list.file = newlistfile
+  ; Get unique elements
+  ui = uniq(list.file,sort(list.file))
+  list = list[ui]
+  nlist = n_elements(list)
+  uiexp = uniq(listfile,sort(listfile))  ; unique exposures
+  nuexp = n_elements(uiexp)
+  print,strtrim(nuexp,2),' exposures that overlap this pixel and neighbors'
+  print,strtrim(nlist,2),' exposure/healpix that overlap this pixel and neighbors'
+endelse
 
 ; Fix directory
 if strmid(dldir,0,4) eq '/net' then begin
@@ -163,6 +182,10 @@ FOR i=0,nlist-1 do begin
 
   ; Load the exposure catalog
   file = list[i].file
+  if file_test(file) eq 0 then begin
+    print,file,' NOT FOUND'
+    goto,BOMB
+  endif
   cat1 = MRDFITS(file,1,/silent)
   ncat1 = n_elements(cat1)
   print,'  ',strtrim(ncat1,2),' sources'
@@ -174,6 +197,10 @@ FOR i=0,nlist-1 do begin
   endif
 
   metafile = repstr(file,'_cat','_meta')
+  if keyword_set(pixfiles) then begin
+    pos = strpos(file,'_cat')
+    metafile = strmid(file,0,pos)+'_meta.fits'
+  endif
   meta = MRDFITS(metafile,1,/silent)
   meta.base = strtrim(meta.base)
   meta.expnum = strtrim(meta.expnum)
