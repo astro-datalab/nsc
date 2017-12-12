@@ -121,7 +121,7 @@ radbound = sqrt(lonbound^2+latbound^2)
 frac = 1.0 + 1.5*max(buffsize/radbound)
 lonbuff = lonbound*frac
 latbuff = latbound*frac
-buffer = {cenra:cenra,cendec:cendec,lon:lonbuff,lat:latbuff}
+buffer = {cenra:cenra,cendec:cendec,lon:lonbuff,lat:latbuff,lr:minmax(lonbuff),br:minmax(latbuff)}
 
 ; Initialize the ID structure
 ;  this will contain the SourceID, Exposure name, ObjectID
@@ -304,9 +304,18 @@ FOR i=0,nlist-1 do begin
     ROI_CUT,buffer.lon,buffer.lat,lon,lat,ind0,ind1,fac=1000,/silent
     nmatch = n_elements(ind1)
   endif else begin
-    inmask = INSIDE(lon,lat,buffer.lon,buffer.lat)
-    ind1 = where(inmask eq 1,nind1)
-    nmatch = nind1
+    ; first use WHERE with X/Y limits
+    in1 = where(lon ge buffer.lr[0] and lon le buffer.lr[1] and $
+                lat ge buffer.br[0] and lat le buffer.br[1],nin1)
+    if nin1 gt 0 then begin
+      inmask = INSIDE(lon[in1],lat[in1],buffer.lon,buffer.lat)
+      in2 = where(inmask eq 1,nin2)
+      if nin2 gt 0 then ind1=in1[in2] else undefine,ind1
+      nmatch = nin2
+    endif else begin
+      undefine,ind1
+      nmatch = 0
+    endelse
   endelse
 
   ; Only want source inside this pixel
@@ -834,6 +843,8 @@ if nuexpnum gt 1 then begin
 endif else numobjexp=n_elements(expnum)
 MATCH,long(sumstr.expnum),uexpnum,ind1,ind2,/sort,count=nmatch
 sumstr[ind1].nobjects = numobjexp
+
+stop
 
 ; Write the output file
 print,'Writing combined catalog to ',outfile
