@@ -1,4 +1,4 @@
-pro make_combine_sourcecat,pix,source,redo=redo,stp=stp,nooutput=nooutput
+pro make_combine_sourcecat,pix,source,redo=redo,stp=stp,nooutput=nooutput,version=version
 
 ; Make the source catalog for a single combined healpix
 
@@ -6,12 +6,14 @@ t0 = systime(1)
 
 nside = 128
 NSC_ROOTDIRS,dldir,mssdir,localdir
-dir = dldir+'users/dnidever/nsc/instcal/'
+if n_elements(version) eq 0 then version='v2'
+dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 radeg = 180.0d0 / !dpi
+
 
 ; Not enough inputs
 if n_elements(pix) eq 0 then begin
-  print,'Syntax - make_combine_sourcecat,pix,source,redo=redo,stp=stp,nooutput=nooutput'
+  print,'Syntax - make_combine_sourcecat,pix,source,redo=redo,stp=stp,nooutput=nooutput,version=version'
   return
 endif
 
@@ -25,7 +27,7 @@ endif
 print,'Creating source catalog for Healpix pixel = ',strtrim(pix,2)
 
 ; Does the object file exist
-objfile = dir+'combine/'+strtrim(pix,2)+'.fits.gz'
+objfile = dir+'combine/'+strtrim(long(pix)/1000,2)+'/'+strtrim(pix,2)+'.fits.gz'
 if file_test(objfile) eq 0 then begin
   print,objfile,' NOT FOUND'
   return
@@ -74,7 +76,9 @@ for i=0,nmeta-1 do begin
   ; missing the instrument tag and expnum not correct for bok
   ;  just use ccdnum.number
   dum = strsplitter(srcid0,'.',/extract)
-  srcid = reform(dum[1,*])+'.'+reform(dum[2,*])
+  ncol = n_elements(dum[*,0])
+  srcid = reform(dum[ncol-2,*])+'.'+reform(dum[ncol-1,*])
+  ;srcid = reform(dum[1,*])+'.'+reform(dum[2,*])
   MATCH,catid,srcid,ind1,ind2,/sort,count=nmatch
   if nmatch ne nind then stop,'not all matched'
   print,strtrim(i+1,2),' ',meta[i].base,' ',strtrim(ncat,2),' ',strtrim(nmatch,2)
