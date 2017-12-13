@@ -2,6 +2,7 @@ pro check_combine_status,pixinfo
 
 if n_elements(nside) eq 0 then nside = 128
 NSC_ROOTDIRS,dldir,mssdir,localdir,longhost
+host = first_el(strsplit(longhost,'.',/extract))
 if n_elements(version) eq 0 then version='v2'
 
 files = file_search(localdir+'dnidever/nsc/instcal/'+version+'/tmp/nsccmb*batch',count=nfiles)
@@ -29,7 +30,7 @@ leftpix = upix[left]
 print,strtrim(nleft,2),' pixels with no output file'
 
 ; Check on the ones that are left
-pixinfo = replicate({pix:0L,fitsexists:-1,nbatch:-1,startdate:0.0,enddate:0.0,dt:-1.0,nloglines:0L,nexp:-1L,nobj:-1L,$
+pixinfo = replicate({host:host,pix:0L,fitsexists:-1,nbatch:-1,startdate:0.0,enddate:0.0,dt:-1.0,nloglines:0L,nexp:-1L,nobj:-1L,$
                      wrotefile:-1,failure:-1,nosources:-1,missingfiles:-1,alreadyexists:-1,stillrunning:-1},nleft)
 pixinfo.pix = leftpix
 for i=0,nleft-1 do begin
