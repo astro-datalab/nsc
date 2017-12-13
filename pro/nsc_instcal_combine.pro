@@ -1,4 +1,5 @@
-pro nsc_instcal_combine,pix,version=version,nside=nside,redo=redo,stp=stp,outdir=outdir,local=local,filesexist=filesexist
+pro nsc_instcal_combine,pix,version=version,nside=nside,redo=redo,stp=stp,outdir=outdir,local=local,$
+                            filesexist=filesexist,pixfiles=pixfiles
 
 t0 = systime(1)
 
@@ -13,7 +14,8 @@ radeg = 180.0d0 / !dpi
 
 ; Not enough inputs
 if n_elements(pix) eq 0 then begin
-  print,'Syntax - nsc_instcal_combine,pix,version=version,nside=nside,redo=redo,stp=stp'
+  print,'Syntax - nsc_instcal_combine,pix,version=version,nside=nside,redo=redo,stp=stp,outdir=outdir,'
+  print,'                             local=local,filesexist=filesexist,pixfiles=pixfiles'
   return
 endif
 
@@ -63,11 +65,28 @@ for i=0,nneipix-1 do begin
     push,list,list1
   endif
 endfor
-; Get unique values
-ui = uniq(list.file,sort(list.file))
-list = list[ui]
-nlist = n_elements(list)
-print,strtrim(nlist,2),' exposures that overlap this pixel and neighbors'
+; Use entire exposure files
+if not keyword_set(pixfiles) then begin
+  ; Get unique values
+  ui = uniq(list.file,sort(list.file))
+  list = list[ui]
+  nlist = n_elements(list)
+  print,strtrim(nlist,2),' exposures that overlap this pixel and neighbors'
+; Use separate files for each exposure healpix pixel
+endif else begin
+  print,'Using separate exposure healpix files'
+  listfile = list.file
+  newlistfile = file_dirname(listfile)+'/'+file_basename(listfile,'.fits')+'.'+strtrim(list.pix,2)+'.fits'
+  list.file = newlistfile
+  ; Get unique elements
+  ui = uniq(list.file,sort(list.file))
+  list = list[ui]
+  nlist = n_elements(list)
+  uiexp = uniq(listfile,sort(listfile))  ; unique exposures
+  nuexp = n_elements(uiexp)
+  print,strtrim(nuexp,2),' exposures that overlap this pixel and neighbors'
+  print,strtrim(nlist,2),' exposure/healpix that overlap this pixel and neighbors'
+endelse
 
 ; Fix directory
 if strmid(dldir,0,4) eq '/net' then begin
@@ -121,7 +140,7 @@ radbound = sqrt(lonbound^2+latbound^2)
 frac = 1.0 + 1.5*max(buffsize/radbound)
 lonbuff = lonbound*frac
 latbuff = latbound*frac
-buffer = {cenra:cenra,cendec:cendec,lon:lonbuff,lat:latbuff}
+buffer = {cenra:cenra,cendec:cendec,lon:lonbuff,lat:latbuff,lr:minmax(lonbuff),br:minmax(latbuff)}
 
 ; Initialize the ID structure
 ;  this will contain the SourceID, Exposure name, ObjectID
@@ -163,6 +182,10 @@ FOR i=0,nlist-1 do begin
 
   ; Load the exposure catalog
   file = list[i].file
+  if file_test(file) eq 0 then begin
+    print,file,' NOT FOUND'
+    goto,BOMB
+  endif
   cat1 = MRDFITS(file,1,/silent)
   ncat1 = n_elements(cat1)
   print,'  ',strtrim(ncat1,2),' sources'
@@ -174,6 +197,10 @@ FOR i=0,nlist-1 do begin
   endif
 
   metafile = repstr(file,'_cat','_meta')
+  if keyword_set(pixfiles) then begin
+    pos = strpos(file,'_cat')
+    metafile = strmid(file,0,pos)+'_meta.fits'
+  endif
   meta = MRDFITS(metafile,1,/silent)
   meta.base = strtrim(meta.base)
   meta.expnum = strtrim(meta.expnum)
@@ -304,9 +331,18 @@ FOR i=0,nlist-1 do begin
     ROI_CUT,buffer.lon,buffer.lat,lon,lat,ind0,ind1,fac=1000,/silent
     nmatch = n_elements(ind1)
   endif else begin
-    inmask = INSIDE(lon,lat,buffer.lon,buffer.lat)
-    ind1 = where(inmask eq 1,nind1)
-    nmatch = nind1
+    ; first use WHERE with X/Y limits
+    in1 = where(lon ge buffer.lr[0] and lon le buffer.lr[1] and $
+                lat ge buffer.br[0] and lat le buffer.br[1],nin1)
+    if nin1 gt 0 then begin
+      inmask = INSIDE(lon[in1],lat[in1],buffer.lon,buffer.lat)
+      in2 = where(inmask eq 1,nin2)
+      if nin2 gt 0 then ind1=in1[in2] else undefine,ind1
+      nmatch = nin2
+    endif else begin
+      undefine,ind1
+      nmatch = 0
+    endelse
   endelse
 
   ; Only want source inside this pixel
