@@ -217,7 +217,7 @@ FOR i=0,nlist-1 do begin
     bdind = where(cat1.x_image gt 1000 and cat1.ccdnum eq 31,nbdind,comp=gdind,ncomp=ngdind)
     if nbdind gt 0 then begin   ; some bad ones found
       if ngdind eq 0 then begin   ; all bad
-        print,'NO useful measurements in ',fitsfile
+        print,'NO useful measurements in ',file
         undefine,cat1
         ncat1 = 0
         goto,BOMB
