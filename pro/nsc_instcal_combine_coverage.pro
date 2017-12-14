@@ -42,7 +42,7 @@ QUERY_POLYGON,nside2,vertex,listpix,nlistpix
 
 ; Initialize the coverage structure
 print,'Creating coverage structure for pixel ',strtrim(pix,2)
-covstr = replicate({pix:0L,pix128:long(pix),ra:0.0d0,dec:0.0d0,coverage:0.0,nexp:0,ucoverage:0.0,unexp:0,udepth:-9999.0,gcoverage:0.0,gnexp:0,gdepth:-9999.0,$
+covstr = replicate({pix:0L,pix128:long(pix),ra:0.0d0,dec:0.0d0,nobj:0L,coverage:0.0,nexp:0,ucoverage:0.0,unexp:0,udepth:-9999.0,gcoverage:0.0,gnexp:0,gdepth:-9999.0,$
                     rcoverage:0.0,rnexp:0,rdepth:0.0,icoverage:0.0,inexp:0,idepth:-9999.0,zcoverage:0.0,$
                     znexp:0,zdepth:-9999.0,ycoverage:0.0,ynexp:0,ydepth:-9999.0,vrcoverage:0.0,vrnexp:0,vrdepth:-9999.0},nlistpix)
 covstr.pix = listpix
@@ -69,6 +69,12 @@ expstr.filter = strtrim(expstr.filter,2)
 add_tag,expstr,'success',0,expstr
 add_tag,expstr,'hoverlap',0,expstr
 add_tag,expstr,'chipindx',-1LL,expstr
+
+; Load the object table
+obj = MRDFITS(objfile,2,/silent)
+ophi = obj.ra/radeg
+otheta = (90-obj.dec)/radeg 
+ANG2PIX_RING,nside2,otheta,ophi,obj_pix4096
 
 ; Load the chip summary structure for each exposure
 print,'Loading the chip summary information'
@@ -166,6 +172,10 @@ nfilters = n_elements(filters)
 ; Loop over the small pixels and figure out the coverage and depth
 ; and number of exposures
 for i=0,nlistpix-1 do begin
+
+  ; Get the objects for this pixel
+  MATCH,listpix[i],obj_pix4096,pind1,pind2,/sort,count=nobjmatch
+  covstr[i].nobj = nobjmatch
 
   ; Get healpix boundary coordinates
   PIX2VEC_RING,nside2,listpix[i],vec1,vertex1
