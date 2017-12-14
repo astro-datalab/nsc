@@ -180,23 +180,8 @@ undefine,allmeta
 FOR i=0,nlist-1 do begin
   print,strtrim(i+1,2),' Loading ',list[i].file
 
-  ; Load the exposure catalog
-  file = list[i].file
-  if file_test(file) eq 0 then begin
-    print,file,' NOT FOUND'
-    goto,BOMB
-  endif
-  cat1 = MRDFITS(file,1,/silent)
-  ncat1 = n_elements(cat1)
-  print,'  ',strtrim(ncat1,2),' sources'
-
-  ; Make sure it's in the right format
-  if n_tags(cat1) ne 45 then begin   ; 49 for v1
-    print,'  This catalog does not have the right format. Skipping'
-    goto,BOMB
-  endif
-
-  metafile = repstr(file,'_cat','_meta')
+  ; Load meta data file first
+  metafile = repstr(list[i].file,'_cat','_meta')
   if keyword_set(pixfiles) then begin
     pos = strpos(file,'_cat')
     metafile = strmid(file,0,pos)+'_meta.fits'
@@ -205,10 +190,6 @@ FOR i=0,nlist-1 do begin
   meta.base = strtrim(meta.base)
   meta.expnum = strtrim(meta.expnum)
   meta.mjd = date2jd(meta.dateobs,/mjd)  ; recompute because some MJD are bad
-  ;head = headfits(list[i].file,exten=0)
-  ;filtername = sxpar(head,'filter')
-  ;if strmid(filtername,0,2) eq 'VR' then filter='VR' else filter=strmid(filtername,0,1)
-  ;exptime = sxpar(head,'exptime')
   print,'  FILTER=',meta.filter,'  EXPTIME=',stringize(meta.exptime,ndec=1),' sec'
 
   ; Check that all chips were astrometrically calibrated
@@ -220,17 +201,63 @@ FOR i=0,nlist-1 do begin
     goto,BOMB
   endif
 
+  ; Load the exposure catalog
+  if file_test(list[i].file) eq 0 then begin
+    print,list[i].file,' NOT FOUND'
+    goto,BOMB
+  endif
+  cat = MRDFITS(list[i].file,1,/silent)
+  ncat = n_elements(cat)
+  print,'  ',strtrim(ncat,2),' sources'
+
+  ; Make sure it's in the right format
+  if n_tags(cat) ne 45 then begin   ; 49 for v1
+    print,'  This catalog does not have the right format. Skipping'
+    goto,BOMB
+  endif
+
+  ; Only include sources inside Boundary+Buffer zone
+  ;  -use ROI_CUT
+  ;  -reproject to tangent plane first so we don't have to deal
+  ;     with RA=0 wrapping or pol issues
+  ROTSPHCEN,cat.ra,cat.dec,buffer.cenra,buffer.cendec,lon,lat,/gnomic
+  if running_gdl() eq 0 then begin
+    ROI_CUT,buffer.lon,buffer.lat,lon,lat,ind0,ind1,fac=1000,/silent
+    nmatch = n_elements(ind1)
+  endif else begin
+    ; first use WHERE with X/Y limits
+    in1 = where(lon ge buffer.lr[0] and lon le buffer.lr[1] and $
+                lat ge buffer.br[0] and lat le buffer.br[1],nin1)
+    if nin1 gt 0 then begin
+      inmask = INSIDE(lon[in1],lat[in1],buffer.lon,buffer.lat)
+      in2 = where(inmask eq 1,nin2)
+      if nin2 gt 0 then ind1=in1[in2] else undefine,ind1
+      nmatch = nin2
+    endif else begin
+      undefine,ind1
+      nmatch = 0
+    endelse
+  endelse
+  ; Only want source inside this pixel
+  if nmatch eq 0 then begin
+    print,'  No sources inside this pixel'
+    goto,BOMB
+  endif
+  print,'  ',strtrim(nmatch,2),' sources are inside this pixel'
+  cat = cat[ind1]
+  ncat = nmatch
+
   ; Remove bad chip data
   ; Half of chip 31 for MJD>56660
   ;  c4d_131123_025436_ooi_r_v2 with MJD=56619 has problems too
   ;  if the background b/w the left and right half is large then BAd
-  lft31 = where(cat1.x_image lt 1024 and cat1.ccdnum eq 31,nlft31)
-  rt31 = where(cat1.x_image ge 1024 and cat1.ccdnum eq 31,nrt31)
+  lft31 = where(cat.x_image lt 1024 and cat.ccdnum eq 31,nlft31)
+  rt31 = where(cat.x_image ge 1024 and cat.ccdnum eq 31,nrt31)
   if nlft31 gt 10 and nrt31 gt 10 then begin
-    lftback = median([cat1[lft31].background])
-    rtback = median([cat1[rt31].background])
+    lftback = median([cat[lft31].background])
+    rtback = median([cat[rt31].background])
     mnback = 0.5*(lftback+rtback)
-    sigback = mad(cat1.background)
+    sigback = mad(cat.background)
     if abs(lftback-rtback) gt (sqrt(mnback)>sigback) then jump31=1 else jump31=0
     print,'  Big jump in CCDNUM 31 background levels'
   endif else jump31=0
@@ -241,17 +268,17 @@ FOR i=0,nlist-1 do begin
     ; X: 1025-2049 bad
     ; use 1000 as the boundary since sometimes there's a sharp drop
     ; at the boundary that causes problem sources with SExtractor
-    bdind = where(cat1.x_image gt 1000 and cat1.ccdnum eq 31,nbdind,comp=gdind,ncomp=ngdind)
+    bdind = where(cat.x_image gt 1000 and cat.ccdnum eq 31,nbdind,comp=gdind,ncomp=ngdind)
     if nbdind gt 0 then begin   ; some bad ones found
       if ngdind eq 0 then begin   ; all bad
-        print,'NO useful measurements in ',file
-        undefine,cat1
-        ncat1 = 0
+        print,'NO useful measurements in ',list[i].file
+        undefine,cat
+        ncat = 0
         goto,BOMB
       endif else begin
         print,'  Removing '+strtrim(nbdind,2)+' bad chip 31 measurements, '+strtrim(ngdind,2)+' left.'
-        REMOVE,bdind,cat1
-        ncat1 = n_elements(cat1)
+        REMOVE,bdind,cat
+        ncat = n_elements(cat)
       endelse
     endif  ; some bad ones to remove
   endif else badchip31=0     ; chip 31
@@ -292,71 +319,36 @@ FOR i=0,nlist-1 do begin
   ; case of an OR or AND FLAG TYPE.
 
   ; Make a cut on quality mask flag (IMAFLAGS_ISO)
-  bdcat = where(cat1.imaflags_iso gt 0,nbdcat)
+  bdcat = where(cat.imaflags_iso gt 0,nbdcat)
   if nbdcat gt 0 then begin
     print,'  Removing ',strtrim(nbdcat,2),' sources with bad CP flags.'
-    if nbdcat eq ncat1 then goto,BOMB
-    REMOVE,bdcat,cat1
-    ncat1 = n_elements(cat1)
+    if nbdcat eq ncat then goto,BOMB
+    REMOVE,bdcat,cat
+    ncat = n_elements(cat)
   endif
 
   ; Make cuts on SE FLAGS
   ;   this removes problematic truncatd sources near chip edges
-  bdseflags = where( ((cat1.flags and 8) eq 8) or $             ; object truncated
-                     ((cat1.flags and 16) eq 16),nbdseflags)    ; aperture truncate
+  bdseflags = where( ((cat.flags and 8) eq 8) or $             ; object truncated
+                     ((cat.flags and 16) eq 16),nbdseflags)    ; aperture truncate
   if nbdseflags gt 0 then begin
     print,'  Removing ',strtrim(nbdseflags,2),' truncated sources'
-    if nbdseflags eq ncat1 then goto,BOMB
-    REMOVE,bdseflags,cat1
-    ncat1 = n_elements(cat1)
+    if nbdseflags eq ncat then goto,BOMB
+    REMOVE,bdseflags,cat
+    ncat = n_elements(cat)
   endif
 
   ; Removing low-S/N sources
   ;  snr = 1.087/err
   snrcut = 5.0
-  bdcatsnr = where(1.087/cat1.magerr_auto lt snrcut,nbdcatsnr)
+  bdcatsnr = where(1.087/cat.magerr_auto lt snrcut,nbdcatsnr)
   if nbdcatsnr gt 0 then begin
     print,'  Removing ',strtrim(nbdcatsnr,2),' sources with S/N<',strtrim(snrcut,2)
-    if nbdcatsnr eq ncat1 then goto,BOMB
-    REMOVE,bdcatsnr,cat1
-    ncat1 = n_elements(cat1)
+    if nbdcatsnr eq ncat then goto,BOMB
+    REMOVE,bdcatsnr,cat
+    ncat = n_elements(cat)
   endif
 
-  ; Only include sources inside Boundary+Buffer zone
-  ;  -use ROI_CUT
-  ;  -reproject to tangent plane first so we don't have to deal
-  ;     with RA=0 wrapping or pol issues
-  ROTSPHCEN,cat1.ra,cat1.dec,buffer.cenra,buffer.cendec,lon,lat,/gnomic
-  if running_gdl() eq 0 then begin
-    ROI_CUT,buffer.lon,buffer.lat,lon,lat,ind0,ind1,fac=1000,/silent
-    nmatch = n_elements(ind1)
-  endif else begin
-    ; first use WHERE with X/Y limits
-    in1 = where(lon ge buffer.lr[0] and lon le buffer.lr[1] and $
-                lat ge buffer.br[0] and lat le buffer.br[1],nin1)
-    if nin1 gt 0 then begin
-      inmask = INSIDE(lon[in1],lat[in1],buffer.lon,buffer.lat)
-      in2 = where(inmask eq 1,nin2)
-      if nin2 gt 0 then ind1=in1[in2] else undefine,ind1
-      nmatch = nin2
-    endif else begin
-      undefine,ind1
-      nmatch = 0
-    endelse
-  endelse
-
-  ; Only want source inside this pixel
-  ;theta = (90-cat1.dec)/radeg
-  ;phi = cat1.ra/radeg
-  ;ANG2PIX_RING,nside,theta,phi,ipring
-  ;MATCH,ipring,pix,ind1,ind2,/sort,count=nmatch
-  if nmatch eq 0 then begin
-    print,'  No sources inside this pixel'
-    goto,BOMB
-  endif
-  print,'  ',strtrim(nmatch,2),' sources are inside this pixel'
-  cat = cat1[ind1]
-  ncat = nmatch
 
   ; Add metadata to ALLMETA
   ;  Make sure it's in the right format
