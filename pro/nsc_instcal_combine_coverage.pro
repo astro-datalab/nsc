@@ -1,22 +1,25 @@
-pro nsc_instcal_combine_coverage,pix,redo=redo
+pro nsc_instcal_combine_coverage,pix,redo=redo,version=version
 
 ; Make the coverage map for a single nside=128 NSC healpix
 
 ; Combine all of the data
 NSC_ROOTDIRS,dldir,mssdir,localdir
-dir = dldir+'users/dnidever/nsc/instcal/'
+if n_elements(version) eq 0 then version='v2'
+dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 nside = 128
 nside2 = 4096
 radeg = 180.0d0 / !dpi
 
+
 ; Not enough inputs
 if n_elements(pix) eq 0 then begin
-  print,'Syntax - nsc_instcal_combine_coverage,pix,redo=redo'
+  print,'Syntax - nsc_instcal_combine_coverage,pix,redo=redo,version=version'
   return
 endif
 
 ; Does the coverage map already exist
-covfile = dir+'combine/coverage/'+strtrim(pix,2)+'_coverage.fits'
+covfile = dir+'combine/coverage/'+strtrim(long(pix)/1000,2)+'/'+strtrim(pix,2)+'_coverage.fits'
+;covfile = dir+'combine/coverage/'+strtrim(pix,2)+'_coverage.fits'
 if file_test(covfile) eq 1 and not keyword_set(redo) then begin
   print,covfile,' EXISTS and /redo NOT set.'
   return
@@ -38,10 +41,10 @@ mmhlat = minmax(hlat)
 QUERY_POLYGON,nside2,vertex,listpix,nlistpix
 
 ; Initialize the coverage structure
-print,'Creating coverage structure'
-covstr = replicate({pix:0L,pix128:long(pix),ra:0.0d0,dec:0.0d0,coverage:0.0,nexp:0,ucoverage:0.0,unexp:0,udepth:0.0,gcoverage:0.0,gnexp:0,gdepth:0.0,$
-                    rcoverage:0.0,rnexp:0,rdepth:0.0,icoverage:0.0,inexp:0,idepth:0.0,zcoverage:0.0,$
-                    znexp:0,zdepth:0.0,ycoverage:0.0,ynexp:0,ydepth:0.0,vrcoverage:0.0,vrnexp:0,vrdepth:0.0},nlistpix)
+print,'Creating coverage structure for pixel ',strtrim(pix,2)
+covstr = replicate({pix:0L,pix128:long(pix),ra:0.0d0,dec:0.0d0,coverage:0.0,nexp:0,ucoverage:0.0,unexp:0,udepth:-9999.0,gcoverage:0.0,gnexp:0,gdepth:-9999.0,$
+                    rcoverage:0.0,rnexp:0,rdepth:0.0,icoverage:0.0,inexp:0,idepth:-9999.0,zcoverage:0.0,$
+                    znexp:0,zdepth:-9999.0,ycoverage:0.0,ynexp:0,ydepth:-9999.0,vrcoverage:0.0,vrnexp:0,vrdepth:-9999.0},nlistpix)
 covstr.pix = listpix
 PIX2ANG_RING,nside2,covstr.pix,theta,phi
 covstr.ra = phi*radeg
@@ -49,7 +52,8 @@ covstr.dec = 90-theta*radeg
 covtags = tag_names(covstr)
 
 ; Does the combined object file exist?
-objfile = dir+'combine/'+strtrim(pix,2)+'.fits.gz'
+objfile = dir+'combine/'+strtrim(long(pix)/1000,2)+'/'+strtrim(pix,2)+'.fits.gz'
+;objfile = dir+'combine/'+strtrim(pix,2)+'.fits.gz'
 if file_test(objfile) eq 0 then begin
   print,objfile,' NOT FOUND'
   goto,SAVEFILE
@@ -229,7 +233,7 @@ for i=0,nlistpix-1 do begin
     overlapfrac = float(ngdpix) / maskpix
     ; Calculate average depth image
     mndepthim = depthim/(numim > 1)
-    if ngdpix gt 0 then depth = median(mndepthim[gdpix]) else depth=0.0
+    if ngdpix gt 0 then depth = median(mndepthim[gdpix]) else depth=-9999.0
     ; Number of chips
     nchipoverlap = max(numim)
 
@@ -248,6 +252,7 @@ endfor  ; pixel loop
 ; Save the coverage map
 SAVEFILE:
 print,'Writing coverage information to ',covfile
+if file_test(file_dirname(covfile),/directory) eq 0 then file_mkdir,file_dirname(covfile)
 MWRFITS,covstr,covfile,/create
 
 ;cat = mrdfits(objfile,2,/silent)
