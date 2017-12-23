@@ -1,6 +1,10 @@
 pro make_pixchipsum,pix,redo=redo
 
 ; Make small summary table of the number of chip sources in each pixel
+
+; Setting pool thread values
+if n_elements(ncpu) eq 0 then ncpu=1
+CPU, TPOOL_NTHREADS = ncpu
   
 NSC_ROOTDIRS,dldir,mssdir,localdir,longhost
 host = first_el(strsplit(longhost,'.',/extract))
