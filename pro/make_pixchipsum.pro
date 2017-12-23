@@ -47,9 +47,11 @@ endif else begin
   tempfile2 = mktemp('chipsumsplit',outdir=tmpdir)
   writecol,tempfile1,idstr.sourceid
   file_delete,tempfile2,/allow
-  spawn,"cat "+tempfile1+" | awk '{split($0,a,"."); print a[3]}' > "+tempfile2,out,errout
+  cmd = "cat "+tempfile1+" | awk '{split($0,a,"+'".");'+" print a[3]}' > "+tempfile2
+  spawn,cmd,out,errout
+  ;spawn,"cat "+tempfile1+" | awk '{split($0,a,"."); print a[3]}' > "+tempfile2,out,errout
   readcol,tempfile2,ccdnums,format='A'
-  file_delete[tempfile1,tempfile2],/allow
+  file_delete,[tempfile1,tempfile2],/allow
 endelse
 chids = idstr.exposure+'-'+ccdnums
 uichids = uniq(chids,sort(chids))
