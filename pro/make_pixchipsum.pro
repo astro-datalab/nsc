@@ -7,6 +7,7 @@ host = first_el(strsplit(longhost,'.',/extract))
 if n_elements(version) eq 0 then version='v2'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 cmbdir = dir +'combine/'
+tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 
 if n_elements(pix) eq 0 then begin
   print,'syntax - make_pixchipsum,pix'
@@ -32,8 +33,20 @@ idstr.sourceid = strtrim(idstr.sourceid,2)
 nidstr = n_elements(idstr)
 uiidstr = uniq(idstr.sourceid,sort(idstr.sourceid))
 ; Get unique exposure+ccdnum IDs and add up the sources
-dum = strsplitter(idstr.sourceid,'.',/extract)
-ccdnums = reform(dum[2,*])
+if nidstr lt 1e5 then begin
+  dum = strsplitter(idstr.sourceid,'.',/extract)
+  ccdnums = reform(dum[2,*])
+endif else begin
+  ; strsplitter is SUPER SLOW for very large arrays
+  ;  use awk instead
+  tempfile1 = mktemp('chipsumsplit',outdir=tmpdir)
+  tempfile2 = mktemp('chipsumsplit',outdir=tmpdir)
+  writecol,tempfile1,idstr.sourceid
+  file_delete,tempfile2,/allow
+  spawn,"cat "+tempfile1+" | awk '{split($0,a,"."); print a[3]}' > "+tempfile2,out,errout
+  readcol,tempfile2,ccdnums,format='A'
+  file_delete[tempfile1,tempfile2],/allow
+endelse
 chids = idstr.exposure+'-'+ccdnums
 uichids = uniq(chids,sort(chids))
 uchids = chids[uichids]
@@ -49,16 +62,16 @@ endif else begin
   brkhi = n_elements(chids)-1
   nchsrc = n_elements(chids)
 endelse
-uidstrindex = {id:uchids,exposure:strarr(nuchids),ccdnum:lonarr(nuchids),lo:brklo,hi:brkhi,num:nchsrc,index:si}
+;uidstrindex = {id:uchids,exposure:strarr(nuchids),ccdnum:lonarr(nuchids),lo:brklo,hi:brkhi,num:nchsrc,index:si}
 dum2 = strsplitter(uchids,'-',/extract)
 uchids_exposure_all = reform(dum2[0,*])  ; all
-uidstrindex.exposure = reform(dum2[0,*])
-uidstrindex.ccdnum = long(reform(dum2[1,*]))
+uidstrindex_exposure = reform(dum2[0,*])
+uidstrindex_ccdnum = long(reform(dum2[1,*]))
 ; Make the summary structure
-pixchipsum = replicate({exposure:'',ccdnum:0L,nsources:0L},nuchids)
-pixchipsum.exposure = uidstrindex.exposure
-pixchipsum.ccdnum = uidstrindex.ccdnum
-pixchipsum.nsources = uidstrindex.num
+pixchipsum = replicate({pix:long(pix),exposure:'',ccdnum:0L,nsources:0L},nuchids)
+pixchipsum.exposure = uidstrindex_exposure
+pixchipsum.ccdnum = uidstrindex_ccdnum
+pixchipsum.nsources = nchsrc
 ; Save the file
 print,'Writing to ',outfile
 if file_test(cmbdir+'chipsum/'+strtrim(long(pix)/1000,2)+'/',/directory) eq 0 then file_mkdir,cmbdir+'chipsum/'+strtrim(long(pix)/1000,2)+'/'
