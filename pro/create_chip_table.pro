@@ -62,8 +62,9 @@ index = MRDFITS(listdir+'nsc_healpix_list.fits',2)
 ; Final columns
 tags = ['instrument', 'exposure','expnum','ccdnum','ra','dec','dateobs','mjd','filter','exptime','airmass','nsources','fwhm','rarms','rastderr',$
         'ra_coef1','ra_coef2','ra_coef3','ra_coef4','decrms','decstderr','dec_coef1','dec_coef2','dec_coef3','dec_coef4','ebv','vertex_ra1','vertex_ra2',$
-        'vertex_ra3','vertex_ra4','vertex_dec1','vertex_dec2','vertex_dec3','vertex_dec4','ngaiamatch','zpterm','zptermerr','nrefmatch','depth95','depth10sig']
-types = [7,7,3,2,5,5,7,5,7,4,4,3,4,4,4,5,5,5,5,4,4,5,5,5,5,4,5,5,5,5,5,5,5,5,3,4,4,3,4,4]
+        'vertex_ra3','vertex_ra4','vertex_dec1','vertex_dec2','vertex_dec3','vertex_dec4','ngaiamatch','zpterm','zptermerr','nrefmatch','chipzpterm',$
+        'chipzptermerr','chipnrefmatch','depth95','depth10sig']
+types = [7,7,3,2,5,5,7,5,7,4,4,3,4,4,4,5,5,5,5,4,4,5,5,5,5,4,5,5,5,5,5,5,5,5,3,4,4,3,4,4,3,4,4]
 ; ngoodgaiamatch, ngoodrefmatch
 ; zpspatialvar_XXX
 schema = create_struct(tags[0],fix('',type=types[0]))
@@ -89,6 +90,9 @@ chipstr.vertex_dec1 = chsum.vdec[0]
 chipstr.vertex_dec2 = chsum.vdec[1]
 chipstr.vertex_dec3 = chsum.vdec[2]
 chipstr.vertex_dec4 = chsum.vdec[3]
+chipstr.chipzpterm = chsum.zpterm
+chipstr.chipzptermerr = chsum.zptermerr
+chipstr.chipnrefmatch = chsum.nrefmatch
 chipstr.nsources = 0
 
 ; need exposure, expnum, filter, mjd, dateobs, ebv, fwhm, exptime, airmass
@@ -120,6 +124,9 @@ for i=0,nexpsum-1 do begin
   chipstr[chind].fwhm = expsum[i].fwhm
   chipstr[chind].exptime = expsum[i].exptime
   chipstr[chind].airmass = expsum[i].airmass
+  chipstr[chind].zpterm = expsum[i].zpterm    ; exposure-level zpterm/err/nrefmatch
+  chipstr[chind].zptermerr = expsum[i].zptermerr
+  chipstr[chind].nrefmatch = expsum[i].nrefmatch
 endfor
 
 ; Load all of the CHIPSUM files
@@ -171,19 +178,17 @@ endif else begin
   brkhi = n_elements(chids)-1
   nchsrc = n_elements(chids)
 endelse
-uidstrindex = {id:uchids,exposure:strarr(nuchids),ccdnum:lonarr(nuchids),lo:brklo,hi:brkhi,num:nchsrc,index:si}
+;uidstrindex = {id:uchids,exposure:strarr(nuchids),ccdnum:lonarr(nuchids),lo:brklo,hi:brkhi,num:nchsrc,index:si}
 ; Get unique exposures
 dum2 = strsplitter(uchids,'-',/extract)
 uchids_exposure_all = reform(dum2[0,*])  ; all
-uidstrindex.exposure = reform(dum2[0,*])
-uidstrindex.ccdnum = long(reform(dum2[1,*]))
+uidstrindex_exposure = reform(dum2[0,*])
+uidstrindex_ccdnum = long(reform(dum2[1,*]))
 
 ; Now match to the CHIPSTR structure
 chipstr_chid = chipstr.exposure+'-'+strtrim(chipstr.ccdnum,2)
-MATCH,chipstr_chid,uidstrindex.id,ind1,ind2,/sort,count=nmatch
-chipstr[ind1].nsources = uidstrindex[ind2].num
-
-stop
+MATCH,chipstr_chid,uchids,ind1,ind2,/sort,count=nmatch
+chipstr[ind1].nsources = nchsrc[ind2]   ;uidstrindex[ind2].num
 
 ; Cut out any chips with NO sources
 bdchip = where(chipstr.nsources eq 0,nbdchip)
