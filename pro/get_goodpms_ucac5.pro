@@ -1,4 +1,4 @@
-pro get_goodpms_ucac5,ra,dec,radius,refname=refname,version=version,redo=redo,nside=nside
+pro get_goodpms_ucac5,ra,dec,radius,refname=refname,version=version,redo=redo
 
 ; Get the good PM values and crossmatch with reference catalog
 
