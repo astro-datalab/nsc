@@ -116,7 +116,9 @@ if file_test(tempfile) eq 0 then begin
 endif
 ; Read in the UCAC5 data
 ucac = MRDFITS(tempfile,1,/silent)
+nucac = n_elements(ucac)
 FILE_DELETE,tempfile,/allow
+print,strtrim(nucac,2),' UCAC5 objects'
 
 ; Crossmatch
 dcr = 2.0  ; 1.0
