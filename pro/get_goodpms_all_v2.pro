@@ -1,14 +1,14 @@
-pro get_goodpms_all_ucac5
+pro get_goodpms_all_v2
 
-; Roll-up the NSC-UCAC5 proper motion files
+; Roll-up the NSC-HSOY proper motion files
 
 if n_elements(nside) eq 0 then nside = 128
 NSC_ROOTDIRS,dldir,mssdir,localdir
 if n_elements(version) eq 0 then version='v2'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
-pmdir = dir+'combine/ucac5pm/'
+pmdir = dir+'combine/hsoypm_v2/'
 
-files = file_search(pmdir+'*.fits',count=nfiles)
+files = file_search(pmdir+'*/*.fits',count=nfiles)
 print,strtrim(nfiles,2),' PM files found'
 
 ; Loop over the fits files
@@ -48,14 +48,8 @@ endfor
 ; Trim off extra elements
 str = str[0:cnt-1]
 
-; Make sure they are unique
-str.id = strtrim(str.id,2)
-ui = uniq(str.id,sort(str.id))
-str = str[ui]
-print,strtrim(n_elements(str),2),' unique objects'
-
 ; Save the file
-MWRFITS,str,pmdir+'ucac5pm.fits',/create
+MWRFITS,str,pmdir+'hsoypm.fits',/create
 
 stop
 
