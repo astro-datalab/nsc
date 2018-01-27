@@ -38,7 +38,7 @@ cat = MRDFITS(catfile,1,/silent)
 ncat = n_elements(cat)
 
 ;; Convert to final format
-schema = {id:'',objectid:'',instrument:'',exposure:'',ccdnum:0L,filter:'',mjd:0.0d0,x:0.0,y:0.0,ra:0.0d0,raerr:0.0,dec:0.0d0,decerr:0.0,$
+schema = {id:'',objectid:'',instrument:'',exposure:'',ccdnum:0,filter:'',mjd:0.0d0,x:0.0,y:0.0,ra:0.0d0,raerr:0.0,dec:0.0d0,decerr:0.0,$
           mag_auto:0.0,magerr_auto:0.0,mag_aper1:0.0,magerr_aper1:0.0,mag_aper2:0.0,magerr_aper2:0.0,$
           mag_aper4:0.0,magerr_aper4:0.0,mag_aper6:0.0,magerr_aper6:0.0,mag_aper8:0.0,magerr_aper8:0.0,kron_radius:0.0,$
           background:0.0,threshold:0.0,isoarea:0.0,x2:0.0,x2err:0.0,y2:0.0,y2err:0.0,xy:0.0,xyerr:0.0,$
