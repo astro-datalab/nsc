@@ -41,7 +41,7 @@ ncat = n_elements(cat)
 schema = {id:'',objectid:'',instrument:'',exposure:'',ccdnum:0,filter:'',mjd:0.0d0,x:0.0,y:0.0,ra:0.0d0,raerr:0.0,dec:0.0d0,decerr:0.0,$
           mag_auto:0.0,magerr_auto:0.0,mag_aper1:0.0,magerr_aper1:0.0,mag_aper2:0.0,magerr_aper2:0.0,$
           mag_aper4:0.0,magerr_aper4:0.0,mag_aper6:0.0,magerr_aper6:0.0,mag_aper8:0.0,magerr_aper8:0.0,kron_radius:0.0,$
-          background:0.0,threshold:0.0,isoarea:0.0,x2:0.0,x2err:0.0,y2:0.0,y2err:0.0,xy:0.0,xyerr:0.0,$
+          background:0.0,threshold:0.0,x2:0.0,x2err:0.0,y2:0.0,y2err:0.0,xy:0.0,xyerr:0.0,$
           asemi:0.0,asemierr:0.0,bsemi:0.0,bsemierr:0.0,theta:0.0,thetaerr:0.0,fwhm:0.0,flags:0,imaflags_iso:0L,nimaflags_iso:0L,class_star:0.0}
 meas = replicate(schema,ncat)
 STRUCT_ASSIGN,cat,meas,/nozero
@@ -62,7 +62,6 @@ meas.mag_aper6 = cat.mag_aper[3]
 meas.magerr_aper6 = cat.magerr_aper[3]
 meas.mag_aper8 = cat.mag_aper[4]
 meas.magerr_aper8 = cat.magerr_aper[4]
-meas.isoarea = cat.isoarea_world * 3600.^2  ; convert to arcsec^2
 meas.x2 = cat.x2_world * 3600.^2            ; convert to arcsec^2
 meas.x2err = cat.errx2_world * 3600.^2      ; convert to arcsec^2
 meas.y2 = cat.y2_world * 3600.^2            ; convert to arcsec^2
