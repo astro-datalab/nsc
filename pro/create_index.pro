@@ -3,7 +3,7 @@ function create_index,arr,index
 ; Create an index of array values like reverse indices.
 if n_elements(arr) eq 0 then begin
   print,'Syntax - index = create_index(arr)'
-  return
+  return,-1
 endif
 
 si = sort(arr)
