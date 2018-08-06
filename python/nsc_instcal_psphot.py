@@ -18,7 +18,7 @@ from scipy.ndimage.filters import convolve
 
 if __name__ == "__main__":
 
-# Run SExtractor on one FULL DECam/Mosaic3/Bok InstCal image
+# Run PSPhot on one FULL DECam/Mosaic3/Bok InstCal image
 
     hostname = socket.gethostname()
     host = hostname.split('.')[0]
@@ -104,7 +104,7 @@ if __name__ == "__main__":
     rootLogger.addHandler(consoleHandler)
     rootLogger.setLevel(logging.NOTSET)
 
-    rootLogger.info("Running SExtractor on "+base+" on host="+host)
+    rootLogger.info("Running PSPhot on "+base+" on host="+host)
     rootLogger.info("  Temporary directory is: "+tmpdir)
 
     # 2) Copy over images from zeus1:/mss
@@ -228,6 +228,14 @@ if __name__ == "__main__":
         var = 1.0 / wt
         var[ wt<1e-20 ] = 1e20
 
+        # Change TPV to TAN, PSPhot doesn't understand TPV
+        fhead["CTYPE1"] = "RA---TAN"
+        fhead["CTYPE2"] = "DEC--TAN"
+        whead["CTYPE1"] = "RA---TAN"
+        whead["CTYPE2"] = "DEC--TAN"
+        mhead["CTYPE1"] = "RA---TAN"
+        mhead["CTYPE2"] = "DEC--TAN"
+
         #if os.path.exists("wt.fits"):
         #    os.remove("wt.fits")
         #fits.writeto("wt.fits",wt,header=whead,output_verify='warn')
@@ -346,14 +354,14 @@ if __name__ == "__main__":
         #        os.remove("mask.fits")
         #    fits.writeto("mask.fits",newmask,header=mhead,output_verify='warn')
 
-        # 3c) Run SExtractor
+        # 3c) Run PSPhot
         #p = subprocess.Popen('sex', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         rootLogger.info("  Running PSPhot")
         if os.path.exists("cat.fits"):
             os.remove("cat.fits")
 
         try:
-            # Save the SExtractor info to a logfile
+            # Save the PSPhot info to a logfile
             slogfile = tmpdir+"/"+base+"_"+str(ccdnum)+".psphot.log"
             sf = open(slogfile,'w')
             #retcode = subprocess.call(["sex","flux.fits","-c","default.config"],stdout=sf,stderr=subprocess.STDOUT)
@@ -375,16 +383,16 @@ if __name__ == "__main__":
         except OSError as e:
             #rootLogger.info(>>sys.stderr, "SExtractor Execution failed:", e)
             #rootLogger.info(sys.stderr+"SExtractor Execution failed:"+str(e))            
-            rootLogger.info("SExtractor Execution failed:"+str(e))
+            rootLogger.info("PSPhot Execution failed:"+str(e))
 
         # Catch the output and put it in a logfile
 
         # 3d) Load the catalog (and logfile) and write final output file
         # Move the file to final location
         if os.path.exists(base+".cmf"):
-            outcatfile = dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".fits"
-            outmdlfile = dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".mdl"
-            outpsffile = dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".psf"
+            outcatfile = dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".cat.fits"
+            outmdlfile = dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".mdl.fits"
+            outpsffile = dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".psf.fits"
             #outcatfile = "/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".fits"
             # Clobber if it already exists
             if os.path.exists(outcatfile):
@@ -392,7 +400,7 @@ if __name__ == "__main__":
                 rootLogger.info("  Copying final catalog to "+outcatfile)
             # Copy to final directory
             shutil.copyfile(base+".cmf",outcatfile)
-            shutil.copyfile(base+".mdl",outmdlfile)
+            shutil.copyfile(base+".mdl.fits",outmdlfile)
             shutil.copyfile(base+".psf",outpsffile)
             #shutil.copyfile("default.config",outconfigfile)
             # Copy check files
@@ -415,6 +423,12 @@ if __name__ == "__main__":
             os.remove("var.fits")
         if os.path.exists("mask.fits"):
             os.remove("mask.fits")
+        if os.path.exists(base+".cmf"):
+            os.remove(base+".cmf")
+        if os.path.exists(base+".mdf"):
+            os.remove(base+".mdf.fits")
+        if os.path.exists(base+".psf"):
+            os.remove(base+".psf")
 
     # Move the log file
     #os.rename(logfile,"/datalab/users/dnidever/decamcatalog/"+night+"/"+base+"/"+base+".log")
