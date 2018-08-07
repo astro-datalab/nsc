@@ -5,6 +5,7 @@ import sys
 import numpy as np
 import warnings
 from astropy.io import fits
+from astropy.wcs import WCS
 from astropy.utils.exceptions import AstropyWarning
 import time
 import shutil
@@ -229,6 +230,8 @@ if __name__ == "__main__":
         var[ wt<1e-20 ] = 1e20
 
         # Change TPV to TAN, PSPhot doesn't understand TPV
+        ctype1 = fhead["CTYPE1"]
+        ctype2 = fhead["CTYPE2"]
         fhead["CTYPE1"] = "RA---TAN"
         fhead["CTYPE2"] = "DEC--TAN"
         whead["CTYPE1"] = "RA---TAN"
@@ -386,6 +389,21 @@ if __name__ == "__main__":
             rootLogger.info("PSPhot Execution failed:"+str(e))
 
         # Catch the output and put it in a logfile
+
+
+        # Fix output catalog coordinates
+        # origin=0 or 1???
+        cat = Tabe(fits.getdata(base+".cmf",1))
+        cat2 = fits.getdata(base+".cmf",2)
+        fhead["CTYPE1"] = ctype1
+        fhead["CTYPE2"] = ctype2
+        w = WCS(fhead)
+        r,d = w.all_pix2world(cat["X_PSF"], cat["Y_PSF"], 1)
+        cat['RA_PSF'] = r
+        cat['DEC_PSF'] = d
+        os.remove(base+".cmf")
+        cat.write(base+".cmf",format='fits')
+        fits.append(base+".cmf",cat2)
 
         # 3d) Load the catalog (and logfile) and write final output file
         # Move the file to final location
