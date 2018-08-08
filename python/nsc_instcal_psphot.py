@@ -6,6 +6,7 @@ import numpy as np
 import warnings
 from astropy.io import fits
 from astropy.wcs import WCS
+from astropy.table import Table
 from astropy.utils.exceptions import AstropyWarning
 import time
 import shutil
@@ -220,16 +221,20 @@ if __name__ == "__main__":
           mask += (np.bitwise_and(omask,16)==16) * 16  # cosmic ray
           mask += (np.bitwise_and(omask,64)==64) * 8   # bleed trail
 
+        # Use mask=1 for "bad" pixels for now
+        mask[mask>0] = 1
 
         # Mask out bad pixels in WEIGHT image
         #  set wt=0 for mask>0 pixels
-        wt[ (mask>0) | (wt<0) ] = 0   # CP sets bad pixels to wt=0 or sometimes negative
+        #wt[ (mask>0) | (wt<0) ] = 0   # CP sets bad pixels to wt=0 or sometimes negative
+        wt[ (mask>0) | (wt<0) ] = 1e-20   # CP sets bad pixels to wt=0 or sometimes negative
 
         # Create variance image
         var = 1.0 / wt
         var[ wt<1e-20 ] = 1e20
 
         # Change TPV to TAN, PSPhot doesn't understand TPV
+        # c4d and k4m uses TPV, ksb uses TNX
         ctype1 = fhead["CTYPE1"]
         ctype2 = fhead["CTYPE2"]
         fhead["CTYPE1"] = "RA---TAN"
@@ -326,36 +331,6 @@ if __name__ == "__main__":
         #fo.writelines(lines)
         #fo.close()
 
-        ## Convolve the mask file with the convolution kernel to "grow" the regions
-        ## around bad pixels the SE already does to the weight map
-        #if (filter_name != ''):
-        #    # Load the filter array
-        #    f = open(filter_name,'r')
-        #    linenum = 0
-        #    for line in f:
-        #        if (linenum == 1):
-        #            shape = line.split(' ')[1]
-        #            # Make it two pixels larger
-        #            filter = np.ones(np.array(shape.split('x'),dtype='i')+2,dtype='i')
-        #            #filter = np.zeros(np.array(shape.split('x'),dtype='i'),dtype='f')
-        #        #if (linenum > 1):
-        #        #    linedata = np.array(line.split(' '),dtype='f')
-        #        #    filter[:,linenum-2] = linedata
-        #        linenum += 1
-        #    f.close()
-        #    # Normalize the filter array
-        #    #filter /= np.sum(filter)
-        #    # Convolve with mask
-        #    #filter = np.ones(np.array(shape.split('x'),dtype='i'),dtype='i')
-        #    #mask2 = convolve2d(mask,filter,mode="same",boundary="symm")
-        #    mask2 = convolve(mask,filter,mode="reflect")
-        #    bad = ((mask == 0) & (mask2 > 0))
-        #    newmask = np.copy(mask)
-        #    newmask[bad] = 1     # mask out the neighboring pixels
-        #    # Write new mask
-        #    if os.path.exists("mask.fits"):
-        #        os.remove("mask.fits")
-        #    fits.writeto("mask.fits",newmask,header=mhead,output_verify='warn')
 
         # 3c) Run PSPhot
         #p = subprocess.Popen('sex', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -367,25 +342,17 @@ if __name__ == "__main__":
             # Save the PSPhot info to a logfile
             slogfile = tmpdir+"/"+base+"_"+str(ccdnum)+".psphot.log"
             sf = open(slogfile,'w')
-            #retcode = subprocess.call(["sex","flux.fits","-c","default.config"],stdout=sf,stderr=subprocess.STDOUT)
             retcode = subprocess.call(["psphot","-file","flux.fits","-mask","mask.fits","-variance","var.fits",base],stdout=sf,stderr=subprocess.STDOUT)
             sf.close()
             sf = open(slogfile,'r')
             slines = sf.readlines()
             sf.close()
-            rootLogger.info(slines)
-            #retcode = call("mycmd" + " myarg", shell=True)
+            rootLogger.info('   '.join(slines))
             if retcode < 0:
-                #rootLogger.info(>>sys.stderr, "Child was terminated by signal", -retcode)
-                #rootLogger.info(sys.stderr+"Child was terminated by signal"+str(-retcode))
                 rootLogger.info("Child was terminated by signal"+str(-retcode))
             else:
-                #rootLogger.info(>>sys.stderr, "Child returned", retcode)
-                #rootLogger.info(sys.stderr+"Child returned"+str(retcode))
                 rootLogger.info("Child returned"+str(retcode))
         except OSError as e:
-            #rootLogger.info(>>sys.stderr, "SExtractor Execution failed:", e)
-            #rootLogger.info(sys.stderr+"SExtractor Execution failed:"+str(e))            
             rootLogger.info("PSPhot Execution failed:"+str(e))
 
         # Catch the output and put it in a logfile
@@ -393,17 +360,19 @@ if __name__ == "__main__":
 
         # Fix output catalog coordinates
         # origin=0 or 1???
-        cat = Tabe(fits.getdata(base+".cmf",1))
-        cat2 = fits.getdata(base+".cmf",2)
-        fhead["CTYPE1"] = ctype1
-        fhead["CTYPE2"] = ctype2
-        w = WCS(fhead)
-        r,d = w.all_pix2world(cat["X_PSF"], cat["Y_PSF"], 1)
-        cat['RA_PSF'] = r
-        cat['DEC_PSF'] = d
-        os.remove(base+".cmf")
-        cat.write(base+".cmf",format='fits')
-        fits.append(base+".cmf",cat2)
+        if os.path.exists(base+".cmf"):
+            cat = Table(fits.getdata(base+".cmf",1))
+            cat2 = fits.getdata(base+".cmf",2)
+            fhead["CTYPE1"] = ctype1
+            fhead["CTYPE2"] = ctype2
+            w = WCS(fhead)
+            # There's an offset of 0.5 pixels, not sure why
+            r,d = w.all_pix2world(cat["X_PSF"]+0.5, cat["Y_PSF"]+0.5, 1)
+            cat['RA_PSF'] = r
+            cat['DEC_PSF'] = d
+            os.remove(base+".cmf")
+            cat.write(base+".cmf",format='fits')
+            fits.append(base+".cmf",cat2)
 
         # 3d) Load the catalog (and logfile) and write final output file
         # Move the file to final location
@@ -411,23 +380,22 @@ if __name__ == "__main__":
             outcatfile = dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".cat.fits"
             outmdlfile = dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".mdl.fits"
             outpsffile = dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".psf.fits"
-            #outcatfile = "/datalab/users/dnidever/decamcatalog/instcal/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".fits"
             # Clobber if it already exists
             if os.path.exists(outcatfile):
                 os.remove(outcatfile)
                 rootLogger.info("  Copying final catalog to "+outcatfile)
             # Copy to final directory
             shutil.copyfile(base+".cmf",outcatfile)
-            shutil.copyfile(base+".mdl.fits",outmdlfile)
-            shutil.copyfile(base+".psf",outpsffile)
-            #shutil.copyfile("default.config",outconfigfile)
-            # Copy check files
-            #shutil.copyfile("miniback.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_miniback.fits")
-            #shutil.copyfile("objects.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_objects.fits")
-            #shutil.copyfile("segment.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_segment.fits")
-            #shutil.copyfile("apertures.fits",dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+"_apertures.fits")
+            if os.path.exists(base+".mdl.fits"):
+                shutil.copyfile(base+".mdl.fits",outmdlfile)
+            if os.path.exists(base+".psf"):
+                shutil.copyfile(base+".psf",outpsffile)
         else:
             rootLogger.info("  No output catalog")
+        # Copy log file if it finished successfully or not
+        if os.path.exists(slogfile):
+            outlogfile = dir+instcode+"/"+night+"/"+base+"/"+base+"_"+str(ccdnum)+".psphot.log"
+            shutil.copyfile(slogfile,outlogfile)
 
         # 4) Delete temporary directory/files
         rootLogger.info("  Deleting subimages")
