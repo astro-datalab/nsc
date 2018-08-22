@@ -66,29 +66,61 @@ def parseprofs(lines):
     profs = profs[gd]
     return profs
 
+# Parse the DAOPHOT PSF parameter errors
+def parsepars(lines):
+    out = []
+    chi = []
+    for i in range(len(lines)):
+        line1 = lines[i].strip()
+        if line1[0:2] == ">>": line1=line1[2:]  # strip leading >>
+        line1.strip()
+        arr = line1.split()                # split on whitespace
+        if len(arr)>0:
+            chi.append(float(arr[0]))
+            out.append(arr)
+    return out, chi
+
 # Read DAOPHOT files
-def daoread(file):
-    if os.path.exists(file) is False:
-        print(file+" NOT found")
+def daoread(fil):
+    if os.path.exists(fil) is False:
+        print(fil+" NOT found")
         return None
-    f = open(file,'r')
+    f = open(fil,'r')
     lines = f.readlines()
     f.close()
     nstars = len(lines)-3
+    if nstars == 0:
+        print("No stars in "+file)
+        return
     # Check header
     line2 = lines[1]
     nl = int(line2.strip().split(' ')[0])
     # NL  is a code indicating the file type:
     # NL = 3 a group file
     # NL = 2 an aperture photometry file
-    # NL = 1 other (output from FIND, PEAK, or NSTAR)
+    # NL = 1 other (output from FIND, PEAK, or NSTAR) or ALLSTAR
     # NL = 0 a file without a header
+    
+    # Check number of columns
+    ncols = len(lines[3].split())
 
     # NL = 1  coo file
-    if nl==1:
+    if (nl==1) & (ncols==7):
         dtype = np.dtype([('id',long),('x',float),('y',float),('mag',float),('sharp',float),('round',float),('round2',float)])
         cat = np.zeros(nstars,dtype=dtype)
         lengths = np.array([7,9,9,9,9,9,9])
+        lo = np.concatenate((np.array([0]), np.cumsum(lengths[0:-1])))
+        hi = lo+lengths
+        names = cat.dtype.names
+        for i in range(nstars):
+            line1 = lines[i+3]
+            for j in range(len(names)):
+                cat[i][names[j]] = np.array(line1[lo[j]:hi[j]],dtype=dtype[names[j]])
+    # NL = 1  als file
+    elif (nl==1) & (ncols==9):
+        dtype = np.dtype([('id',long),('x',float),('y',float),('mag',float),('err',float),('sky',float),('iter',float),('chi',float),('sharp',float)])
+        cat = np.zeros(nstars,dtype=dtype)
+        lengths = np.array([7,9,9,9,9,9,9,9,9])
         lo = np.concatenate((np.array([0]), np.cumsum(lengths[0:-1])))
         hi = lo+lengths
         names = cat.dtype.names
@@ -101,7 +133,7 @@ def daoread(file):
         print("Reading aperture photometry files not supported yet.")
         return
     # NL = 3  list
-    else:
+    elif nl==3:
         dtype = np.dtype([('id',long),('x',float),('y',float),('mag',float),('err',float),('sky',float)])
         cat = np.zeros(nstars,dtype=dtype)
         lengths = np.array([7,9,9,9,9,9,9])
@@ -112,6 +144,9 @@ def daoread(file):
             line1 = lines[i+3]
             for j in range(len(names)):
                 cat[i][names[j]] = np.array(line1[lo[j]:hi[j]],dtype=dtype[names[j]])
+    else:
+        print("Cannot load this file")
+        return
     return cat
 
 # Remove indices from a list
@@ -121,6 +156,21 @@ def remove_indices(lst,index):
        if i not in index: newlst.append(lst[i])
     return newlst
 
+# Little function used by numlines
+def blocks(files, size=65536):
+    while True:
+        b = files.read(size)
+        if not b: break
+        yield b
+
+# Read number of lines in a file
+def numlines(fil):
+    with open(fil, "r") as f:
+        return (sum(bl.count("\n") for bl in blocks(f)))
+
+    # Could also use this
+    #count=0
+    #for line in open(fil): count += 1
 
 # Represent an exposure to process
 class Exposure:
@@ -965,10 +1015,10 @@ class Chip:
         # Iterate
         #---------
         if doiter is False: maxiter=1
-        iter = 0
+        iter = 1
         endflag = 0
         while (endflag==0):
-            self.logger.info("Iter = "+str(iter+1))
+            self.logger.info("Iter = "+str(iter))
 
             if os.path.exists(logfile): os.remove(logfile)
             if os.path.exists(outfile): os.remove(outfile)
@@ -1021,9 +1071,11 @@ class Chip:
                     l3 = grep(plines,"File with PSF stars and neighbors",index=True)
                     if len(l1)>0:
                         parlines = plines[l1[0]+1:l2[0]-1]
-                        
-                        self.logger.info("Chi   Parameters")
-                        self.logger.info(" ".join(parlines))
+                        pararr, parchi = parsepars(parlines)
+                        minchi = np.min(parchi)
+                        self.logger.info("  Chi = "+str(minchi))
+                        #self.logger.info("Chi   Parameters")
+                        #self.logger.info(" ".join(parlines))
                     # Get profile errors
                     if len(l2)>0:
                         proflines = plines[l2[0]+1:l3[0]-1]
@@ -1032,7 +1084,7 @@ class Chip:
                         nstars = len(profs)
                         bdstars = (profs['flag'] != '')
                         nbdstars = np.sum(bdstars)
-                        self.logger.info(str(nbdstars)+" stars with flags")
+                        self.logger.info("  "+str(nbdstars)+" stars with flags")
                         # Delete stars with flags
                         if (nbdstars>0) & (nstars>minstars):
                             f = open(wlistfile,'r')
@@ -1078,8 +1130,81 @@ class Chip:
         
     # Run ALLSTAR
     #-------------
-    def runallstar():
-        pass
+    def runallstar(self,psffile=None,apfile=None,subfile=None):
+
+        # Set up filenames, make sure they don't exist
+        base = os.path.basename(self.daofile)
+        base = os.path.splitext(os.path.splitext(base)[0])[0]
+        optfile = base+".als.opt"
+        scriptfile = base+".als.sh"
+        if apfile is None:
+            if os.path.exists(base+".ap") is False:
+                self.logger.info("apfile not input and "+base+".ap NOT found")
+                return
+            apfile = base+".ap"
+        if psffile is None:
+            if os.path.exists(base+".psf") is False:
+                self.logger.info("psffile not input and "+base+".psf NOT found")
+                return
+            psffile = base+".psf"
+        if subfile is None: subfile = base+"s.fits"
+        outfile = base+".als"
+        logfile = base+".als.log"
+        if os.path.exists(outfile): os.remove(outfile)
+        if os.path.exists(subfile): os.remove(subfile)
+        if os.path.exists(logfile): os.remove(logfile)
+        if os.path.exists(scriptfile): os.remove(scriptfile)
+
+        # Load the option file lines
+        f = open(optfile,'r')
+        optlines = f.readlines()
+        f.close()
+
+        # Lines for the DAOPHOT ALLSTAR script
+        lines = ["#!/bin/sh\n",
+                 "allstar << END_ALLSTAR >> "+logfile+"\n"]
+        lines += optlines
+        lines += ["\n",
+                  base+".fits\n",
+                  psffile+"\n",
+                  apfile+"\n",
+                  outfile+"\n",
+                  subfile+"\n",
+                  "EXIT\n",
+                  "EXIT\n",
+                  "END_ALLSTAR\n"]
+        # Write the script
+        f = open(scriptfile,'w')
+        f.writelines(lines)
+        f.close()
+        os.chmod(scriptfile,0775)
+
+        # Copy option file to daophot.opt
+        if os.path.exists("allstar.opt") is False: shutil.copyfile(optfile,"allstar.opt")
+
+        # Run the script
+        self.logger.info("-- Running ALLSTAR --")
+        try:
+            retcode = subprocess.call(["./"+scriptfile],stderr=subprocess.STDOUT,shell=False)
+            if retcode < 0:
+                self.logger.info("Child was terminated by signal"+str(-retcode))
+            else:
+                pass
+        except OSError as e:
+            self.logger.info("ALLSTAR failed:"+str(e))
+
+        # Check that the output file exists
+        if os.path.exists(outfile) is True:
+            # How many sources converged
+            num = numlines(outfile)-3
+            self.logger.info(str(num)+" stars converged")
+        # Failure
+        else:
+            self.logger.info("Output file "+outfile+" NOT Found")
+
+        # Delete the script
+        os.remove(scriptfile)
+
         
     # PSF star aperture photometry for calculating the aperture correction
     #---------------------------------------------------------------------
