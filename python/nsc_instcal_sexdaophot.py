@@ -23,9 +23,32 @@ import glob
 import logging
 import socket
 #from scipy.signal import convolve2d
-#from scipy.ndimage.filters import convolve
+from scipy.ndimage.filters import convolve
 import astropy.stats
 import struct
+
+# Ignore these warnings, it's a bug
+warnings.filterwarnings("ignore", message="numpy.dtype size changed")
+warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
+
+# Get NSC directories
+def getnscdirs(version=None):
+    # Host
+    hostname = socket.gethostname()
+    host = hostname.split('.')[0]
+    # Version
+    verdir = ""
+    if version is not None:
+       verdir = version if version.endswith('/') else version+"/"
+    # on thing/hulk use
+    if (host == "thing") | (host == "hulk"):
+        basedir = "/dl1/users/dnidever/nsc/instcal/"+verdir
+        tmproot = "/d0/dnidever/nsc/instcal/"+verdir+"tmp/"
+    # on gp09 use
+    if (host == "gp09") | (host == "gp08") | (host == "gp07") | (host == "gp06") | (host == "gp05"):
+        basedir = "/net/dl1/users/dnidever/nsc/instcal/"+verdir
+        tmproot = "/data0/dnidever/nsc/instcal/"+verdir+"tmp/"
+    return basedir,tmproot
 
 # Standard grep function that works on string list
 def grep(lines,expr,index=False):
@@ -175,13 +198,14 @@ def numlines(fil):
 # Represent an exposure to process
 class Exposure:
 
-    def __init__(self,fluxfile,wtfile,maskfile):
+    def __init__(self,fluxfile,wtfile,maskfile,nscver="t3a"):
         self.fluxfile = fluxfile
         self.wtfile = wtfile
         self.maskfile = maskfile
         base = os.path.basename(fluxfile)
         base = os.path.splitext(os.path.splitext(base)[0])[0]
         self.base = base
+        self.nscver = nscver
         self.logfile = base+".log"
         self.logger = None
         self.chip = None
@@ -215,8 +239,6 @@ class Exposure:
 
         self.logger.info("Starting logfile at "+self.logfile)
         
-
-        #rootLogger.info("Running SExtractor on "+base+" on host="+host)
         #rootLogger.info("  Temporary directory is: "+tmpdir)
 
         
@@ -246,6 +268,7 @@ class Exposure:
         # Create the chip object
         self.chip = Chip(fluxfile,wtfile,maskfile)
         self.chip.bigextension = extension
+        self.chip.nscver = self.nscver
         # Add logger information
         self.chip.logger = self.logger
         
@@ -475,8 +498,202 @@ class Chip:
         self._cpfwhm = cpfwhm
         return self._cpfwhm
 
-    
-    # Make DAOPHOT option files:
+
+    # Run Source Extractor
+    #---------------------
+    def runsex(self,outfile=None):
+
+        self.logger.info("-- Running SExtractor --")
+
+        if outfile is None: outfile = "flux_sex.cat.fits"
+        fluxfile = "flux_sex.fits"
+        wtfile = "wt_sex.fits"
+        maskfile = "mask_sex.fits"
+        logfile = "flux_sex.log"
+        if os.path.exists(outfile): os.remove(outfile)
+        if os.path.exists(fluxfile): os.remove(fluxfile)
+        if os.path.exists(wtfile): os.remove(wtfile)
+        if os.path.exists(maskfile): os.remove(maskfile)
+        if os.path.exists(logfile): os.remove(logfile)
+
+        # Load the data
+        flux,fhead = fits.getdata(self.fluxfile,header=True)
+        wt,whead = fits.getdata(self.wtfile,header=True)
+        mask,mhead = fits.getdata(self.maskfile,header=True)
+
+        # 3a) Make subimages for flux, weight, mask
+
+        # Turn the mask from integer to bitmask
+        if ((self.instrument=='c4d') & (self.plver>='V3.5.0')) | (self.instrument=='k4m') | (self.instrument=='ksb'):
+             #  1 = bad (in static bad pixel mask) -> 1
+             #  2 = no value (for stacks)          -> 2
+             #  3 = saturated                      -> 4
+             #  4 = bleed mask                     -> 8
+             #  5 = cosmic ray                     -> 16
+             #  6 = low weight                     -> 32
+             #  7 = diff detect                    -> 64
+             omask = mask.copy()
+             mask *= 0
+             nonzero = (omask>0)
+             mask[nonzero] = 2**((omask-1)[nonzero])    # This takes about 1 sec
+        # Fix the DECam Pre-V3.5.0 masks
+        if (self.instrument=='c4d') & (self.plver<'V3.5.0'):
+          # --CP bit masks, Pre-V3.5.0 (PLVER)
+          # Bit   DQ Type  PROCTYPE
+          # 1  detector bad pixel          ->  1 
+          # 2  saturated                   ->  4
+          # 4  interpolated                ->  32
+          # 16  single exposure cosmic ray ->  16
+          # 64  bleed trail                ->  8
+          # 128  multi-exposure transient  ->  0 TURN OFF
+          # --CP bit masks, V3.5.0 on (after ~10/28/2014), integer masks
+          #  1 = bad (in static bad pixel mask)
+          #  2 = no value (for stacks)
+          #  3 = saturated
+          #  4 = bleed mask
+          #  5 = cosmic ray
+          #  6 = low weight
+          #  7 = diff detect
+          omask = mask.copy()
+          mask *= 0     # re-initialize
+          mask += (np.bitwise_and(omask,1)==1) * 1    # bad pixels
+          mask += (np.bitwise_and(omask,2)==2) * 4    # saturated
+          mask += (np.bitwise_and(omask,4)==4) * 32   # interpolated
+          mask += (np.bitwise_and(omask,16)==16) * 16  # cosmic ray
+          mask += (np.bitwise_and(omask,64)==64) * 8   # bleed trail
+        
+        # Mask out bad pixels in WEIGHT image
+        #  set wt=0 for mask>0 pixels
+        wt[ (mask>0) | (wt<0) ] = 0   # CP sets bad pixels to wt=0 or sometimes negative
+
+        # Write out the files
+        shutil.copy(self.fluxfile,fluxfile)
+        fits.writeto(wtfile,wt,header=whead,output_verify='warn')
+
+
+        # 3b) Make SExtractor config files
+        # Copy the default files
+        basedir, tmpdir = getnscdirs(self.nscver)
+        shutil.copyfile(basedir+"config/default.conv","default.conv")
+        shutil.copyfile(basedir+"config/default.nnw","default.nnw")
+        shutil.copyfile(basedir+"config/default.param","default.param")
+
+        # Read in configuration file and modify for this image
+        f = open(basedir+'config/default.config', 'r') # 'r' = read
+        lines = f.readlines()
+        f.close()
+
+        # Gain, saturation, pixscale
+
+        # Things to change
+        # SATUR_LEVEL     59000.00         # level (in ADUs) at which arises saturation
+        # GAIN            43.52             # detector gain in e-/ADU.
+        # SEEING_FWHM     1.46920            # stellar FWHM in arcsec
+        # WEIGHT_IMAGE  F4-00507860_01_comb.mask.fits
+
+        filter_name = ''
+        cnt = 0L
+        for l in lines:
+            # CATALOG_NAME
+            m = re.search('^CATALOG_NAME',l)
+            if m != None:
+                lines[cnt] = "CATALOG_NAME     "+outfile+"         # name of the output catalog\n"
+            # FLAG_IMAGE
+            m = re.search('^FLAG_IMAGE',l)
+            if m != None:
+                lines[cnt] = "FLAG_IMAGE     "+maskfile+"         # filename for an input FLAG-image\n"
+            # WEIGHT_IMAGE
+            m = re.search('^WEIGHT_IMAGE',l)
+            if m != None:
+                lines[cnt] = "WEIGHT_IMAGE     "+wtfile+"  # Weight image name\n"
+            # SATUR_LEVEL
+            m = re.search('^SATUR_LEVEL',l)
+            if m != None:
+                lines[cnt] = "SATUR_LEVEL     "+str(self.saturate)+"         # level (in ADUs) at which arises saturation\n"
+            # Gain
+            m = re.search('^GAIN',l)
+            if m != None:
+                lines[cnt] = "GAIN            "+str(self.gain)+"            # detector gain in e-/ADU.\n"
+            # SEEING_FWHM
+            m = re.search('^SEEING_FWHM',l)
+            if m != None:
+                lines[cnt] = "SEEING_FWHM     "+str(self.cpfwhm)+"            # stellar FWHM in arcsec\n"
+            # PHOT_APERTURES, aperture diameters in pixels
+            m = re.search('^PHOT_APERTURES',l)
+            if m != None:
+                aper_world = np.array([ 0.5, 1.0, 2.0, 3.0, 4.0]) * 2  # radius->diameter, 1, 2, 4, 6, 8"
+                aper_pix = aper_world / self.pixscale
+                lines[cnt] = "PHOT_APERTURES  "+', '.join(np.array(np.round(aper_pix,2),dtype='str'))+"            # MAG_APER aperture diameter(s) in pixels\n"            
+            # Filter name
+            m = re.search('^FILTER_NAME',l)
+            if m != None:
+                filter_name = (l.split())[1]
+            cnt = cnt+1
+        # Write out the new config file
+        if os.path.exists("default.config"):
+            os.remove("default.config")
+        fo = open('default.config', 'w')
+        fo.writelines(lines)
+        fo.close()
+
+        # Convolve the mask file with the convolution kernel to "grow" the regions
+        # around bad pixels the SE already does to the weight map
+        if (filter_name != ''):
+            # Load the filter array
+            f = open(filter_name,'r')
+            linenum = 0
+            for line in f:
+                if (linenum == 1):
+                    shape = line.split(' ')[1]
+                    # Make it two pixels larger
+                    filter = np.ones(np.array(shape.split('x'),dtype='i')+2,dtype='i')
+                    #filter = np.zeros(np.array(shape.split('x'),dtype='i'),dtype='f')
+                #if (linenum > 1):
+                #    linedata = np.array(line.split(' '),dtype='f')
+                #    filter[:,linenum-2] = linedata
+                linenum += 1
+            f.close()
+            # Normalize the filter array
+            #filter /= np.sum(filter)
+            # Convolve with mask
+            #filter = np.ones(np.array(shape.split('x'),dtype='i'),dtype='i')
+            #mask2 = convolve2d(mask,filter,mode="same",boundary="symm")
+            mask2 = convolve(mask,filter,mode="reflect")
+            bad = ((mask == 0) & (mask2 > 0))
+            newmask = np.copy(mask)
+            newmask[bad] = 1     # mask out the neighboring pixels
+            # Write new mask
+            fits.writeto(maskfile,newmask,header=mhead,output_verify='warn')
+
+        # 3c) Run SExtractor
+        try:
+            # Save the SExtractor info to a logfile
+            sf = open(logfile,'w')
+            retcode = subprocess.call(["sex",fluxfile,"-c","default.config"],stdout=sf,stderr=subprocess.STDOUT)
+            sf.close()
+            if retcode < 0:
+                self.logger.info("Child was terminated by signal"+str(-retcode))
+            else:
+                pass
+        except OSError as e:
+            self.logger.info("SExtractor Execution failed:"+str(e))
+
+        # Check that the output file exists
+        if os.path.exists(outfile) is True:
+            # How many sources were detected, final catalog file
+            head = fits.getheader(outfile,2)
+            self.logger.info(str(head["naxis2"])+" sources detected")
+            self.logger.info("Final catalog is "+outfile)
+
+        # Delete temporary files
+        os.remove(fluxfile)
+        os.remove(maskfile)
+        os.remove(wtfile)
+        #os.remove("default.conv")
+
+
+    # Make DAOPHOT option files
+    #--------------------------
     def mkopt(self,VA=1,LO=7.0,TH=3.5,LS=0.2,HS=1.0,LR=-1.0,HR=1.0,WA=-2,AN=-6,
                    EX=5,PE=0.75,PR=5.0,CR=2.5,CE=6.0,MA=50.0,RED=1.0,WA2=0.0,
                    fitradius_fwhm=1.0):
@@ -1117,6 +1334,9 @@ class Chip:
             # Should we end
             if (iter==maxiter) | (nbdstars==0) | (nstars<=minstars): endflag=1
             iter = iter+1
+
+        # I should do the background subtraction of the neighbors here!
+        # maybe call this genpsf and have runpsf just do a single psf run.
         
         # Copy working list to final list
         if os.path.exists(listfile): os.remove(listfile)
@@ -1198,6 +1418,7 @@ class Chip:
             # How many sources converged
             num = numlines(outfile)-3
             self.logger.info(str(num)+" stars converged")
+            self.logger.info("Final catalog is "+outfile)
         # Failure
         else:
             self.logger.info("Output file "+outfile+" NOT Found")
@@ -1205,14 +1426,32 @@ class Chip:
         # Delete the script
         os.remove(scriptfile)
 
+    # Calculate SEEING from SE catalog
+
+    # Pick PSF stars from SE catalog
         
+    # Write DAO files or convert from SE?
+
+    # Combine SE + DAOPHOT/ALLSTAR info into ONE file
+
     # PSF star aperture photometry for calculating the aperture correction
     #---------------------------------------------------------------------
-    def brighstaraperphot():
+    def brighstaraperphot(self):
         pass
         
     # Run DAOGROW to calculate aperture corrections
     #----------------------------------------------
-    def daogrow():
+    def daogrow(self):
         pass
 
+    # Process a single chip
+    #----------------------
+    def process(self):
+        self.runsex()
+        self.mkopt()
+        self.mkdaoim()
+        self.daodetect()
+        self.daoaperphot()
+        self.daopickpsf()
+        self.runpsf()
+        self.runallstar()
