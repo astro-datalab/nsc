@@ -15,6 +15,7 @@ import warnings
 from astropy.io import fits
 from astropy.wcs import WCS
 from astropy.utils.exceptions import AstropyWarning
+from astropy.table import Table
 import time
 import shutil
 import re
@@ -195,7 +196,7 @@ def numlines(fil):
     #count=0
     #for line in open(fil): count += 1
 
-# Represent an exposure to process
+# Class to represent an exposure to process
 class Exposure:
 
     def __init__(self,fluxfile,wtfile,maskfile,nscver="t3a"):
@@ -281,7 +282,7 @@ class Exposure:
         pass
         
         
-# Represent a single chip of an exposure
+# Class to represent a single chip of an exposure
 class Chip:
 
     def __init__(self,fluxfile,wtfile,maskfile):
@@ -296,6 +297,8 @@ class Chip:
         self.header = fits.getheader(fluxfile,0)
         self.sexfile = self.dir+"/"+self.base+"_sex.fits"
         self.daofile = self.dir+"/"+self.base+"_dao.fits"
+        self.sexcatfile = None
+        self.sexcat = None
         self.seeing = None
         self.daomaglim = None
         # Internal hidden variables
@@ -325,6 +328,7 @@ class Chip:
         # Can't get rdnoise, no header yet
         if self.header is None:
             print("Cannot get RDNOISE, no header yet")
+            return None
         # Check DECam style rdnoise
         if "RDNOISEA" in self.header.keys():
             rdnoisea = self.header["RDNOISEA"]
@@ -377,6 +381,7 @@ class Chip:
         # Can't get ccdnum, no header yet
         if self.header is None:
             print("Cannot get CCDNUM, no header yet")
+            return None
         # Get ccdnum from the header
         # We have this key, set _rndoise and return
         if 'CCDNUM' in self.header.keys():
@@ -407,6 +412,7 @@ class Chip:
         # Can't get saturate, no header yet
         if self.header is None:
             print("Cannot get SATURATE, no header yet")
+            return None
         # Get saturate from the header
         # We have this key, set _saturate and return
         if 'SATURATE' in self.header.keys():
@@ -423,6 +429,7 @@ class Chip:
         # Can't get wcs, no header yet
         if self.header is None:
             print("Cannot get WCS, no header yet")
+            return None
         try:
             self._wcs = WCS(self.header)
             return self._wcs
@@ -438,6 +445,7 @@ class Chip:
         # Can't get exptime, no header yet
         if self.header is None:
             print("Cannot get EXPTIME, no header yet")
+            return None
         # Get rdnoise from the header
         # We have this key, set _rndoise and return
         if 'EXPTIME' in self.header.keys():
@@ -454,6 +462,7 @@ class Chip:
         # Can't get instrument, no header yet
         if self.header is None:
             print("Cannot get INSTRUMENT, no header yet")
+            return None
         # instrument, c4d, k4m or ksb
         # DTINSTRU = 'mosaic3 '
         # DTTELESC = 'kp4m    '
@@ -476,6 +485,7 @@ class Chip:
         # Can't get plver, no header yet
         if self.header is None:
             print("Cannot get PLVER, no header yet")
+            return None
         plver = self.header.get('PLVER')
         if plver is None:
             self._plver = 'V1.0'
@@ -487,9 +497,10 @@ class Chip:
         # We have it already, just return it
         if self._cpfwhm is not None:
             return self._cpfwhm
-        # Can't get plver, no header yet
+        # Can't get fwhm, no header yet
         if self.header is None:
             print("Cannot get CPFWHM, no header yet")
+            return None
         # FWHM values are ONLY in the extension headers
         cpfwhm_map = { 'c4d': 1.5 if self.header.get('FWHM') is None else self.header.get('FWHM')*0.27, 
                        'k4m': 1.5 if self.header.get('SEEING1') is None else self.header.get('SEEING1'),
@@ -497,6 +508,108 @@ class Chip:
         cpfwhm = cpfwhm_map[self.instrument]
         self._cpfwhm = cpfwhm
         return self._cpfwhm
+
+
+    # Write SE catalog in DAO format
+    def sextodao(self,cat=None,outfile=None,type="lst"):
+
+        # Not enough inputs
+        if cat is None:
+            print("No catalog input")
+            return
+        if outfile is None:
+            print("No outfile given")
+            return
+        # Delete outfile
+        if os.path.exists(outfile): os.remove(outfile)
+    
+        # Types: coo, lst, ap, als
+
+        # Header values:  this information comes from daophot2.pdf pg.69
+        # NL: Originally meant "number of lines" but not anymore
+        # NX: size of X-dimension of image in pixels
+        # NY: size of Y-dimension of image in pixels
+        # LOWBAD: lower good data limit, calculated by FIND
+        # HIGHBAD: upper good data limit, specified in option file
+        # THRESH: threshold calculated by FIND
+        # AP1: radius (pixels) of the first aperture used by PHOTOMETRY
+        # PH/ADU: gain in photons/ADU used when running FIND
+        # RDNOISE: rdnoise (ADU) used when running FIND
+        # FRAD: value of fitting radius
+
+        # Go through the types
+        # "coo" file from FIND
+        if type == "coo":
+
+            #NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD
+            #  1  2046  4094  1472.8 38652.0   80.94    0.00    3.91    1.55    3.90
+            # 
+            #      1  1434.67    15.59   -0.045    0.313    0.873    1.218
+            #      2   233.85    18.42   -0.018    0.218   -0.781    1.433
+            #    ID      X         Y       MAG     SHARP    ROUND    ROUND2
+            f = open(outfile,'w')
+            # Header
+            f.write(" NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD\n")
+            f.write("  3 %5d %5d %7.1f %7.1f %7.2f %7.2f %7.2f %7.2f %7.2f\n" %
+                    (self.header['naxis1'],self.header['naxis2'],1000.0,self.saturate,100.0,3.0,self.gain,self.rdnoise/self.gain,3.9))
+            #f.write("  3  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90\n")
+            # Write the data
+            for e in cat:
+                f.write("%7d %8.2f %8.2f %8.3f %8.3f %8.3f %8.3f\n" %
+                        (e["NUMBER"],e["X_IMAGE"]+1,e["Y_IMAGE"]+1,e["MAG_AUTO"],0.6,0.0,0.0))
+            f.close()
+
+        # "lst" file from PICKPSF
+        elif type == "lst":
+
+            #NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD
+            # 3  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90
+            #
+            #   318 1519.850  622.960   10.963    0.001    0.315
+            #  1199 1036.580 2257.650   11.008    0.001    0.321
+            #   ID     X        Y         MAG      ERR      SKY?
+            f = open(outfile,'w')
+            # Header
+            f.write(" NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD\n")
+            f.write("  3 %5d %5d %7.1f %7.1f %7.2f %7.2f %7.2f %7.2f %7.2f\n" %
+                    (self.header['naxis1'],self.header['naxis2'],1000.0,self.saturate,100.0,3.0,self.gain,self.rdnoise/self.gain,3.9))
+            #f.write("  3  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90\n")
+            # Write the data
+            for e in cat:
+                f.write("%7d %8.3f %8.3f %8.3f %8.3f %8.3f\n" %
+                        (e["NUMBER"],e["X_IMAGE"]+1,e["Y_IMAGE"]+1,e["MAG_AUTO"],e["MAGERR_AUTO"],0.3))
+            f.close()
+
+        # "ap" file from PHOTOMETRY
+        elif type == "ap":
+            print(".ap files not supported yet")
+            return
+
+        # "als" file from ALLSTAR
+        elif type == "als":
+
+            # NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD
+            #  1  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90
+            # 
+            #      7  219.110   30.895   16.934   0.0935 1613.224       4.    0.872    0.040
+            #     25 1396.437   62.936   12.588   0.0063 1615.938       4.    1.102   -0.042
+            #    ID      X        Y       MAG      ERR     SKY        ITER     CHI     SHARP
+            f = open(outfile,'w')
+            # Header
+            f.write(" NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD\n")
+            f.write("  3 %5d %5d %7.1f %7.1f %7.2f %7.2f %7.2f %7.2f %7.2f\n" %
+                    (self.header['naxis1'],self.header['naxis2'],1000.0,self.saturate,100.0,3.0,self.gain,self.rdnoise/self.gain,3.9))
+            #f.write("  3  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90\n")
+            # Write the data
+            for e in cat:
+                f.write("%7d %8.3f %8.3f %8.3f %8.4f %8.3f %8.0f %8.3f %8.3f\n" %
+                        (e["NUMBER"],e["X_IMAGE"]+1,e["Y_IMAGE"]+1,e["MAG_AUTO"],e["MAGERR_AUTO"],1500.0,1,1.0,0.0))
+            f.close()
+
+        # Not supported
+        else:
+            print(type+" NOT supported")
+            return
 
 
     # Run Source Extractor
@@ -680,6 +793,10 @@ class Chip:
 
         # Check that the output file exists
         if os.path.exists(outfile) is True:
+            # Load the catalog and keep it in memory for later use
+            self.sexcatfile = outfile
+            cat = Table.read(outfile,2)
+            self.sexcat = cat
             # How many sources were detected, final catalog file
             head = fits.getheader(outfile,2)
             self.logger.info(str(head["naxis2"])+" sources detected")
@@ -691,6 +808,90 @@ class Chip:
         os.remove(wtfile)
         #os.remove("default.conv")
 
+    # Determine FWHM using SE catalog
+    #--------------------------------
+    def sexfwhm(self):
+
+        self.logger.info("-- Determining seeing FWHM using SExtractor catalog --")
+
+        # Make sure we have the SE catalog
+        if self.sexcatfile is None:
+            self.logger.info("No SE catalog found")
+            return
+        # Load the catalog if necessary
+        if self.sexcat is None:
+            self.sexcat = Table.read(self.sexcatfile,2)
+        # Select good sources
+        gdcat = ((self.sexcat['MAG_AUTO']< 50) & (self.sexcat['MAGERR_AUTO']<0.05) & (self.sexcat['CLASS_STAR']>0.8))
+        ngdcat = np.sum(gdcat)
+        # CLASS_STAR is not as reliable if the seeing is bad
+        if (ngdcat<10) & (self.cpfwhm>1.8):
+            gdcat = ((self.sexcat['MAG_AUTO']< 50) & (self.sexcat['MAGERR_AUTO']<0.05))
+            ngdcat = np.sum(gdcat)            
+        # Not enough sources, lower thresholds
+        if (ngdcat<10):
+            gdcat = ((self.sexcat['MAG_AUTO']< 50) & (self.sexcat['MAGERR_AUTO']<0.08))
+            ngdcat = np.sum(gdcat)            
+        medfwhm = np.median(self.sexcat[gdcat]['FWHM_WORLD']*3600.)
+        self.logger.info('  FWHM = %5.2f arcsec (%d sources)' % (medfwhm, ngdcat))
+        self.seeing = medfwhm
+
+    # Pick PSF candidates using SE catalog
+    #-------------------------------------
+    def sexpickpsf(self,nstars=100):
+
+        self.logger.info("-- Picking PSF stars using SExtractor catalog --")
+
+        # Make sure we have the SE catalog
+        if self.sexcatfile is None:
+            self.logger.info("No SE catalog found")
+            return
+        # Load the catalog if necessary
+        if self.sexcat is None:
+            self.sexcat = Table.read(self.sexcatfile,2)
+        # Make sure we have seeing calculated
+        if self.seeing is None: self.sexfwhm()
+        # Select good sources
+        gdcat1 = ((self.sexcat['MAG_AUTO']< 50) & (self.sexcat['MAGERR_AUTO']<0.05) & (self.sexcat['CLASS_STAR']>0.8))
+        ngdcat1 = np.sum(gdcat1)
+        # Bright and faint limit, use 5th and 95th percentile
+        minmag, maxmag = np.sort(self.sexcat[gdcat1]['MAG_AUTO'])[[int(np.round(0.05*ngdcat1)),int(np.round(0.95*ngdcat1))]]
+        # Select stars with
+        # -good FWHM values
+        # -good clas_star values (unless FWHM too large)
+        # -good mag range, bright but not too bright
+        if self.cpfwhm<1.8:
+            gdcat = ((self.sexcat['MAG_AUTO']< 50) & (self.sexcat['MAGERR_AUTO']<0.1) & (self.sexcat['CLASS_STAR']>0.8) & 
+                     (self.sexcat['FWHM_WORLD']*3600.>0.5*self.seeing) & (self.sexcat['FWHM_WORLD']*3600.<1.5*self.seeing) &
+                     (self.sexcat['MAG_AUTO']>(minmag+1.0)) & (self.sexcat['MAG_AUTO']<(maxmag-0.5)))
+            ngdcat = np.sum(gdcat)
+        # Do not use CLASS_STAR if seeing bad, not as reliable
+        else:
+            gdcat = ((self.sexcat['MAG_AUTO']< 50) & (self.sexcat['MAGERR_AUTO']<0.1) & 
+                     (self.sexcat['FWHM_WORLD']*3600.>0.5*self.seeing) & (self.sexcat['FWHM_WORLD']*3600.<1.5*self.seeing) &
+                     (self.sexcat['MAG_AUTO']>(minmag+1.0)) & (self.sexcat['MAG_AUTO']<(maxmag-0.5)))
+            ngdcat = np.sum(gdcat)
+        # No candidate, loosen cuts
+        if ngdcat<10:
+            self.logger.info("Too few PSF stars on first try. Loosening cuts")
+            gdcat = ((self.sexcat['MAG_AUTO']< 50) & (self.sexcat['MAGERR_AUTO']<0.15) & 
+                     (self.sexcat['FWHM_WORLD']*3600.>0.2*self.seeing) & (self.sexcat['FWHM_WORLD']*3600.<1.8*self.seeing) &
+                     (self.sexcat['MAG_AUTO']>(minmag+0.5)) & (self.sexcat['MAG_AUTO']<(maxmag-0.5)))
+            ngdcat = np.sum(gdcat)
+        # No candidates
+        if ngdcat==0:
+            self.logger.info("No good PSF stars found")
+            return
+
+        # Candidate PSF stars, use only Nstars, and sort by magnitude
+        psfcat = np.sort(self.sexcat[gdcat],order='MAG_AUTO')
+        if ngdcat>nstars: psfcat=psfcat[0:nstars]
+
+        # Output them in DAO format
+
+        # Do we need separate aperture photometry file?
+
+        return psfcat
 
     # Make DAOPHOT option files
     #--------------------------
@@ -907,10 +1108,6 @@ class Chip:
         self.logger.info("Wrote DAOPHOT-ready image to "+self.daofile)
         fits.writeto(self.daofile,flux,fhead,overwrite=True)
 
-        
-    # Pick PSF stars with SExtractor catalog
-    def sexpickpsf(self):
-        pass
 
     # DAOPHOT detection
     #----------------------
