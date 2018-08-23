@@ -115,7 +115,7 @@ def daoread(fil):
     nstars = len(lines)-3
     if nstars == 0:
         print("No stars in "+file)
-        return
+        return None
     # Check header
     line2 = lines[1]
     nl = int(line2.strip().split(' ')[0])
@@ -327,7 +327,7 @@ class Chip:
             return self._rdnoise
         # Can't get rdnoise, no header yet
         if self.header is None:
-            print("Cannot get RDNOISE, no header yet")
+            self.logger.warning("Cannot get RDNOISE, no header yet")
             return None
         # Check DECam style rdnoise
         if "RDNOISEA" in self.header.keys():
@@ -342,7 +342,7 @@ class Chip:
             if name in self.header.keys():
                 self._rdnoise = self.header[name]
                 return self._rdnoise
-        print('No RDNOISE found')
+        self.logger.warning('No RDNOISE found')
         return None
             
     @property
@@ -380,14 +380,14 @@ class Chip:
             return self._ccdnum
         # Can't get ccdnum, no header yet
         if self.header is None:
-            print("Cannot get CCDNUM, no header yet")
+            self.logger.warning("Cannot get CCDNUM, no header yet")
             return None
         # Get ccdnum from the header
         # We have this key, set _rndoise and return
         if 'CCDNUM' in self.header.keys():
             self._ccdnum = self.header['CCDNUM']
             return self._ccdnum
-        print('No CCDNUM found')
+        self.logger.warning('No CCDNUM found')
         return None
             
     @property
@@ -411,14 +411,14 @@ class Chip:
             return self._saturate
         # Can't get saturate, no header yet
         if self.header is None:
-            print("Cannot get SATURATE, no header yet")
+            self.logger.warning("Cannot get SATURATE, no header yet")
             return None
         # Get saturate from the header
         # We have this key, set _saturate and return
         if 'SATURATE' in self.header.keys():
             self._saturate = self.header['SATURATE']
             return self._saturate
-        print('No SATURATE found')
+        self.logger.warning('No SATURATE found')
         return None
     
     @property
@@ -428,13 +428,13 @@ class Chip:
             return self._wcs
         # Can't get wcs, no header yet
         if self.header is None:
-            print("Cannot get WCS, no header yet")
+            self.logger.warning("Cannot get WCS, no header yet")
             return None
         try:
             self._wcs = WCS(self.header)
             return self._wcs
         except:
-            print("Problem with WCS")
+            self.logger.warning("Problem with WCS")
             return None
             
     @property
@@ -444,7 +444,7 @@ class Chip:
             return self._exptime
         # Can't get exptime, no header yet
         if self.header is None:
-            print("Cannot get EXPTIME, no header yet")
+            self.logger.warning("Cannot get EXPTIME, no header yet")
             return None
         # Get rdnoise from the header
         # We have this key, set _rndoise and return
@@ -461,7 +461,7 @@ class Chip:
             return self._instrument
         # Can't get instrument, no header yet
         if self.header is None:
-            print("Cannot get INSTRUMENT, no header yet")
+            self.logger.warning("Cannot get INSTRUMENT, no header yet")
             return None
         # instrument, c4d, k4m or ksb
         # DTINSTRU = 'mosaic3 '
@@ -484,7 +484,7 @@ class Chip:
             return self._plver
         # Can't get plver, no header yet
         if self.header is None:
-            print("Cannot get PLVER, no header yet")
+            self.logger.warning("Cannot get PLVER, no header yet")
             return None
         plver = self.header.get('PLVER')
         if plver is None:
@@ -499,7 +499,7 @@ class Chip:
             return self._cpfwhm
         # Can't get fwhm, no header yet
         if self.header is None:
-            print("Cannot get CPFWHM, no header yet")
+            self.logger.warning("Cannot get CPFWHM, no header yet")
             return None
         # FWHM values are ONLY in the extension headers
         cpfwhm_map = { 'c4d': 1.5 if self.header.get('FWHM') is None else self.header.get('FWHM')*0.27, 
@@ -511,19 +511,19 @@ class Chip:
 
 
     # Write SE catalog in DAO format
-    def sextodao(self,cat=None,outfile=None,type="lst"):
+    def sextodao(self,cat=None,outfile=None,format="lst"):
 
         # Not enough inputs
         if cat is None:
-            print("No catalog input")
+            self.logger.warning("No catalog input")
             return
         if outfile is None:
-            print("No outfile given")
+            self.logger.warning("No outfile given")
             return
         # Delete outfile
         if os.path.exists(outfile): os.remove(outfile)
     
-        # Types: coo, lst, ap, als
+        # Formats: coo, lst, ap, als
 
         # Header values:  this information comes from daophot2.pdf pg.69
         # NL: Originally meant "number of lines" but not anymore
@@ -537,9 +537,9 @@ class Chip:
         # RDNOISE: rdnoise (ADU) used when running FIND
         # FRAD: value of fitting radius
 
-        # Go through the types
+        # Go through the formats
         # "coo" file from FIND
-        if type == "coo":
+        if format == "coo":
 
             #NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD
             #  1  2046  4094  1472.8 38652.0   80.94    0.00    3.91    1.55    3.90
@@ -560,7 +560,7 @@ class Chip:
             f.close()
 
         # "lst" file from PICKPSF
-        elif type == "lst":
+        elif format == "lst":
 
             #NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD
             # 3  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90
@@ -581,12 +581,12 @@ class Chip:
             f.close()
 
         # "ap" file from PHOTOMETRY
-        elif type == "ap":
-            print(".ap files not supported yet")
+        elif format == "ap":
+            self.logger.warning(".ap files not supported yet")
             return
 
         # "als" file from ALLSTAR
-        elif type == "als":
+        elif format == "als":
 
             # NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD
             #  1  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90
@@ -608,7 +608,7 @@ class Chip:
 
         # Not supported
         else:
-            print(type+" NOT supported")
+            self.logger.warning(format+" NOT supported")
             return
 
 
@@ -785,11 +785,13 @@ class Chip:
             retcode = subprocess.call(["sex",fluxfile,"-c","default.config"],stdout=sf,stderr=subprocess.STDOUT)
             sf.close()
             if retcode < 0:
-                self.logger.info("Child was terminated by signal"+str(-retcode))
+                self.logger.error("Child was terminated by signal"+str(-retcode))
             else:
                 pass
         except OSError as e:
-            self.logger.info("SExtractor Execution failed:"+str(e))
+            self.logger.error("SExtractor Execution failed:"+str(e))
+            self.logger.error(e)
+            raise
 
         # Check that the output file exists
         if os.path.exists(outfile) is True:
@@ -808,6 +810,7 @@ class Chip:
         os.remove(wtfile)
         #os.remove("default.conv")
 
+
     # Determine FWHM using SE catalog
     #--------------------------------
     def sexfwhm(self):
@@ -816,7 +819,7 @@ class Chip:
 
         # Make sure we have the SE catalog
         if self.sexcatfile is None:
-            self.logger.info("No SE catalog found")
+            self.logger.warning("No SE catalog found")
             return
         # Load the catalog if necessary
         if self.sexcat is None:
@@ -836,6 +839,7 @@ class Chip:
         self.logger.info('  FWHM = %5.2f arcsec (%d sources)' % (medfwhm, ngdcat))
         self.seeing = medfwhm
 
+
     # Pick PSF candidates using SE catalog
     #-------------------------------------
     def sexpickpsf(self,nstars=100):
@@ -844,13 +848,18 @@ class Chip:
 
         # Make sure we have the SE catalog
         if self.sexcatfile is None:
-            self.logger.info("No SE catalog found")
+            self.logger.warning("No SE catalog found")
             return
         # Load the catalog if necessary
         if self.sexcat is None:
             self.sexcat = Table.read(self.sexcatfile,2)
         # Make sure we have seeing calculated
         if self.seeing is None: self.sexfwhm()
+
+        base = os.path.basename(self.sexfile)
+        base = os.path.splitext(os.path.splitext(base)[0])[0]
+        outfile = base+".lst"
+
         # Select good sources
         gdcat1 = ((self.sexcat['MAG_AUTO']< 50) & (self.sexcat['MAGERR_AUTO']<0.05) & (self.sexcat['CLASS_STAR']>0.8))
         ngdcat1 = np.sum(gdcat1)
@@ -880,18 +889,20 @@ class Chip:
             ngdcat = np.sum(gdcat)
         # No candidates
         if ngdcat==0:
-            self.logger.info("No good PSF stars found")
-            return
+            self.logger.error("No good PSF stars found")
+            raise
 
         # Candidate PSF stars, use only Nstars, and sort by magnitude
         psfcat = np.sort(self.sexcat[gdcat],order='MAG_AUTO')
         if ngdcat>nstars: psfcat=psfcat[0:nstars]
 
         # Output them in DAO format
+        self.sextodao(psfcat,outfile,format="lst")
+        if os.path.exists(outfile) is False:
+            self.logger.error("Output file "+outfile+" NOT found")
+            raise
 
-        # Do we need separate aperture photometry file?
-
-        return psfcat
+        # Do we a need separate aperture photometry file?
 
     # Make DAOPHOT option files
     #--------------------------
@@ -1111,7 +1122,7 @@ class Chip:
 
     # DAOPHOT detection
     #----------------------
-    def daodetect(self):
+    def daodetect(self,imfile=None):
 
         # Set up filenames, make sure they don't exist
         base = os.path.basename(self.daofile)
@@ -1123,6 +1134,12 @@ class Chip:
         if os.path.exists(outfile): os.remove(outfile)
         if os.path.exists(logfile): os.remove(logfile)
         if os.path.exists(scriptfile): os.remove(scriptfile)
+        # Image file
+        if imfile is None:
+            if os.path.exists(base+".fits") is False:
+                self.logger.warning("No image file input and "+base+".fits NOT found")
+                return
+            imfile = base+".fits"
 
         # Lines for the DAOPHOT script
         lines = "#!/bin/sh\n" \
@@ -1130,7 +1147,7 @@ class Chip:
                 "OPTIONS\n" \
                 ""+optfile+"\n" \
                 "\n" \
-                "ATTACH "+base+".fits\n" \
+                "ATTACH "+imfile+"\n" \
                 "FIND\n" \
                 "1,1\n" \
                 ""+outfile+"\n" \
@@ -1152,11 +1169,13 @@ class Chip:
         try:
             retcode = subprocess.call(["./"+scriptfile],stderr=subprocess.STDOUT,shell=False)
             if retcode < 0:
-                self.logger.info("Child was terminated by signal"+str(-retcode))
+                self.logger.error("Child was terminated by signal"+str(-retcode))
             else:
                 pass
         except OSError as e:
-            self.logger.info("DAOPHOT detection failed:"+str(e))
+            self.logger.error("DAOPHOT detection failed:"+str(e))
+            self.logger.error(e)
+            raise
 
         # Check that the output file exists
         if os.path.exists(outfile) is True:
@@ -1183,32 +1202,38 @@ class Chip:
                     self.logger.info(l3[0].rstrip().strip())
         # Failure
         else:
-            self.logger.info("Output file "+outfile+" NOT Found")
+            self.logger.error("Output file "+outfile+" NOT Found")
+            raise
 
         # Delete the script
         os.remove(scriptfile)
 
     # DAOPHOT aperture photometry
     #----------------------------
-    def daoaperphot(self,coofile=None,apertures=None):
+    def daoaperphot(self,coofile=None,apertures=None,imfile=None,outfile=None):
 
         # Set up filenames, make sure they don't exist
         base = os.path.basename(self.daofile)
         base = os.path.splitext(os.path.splitext(base)[0])[0]
         optfile = base+".opt"
-        apfile = base+".apers"
-        scriptfile = base+".ap.sh"
-        outfile = base+".ap"
-        logfile = base+".ap.log"
+        # Image file
+        if imfile is None: imfile = base+".fits"
+        imbase = os.path.basename(imfile)
+        imbase = os.path.splitext(os.path.splitext(imbase)[0])[0]
+        apfile = imbase+".apers"
+        scriptfile = imbase+".ap.sh"
+        logfile = imbase+".ap.log"
+        # Output file
+        if outfile is None:
+            outfile = imbase+".ap"
         if os.path.exists(apfile): os.remove(apfile)
         if os.path.exists(outfile): os.remove(outfile)
         if os.path.exists(logfile): os.remove(logfile)
         if os.path.exists(scriptfile): os.remove(scriptfile)
-
-        # What detection/coordinate file
+        # Detection/coordinate file
         if coofile is None:
             if os.path.exists(base+".coo") is False:
-                self.logger.info("No detection/coordinate file input and "+base+".coo NOT found")
+                self.logger.warning("No detection/coordinate file input and "+base+".coo NOT found")
                 return
             coofile = base+".coo"
 
@@ -1220,7 +1245,7 @@ class Chip:
             apertures = [3.000, 6.0803, 9.7377, 15.5952, 19.7360, 40.0000, 50.0000]
         nap = len(apertures)
         if nap<3:
-            self.logger.info("Only "+str(nap)+" apertures input.  Need at least 3")
+            self.logger.warning("Only "+str(nap)+" apertures input.  Need at least 3")
             return
         f = open(apfile,'w')
         for i in range(nap-2):
@@ -1238,7 +1263,7 @@ class Chip:
                 "OPTIONS\n" \
                 ""+optfile+"\n" \
                 "\n" \
-                "ATTACH "+base+".fits\n" \
+                "ATTACH "+imfile+"\n" \
                 "PHOTOMETRY\n" \
                 ""+apfile+"\n" \
                 " \n" \
@@ -1271,11 +1296,13 @@ class Chip:
         try:
             retcode = subprocess.call(["./"+scriptfile],stderr=subprocess.STDOUT,shell=True)
             if retcode < 0:
-                self.logger.info("Child was terminated by signal"+str(-retcode))
+                self.logger.error("Child was terminated by signal"+str(-retcode))
             else:
                 pass
         except OSError as e:
-            self.logger.info("DAOPHOT aperture photometry failed:"+str(e))
+            self.logger.error("DAOPHOT aperture photometry failed:"+str(e))
+            self.logger.error(e)
+            raise
 
         # Check that the output file exists
         if os.path.exists(outfile) is True:
@@ -1295,14 +1322,14 @@ class Chip:
                     self.logger.info(l1.strip())   # clip leading/trailing whitespace
         # Failure
         else:
-            self.logger.info("Output file "+outfile+" NOT Found")
+            self.logger.error("Output file "+outfile+" NOT Found")
+            raise
 
         # Delete the script
         os.remove(scriptfile)
 
         # Move PSF file back
-        if movedpsf is True:
-            os.rename(psftemp,base+".psf")
+        if movedpsf is True: os.rename(psftemp,base+".psf")
 
 
     # Pick PSF stars using DAOPHOT
@@ -1323,14 +1350,14 @@ class Chip:
         # What detection/coordinate file
         if catfile is None:
             if os.path.exists(base+".ap") is False:
-                self.logger.info("No catalog file input and "+base+".ap NOT found")
+                self.logger.warning("No catalog file input and "+base+".ap NOT found")
                 return
             catfile = base+".ap"
 
         # Magnitude limit
         if maglim is None:
             if self.daomaglim is None:
-                self.logger.info("No magnitude input and DAOMAGLIMIT not set yet")
+                self.logger.warning("No magnitude input and DAOMAGLIMIT not set yet")
                 return
             maglim = self.daomaglim-1.0
 
@@ -1362,11 +1389,13 @@ class Chip:
         try:
             retcode = subprocess.call(["./"+scriptfile],stderr=subprocess.STDOUT,shell=True)
             if retcode < 0:
-                self.logger.info("Child was terminated by signal"+str(-retcode))
+                self.logger.error("Child was terminated by signal"+str(-retcode))
             else:
                 pass
         except OSError as e:
-            self.logger.info("DAOPHOT PICKPSF failed:"+str(e))
+            self.logger.error("DAOPHOT PICKPSF failed:"+str(e))
+            self.logger.error(e)
+            raise
 
         # Check that the output file exists
         if os.path.exists(outfile) is True:
@@ -1380,15 +1409,16 @@ class Chip:
                     self.logger.info(l1[0].strip())   # clip \n
         # Failure
         else:
-            self.logger.info("Output file "+outfile+" NOT Found")
+            self.logger.error("Output file "+outfile+" NOT Found")
+            raise
 
         # Delete the script
         os.remove(scriptfile)
 
-        
-    # Create DAOPHOT PSF
+
+    # Run DAOPHOT PSF
     #-------------------
-    def runpsf(self,apfile=None,listfile=None,doiter=True,maxiter=5,minstars=6,verbose=False):
+    def daopsf(self,listfile=None,apfile=None,imfile=None,verbose=False):
 
         # Set up filenames, make sure they don't exist
         base = os.path.basename(self.daofile)
@@ -1406,13 +1436,220 @@ class Chip:
         # Aperture photometry file
         if apfile is None:
             if os.path.exists(base+".ap") is False:
-                self.logger.info("No aperture photometry file input and "+base+".ap NOT found")
+                self.logger.warning("No aperture photometry file input and "+base+".ap NOT found")
                 return
             apfile = base+".ap"
         # List file
         if listfile is None:
             if os.path.exists(base+".lst") is False:
-                self.logger.info("No PSF candidates list input and "+base+".lst NOT found")
+                self.logger.warning("No PSF candidates list input and "+base+".lst NOT found")
+                return
+            listfile = base+".lst"
+        # Image file
+        if imfile is None: imfile = base+".fits"
+
+        self.logger.info("-- Running DAOPHOT PSF -- ")
+
+        # Lines for the DAOPHOT script
+        lines = "#!/bin/sh\n" \
+                "daophot << END_DAOPHOT >> "+logfile+"\n" \
+                "OPTIONS\n" \
+                ""+optfile+"\n" \
+                "\n" \
+                "ATTACH "+imfile+"\n" \
+                "PSF\n" \
+                ""+apfile+"\n" \
+                ""+listfile+"\n" \
+                ""+outfile+"\n" \
+                "\n" \
+                "EXIT\n" \
+                "EXIT\n" \
+                "END_DAOPHOT\n"
+        # Write the script
+        f = open(scriptfile,'w')
+        f.writelines(lines)
+        f.close()
+        os.chmod(scriptfile,0775)
+
+        # Copy option file to daophot.opt
+        if os.path.exists("daophot.opt") is False: shutil.copyfile(base+".opt","daophot.opt")
+
+        # Run the script
+        try:
+            retcode = subprocess.call(["./"+scriptfile],stderr=subprocess.STDOUT,shell=True)
+            if retcode < 0:
+                self.logger.error("Child was terminated by signal"+str(-retcode))
+            else:
+                pass
+        except OSError as e:
+            self.logger.error("DAOPHOT PSF failed:"+str(e))
+            self.logger.error(e)
+            raise
+
+        # Check that the output file exists
+        if os.path.exists(outfile) is True:
+            # Get info from the logfile
+            if os.path.exists(logfile):
+                f = open(logfile,'r')
+                plines = f.readlines()
+                f.close()
+                # Get parameter errors
+                l1 = grep(plines,"Chi    Parameters",index=True)
+                l2 = grep(plines,"Profile errors",index=True)
+                l3 = grep(plines,"File with PSF stars and neighbors",index=True)
+                if len(l1)>0:
+                    parlines = plines[l1[0]+1:l2[0]-1]
+                    pararr, parchi = parsepars(parlines)
+                    minchi = np.min(parchi)
+                    self.logger.info("  Chi = "+str(minchi))
+                # Get profile errors
+                if len(l2)>0:
+                    proflines = plines[l2[0]+1:l3[0]-1]
+                    if verbose: self.logger.info(" ".join(proflines))
+                    profs = parseprofs(proflines)
+                else:
+                    self.logger.error("No DAOPHOT profile errors found in logfile")
+                    raise
+        # Failure
+        else:
+            self.logger.error("Output file "+outfile+" NOT Found")
+            raise
+
+        # Delete the script
+        os.remove(scriptfile)
+
+        return pararr, parchi, profs
+
+
+    # Subtract neighbors of PSF stars
+    #--------------------------------
+    def subpsfnei(self,lstfile=None,photfile=None,outfile=None,psffile=None,imfile=None):
+
+        # Set up filenames, make sure the output ones don't exist
+        base = os.path.basename(self.daofile)
+        base = os.path.splitext(os.path.splitext(base)[0])[0]
+        optfile = base+".opt"
+        scriptfile = base+".subnei.sh"
+        logfile = base+".subnei.log"
+        nstfile = base+".nst"
+        grpfile = base+".grp"
+        if imfile is None: imfile = base+".fits"
+        if outfile is None: outfile = base+"a.fits"
+        if os.path.exists(outfile): os.remove(outfile)
+        if os.path.exists(logfile): os.remove(logfile)
+        if os.path.exists(scriptfile): os.remove(scriptfile)
+        if os.path.exists(nstfile): os.remove(nstfile)
+        if os.path.exists(grpfile): os.remove(grpfile)
+        # Check that image file exists
+        if os.path.exists(imfile) is False:
+            self.logger.error(imfile+" NOT Found")
+            return
+        # Phot file (normally .nei file)
+        if photfile is None: 
+            if os.path.exists(base+".nei") is False:
+                self.logger.warning("Photometry file not input and "+base+".nei NOT found")
+                return
+            photfile = base+".nei"
+        # List file
+        if lstfile is None: 
+            if os.path.exists(base+".lst") is False:
+                self.logger.warning("List file not input and "+base+".lst NOT found")
+                return
+            lstfile = base+".lst"
+        # PSF file
+        if psffile is None: 
+            if os.path.exists(base+".psf") is False:
+                self.logger.warning("PSF file not input and "+base+".psf NOT found")
+                return
+            psffile = base+".psf"
+
+        self.logger.info("-- Subtracting PSF stars neighbors -- ")
+
+        # Lines for the DAOPHOT script
+        lines = "#!/bin/sh\n" \
+                "daophot << END_DAOPHOT >> "+logfile+"\n" \
+                "OPTIONS\n" \
+                ""+optfile+"\n" \
+                "\n" \
+                "ATTACH "+imfile+"\n" \
+                "GROUP\n" \
+                ""+photfile+"\n" \
+                ""+psffile+"\n" \
+                "5.\n" \
+                ""+grpfile+"\n" \
+                "NSTAR\n" \
+                ""+psffile+"\n" \
+                ""+grpfile+"\n" \
+                ""+nstfile+"\n" \
+                "SUBSTAR\n" \
+                ""+psffile+"\n" \
+                ""+nstfile+"\n" \
+                "y\n" \
+                ""+lstfile+"\n" \
+                ""+outfile+"\n" \
+                "\n" \
+                "EXIT\n" \
+                "END_DAOPHOT\n"
+        # Write the script
+        f = open(scriptfile,'w')
+        f.writelines(lines)
+        f.close()
+        os.chmod(scriptfile,0775)
+
+        # Copy option file to daophot.opt
+        if os.path.exists("daophot.opt") is False: shutil.copyfile(base+".opt","daophot.opt")
+
+        # Run the script
+        try:
+            retcode = subprocess.call(["./"+scriptfile],stderr=subprocess.STDOUT,shell=True)
+            if retcode < 0:
+                self.logger.error("Child was terminated by signal"+str(-retcode))
+            else:
+                pass
+        except OSError as e:
+            self.logger.error("PSF star neighbor subtracting failed:"+str(e))
+            self.logger.error(e)
+            raise
+
+        # Check that the output file exists
+        if os.path.exists(outfile) is False:
+            self.logger.error("Output file "+outfile+" NOT Found")
+            raise
+
+        # Delete the script
+        #os.remove(scriptfile)
+
+
+    # Create DAOPHOT PSF
+    #-------------------
+    def createpsf(self,listfile=None,apfile=None,doiter=True,maxiter=5,minstars=6,subneighbors=True,verbose=False):
+
+        self.logger.info("-- Creating PSF Iteratively --")
+
+        # Set up filenames, make sure they don't exist
+        base = os.path.basename(self.daofile)
+        base = os.path.splitext(os.path.splitext(base)[0])[0]
+        optfile = base+".opt"
+        scriptfile = base+".psf.sh"
+        outfile = base+".psf"
+        logfile = base+".psf.log"
+        neifile = base+".nei"
+        imfile = base+".fits"
+        if os.path.exists(outfile): os.remove(outfile)
+        if os.path.exists(logfile): os.remove(logfile)
+        if os.path.exists(scriptfile): os.remove(scriptfile)
+        if os.path.exists(neifile): os.remove(neifile)
+
+        # Aperture photometry file
+        if apfile is None:
+            if os.path.exists(base+".ap") is False:
+                self.logger.warning("No aperture photometry file input and "+base+".ap NOT found")
+                return
+            apfile = base+".ap"
+        # List file
+        if listfile is None:
+            if os.path.exists(base+".lst") is False:
+                self.logger.warning("No PSF candidates list input and "+base+".lst NOT found")
                 return
             listfile = base+".lst"
         # Working list file
@@ -1424,8 +1661,6 @@ class Chip:
         if os.path.exists(listfile+".orig"): os.remove(listfile+".orig")
         shutil.copy(listfile,listfile+".orig")
 
-        self.logger.info("-- Running DAOPHOT PSF -- ")
-
         # Iterate
         #---------
         if doiter is False: maxiter=1
@@ -1434,116 +1669,69 @@ class Chip:
         while (endflag==0):
             self.logger.info("Iter = "+str(iter))
 
-            if os.path.exists(logfile): os.remove(logfile)
-            if os.path.exists(outfile): os.remove(outfile)
-            if os.path.exists(neifile): os.remove(neifile)
-
-            # Lines for the DAOPHOT script
-            lines = "#!/bin/sh\n" \
-                    "daophot << END_DAOPHOT >> "+logfile+"\n" \
-                    "OPTIONS\n" \
-                    ""+optfile+"\n" \
-                    "\n" \
-                    "ATTACH "+base+".fits\n" \
-                    "PSF\n" \
-                    ""+apfile+"\n" \
-                    ""+wlistfile+"\n" \
-                    ""+outfile+"\n" \
-                    "\n" \
-                    "EXIT\n" \
-                    "EXIT\n" \
-                    "END_DAOPHOT\n"
-            # Write the script
-            f = open(scriptfile,'w')
-            f.writelines(lines)
-            f.close()
-            os.chmod(scriptfile,0775)
-
-            # Copy option file to daophot.opt
-            if os.path.exists("daophot.opt") is False: shutil.copyfile(base+".opt","daophot.opt")
-
-            # Run the script
+            # Run DAOPSF
             try:
-                retcode = subprocess.call(["./"+scriptfile],stderr=subprocess.STDOUT,shell=True)
-                if retcode < 0:
-                    self.logger.info("Child was terminated by signal"+str(-retcode))
-                else:
-                    pass
-            except OSError as e:
-                self.logger.info("DAOPHOT PSF failed:"+str(e))
+                pararr, parchi, profs = self.daopsf(wlistfile,apfile)
+            except:
+                self.logger.error("Failure in DAOPSF")
+                raise
 
-            # Check that the output file exists
-            if os.path.exists(outfile) is True:
-                # Get info from the logfile
-                if os.path.exists(logfile):
-                    f = open(logfile,'r')
-                    plines = f.readlines()
-                    f.close()
-                    # Get parameter errors
-                    l1 = grep(plines,"Chi    Parameters",index=True)
-                    l2 = grep(plines,"Profile errors",index=True)
-                    l3 = grep(plines,"File with PSF stars and neighbors",index=True)
-                    if len(l1)>0:
-                        parlines = plines[l1[0]+1:l2[0]-1]
-                        pararr, parchi = parsepars(parlines)
-                        minchi = np.min(parchi)
-                        self.logger.info("  Chi = "+str(minchi))
-                        #self.logger.info("Chi   Parameters")
-                        #self.logger.info(" ".join(parlines))
-                    # Get profile errors
-                    if len(l2)>0:
-                        proflines = plines[l2[0]+1:l3[0]-1]
-                        if verbose: self.logger.info(" ".join(proflines))
-                        profs = parseprofs(proflines)
-                        nstars = len(profs)
-                        bdstars = (profs['flag'] != '')
-                        nbdstars = np.sum(bdstars)
-                        self.logger.info("  "+str(nbdstars)+" stars with flags")
-                        # Delete stars with flags
-                        if (nbdstars>0) & (nstars>minstars):
-                            f = open(wlistfile,'r')
-                            listlines = f.readlines()
-                            f.close()
-                            # Read the list
-                            lstcat = daoread(wlistfile)
-                            # Match up with the stars we are deleting
-                            mid, ind1, ind2 = np.intersect1d(profs[bdstars]['id'],lstcat['id'],return_indices=True)
-                            # Remove the lines from listlines
-                            newlistlines = remove_indices(listlines,ind2+3)
-                            # Write new list
-                            os.remove(wlistfile)
-                            f = open(wlistfile,'w')
-                            f.writelines(newlistlines)
-                            f.close()
-                            self.logger.info("  Removing IDs="+str(" ".join(profs[bdstars]['id'].astype(str))))
-                            self.logger.info("  "+str(nbdstars)+" bad stars removed. "+str(nstars-nbdstars)+" PSF stars left")
-                    else:
-                        self.logger.info("No DAOPHOT profile errors found in logfile")
-                        return
-            # Failure
-            else:
-                self.logger.info("Output file "+outfile+" NOT Found")
-                return
-
-            # Delete the script
-            os.remove(scriptfile)
+            # Check for bad stars
+            nstars = len(profs)
+            bdstars = (profs['flag'] != '')
+            nbdstars = np.sum(bdstars)
+            self.logger.info("  "+str(nbdstars)+" stars with flags")
+            # Delete stars with flags
+            if (nbdstars>0) & (nstars>minstars):
+                f = open(wlistfile,'r')
+                listlines = f.readlines()
+                f.close()
+                # Read the list
+                lstcat = daoread(wlistfile)
+                # Match up with the stars we are deleting
+                mid, ind1, ind2 = np.intersect1d(profs[bdstars]['id'],lstcat['id'],return_indices=True)
+                # Remove the lines from listlines
+                newlistlines = remove_indices(listlines,ind2+3)
+                # Write new list
+                os.remove(wlistfile)
+                f = open(wlistfile,'w')
+                f.writelines(newlistlines)
+                f.close()
+                self.logger.info("  Removing IDs="+str(" ".join(profs[bdstars]['id'].astype(str))))
+                self.logger.info("  "+str(nbdstars)+" bad stars removed. "+str(nstars-nbdstars)+" PSF stars left")
 
             # Should we end
             if (iter==maxiter) | (nbdstars==0) | (nstars<=minstars): endflag=1
             iter = iter+1
 
-        # I should do the background subtraction of the neighbors here!
-        # maybe call this genpsf and have runpsf just do a single psf run.
-        
+        # Subtract PSF star neighbors
+        if subneighbors:
+            subfile = base+"a.fits"
+            #try:
+            self.subpsfnei(wlistfile,neifile,subfile,imfile=imfile,psffile=outfile)
+            #except:
+            #    self.logger.error("Subtracting neighbors failed.  Keeping original PSF file")
+            # Check that the subtracted image exist and rerun DAOPSF
+            if os.path.exists(subfile):
+                # Final run of DAOPSF
+                self.logger.info("Final DAOPDF run")
+                try:
+                    pararr, parchi, profs = self.daopsf(wlistfile,apfile)
+                except:
+                    self.logger.error("Failure in DAOPSF")
+                    raise
+                # Get aperture photometry for PSF stars from subtracted image
+                self.logger.info("Getting aperture photometry for PSF stars")
+                apertures = [3.0, 3.7965, 4.8046, 6.0803, 7.6947, 9.7377, 12.3232, 15.5952, 19.7360, \
+                             24.9762, 31.6077, 40.0000, 50.0000]
+                self.daoaperphot(wlistfile,apertures,subfile)
+
         # Copy working list to final list
         if os.path.exists(listfile): os.remove(listfile)
         shutil.move(wlistfile,listfile)
         self.logger.info("Final list of PSF stars in "+listfile+".  Original list in "+listfile+".orig")
 
-    # Subtract neighbors of PSF stars
-    #--------------------------------
-    def subnei():
-        pass
+        
         
     # Run ALLSTAR
     #-------------
@@ -1556,12 +1744,12 @@ class Chip:
         scriptfile = base+".als.sh"
         if apfile is None:
             if os.path.exists(base+".ap") is False:
-                self.logger.info("apfile not input and "+base+".ap NOT found")
+                self.logger.warning("apfile not input and "+base+".ap NOT found")
                 return
             apfile = base+".ap"
         if psffile is None:
             if os.path.exists(base+".psf") is False:
-                self.logger.info("psffile not input and "+base+".psf NOT found")
+                self.logger.warning("psffile not input and "+base+".psf NOT found")
                 return
             psffile = base+".psf"
         if subfile is None: subfile = base+"s.fits"
@@ -1604,11 +1792,13 @@ class Chip:
         try:
             retcode = subprocess.call(["./"+scriptfile],stderr=subprocess.STDOUT,shell=False)
             if retcode < 0:
-                self.logger.info("Child was terminated by signal"+str(-retcode))
+                self.logger.warning("Child was terminated by signal"+str(-retcode))
             else:
                 pass
         except OSError as e:
-            self.logger.info("ALLSTAR failed:"+str(e))
+            self.logger.warning("ALLSTAR failed:"+str(e))
+            self.logger.warning(e)
+            raise
 
         # Check that the output file exists
         if os.path.exists(outfile) is True:
@@ -1618,23 +1808,15 @@ class Chip:
             self.logger.info("Final catalog is "+outfile)
         # Failure
         else:
-            self.logger.info("Output file "+outfile+" NOT Found")
+            self.logger.error("Output file "+outfile+" NOT Found")
+            raise
 
         # Delete the script
         os.remove(scriptfile)
 
-    # Calculate SEEING from SE catalog
-
-    # Pick PSF stars from SE catalog
-        
-    # Write DAO files or convert from SE?
 
     # Combine SE + DAOPHOT/ALLSTAR info into ONE file
 
-    # PSF star aperture photometry for calculating the aperture correction
-    #---------------------------------------------------------------------
-    def brighstaraperphot(self):
-        pass
         
     # Run DAOGROW to calculate aperture corrections
     #----------------------------------------------
