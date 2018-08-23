@@ -15,7 +15,7 @@ import warnings
 from astropy.io import fits
 from astropy.wcs import WCS
 from astropy.utils.exceptions import AstropyWarning
-from astropy.table import Table
+from astropy.table import Table, Column
 import time
 import shutil
 import re
@@ -300,7 +300,6 @@ class Chip:
         self.sexcatfile = None
         self.sexcat = None
         self.seeing = None
-        self.daomaglim = None
         # Internal hidden variables
         self._rdnoise = None
         self._gain = None
@@ -312,6 +311,8 @@ class Chip:
         self._instrument = None
         self._plver = None
         self._cpfwhm = None
+        self._daomaglim = None    # set by daoaperphot()
+        self._sexmaglim = None    # set by runsex()
         # Logger
         self.logger = None
 
@@ -509,6 +510,16 @@ class Chip:
         self._cpfwhm = cpfwhm
         return self._cpfwhm
 
+    @property
+    def maglim(self):
+        # We have it already, just return it
+        if self._daomaglim is not None:
+            return self._daomaglim
+        if self._sexmaglim is not None:
+            return self._sexmaglim
+        self.logger.warning('Maglim not set yet')
+        return None
+
 
     # Write SE catalog in DAO format
     def sextodao(self,cat=None,outfile=None,format="lst"):
@@ -552,11 +563,12 @@ class Chip:
             f.write(" NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD\n")
             f.write("  3 %5d %5d %7.1f %7.1f %7.2f %7.2f %7.2f %7.2f %7.2f\n" %
                     (self.header['naxis1'],self.header['naxis2'],1000.0,self.saturate,100.0,3.0,self.gain,self.rdnoise/self.gain,3.9))
+            f.write("\n")
             #f.write("  3  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90\n")
             # Write the data
             for e in cat:
                 f.write("%7d %8.2f %8.2f %8.3f %8.3f %8.3f %8.3f\n" %
-                        (e["NUMBER"],e["X_IMAGE"]+1,e["Y_IMAGE"]+1,e["MAG_AUTO"],0.6,0.0,0.0))
+                        (e["NUMBER"],e["X_IMAGE"],e["Y_IMAGE"],e["MAG_AUTO"],0.6,0.0,0.0))
             f.close()
 
         # "lst" file from PICKPSF
@@ -573,6 +585,7 @@ class Chip:
             f.write(" NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD\n")
             f.write("  3 %5d %5d %7.1f %7.1f %7.2f %7.2f %7.2f %7.2f %7.2f\n" %
                     (self.header['naxis1'],self.header['naxis2'],1000.0,self.saturate,100.0,3.0,self.gain,self.rdnoise/self.gain,3.9))
+            f.write("\n")
             #f.write("  3  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90\n")
             # Write the data
             for e in cat:
@@ -599,6 +612,7 @@ class Chip:
             f.write(" NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD\n")
             f.write("  3 %5d %5d %7.1f %7.1f %7.2f %7.2f %7.2f %7.2f %7.2f\n" %
                     (self.header['naxis1'],self.header['naxis2'],1000.0,self.saturate,100.0,3.0,self.gain,self.rdnoise/self.gain,3.9))
+            f.write("\n")
             #f.write("  3  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90\n")
             # Write the data
             for e in cat:
@@ -803,6 +817,14 @@ class Chip:
             head = fits.getheader(outfile,2)
             self.logger.info(str(head["naxis2"])+" sources detected")
             self.logger.info("Final catalog is "+outfile)
+            # Get the magnitude limit, use 90th percentile
+            gdcat = (cat["MAG_AUTO"]<50)
+            ngdcat = np.sum(gdcat)
+            mag = cat["MAG_AUTO"][gdcat]
+            mag_sorted = np.sort(mag)
+            maglim = mag_sorted[int(np.round(0.90*ngdcat))]
+            self._sexmaglim = maglim
+            self.logger.info("Estimated magnitude limit = %6.2f mag" % maglim)
 
         # Delete temporary files
         os.remove(fluxfile)
@@ -1212,6 +1234,8 @@ class Chip:
     #----------------------------
     def daoaperphot(self,coofile=None,apertures=None,imfile=None,outfile=None):
 
+        self.logger.info("-- Running DAOPHOT aperture photometry --")
+
         # Set up filenames, make sure they don't exist
         base = os.path.basename(self.daofile)
         base = os.path.splitext(os.path.splitext(base)[0])[0]
@@ -1236,6 +1260,7 @@ class Chip:
                 self.logger.warning("No detection/coordinate file input and "+base+".coo NOT found")
                 return
             coofile = base+".coo"
+        self.logger.info("coofile = "+coofile+"   outfile = "+outfile)
 
         # Make apertures file
         if apertures is None:
@@ -1292,7 +1317,6 @@ class Chip:
             movedpsf = False
 
         # Run the script
-        self.logger.info("-- Running DAOPHOT aperture photometry --")
         try:
             retcode = subprocess.call(["./"+scriptfile],stderr=subprocess.STDOUT,shell=True)
             if retcode < 0:
@@ -1356,10 +1380,10 @@ class Chip:
 
         # Magnitude limit
         if maglim is None:
-            if self.daomaglim is None:
-                self.logger.warning("No magnitude input and DAOMAGLIMIT not set yet")
-                return
-            maglim = self.daomaglim-1.0
+            if self.maglim is None:
+                self.logger.warning("No magnitude input and MAGLIMIT not set yet")
+                raise
+            maglim = self.maglim-1.0
 
         # Lines for the DAOPHOT script
         lines = "#!/bin/sh\n" \
@@ -1406,7 +1430,7 @@ class Chip:
                 f.close()
                 l1 = grep(plines,"suitable candidates were found.")
                 if len(l1)>0:
-                    self.logger.info(l1[0].strip())   # clip \n
+                    self.logger.info(l1[0].strip()+"   "+outfile)   # clip \n
         # Failure
         else:
             self.logger.error("Output file "+outfile+" NOT Found")
@@ -1735,7 +1759,7 @@ class Chip:
         
     # Run ALLSTAR
     #-------------
-    def runallstar(self,psffile=None,apfile=None,subfile=None):
+    def allstar(self,psffile=None,apfile=None,subfile=None):
 
         # Set up filenames, make sure they don't exist
         base = os.path.basename(self.daofile)
@@ -1823,14 +1847,82 @@ class Chip:
     def daogrow(self):
         pass
 
+
+    # Combine SE and DAOPHOT catalogs
+    #--------------------------------
+    def finalcat(self,outfile=None,both=True,sexdetect=True):
+        # both       Only keep sources that have BOTH SE and ALLSTAR information
+        # sexdetect  SE catalog was used for DAOPHOT detection list
+
+        self.logger.info("--  Creating final combined catalog --")
+
+        daobase = os.path.basename(self.daofile)
+        daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
+        if outfile is None: outfile=self.base+".fits"
+
+        # Check that we have the SE and ALS information
+        if (self.sexcat is None) | (os.path.exists(daobase+".als") is None):
+            self.logger.warning("SE catalog or ALS catalog NOT found")
+            return
+
+        # Load ALS catalog
+        als = Table(daoread(daobase+".als"))
+        nals = len(als)
+
+        # Just add columns to the SE catalog
+        ncat = len(self.sexcat)
+        newcat = self.sexcat.copy()
+        alsnames = ['X','Y','MAG','ERR','SKY','ITER','CHI','SHARP']   # NEED TO BE LOWERCASE!!
+        newnames = ['XPSF','YPSF','MAGPSF','ERRPSF','SKY','ITER','CHI','SHARP']
+        newtypes = ['float64','float64','float','float','float','float','float']
+        nan = float('nan')
+        newvals = [nan, nan, nan, nan ,nan, nan, nan]
+        # DAOPHOT detection list used, need ALS ID
+        if not sexdetect:
+            alsnames = ['ID']+alsnames
+            newnames = ['ALSID']+newnames
+            newtypes = ['int32']+newtypes
+            newvals = [-1]+newvals
+        newcols = []
+        for n,t,v in zip(newnames,newtypes,newvals):
+            col = Column(name=n,length=ncat,dtype=t)
+            col[:] = v
+            newcols.append(col)
+        # Match up with IDs if SE list used by DAOPHOT
+        if sexdetect:
+            mid, ind1, ind2 = np.intersect1d(newcat["NUMBER"],als["id"],return_indices=True)
+            for id1,id2 in zip(newnames,alsnames):
+                newcat[id1][ind1] = als[id2][ind2]
+            # Only keep sources that have SE+ALLSTAR information
+            #  trim out ones that don't have ALS
+            if (both is True) & (nals<ncat): newcat = newcat[ind1]
+
+        # Match up with coordinates, DAOPHOT detection list used
+        else:
+            print("Need to match up with coordinates")
+
+            # Only keep sources that have SE+ALLSTAR information
+            #  trim out ones that don't have ALS
+            if (both is True) & (nals<ncat): newcat = newcat[ind1]
+
+        # Write to file
+        self.logger.info("Final catalog = "+outfile)
+        newcat.write(outfile)
+
     # Process a single chip
     #----------------------
     def process(self):
         self.runsex()
         self.mkopt()
         self.mkdaoim()
-        self.daodetect()
+        #self.daodetect()
+        # Create DAOPHOT-style coo file
+        # Need to use SE positions
+        self.sextodao(self.sexcat,outfile="flux_dao.coo")
         self.daoaperphot()
         self.daopickpsf()
-        self.runpsf()
-        self.runallstar()
+        self.createpsf()
+        self.allstar()
+        self.finalcat()
+        # Do I need to rerun daoaperphot to get aperture
+        # photometry at the FINAL allstar positions??
