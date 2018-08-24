@@ -366,6 +366,7 @@ class Exposure:
             self.logger.info(" ")
             self.logger.info("=== Processing subimage "+str(i)+" ===")
             self.loadchip(i)
+            self.logger.info("CCDNUM = "+str(self.chip.ccdnum))
             self.chip.process()
             self.chip.cleanup()
             # Copy files to final location?
@@ -1753,7 +1754,7 @@ class Chip:
             raise
 
         # Delete the script
-        #os.remove(scriptfile)
+        os.remove(scriptfile)
 
 
     # Create DAOPHOT PSF
@@ -1950,8 +1951,6 @@ class Chip:
         # Delete the script
         os.remove(scriptfile)
 
-
-    # Combine SE + DAOPHOT/ALLSTAR info into ONE file
 
         
     # Run DAOGROW to calculate aperture corrections
