@@ -1984,10 +1984,10 @@ class Chip:
         ncat = len(self.sexcat)
         newcat = self.sexcat.copy()
         alsnames = ['X','Y','MAG','ERR','SKY','ITER','CHI','SHARP']
-        newnames = ['XPSF','YPSF','MAGPSF','ERRPSF','SKY','ITER','CHI','SHARP']
-        newtypes = ['float64','float64','float','float','float','float','float','float']
+        newnames = ['XPSF','YPSF','MAGPSF','ERRPSF','SKY','ITER','CHI','SHARP','RAPSF','DECPSF']
+        newtypes = ['float64','float64','float','float','float','float','float','float','float64','float64']
         nan = float('nan')
-        newvals = [nan, nan, nan, nan ,nan, nan, nan, nan]
+        newvals = [nan, nan, nan, nan ,nan, nan, nan, nan, nan, nan]
         # DAOPHOT detection list used, need ALS ID
         if not sexdetect:
             alsnames = ['ID']+alsnames
@@ -2016,6 +2016,11 @@ class Chip:
             # Only keep sources that have SE+ALLSTAR information
             #  trim out ones that don't have ALS
             if (both is True) & (nals<ncat): newcat = newcat[ind1]
+
+        # Add RA, DEC
+        r,d = self.wcs.all_pix2world(newcat["XPSF"],newcat["YPSF"],1)
+        newcat['RAPSF'] = r
+        newcat['DECPSF'] = d        
 
         # Write to file
         self.logger.info("Final catalog = "+outfile)
