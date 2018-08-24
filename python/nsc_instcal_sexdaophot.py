@@ -199,18 +199,9 @@ def numlines(fil):
 # Class to represent an exposure to process
 class Exposure:
 
-    def __init__(self,fluxfile,wtfile,maskfile,nscver="t3a"):
-        self.fluxfile = fluxfile
-        self.wtfile = wtfile
-        self.maskfile = maskfile
-        base = os.path.basename(fluxfile)
-        base = os.path.splitext(os.path.splitext(base)[0])[0]
-        self.base = base
-        self.nscver = nscver
-        self.logfile = base+".log"
-        self.logger = None
-        self.chip = None
-
+    # Initialize Exposure object
+    def __init__(self,fluxfile,wtfile,maskfile,nscversion="t3a"):
+        # Check that the files exist
         if os.path.exists(fluxfile) is False:
             print(fluxfile+" NOT found")
             return
@@ -220,33 +211,120 @@ class Exposure:
         if os.path.exists(maskfile) is False:
             print(maskfile+" NOT found")
             return
+        # Setting up the object properties
+        self.origfluxfile = fluxfile
+        self.origwtfile = wtfile
+        self.origmaskfile = maskfile
+        self.fluxfile = None      # working files in temp dir
+        self.wtfile = None        # working files in temp dir
+        self.maskfile = None      # working files in temp dir
+        base = os.path.basename(fluxfile)
+        base = os.path.splitext(os.path.splitext(base)[0])[0]
+        self.base = base
+        self.nscversion = nscversion
+        self.logfile = base+".log"
+        self.logger = None
+        self.origdir = None
+        self.wdir = None     # the temporary working directory
+        self.outdir = None
+        self.chip = None
+
+        # Get instrument
+        head0 = fits.getheader(fluxfile,0)
+        if head0["DTINSTRU"] == 'mosaic3':
+            self.instrument = 'k4m'
+        elif head0["DTINSTRU"] == '90prime':
+            self.instrument = 'ksb'
+        elif head0["DTINSTRU"] == 'decam':
+            self.instrument = 'c4d'
+        else:
+            print("Cannot determine instrument type")
+            return
+        # Get number of extensions
+        hdulist = fits.open(fluxfile)
+        nhdu = len(hdulist)
+        hdulist.close()
+        self.nexten = nhdu
+        # Get night
+        dateobs = head0.get("DATE-OBS")
+        night = dateobs[0:4]+dateobs[5:7]+dateobs[8:10]
+        self.night = night
+        # Output directory
+        basedir,tmpdir = getnscdirs(nscversion)
+        self.outdir = basedir+self.instrument+"/"+self.night+"/"+self.base+"/"
+
+        
+    # Setup
+    def setup(self):
+        basedir,tmproot = getnscdirs(self.nscversion)
+        # Prepare temporary directory
+        tmpcntr = 1L
+        tmpdir = tmproot+self.base+"."+str(tmpcntr)
+        while (os.path.exists(tmpdir)):
+            tmpcntr = tmpcntr+1
+            tmpdir = tmproot+self.base+"."+str(tmpcntr)
+            if tmpcntr > 20:
+                print("Temporary Directory counter getting too high. Exiting")
+                sys.exit()
+        os.mkdir(tmpdir)
+        origdir = os.getcwd()
+        self.origdir = origdir
+        os.chdir(tmpdir)
+        self.wdir = tmpdir
 
         # Set up logging to screen and logfile
-        #logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
         logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
         rootLogger = logging.getLogger()
-
-        #logfile = tmpdir+"/"+base+".log"
-        #fileHandler = logging.FileHandler("{0}/{1}.log".format(logPath, fileName))
+        # file handler
         fileHandler = logging.FileHandler(self.logfile)
         fileHandler.setFormatter(logFormatter)
         rootLogger.addHandler(fileHandler)
-
+        # console/screen handler
         consoleHandler = logging.StreamHandler()
         consoleHandler.setFormatter(logFormatter)
         rootLogger.addHandler(consoleHandler)
         rootLogger.setLevel(logging.NOTSET)
         self.logger = rootLogger
-
+        self.logger.info("Setting up in temporary directory "+tmpdir)
         self.logger.info("Starting logfile at "+self.logfile)
-        
-        #rootLogger.info("  Temporary directory is: "+tmpdir)
 
+        # Copy over images from zeus1:/mss
+        fluxfile = "bigflux.fits.fz"
+        wtfile = "bigwt.fits.fz"
+        maskfile = "bigmask.fits.fz"
+        self.logger.info("Copying InstCal images from mass store archive")
+        shutil.copyfile(self.origfluxfile,tmpdir+"/"+os.path.basename(self.origfluxfile))
+        self.logger.info("  "+self.origfluxfile)
+        if (os.path.basename(self.origfluxfile) != fluxfile):
+            os.symlink(os.path.basename(self.origfluxfile),fluxfile)
+        shutil.copyfile(self.origwtfile,tmpdir+"/"+os.path.basename(self.origwtfile))
+        self.logger.info("  "+self.origwtfile)
+        if (os.path.basename(self.origwtfile) != wtfile):
+            os.symlink(os.path.basename(self.origwtfile),wtfile)
+        shutil.copyfile(self.origmaskfile,tmpdir+"/"+os.path.basename(self.origmaskfile))
+        self.logger.info("  "+self.origmaskfile)
+        if (os.path.basename(self.origmaskfile) != maskfile):
+            os.symlink(os.path.basename(self.origmaskfile),maskfile)
+
+        # Set local working filenames
+        self.fluxfile = fluxfile
+        self.wtfile = wtfile
+        self.maskfile = maskfile
         
+        # Make final output directory
+        if not os.path.exists(self.outdir):
+            os.makedirs(self.outdir)   # will make multiple levels of directories if necessary
+            self.logger.info("Making output directory: "+self.outdir)
+
+
     # Load chip
     def loadchip(self,extension,fluxfile="flux.fits",wtfile="wt.fits",maskfile="mask.fits"):
         # Load the data
         self.logger.info(" Loading chip "+str(extension))
+        # Check that the working files set by "setup"
+        if (self.fluxfile is None) | (self.wtfile is None) | (self.maskfile is None):
+            self.logger.warning("Local working filenames not set.  Make sure to run setup() first")
+            return
         try:
             flux,fhead = fits.getdata(self.fluxfile,extension,header=True)
             fhead0 = fits.getheader(self.fluxfile,0)  # add PDU info
@@ -254,7 +332,7 @@ class Exposure:
             wt,whead = fits.getdata(self.wtfile,extension,header=True)
             mask,mhead = fits.getdata(self.maskfile,extension,header=True)
         except:
-            self.logger.info("No extension "+str(extension))
+            self.logger.error("No extension "+str(extension))
             return
         # Write the data to the appropriate files
         if os.path.exists(fluxfile):
@@ -269,18 +347,51 @@ class Exposure:
         # Create the chip object
         self.chip = Chip(fluxfile,wtfile,maskfile)
         self.chip.bigextension = extension
-        self.chip.nscver = self.nscver
+        self.chip.nscversion = self.nscversion
+        self.chip.outdir = self.outdir
         # Add logger information
         self.chip.logger = self.logger
-        
-    # setup
-    def setup():
-        pass
+
+
+    # Process all chips
+    def process(self):
+        self.logger.info("-------------------------------------------------")
+        self.logger.info("Processing ALL extension images")
+        self.logger.info("-------------------------------------------------")
+
+        # LOOP through the HDUs/chips
+        #----------------------------
+        for i in xrange(1,self.nexten):
+            t0 = time.time()
+            self.logger.info(" ")
+            self.logger.info("=== Processing subimage "+str(i)+" ===")
+            self.loadchip(i)
+            self.chip.process()
+            self.chip.cleanup()
+            # Copy files to final location?
+            self.logger.info("dt = "+str(time.time()-t0)+" seconds")
+
     
-    # teardown
-    def teardown():
-        pass
+    # Teardown
+    def teardown(self):
+        # Delete files and temporary directory
+        self.logger.info("Deleting files and temporary directory.")
+        # Move the final log file
+        shutil.move(self.logfile,self.outdir+self.base+".log")
+        # Delete temporary files and directory
+        tmpfiles = glob.glob("*")
+        for f in tmpfiles: os.remove(f)
+        os.rmdir(self.wdir)
+        # CD back to original directory
+        os.chdir(self.origdir)
         
+
+    # RUN all steps to process this exposure
+    def run(self):
+        self.setup()
+        self.process()
+        self.teardown()
+
         
 # Class to represent a single chip of an exposure
 class Chip:
@@ -700,7 +811,7 @@ class Chip:
 
         # 3b) Make SExtractor config files
         # Copy the default files
-        basedir, tmpdir = getnscdirs(self.nscver)
+        basedir, tmpdir = getnscdirs(self.nscversion)
         shutil.copyfile(basedir+"config/default.conv","default.conv")
         shutil.copyfile(basedir+"config/default.nnw","default.nnw")
         shutil.copyfile(basedir+"config/default.param","default.param")
@@ -891,6 +1002,7 @@ class Chip:
         # -good FWHM values
         # -good clas_star values (unless FWHM too large)
         # -good mag range, bright but not too bright
+        # -ALSO USE FLAGS AND SFLAGS!!!
         if self.cpfwhm<1.8:
             gdcat = ((self.sexcat['MAG_AUTO']< 50) & (self.sexcat['MAGERR_AUTO']<0.1) & (self.sexcat['CLASS_STAR']>0.8) & 
                      (self.sexcat['FWHM_WORLD']*3600.>0.5*self.seeing) & (self.sexcat['FWHM_WORLD']*3600.<1.5*self.seeing) &
@@ -1941,7 +2053,62 @@ class Chip:
     # Clean up the files
     #--------------------
     def cleanup(self):
-        pass
+        self.logger.info("Copying final files to output directory "+self.outdir)
+        base = os.path.basename(self.fluxfile)
+        base = os.path.splitext(os.path.splitext(base)[0])[0]
+        daobase = os.path.basename(self.daofile)
+        daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
+        # Copy the files we want to keep
+        # final combined catalog, logs
+        outcatfile = self.outdir+self.base+"_"+str(self.ccdnum)+".fits"
+        if os.path.exists(outcatfile): os.remove(outcatfile)
+        shutil.copyfile("flux.cat.fits",outcatfile)
+        # Copy DAOPHOT opt files
+        outoptfile = self.outdir+self.base+"_"+str(self.ccdnum)+".opt"
+        if os.path.exists(outoptfile): os.remove(outoptfile)
+        shutil.copyfile(daobase+".opt",outoptfile)
+        outalsoptfile = self.outdir+self.base+"_"+str(self.ccdnum)+".als.opt"
+        if os.path.exists(outalsoptfile): os.remove(outalsoptfile)
+        shutil.copyfile(daobase+".als.opt",outalsoptfile)
+        # Copy DAOPHOT PSF star list
+        outlstfile = self.outdir+self.base+"_"+str(self.ccdnum)+".psf.lst"
+        if os.path.exists(outlstfile): os.remove(outlstfile)
+        shutil.copyfile(daobase+".lst",outlstfile)
+        # Copy DAOPHOT PSF file
+        outpsffile = self.outdir+self.base+"_"+str(self.ccdnum)+".psf"
+        if os.path.exists(outpsffile): os.remove(outpsffile)
+        shutil.copyfile(daobase+".psf",outpsffile)
+        # Copy DAOPHOT .apers file??
+        # Copy SE config file
+        outconfigfile = self.outdir+self.base+"_"+str(self.ccdnum)+".sex.config"
+        if os.path.exists(outconfigfile): os.remove(outconfigfile)
+        shutil.copyfile("default.config",outconfigfile)
+
+        # Combine all the log files
+        logfiles = glob.glob(base+"*.log")
+        loglines = []
+        for logfil in logfiles:
+            loglines += ["==> "+logfil+" <==\n"]
+            f = open(logfil,'r')
+            lines = f.readlines()
+            f.close()
+            loglines += lines
+            loglines += ["\n"]
+        f = open(base+".logs","w")
+        f.writelines("".join(loglines))
+        f.close()
+        outlogfile =  self.outdir+self.base+"_"+str(self.ccdnum)+".logs"
+        if os.path.exists(outlogfile): os.remove(outlogfile)
+        shutil.copyfile(base+".logs",outlogfile)
+
+        # Delete temporary directory/files
+        self.logger.info("  Cleaning up")
+        files1 = glob.glob("flux*")
+        files2 = glob.glob("default*")        
+        files = files1+files2+["flux.fits","wt.fits","mask.fits","daophot.opt","allstar.opt"]
+        for f in files:
+            if os.path.exists(f): os.remove(f)
+
 
 # Main command-line program
 if __name__ == "__main__":
@@ -1952,23 +2119,22 @@ if __name__ == "__main__":
        version = sys.argv[4]
        verdir = version if version.endswith('/') else version+"/"
 
-    # Get directories
-    basedir, tmpdir = getnscdirs()
+    # Get NSC directories
+    basedir, tmpdir = getnscdirs(version)
 
     # Make sure the directories exist
     if not os.path.exists(basedir):
         os.makedirs(basedir)
-    if not os.path.exists(tmproot):
-        os.makedirs(tmproot)
+    if not os.path.exists(tmpdir):
+        os.makedirs(tmpdir)
 
     t0 = time.time()
-
-    print sys.argv
+    print(sys.argv)
 
     # Not enough inputs
     n = len(sys.argv)
     if n < 4:
-        print "Syntax - nsc_instcal_sexdaophot.py fluxfile wtfile maskfile version"
+        print("Syntax - nsc_instcal_sexdaophot.py fluxfile wtfile maskfile version")
         sys.exit()
 
     # File names
@@ -1976,40 +2142,19 @@ if __name__ == "__main__":
     wtfile = sys.argv[2]
     maskfile = sys.argv[3]
     # Check that the files exist
-    if os.path.exists(fluxfile) == False:
-        print fluxfile, "file NOT FOUND"
+    if os.path.exists(fluxfile) is False:
+        print(fluxfile+" file NOT FOUND")
         sys.exit()
-    if os.path.exists(wtfile) == False:
-        print wtfile, "file NOT FOUND"
+    if os.path.exists(wtfile) is False:
+        print(wtfile+" file NOT FOUND")
         sys.exit()
-    if os.path.exists(maskfile) == False:
-        print maskile, "file NOT FOUND"
+    if os.path.exists(maskfile) is False:
+        print(maskile+" file NOT FOUND")
         sys.exit()
-
-    base = os.path.basename(fluxfile)
-    base = os.path.splitext(os.path.splitext(base)[0])[0]
 
     # Create the Exposure object
-    exp = Exposure(fluxfile,wtfile,maskfile)
-    # Setup temporary directory, etc.
+    exp = Exposure(fluxfile,wtfile,maskfile,nscversion=version)
+    # Run
+    exp.run()
 
-
-    # Get number of extensions
-    hdulist = fits.open("bigflux.fits.fz")
-    nhdu = len(hdulist)
-    hdulist.close()
-
-
-    # LOOP through the HDUs/chips
-    #----------------------------
-    for i in xrange(1,nhdu):
-        rootLogger.info(" Processing subimage "+str(i))
-        exp.loadchip(i)
-        exp.chip.process()
-        exp.chip.cleanup()
-        # Copy files
-
-    # Teardown
-    exp.teardown()
-
-    exp.logger.info(str(time.time()-t0)+" seconds")
+    print("Total time = "+str(time.time()-t0)+" seconds")
