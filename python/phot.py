@@ -34,6 +34,37 @@ warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
 # Standard grep function that works on string list
 def grep(lines,expr,index=False):
+    '''
+    Similar to the standard unit "grep" but run on a list of strings.
+    Returns a list of the matching lines unless index=True is set,
+    then it returns the indices.
+
+    Parameters
+    ----------
+    lines : list
+          The list of string lines to check.
+    expr  : str
+          Scalar string expression to search for.
+    index : bool, optional
+          If this is ``True`` then the indices of matching lines will be
+          returned instead of the actual lines.  index is ``False`` by default.
+
+    Example
+    -------
+
+    Search for a string and return the matching lines:
+
+    .. code-block:: python
+
+        mlines = grep(lines,"hello")
+
+    Search for a string and return the indices of the matching lines:
+
+    .. code-block:: python
+
+        index = grep(lines,"hello",index=True)
+
+    '''
     out = []
     cnt = 0L
     for l in lines:
@@ -258,7 +289,7 @@ def makemeta(fluxfile=None,header=None):
     return meta
 
 # Write SE catalog in DAO format
-def sextodao(cat=None,meta=None,outfile=None,format="lst",logger=None):
+def sextodao(cat=None,meta=None,outfile=None,format="lst",logger=None,naxis1=None,naxis2=None,saturate=None,rdnoise=None,gain=None):
     # cat      SE catalog
     # meta     Image meta-data dictionary (naxis1, naxis2, saturate, rdnoise, gain, etc.)
     # outfile  Output filename
@@ -278,6 +309,13 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",logger=None):
         return
     # Delete outfile
     if os.path.exists(outfile): os.remove(outfile)
+
+    # Get meta-data parameters, keyword inputs take priority over "meta"
+    if naxis1 is None: naxis1=meta['NAXIS1']
+    if naxis2 is None: naxis2=meta['NAXIS2']
+    if saturate is None: saturate=meta['SATURATE']
+    if rdnoise is None: rdnoise=meta['RDNOISE']
+    if gain is None: gain=meta['GAIN']
 
     # Formats: coo, lst, ap, als
 
@@ -307,7 +345,7 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",logger=None):
         # Header
         f.write(" NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD\n")
         f.write("  3 %5d %5d %7.1f %7.1f %7.2f %7.2f %7.2f %7.2f %7.2f\n" %
-                (meta['naxis1'],meta['naxis2'],1000.0,["saturate"],100.0,3.0,["gain"],["rdnoise"]/["gain"],3.9))
+                (naxis1,naxis2,1000.0,saturate,100.0,3.0,gain,rdnoise/gain,3.9))
         f.write("\n")
         #f.write("  3  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90\n")
         # Write the data
@@ -329,7 +367,7 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",logger=None):
         # Header
         f.write(" NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD\n")
         f.write("  3 %5d %5d %7.1f %7.1f %7.2f %7.2f %7.2f %7.2f %7.2f\n" %
-                (meta['naxis1'],meta['naxis2'],1000.0,meta["saturate"],100.0,3.0,["gain"],["rdnoise"]/["gain"],3.9))
+                (naxis1,naxis2,1000.0,saturate,100.0,3.0,gain,rdnoise/gain,3.9))
         f.write("\n")
         #f.write("  3  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90\n")
         # Write the data
@@ -356,7 +394,7 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",logger=None):
         # Header
         f.write(" NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD\n")
         f.write("  3 %5d %5d %7.1f %7.1f %7.2f %7.2f %7.2f %7.2f %7.2f\n" %
-                (meta['naxis1'],meta['naxis2'],1000.0,meta["saturate"],100.0,3.0,meta["gain"],meta["rdnoise"]/meta["gain"],3.9))
+                (naxis1,naxis2,1000.0,saturate,100.0,3.0,gain,rdnoise/gain,3.9))
         f.write("\n")
         #f.write("  3  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90\n")
         # Write the data
