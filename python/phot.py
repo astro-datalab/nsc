@@ -27,6 +27,7 @@ import socket
 from scipy.ndimage.filters import convolve
 import astropy.stats
 import struct
+import tempfile
 
 # Ignore these warnings, it's a bug
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -81,6 +82,73 @@ def grep(lines,expr,index=False):
                 out.append(cnt)
         cnt = cnt+1
     return out
+
+
+# Read in all lines of files
+def readlines(fil=None):
+    '''
+    Read in all lines of a file.
+    
+    Parameters
+    ----------
+    file : str
+         The name of the file to load.
+   
+    Returns
+    -------
+    lines : list
+          The list of lines from the file
+
+    Example
+    -------
+
+    .. code-block:: python
+
+       lines = readlines("file.txt")
+
+    '''
+    if fil is None:
+        print("File not input")
+        return
+    f = open(fil,'r')
+    lines = f.readlines()
+    f.close()
+    return lines
+
+
+# Write all lines to file
+def writelines(lines=None,fil=None):
+    '''
+    Write a list of lines to a file.
+    
+    Parameters
+    ----------
+    lines : list
+         The list of lines to write to a file.
+    fil : str
+        The filename to write the lines to.
+   
+    Returns
+    -------
+    Nothing is returned.  The lines are written to `fil`.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+       writelines(lines,"file.txt")
+
+    '''
+    if lines is None:
+        print("No lines input")
+        return
+    if fil is None:
+        print("No file name input")
+        return
+    f = open(fil,'w')
+    f.writelines(lines)
+    f.close()
 
 
 # Parse the DAOPHOT PSF profile errors
@@ -309,9 +377,7 @@ def daoread(fil):
     if os.path.exists(fil) is False:
         print(fil+" NOT found")
         return None
-    f = open(fil,'r')
-    lines = f.readlines()
-    f.close()
+    lines = readlines(fil)
     nstars = len(lines)-3
     if nstars == 0:
         print("No stars in "+file)
@@ -354,8 +420,53 @@ def daoread(fil):
                 cat[i][names[j]] = np.array(line1[lo[j]:hi[j]],dtype=dtype[names[j]])
     # NL = 2  aperture photometry
     elif nl==2:
-        print("Reading aperture photometry files not supported yet.")
-        return
+        #
+        #      1 1434.670   15.590   99.999   99.999   99.999   99.999   99.999
+        #      1615.662 20.90  0.00  9.9999   9.9999   9.9999   9.9999   9.9999
+        #
+        #      2  233.850   18.420   99.999   99.999   99.999   99.999   99.999
+        #      1613.601 20.96  0.02  9.9999   9.9999   9.9999   9.9999   9.9999
+        #
+        #  The columns are: ID, X, Y, Mag1, Mag2, etc..
+        #                   Sky, St.Dev. of sky, skew of sky, Mag1err, Mag2err, etc.
+        naper = ncols-3   # apertures
+        nstars = (numlines(fil)-3.0)/3.0  # stars
+        dtype = np.dtype([('ID',long),('X',float),('Y',float),('SKY',float),('SKYSIG',float),('SKYSKEW',float),('MAG',float,aper),('ERR',float,naper)])
+        cat = np.zeros(nstars,dtype=dtype)
+        # for line 1
+        lengths1 = np.concatenate([np.array([7,9,9]),np.zeros(naper,dtype=int)+9])
+        dtype1 = np.concatenate([np.array([7,9,9]),np.zeros(naper,dtype=int)+9])
+        lo1 = np.concatenate((np.array([0]), np.cumsum(lengths1[0:-1])))
+        hi1 = lo1+lengths1
+        names1 = ['ID','X','Y']+['MAG'+f for f in (np.arange(naper)+1).astype(str)]
+        # for line 2
+        lengths2 = np.concatenate([np.array([14,6,6]),np.zeros(naper,dtype=int)+8])
+        lo2 = np.concatenate((np.array([0]), np.cumsum(lengths2[0:-1])))
+        hi2 = lo2+lengths2
+        names1 = ['SKY','SKYSIG','SKYSKEW']+['ERR'+f for f in (np.arange(naper)+1).astype(str)]
+        for i in range(nstars):
+            # line 1
+            # ID, X, Y, Mag1, Mag2, etc.. 
+            line1 = lines[i*3+3]
+            cat[i]['ID'] = long(line1[lo1[0]:hi1[0]])
+            cat[i]['X'] = float(line1[lo1[1]:hi1[1]])
+            cat[i]['Y'] = float(line1[lo1[2]:hi1[2]])
+            mag = np.zeros(naper,dtype=float)
+            for j in range(naper):
+                mag[j] = np.array(line1[lo1[j+3]:hi1[j+3]],dtype=float)
+            cat[i]['MAG'] = mag
+            # line 2
+            # Sky, St.Dev. of sky, skew of sky, Mag1err, Mag2err, etc.  
+            line2 = lines[i*3+4]
+            cat[i]['SKY'] = float(line2[lo2[0]:hi2[0]])
+            cat[i]['SKYSIG'] = float(line2[lo2[1]:hi2[1]])
+            cat[i]['SKYSKEW'] = float(line2[lo2[2]:hi2[2]])
+            err = np.zeros(naper,dtype=float)
+            for j in range(naper):
+                err[j] = np.array(line2[lo2[j+3]:hi2[j+3]],dtype=float)
+            cat[i]['ERR'] = err
+
+        return cat
     # NL = 3  list
     elif nl==3:
         dtype = np.dtype([('ID',long),('X',float),('Y',float),('MAG',float),('ERR',float),('SKY',float)])
@@ -788,9 +899,7 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
     shutil.copyfile(configdir+"default.param","default.param")
 
     # Read in configuration file and modify for this image
-    f = open('default.config', 'r') # 'r' = read
-    lines = f.readlines()
-    f.close()
+    line = readlines('default.config')
 
     # Gain, saturation, pixscale
 
@@ -1409,9 +1518,9 @@ def mkdaoim(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,logge
     fits.writeto(outfile,flux,fhead,overwrite=True)
 
 
-# DAOPHOT detection
-#----------------------
-def daodetect(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
+# DAOPHOT FIND detection
+#-----------------------
+def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
     '''
     This runs DAOPHOT FIND on an image.
 
@@ -1448,6 +1557,7 @@ def daodetect(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
     '''
 
     if logger is None: logger=basiclogger()   # set up basic logger if necessary
+    logger.info("-- Running DAOPHOT detection --")
 
     # Make sure we have the image file name
     if imfile is None:
@@ -1465,16 +1575,25 @@ def daodetect(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
     if os.path.exists(logfile): os.remove(logfile)
     if os.path.exists(scriptfile): os.remove(scriptfile)
 
+    # Make temporary short filenames to DAOPHOT can handle them
+    tid,tfile = tempfile.mkstemp(prefix="tcoo",dir=".")
+    tbase = os.path.basename(tfile)
+    timfile = tbase+".fits"
+    toptfile = tbase+".opt"
+    toutfile = base+".coo"
+    os.symlink(imfile,timfile)
+    os.symlink(optfile,toptfile)
+
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
             "daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
-            ""+optfile+"\n" \
+            ""+toptfile+"\n" \
             "\n" \
-            "ATTACH "+imfile+"\n" \
+            "ATTACH "+timfile+"\n" \
             "FIND\n" \
             "1,1\n" \
-            ""+outfile+"\n" \
+            ""+toutfile+"\n" \
             "y\n" \
             "EXIT\n" \
             "EXIT\n" \
@@ -1489,7 +1608,6 @@ def daodetect(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
     if os.path.exists("daophot.opt") is False: shutil.copyfile(base+".opt","daophot.opt")
 
     # Run the script
-    logger.info("-- Running DAOPHOT detection --")
     try:
         retcode = subprocess.call(["./"+scriptfile],stderr=subprocess.STDOUT,shell=False)
         if retcode < 0:
@@ -1499,15 +1617,18 @@ def daodetect(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
     except OSError as e:
         logger.error("DAOPHOT detection failed:"+str(e))
         logger.error(e)
-        raise
+        raise Exception("DAOPHOT failed")
 
     # Check that the output file exists
-    if os.path.exists(outfile) is True:
+    if os.path.exists(toutfile) is True:
+        # Copy output file to the final filename
+        os.rename(toutfile,outfile)
+        # Remove the temporary links
+        for f in [tfile,timfile,toptfile]: os.remove(f)
+
         # Get info from the logfile
         if os.path.exists(logfile) is True:
-            f = open(logfile,'r')
-            dlines = f.readlines()
-            f.close()
+            dflines = readlines(logfile)
             l1 = grep(dlines,"Sky mode and standard deviation")
             if len(l1)>0:
                 logger.info(l1[0].strip())   # clip \n
@@ -1527,7 +1648,7 @@ def daodetect(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
     # Failure
     else:
         logger.error("Output file "+outfile+" NOT Found")
-        raise
+        raise Exception("Output not found")
 
     # Delete the script
     os.remove(scriptfile)
@@ -1538,35 +1659,86 @@ def daodetect(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
 
 # DAOPHOT aperture photometry
 #----------------------------
-def daoaperphot(coofile=None,apertures=None,imfile=None,outfile=None,logger=None):
+def daoaperphot(imfile=None,coofile=None,optfile=None,apertures=None,outfile=None,logfile=None,logger=None):
+    '''
+    This runs DAOPHOT aperture photometry on an image.
+
+    Parameters
+    ----------
+    imfile : str
+           The filename of the DAOPHOT-ready FITS image.
+    coofile : str
+            The filename of the catalog of sources for which to obtain aperture photometry.
+    optfile : str, optional
+            The option file for `imfile`.  By default it is assumed that this is
+            the base name of `imfile` with a ".opt" suffix.
+    apertures : list or array, optional
+             The list of aperture to use.  The last two are used as the inner and outer sky radius.
+             The default apertures are: apertures = [3.0, 6.0803, 9.7377, 15.5952, 19.7360, 40.0, 50.0]
+    outfile : str, optional
+            The output filename of the aperture photometry catalog.  By default this is
+            the base name of `imfile` with a ".ap" suffix.
+    logfile : str, optional
+            The name of the logfile to constrain the output of the DAOPHOT FIND
+            run.  By default this is the base name of `imfile` with a ".ap.log" suffix.
+    logger : logging object
+           The logger to use for the loggin information.
+
+    Returns
+    -------
+    cat : numpy structured array
+        The DAOPHOT aperture photometry catalog.
+
+    The output catalog and logfile will also be created.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        cat = daoaperphot("image.fits","image.coo")
+
+    '''
 
     if logger is None: logger=basiclogger()   # set up basic logger if necessary
     logger.info("-- Running DAOPHOT aperture photometry --")
 
+    # Make sure we have the image file name
+    if imfile is None:
+        logger.warning("No image filename input")
+        return
+    # Make sure we have the source list
+    if coofile is None:
+        logger.warning("No source list not input")
+        return
+
     # Set up filenames, make sure they don't exist
-    base = os.path.basename(self.daofile)
+    base = os.path.basename(imfile)
     base = os.path.splitext(os.path.splitext(base)[0])[0]
-    optfile = base+".opt"
-    # Image file
-    if imfile is None: imfile = base+".fits"
-    imbase = os.path.basename(imfile)
-    imbase = os.path.splitext(os.path.splitext(imbase)[0])[0]
-    apfile = imbase+".apers"
-    scriptfile = imbase+".ap.sh"
-    logfile = imbase+".ap.log"
-    # Output file
-    if outfile is None:
-        outfile = imbase+".ap"
-    if os.path.exists(apfile): os.remove(apfile)
+    if optfile is None: optfile = base+".opt"
+    if outfile is None: outfile = base+".ap"
+    if logfile is None: logfile = base+".ap.log"
+    apersfile = base+".apers"
+    scriptfile = base+".coo.sh"
     if os.path.exists(outfile): os.remove(outfile)
+    if os.path.exists(apersfile): os.remove(apersfile)
     if os.path.exists(logfile): os.remove(logfile)
     if os.path.exists(scriptfile): os.remove(scriptfile)
-    # Detection/coordinate file
-    if coofile is None:
-        if os.path.exists(base+".coo") is False:
-            logger.warning("No detection/coordinate file input and "+base+".coo NOT found")
-            return
-        coofile = base+".coo"
+
+    # Make temporary short filenames to DAOPHOT can handle them
+    tid,tfile = tempfile.mkstemp(prefix="tap",dir=".")
+    tbase = os.path.basename(tfile)
+    timfile = tbase+".fits"
+    cooext = os.path.splitext(coofile)[1]
+    tcoofile = tbase+cooext
+    toptfile = tbase+".opt"
+    tapersfile = tbase+".apers"
+    toutfile = base+".ap"
+    os.symlink(imfile,timfile)
+    os.symlink(optfile,toptfile)
+    os.symlink(coofile,tcoofile)
+    os.symlink(apersfile,tapersfile)
+
     logger.info("coofile = "+coofile+"   outfile = "+outfile)
 
     # Make apertures file
@@ -1579,7 +1751,7 @@ def daoaperphot(coofile=None,apertures=None,imfile=None,outfile=None,logger=None
     if nap<3:
         logger.warning("Only "+str(nap)+" apertures input.  Need at least 3")
         return
-    f = open(apfile,'w')
+    f = open(tapersfile,'w')
     for i in range(nap-2):
         # use hexidecimal for aperture id, 2 digits, first starts with A
         id = hex(160+i+1)
@@ -1593,14 +1765,14 @@ def daoaperphot(coofile=None,apertures=None,imfile=None,outfile=None,logger=None
     lines = "#!/bin/sh\n" \
             "daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
-            ""+optfile+"\n" \
+            ""+toptfile+"\n" \
             "\n" \
-            "ATTACH "+imfile+"\n" \
+            "ATTACH "+timfile+"\n" \
             "PHOTOMETRY\n" \
-            ""+apfile+"\n" \
+            ""+tapersfile+"\n" \
             " \n" \
-            ""+coofile+"\n" \
-            ""+outfile+"\n" \
+            ""+tcoofile+"\n" \
+            ""+toutfile+"\n" \
             "EXIT\n" \
             "EXIT\n" \
             "END_DAOPHOT\n"
@@ -1636,12 +1808,15 @@ def daoaperphot(coofile=None,apertures=None,imfile=None,outfile=None,logger=None
         raise
 
     # Check that the output file exists
-    if os.path.exists(outfile) is True:
+    if os.path.exists(toutfile) is True:
+        # Copy output file to the final filename
+        os.rename(toutfile,outfile)
+        # Remove the temporary links
+        for f in [tfile,timfile,toptfile,tcoofile,tapersfile]: os.remove(f)
+
         # Get info from the logfile
         if os.path.exists(logfile):
-            f = open(logfile,'r')
-            plines = f.readlines()
-            f.close()
+            plines = readlines(logfile)
             l1 = grep(plines,"Estimated magnitude limit")
             if len(l1)>0:
                 l1 = l1[0]
@@ -1649,18 +1824,20 @@ def daoaperphot(coofile=None,apertures=None,imfile=None,outfile=None,logger=None
                 lo = l1.find(":")
                 hi = l1.find("+-")
                 maglim = np.float(l1[lo+1:hi])
-                self.daomaglim = maglim
                 logger.info(l1.strip())   # clip leading/trailing whitespace
     # Failure
     else:
         logger.error("Output file "+outfile+" NOT Found")
-        raise
+        raise Exception("Output not found")
 
     # Delete the script
     os.remove(scriptfile)
 
     # Move PSF file back
     if movedpsf is True: os.rename(psftemp,base+".psf")
+
+    # Return the catalog
+    return daoread(outfile)
 
 
 # Pick PSF stars using DAOPHOT
@@ -1734,9 +1911,7 @@ def daopickpsf(catfile=None,maglim=None,nstars=100,logger=None):
     if os.path.exists(outfile) is True:
         # Get info from the logfile
         if os.path.exists(logfile):
-            f = open(logfile,'r')
-            plines = f.readlines()
-            f.close()
+            plines = readlines(logfile)
             l1 = grep(plines,"suitable candidates were found.")
             if len(l1)>0:
                 logger.info(l1[0].strip()+"   "+outfile)   # clip \n
@@ -1824,9 +1999,7 @@ def daopsf(listfile=None,apfile=None,imfile=None,verbose=False,logger=None):
     if os.path.exists(outfile) is True:
         # Get info from the logfile
         if os.path.exists(logfile):
-            f = open(logfile,'r')
-            plines = f.readlines()
-            f.close()
+            plines = readlines(logfile)
             # Get parameter errors
             l1 = grep(plines,"Chi    Parameters",index=True)
             l2 = grep(plines,"Profile errors",index=True)
@@ -2019,9 +2192,7 @@ def createpsf(listfile=None,apfile=None,doiter=True,maxiter=5,minstars=6,subneig
         logger.info("  "+str(nbdstars)+" stars with flags")
         # Delete stars with flags
         if (nbdstars>0) & (nstars>minstars):
-            f = open(wlistfile,'r')
-            listlines = f.readlines()
-            f.close()
+            listlines = readlines(wlistfile)
             # Read the list
             lstcat = daoread(wlistfile)
             # Match up with the stars we are deleting
@@ -2097,9 +2268,7 @@ def allstar(psffile=None,apfile=None,subfile=None,logger=None):
     if os.path.exists(scriptfile): os.remove(scriptfile)
 
     # Load the option file lines
-    f = open(optfile,'r')
-    optlines = f.readlines()
-    f.close()
+    optlines = readlines(optfile)
 
     # Lines for the DAOPHOT ALLSTAR script
     lines = ["#!/bin/sh\n",
