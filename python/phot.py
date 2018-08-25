@@ -28,7 +28,7 @@ from scipy.ndimage.filters import convolve
 import astropy.stats
 import struct
 import tempfile
-from utils import *
+from .utils import *
 
 # Ignore these warnings, it's a bug
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
