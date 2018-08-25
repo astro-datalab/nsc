@@ -49,6 +49,11 @@ def grep(lines,expr,index=False):
           If this is ``True`` then the indices of matching lines will be
           returned instead of the actual lines.  index is ``False`` by default.
 
+    Returns
+    -------
+    out : list
+        The list of matching lines or indices.
+
     Example
     -------
 
@@ -77,8 +82,36 @@ def grep(lines,expr,index=False):
         cnt = cnt+1
     return out
 
+
 # Parse the DAOPHOT PSF profile errors
 def parseprofs(lines):
+    '''
+    This parses the PSF profile errors output from the DAOPHOT PSF program.
+    It returns a numpy structured array with ID, CHI, FLAG for the PSF stars.
+
+    This is an example of the PDF profile error lines:
+    1044  0.010      1039  0.010       304  0.013      1118  0.020       119  0.027   
+     610  0.012       580  0.013       373  0.010       617  0.017      1087  0.027   
+     696  0.010       229  0.012       170  0.016       628  0.018      1211  0.030 
+
+    Parameters
+    ----------
+    lines : list
+          The list of string lines from the DAOPHOT PSF program for the profile errors.
+
+    Returns
+    -------
+    profs : numpy structured array
+          The catalog containing ID, CHI and FLAG columns for the PSF stars.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        profs = parseprofs(lines)
+
+    '''
     dtype = np.dtype([('ID',int),('CHI',float),('FLAG',np.str_,3)])
     profs = np.zeros(len(lines)*5,dtype=dtype)
     profs['ID'] = -1
@@ -102,8 +135,43 @@ def parseprofs(lines):
     profs = profs[gd]
     return profs
 
+
 # Parse the DAOPHOT PSF parameter errors
 def parsepars(lines):
+    '''
+    This parses the PSF parameter errors output from the DAOPHOT PSF program.
+    It returns a list (one element per line) where each element constains
+    a list of the 3-5 parameters.
+
+    This is an example of lines of the PSF parameter errors:
+           Chi    Parameters...
+    >>   0.0319   1.79190   1.69498   
+    >>   0.0382   1.21314   1.26585  -0.00693   
+    >>   0.0215   1.62418   1.52379  -0.00385   
+    >>   0.0196   1.66754   1.57059  -0.00304   
+    >>   0.0543   1.41140   1.30613  -0.00290   
+    >>   0.0197   1.68487   1.58727   0.68797  -0.00305   
+
+    Parameters
+    ----------
+    lines : list
+          The list of string lines from the DAOPHOT PSF program for the parameter errors.
+
+    Returns
+    -------
+    out : list
+        The list of lists containing the individual parameters.
+    chi : list
+        The list of chi values per line.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        out, chi = parseparse(lines)
+
+    '''
     out = []
     chi = []
     for i in range(len(lines)):
@@ -116,8 +184,128 @@ def parsepars(lines):
             out.append(arr)
     return out, chi
 
+
+
+# Remove indices from a list
+def remove_indices(lst,index):
+    '''
+    This will remove elements from a list given their indices.
+
+    Parameters
+    ----------
+    lst : list
+          The list from which to remove elements.
+    index : list or array
+          The list or array of indices to remove.
+
+    Returns
+    -------
+    newlst : list
+           The new list with indices removed.
+
+    Example
+    -------
+
+    Remove indices 1 and 5 from array `arr`.
+
+    .. code-block:: python
+
+        index = [1,5]
+        arr  = range(10)
+        arr2 = remove_indices(arr,index)
+        print(arr)
+          [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+    '''
+    newlst = []
+    for i in range(len(lst)):
+       if i not in index: newlst.append(lst[i])
+    return newlst
+
+
+# Little function used by numlines
+def blocks(files, size=65536):
+    '''
+    This is a small utility function used by numlines()
+    '''
+    while True:
+        b = files.read(size)
+        if not b: break
+        yield b
+
+
+# Read number of lines in a file
+def numlines(fil):
+    '''
+    This function quickly counts the number of lines in a file.
+
+    Parameters
+    ----------
+    fil : str
+          The filename to check the number of lines.
+
+    Returns
+    -------
+    nlines : int
+           The number of lines in `fil`.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        n = numlines("file.txt")
+
+    '''
+    with open(fil, "r") as f:
+        return (sum(bl.count("\n") for bl in blocks(f)))
+
+    # Could also use this
+    #count=0
+    #for line in open(fil): count += 1
+
+
+# Set up basic logging to screen
+def basiclogger():
+    '''
+    This sets up a basic logger that write just to the screen.
+    '''
+    logger = logging.getLogger()
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(levelname)-2s %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.NOTSET)
+    return logger
+
+
 # Read DAOPHOT files
 def daoread(fil):
+    '''
+    This program reads in DAOPHOT-style files and return a numpy structured array.
+    The supported types are .coo, .lst, .ap (in development), and .als.
+
+    Parameters
+    ----------
+    fil : str
+        The filename of the DAOPHOT catalog file.
+
+    Returns
+    -------
+    cat : numpy structured array
+        The DAOPHOT catalog as a numpy structured array.
+
+    Example
+    -------
+
+    Load an ALLSTAR catalog file:
+
+    .. code-block:: python
+
+        cat = daoread("image1.als")
+
+    '''
+
     if os.path.exists(fil) is False:
         print(fil+" NOT found")
         return None
@@ -185,41 +373,52 @@ def daoread(fil):
         return
     return cat
 
-# Remove indices from a list
-def remove_indices(lst,index):
-    newlst = []
-    for i in range(len(lst)):
-       if i not in index: newlst.append(lst[i])
-    return newlst
-
-# Little function used by numlines
-def blocks(files, size=65536):
-    while True:
-        b = files.read(size)
-        if not b: break
-        yield b
-
-# Read number of lines in a file
-def numlines(fil):
-    with open(fil, "r") as f:
-        return (sum(bl.count("\n") for bl in blocks(f)))
-
-    # Could also use this
-    #count=0
-    #for line in open(fil): count += 1
-
-# Set up basic logging to screen
-def basiclogger():
-    logger = logging.getLogger()
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter('%(levelname)-2s %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.setLevel(logging.NOTSET)
-    return logger
 
 # Make meta-data dictionary for an image:
 def makemeta(fluxfile=None,header=None):
+    '''
+    This creates a meta-data dictionary for an exposure that is used by many
+    of the photometry programs.  Either the filename or the header must be input.
+    Note that sometimes in multi-extension FITS (MEF) files the information needed
+    is both in the primary header and the extension header.  In that case it is best
+    to combine them into one header and input that to makemeta().  This can easily
+    be accomplished like this:
+      
+       head0 = fits.getheader("image1.fits",0)
+       head = fits.getheader("image1.fits",1)
+       head.extend(head0,unique=True)
+       meta = makemeta(header=head)
+
+    Parameters
+    ----------
+    fluxfile : str, optional
+             The filename of the FITS image.
+    header : str, optional
+           The header of the image.
+
+    Returns
+    -------
+    meta : astropy header
+        The meta-data dictionary which is an astropy header with additional
+        keyword/value pairs added.
+
+    Example
+    -------
+
+    Create the meta-data dictionary for `image.fits`
+
+    .. code-block:: python
+
+        meta = makemeta("image.fits")
+
+    Create the meta-data dictionary from `head`.
+
+    .. code-block:: python
+
+        meta = makemeta(header=head)
+
+    '''
+
     # You generally need BOTH the PDU and extension header
     # To get all of this information
 
@@ -288,13 +487,48 @@ def makemeta(fluxfile=None,header=None):
 
     return meta
 
+
 # Write SE catalog in DAO format
 def sextodao(cat=None,meta=None,outfile=None,format="lst",logger=None,naxis1=None,naxis2=None,saturate=None,rdnoise=None,gain=None):
-    # cat      SE catalog
-    # meta     Image meta-data dictionary (naxis1, naxis2, saturate, rdnoise, gain, etc.)
-    # outfile  Output filename
-    # format   Output format (lst, coo, ap, als)
-    # logger   Logger to use.
+    '''
+    This writes out a Source Extractor catalog in a DAOPHOT format.
+
+    Parameters
+    ----------
+    cat : numpy structured arrray or astropy Table format
+        The Source Extractor catalog.
+    meta : astropy header
+         The image meta-data dictionary (naxis1, naxis2, saturate, rdnoise, gain, etc.).  The parameters
+         can be input individually (see below).
+    outfile : str
+            The output filename.
+    format : str, (lst, coo, ap, als)
+           The output DAOPHOT format (lst, coo, ap, als).
+    logger : logger object, optional
+           The Logger to use for logging output.
+    naxis1 : int, optional
+           The X-dimensional size (in pixels) of the image.
+    naxis2 : int, optional
+           The Y-dimenaional size (in pixels) of the image.
+    saturate : float, optional
+           The saturation level of the image.
+    rdnoise : float, optional
+           The read noise of the image (in electrons).
+    gain : float, optional
+           The gain of the image (electrons/ADU).
+
+    Returns
+    -------
+    Nothing is returned.  The catalog is written to `outfile`.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        sextodao(cat,meta,"cat.coo")
+
+    '''
 
     if logger is None: logger=basiclogger()   # set up basic logger if necessary
     # Not enough inputs
@@ -412,6 +646,46 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",logger=None,naxis1=Non
 # Run Source Extractor
 #---------------------
 def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,configdir=None,logfile=None,logger=None):
+    '''
+    Run Source Extractor on an exposure.  The program is configured to work with files
+    created by the NOAO Community Pipeline.
+
+    Parameters
+    ----------
+    fluxfile : str
+             The filename of the flux FITS image.
+    wtfile : str
+           The filename of the weight (1/variance) FITS image.
+    maskfile : str
+             The filename of the mask FITS image.
+    meta : astropy header
+         The meta-data dictionary for the exposure.
+    outfile : str
+            The output filename of the final catalog.
+    configdir : str
+              The directory that contains the Source Extractor configuration files.
+              default.config, default.conv, default.nnw, default.param
+    logfile : str, optional
+            The name to use for the logfile.  If this is not input then the name will
+            be the base name of `fluxfile` with the suffix ".sex.log".
+    logger : logger object, optional
+           The Logger to use for logging output.
+
+    Returns
+    -------
+    cat : astropy Table
+        The final Source Extractor catalog.
+
+    The catalog is written to `outfile` and the output of Source Extractor to `logfile`.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        cat = runsex("flux.fits","wt.fits","mask.fits",meta,"cat.fits","/data/config/","sex.log")
+
+    '''
 
     if logger is None: logger=basiclogger()   # set up basic logger if necessary
     logger.info("-- Running SExtractor --")
@@ -640,83 +914,138 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
     return cat
 
 
-# Determine FWHM using SE catalog
-#--------------------------------
-def sexfwhm(logger=None):
+# Determine seeing FWHM using SE catalog
+#---------------------------------------
+def sexfwhm(cat=None,logger=None):
+    '''
+    Determine the seeing FWHM using a Source Extractor catalog.
+
+    Parameters
+    ----------
+    cat : astropy Table
+        The Source Extractor catalog.
+
+    Returns
+    -------
+    fwhm : float
+         The seeing FWHM in arcsec.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        fwhm = sexfwhm(cat)
+
+    '''
 
     if logger is None: logger=basiclogger()   # set up basic logger if necessary
-    logger.info("-- Determining seeing FWHM using SExtractor catalog --")
-
     # Make sure we have the SE catalog
-    if self.sexcatfile is None:
-        logger.warning("No SE catalog found")
+    if cat is None:
+        logger.warning("No catalog input")
         return
-    # Load the catalog if necessary
-    if self.sexcat is None:
-        self.sexcat = Table.read(self.sexcatfile,2)
     # Select good sources
-    gdcat = ((self.sexcat['MAG_AUTO']< 50) & (self.sexcat['MAGERR_AUTO']<0.05) & (self.sexcat['CLASS_STAR']>0.8))
+    gdcat = ((cat['MAG_AUTO']< 50) & (cat['MAGERR_AUTO']<0.05) & (cat['CLASS_STAR']>0.8) &
+             (cat['FLAGS']==0) & (cat['IMAFLAGS_ISO']==0))
     ngdcat = np.sum(gdcat)
-    # CLASS_STAR is not as reliable if the seeing is bad
-    if (ngdcat<10) & (self.cpfwhm>1.8):
-        gdcat = ((self.sexcat['MAG_AUTO']< 50) & (self.sexcat['MAGERR_AUTO']<0.05))
-        ngdcat = np.sum(gdcat)            
+    # Not enough good source, remove FLAGS cut
+    if (ngdcat<10):
+        gdcat = ((cat['MAG_AUTO']< 50) & (cat['MAGERR_AUTO']<0.05) & (cat['CLASS_STAR']>0.8) &
+                 (cat['IMAFLAGS_ISO']==0))
+        ngdcat = np.sum(gdcat)
+    # Not enough good source, remove FLAGS/CLASS_STAR cuts
+    if (ngdcat<10):
+        gdcat = ((cat['MAG_AUTO']< 50) & (cat['MAGERR_AUTO']<0.05) & (cat['IMAFLAGS_ISO']==0))
+        ngdcat = np.sum(gdcat)
     # Not enough sources, lower thresholds
     if (ngdcat<10):
-        gdcat = ((self.sexcat['MAG_AUTO']< 50) & (self.sexcat['MAGERR_AUTO']<0.08))
+        gdcat = ((cat['MAG_AUTO']< 50) & (cat['MAGERR_AUTO']<0.08))
         ngdcat = np.sum(gdcat)            
-    medfwhm = np.median(self.sexcat[gdcat]['FWHM_WORLD']*3600.)
+    medfwhm = np.median(cat[gdcat]['FWHM_WORLD']*3600.)
     logger.info('  FWHM = %5.2f arcsec (%d sources)' % (medfwhm, ngdcat))
-    self.seeing = medfwhm
+
+    return medfwhm
 
 
 # Pick PSF candidates using SE catalog
 #-------------------------------------
-def sexpickpsf(nstars=100,logger=None):
+def sexpickpsf(cat=None,fwhm=None,outfile=None,nstars=100,logger=None):
+    '''
+    Pick PSF stars using a Source Extractor catalog and output to a DAOPHOT-style file.
+
+    Parameters
+    ----------
+    cat : astropy Table
+        The Source Extractor catalog.
+    fwhm : float
+         The seeing FWHM of the exposure (in arcsec).
+    outfile : str
+           The filaname of the DAOPHOT-style lst file to write the PSF stars to.
+    nstars : int, optional, default is 100
+           The number of PSF stars to pick.
+    logger : logging object
+          The logger to use for logging information.
+
+    Returns
+    -------
+    psfcat : astropy Table
+         The table of PSF stars.
+
+    The table of PSF stars is also written to `outfile`.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        psfcat = sexpickpsf(cat,fwhm,"psfstars.lst",nstars=100)
+
+    '''
 
     if logger is None: logger=basiclogger()   # set up basic logger if necessary
-    logger.info("-- Picking PSF stars using SExtractor catalog --")
 
     # Make sure we have the SE catalog
-    if self.sexcatfile is None:
-        logger.warning("No SE catalog found")
+    if cat is None:
+        logger.warning("No catalog input")
         return
-    # Load the catalog if necessary
-    if self.sexcat is None:
-        self.sexcat = Table.read(self.sexcatfile,2)
-    # Make sure we have seeing calculated
-    if self.seeing is None: self.sexfwhm()
-
-    base = os.path.basename(self.sexfile)
-    base = os.path.splitext(os.path.splitext(base)[0])[0]
-    outfile = base+".lst"
+    # Make sure we have FWHM
+    if fwhm is None:
+        logger.warning("No FWHM input")
+        return
+    # Make sure we have the output file
+    if outfile is None:
+        logger.warning("No outfile input")
+        return
 
     # Select good sources
-    gdcat1 = ((self.sexcat['MAG_AUTO']< 50) & (self.sexcat['MAGERR_AUTO']<0.05) & (self.sexcat['CLASS_STAR']>0.8))
+    gdcat1 = ((cat['MAG_AUTO']< 50) & (cat['MAGERR_AUTO']<0.05) & (cat['CLASS_STAR']>0.8))
     ngdcat1 = np.sum(gdcat1)
     # Bright and faint limit, use 5th and 95th percentile
-    minmag, maxmag = np.sort(self.sexcat[gdcat1]['MAG_AUTO'])[[int(np.round(0.05*ngdcat1)),int(np.round(0.95*ngdcat1))]]
+    minmag, maxmag = np.sort(cat[gdcat1]['MAG_AUTO'])[[int(np.round(0.05*ngdcat1)),int(np.round(0.95*ngdcat1))]]
     # Select stars with
     # -good FWHM values
     # -good clas_star values (unless FWHM too large)
     # -good mag range, bright but not too bright
-    if self.cpfwhm<1.8:
-        gdcat = ((self.sexcat['MAG_AUTO']< 50) & (self.sexcat['MAGERR_AUTO']<0.1) & (self.sexcat['CLASS_STAR']>0.8) & 
-                 (self.sexcat['FWHM_WORLD']*3600.>0.5*self.seeing) & (self.sexcat['FWHM_WORLD']*3600.<1.5*self.seeing) &
-                 (self.sexcat['MAG_AUTO']>(minmag+1.0)) & (self.sexcat['MAG_AUTO']<(maxmag-0.5)))
+    # -no flags set
+    if fwhm<1.8:
+        gdcat = ((cat['MAG_AUTO']< 50) & (cat['MAGERR_AUTO']<0.1) & (cat['CLASS_STAR']>0.8) & 
+                 (cat['FWHM_WORLD']*3600.>0.5*fwhm) & (cat['FWHM_WORLD']*3600.<1.5*fwhm) &
+                 (cat['MAG_AUTO']>(minmag+1.0)) & (cat['MAG_AUTO']<(maxmag-0.5)) &
+                 (cat['FLAGS']==0) & (cat['IMAFLAGS_ISO']==0))
         ngdcat = np.sum(gdcat)
     # Do not use CLASS_STAR if seeing bad, not as reliable
     else:
-        gdcat = ((self.sexcat['MAG_AUTO']< 50) & (self.sexcat['MAGERR_AUTO']<0.1) & 
-                 (self.sexcat['FWHM_WORLD']*3600.>0.5*self.seeing) & (self.sexcat['FWHM_WORLD']*3600.<1.5*self.seeing) &
-                 (self.sexcat['MAG_AUTO']>(minmag+1.0)) & (self.sexcat['MAG_AUTO']<(maxmag-0.5)))
+        gdcat = ((cat['MAG_AUTO']< 50) & (cat['MAGERR_AUTO']<0.1) & 
+                 (cat['FWHM_WORLD']*3600.>0.5*fwhm) & (cat['FWHM_WORLD']*3600.<1.5*fwhm) &
+                 (cat['MAG_AUTO']>(minmag+1.0)) & (cat['MAG_AUTO']<(maxmag-0.5)) &
+                 (cat['FLAGS']==0) & (cat['IMAFLAGS_ISO']==0))
         ngdcat = np.sum(gdcat)
     # No candidate, loosen cuts
     if ngdcat<10:
         logger.info("Too few PSF stars on first try. Loosening cuts")
-        gdcat = ((self.sexcat['MAG_AUTO']< 50) & (self.sexcat['MAGERR_AUTO']<0.15) & 
-                 (self.sexcat['FWHM_WORLD']*3600.>0.2*self.seeing) & (self.sexcat['FWHM_WORLD']*3600.<1.8*self.seeing) &
-                 (self.sexcat['MAG_AUTO']>(minmag+0.5)) & (self.sexcat['MAG_AUTO']<(maxmag-0.5)))
+        gdcat = ((cat['MAG_AUTO']< 50) & (cat['MAGERR_AUTO']<0.15) & 
+                 (cat['FWHM_WORLD']*3600.>0.2*self.seeing) & (cat['FWHM_WORLD']*3600.<1.8*fwhm) &
+                 (cat['MAG_AUTO']>(minmag+0.5)) & (cat['MAG_AUTO']<(maxmag-0.5)))
         ngdcat = np.sum(gdcat)
     # No candidates
     if ngdcat==0:
@@ -724,22 +1053,111 @@ def sexpickpsf(nstars=100,logger=None):
         raise
 
     # Candidate PSF stars, use only Nstars, and sort by magnitude
-    psfcat = np.sort(self.sexcat[gdcat],order='MAG_AUTO')
+    psfcat = np.sort(cat[gdcat],order='MAG_AUTO')
     if ngdcat>nstars: psfcat=psfcat[0:nstars]
+    logger.info(str(len(psfcat))+" PSF stars found")
 
     # Output them in DAO format
-    self.sextodao(psfcat,outfile,format="lst")
+    sextodao(psfcat,outfile,format="lst")
     if os.path.exists(outfile) is False:
         logger.error("Output file "+outfile+" NOT found")
         raise
 
+    return psfcat
+
+
     # Do we a need separate aperture photometry file?
+    
+
 
 # Make DAOPHOT option files
 #--------------------------
-def mkopt(VA=1,LO=7.0,TH=3.5,LS=0.2,HS=1.0,LR=-1.0,HR=1.0,WA=-2,AN=-6,
-          EX=5,PE=0.75,PR=5.0,CR=2.5,CE=6.0,MA=50.0,RED=1.0,WA2=0.0,
+def mkopt(base=None,meta=None,VA=1,LO=7.0,TH=3.5,LS=0.2,HS=1.0,LR=-1.0,HR=1.0,
+          WA=-2,AN=-6,EX=5,PE=0.75,PR=5.0,CR=2.5,CE=6.0,MA=50.0,RED=1.0,WA2=0.0,
           fitradius_fwhm=1.0,logger=None):
+    '''
+    Create the DAOPHOT and ALLSTAR option files (.opt and .als.opt) for an exposure.
+
+    Parameters
+    ----------
+    base : str
+         The base name to use for the option files.  The DAOPHOT option file will
+         be called `base`.opt and the ALLSTAR option file `base`.als.opt
+    meta : astropy dictionary
+         The metal-data dictionary for the image.
+    
+    VA : int, default = 1
+       The variable type of PSF to use.
+       -1: Analytic PSF only
+        0: Analytic PSF and look-up table of empirical corrections
+        1: linear variations across the field
+        2: quadratic variations across the field
+    LO : float, default = 7.0
+       Low good datum (7. works fine on most imags).
+    TH : float, default = 3.5
+       Threshold in sigma above the background (3.5 works fine).
+    LS : float, default = 0.2
+       Lower sharpness cutoff.
+    HS : float, default = 1.0
+       High sharpness cutoff.
+    LR : float, default = -1.0
+       Lower roundness cutoff.
+    HR : float, default = 1.0
+       High roundness cutoff.
+    WA : int, default = -2
+       Watch progress for DAOPHOT.  Determines what output is displayed.
+    AN : int, default = -6
+       Analytic model PSF.
+        1: Gaussian (3 pararameters)
+        2: Moffat function (3 parameters), beta=1.5
+        3: Moffat function (3 parameters), beta=2.5
+        4: Lorentz function (3 parameters)
+        5: Penny function, Gauss+Lorentz (4 parameters), G+L are parallel
+        6: Penny function (5 parameters), G and L can be in different directions
+        A negative sign in front means to try all functions up to X and pick the best one.
+    EX : int, default = 5
+       Extra PSF cleaning passes.
+    PE : float, default = 0.75
+       Percent error due to the uncertainty in the fine-scale structure of the flat field.
+    PR : float, default = 5.0
+       Profile error due to the incompleteness of the PSF model.
+    CR : float, default = 2.5
+       Clipping range.  Used to remove outlier pixels. Parameter "a" in the formula given in
+       Stetson 1987, PASP, 99, 191, section III.D.2.d "Resisting bad data".
+    CE : float, default = 6.0
+       Clipping exponent.  Parameter b in above clipping formula.
+    MA : float, default = 50.0
+       Maximum group size
+    RED : float, default = 1.0
+        Redetermine centroid (0 = no, 1 = yes).
+    WA2 : float, default = 0.0
+        Watch progress for ALLSTAR.      
+    fitradius_fwhm : float, default = 1.0
+        The fitting radius size in units of the seeing FWHM for the area to be fit.
+    HI : float, optional
+       High good datum.  Normally set by `saturate` from `meta`.
+    RD : float, optional
+       The read noise in electrons. Normally set by `rdnoise` from `meta`.
+    GA : float, optional
+       The gain in electrons/ADU. Normally set by `gain` from `meta`.
+    FW : float, optional
+       The seeing FWHM in pixels.  Normally set by `fwhm`/`pixscale` from `meta`.
+    logger : logger object, optional
+           The Logger to use for logging output.
+
+    Returns
+    -------
+    Nothing is returned.  The DAOPHOT option file is written to `base`.opt and the ALLSTAR
+    option file to `base`.als.opt.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        mkopt("image",meta)
+
+    '''
 
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     # % MAKING THE OPT FILES
@@ -779,23 +1197,15 @@ def mkopt(VA=1,LO=7.0,TH=3.5,LS=0.2,HS=1.0,LR=-1.0,HR=1.0,WA=-2,AN=-6,
     #EX =  5     # extra PSF passes
 
     if logger is None: logger=basiclogger()   # set up basic logger if necessary
-    logger.info("-- Creating DAOPHOT option file --")
 
-    base = os.path.basename(self.daofile)
-    dir = os.path.abspath(os.path.dirname(self.daofile))
-    base = os.path.splitext(os.path.splitext(base)[0])[0]
-    optfile = dir+"/"+base+".opt"
-    alsoptfile = dir+"/"+base+".als.opt"
+    optfile = base+".opt"
+    alsoptfile = base+".als.opt"
 
-    # Frame specific parameters
-    GA = self.gain
-    RD = self.rdnoise
-    if self.seeing is not None:
-        FW = self.seeing / self.pixscale
-    else:
-        logger.info("No FWHM using CPFWHM")
-        FW = self.cpfwhm / self.pixscale
-    HI = self.saturate
+    # Get frame specific parameters from meta if necessary
+    if GA is None: GA = meta['gain']
+    if RD is None: RD = meta['rdnoise']
+    if FW is None: FW = meta['fwhm'] / meta['pixscale']
+    if HI is None: HI = meta['saturate']
 
 
     # Calculating some things
