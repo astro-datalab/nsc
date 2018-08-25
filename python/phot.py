@@ -1284,10 +1284,55 @@ def mkopt(base=None,meta=None,VA=1,LO=7.0,TH=3.5,LS=0.2,HS=1.0,LR=-1.0,HR=1.0,
 
 
 # Make image ready for DAOPHOT
-def mkdaoim(fluxfile=None,wtfile=None,maskfile=None,logger=None):
+def mkdaoim(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,logger=None):
+    '''
+    This constructs a FITS image that is prepared for DAOPHOT.
+    This program was designed for exposures from the NOAO Community Pipeline.
+
+    Parameters
+    ----------
+    fluxfile : str
+             The filename of the flux FITS image.
+    wtfile : str
+           The filename of the weight (1/variance) FITS image.
+    maskfile : str
+             The filename of the mask FITS image.
+    meta : astropy header
+         The meta-data dictionary for the exposure.
+    outfile : str
+            The name of the output FITS file.
+
+    Returns
+    -------
+    Nothing is returned.  The DAOPHOT-ready image is written to `outfile`.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        mkdaoim("flux.fits","wt.fits","mask.fits","image.fits")
+
+    '''
 
     if logger is None: logger=basiclogger()   # set up basic logger if necessary
-    logger.info("-- Creating DAOPHOT-ready image --")
+
+    # Not enough inputs
+    if fluxfile is None:
+        logger.warning("No fluxfile input")
+        return
+    if wtfile is None:
+        logger.warning("No wtfile input")
+        return
+    if maskfile is None:
+        logger.warning("No maskfile input")
+        return
+    if meta is None:
+        logger.warning("No meta-data dictionary input")
+        return
+    if outfile is None:
+        logger.warning("No outfile input")
+        return
 
     flux,fhead = fits.getdata(fluxfile,header=True)
     wt,whead = fits.getdata(wtfile,header=True)
@@ -1335,9 +1380,9 @@ def mkdaoim(fluxfile=None,wtfile=None,maskfile=None,logger=None):
     # 128 for Pre-V3.5.0 images and set 7 values to zero for V3.5.0 or later.
 
     #logger.info("Turning off the CP difference image masking flags")
-    if self.plver > 0:      # CP data
+    if meta["plver"] > 0:      # CP data
         # V3.5.0 and on, Integer masks
-        versnum = self.plver.split('.')
+        versnum = meta["plver"].split('.')
         if (versnum[0]>3) | ((versnum[0]==3) & (versnum[1]>=5)):
             bdpix = (mask == 7)
             nbdpix = np.sum(bdpix)
@@ -1356,36 +1401,69 @@ def mkdaoim(fluxfile=None,wtfile=None,maskfile=None,logger=None):
     if nbdpix>0: flux[bdpix]=6e4
     logger.info("%d bad pixels masked" % nbdpix)
 
-    fhead.append('GAIN',self.gain)
-    fhead.append('RDNOISE',self.rdnoise)
+    fhead.append('GAIN',meta["gain"])
+    fhead.append('RDNOISE',meta["rdnoise"])
 
     # Write new image
-    logger.info("Wrote DAOPHOT-ready image to "+self.daofile)
-    fits.writeto(self.daofile,flux,fhead,overwrite=True)
+    logger.info("Wrote DAOPHOT-ready image to "+outfile)
+    fits.writeto(outfile,flux,fhead,overwrite=True)
 
 
 # DAOPHOT detection
 #----------------------
-def daodetect(imfile=None,logger=None):
+def daodetect(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
+    '''
+    This runs DAOPHOT FIND on an image.
+
+    Parameters
+    ----------
+    imfile : str
+           The filename of the DAOPHOT-ready FITS image.
+    optfile : str, optional
+            The option file for `imfile`.  By default it is assumed that this is
+            the base name of `imfile` with a ".opt" suffix.
+    outfile : str, optional
+            The output filename of the FIND catalog.  By default this is
+            the base name of `imfile` with a ".coo" suffix.
+    logfile : str, optional
+            The name of the logfile to constrain the output of the DAOPHOT FIND
+            run.  By default this is the base name of `imfile` with a ".coo.log" suffix.
+    logger : logging object
+           The logger to use for the loggin information.
+
+    Returns
+    -------
+    cat : numpy structured array
+        The DAOPHOT FIND catalog.
+
+    The output catalog and logfile will also be created.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        cat = daofind("image.fits")
+
+    '''
 
     if logger is None: logger=basiclogger()   # set up basic logger if necessary
 
+    # Make sure we have the image file name
+    if imfile is None:
+        logger.warning("No image filename input")
+        return
+
     # Set up filenames, make sure they don't exist
-    base = os.path.basename(self.daofile)
+    base = os.path.basename(imfile)
     base = os.path.splitext(os.path.splitext(base)[0])[0]
-    optfile = base+".opt"
+    if optfile is None: optfile = base+".opt"
+    if outfile is None: outfile = base+".coo"
+    if logfile is None: logfile = base+".coo.log"
     scriptfile = base+".coo.sh"
-    outfile = base+".coo"
-    logfile = base+".coo.log"
     if os.path.exists(outfile): os.remove(outfile)
     if os.path.exists(logfile): os.remove(logfile)
     if os.path.exists(scriptfile): os.remove(scriptfile)
-    # Image file
-    if imfile is None:
-        if os.path.exists(base+".fits") is False:
-            logger.warning("No image file input and "+base+".fits NOT found")
-            return
-        imfile = base+".fits"
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
@@ -1453,6 +1531,9 @@ def daodetect(imfile=None,logger=None):
 
     # Delete the script
     os.remove(scriptfile)
+
+    # Load and return the catalog
+    return daoread(outfile)
 
 
 # DAOPHOT aperture photometry
