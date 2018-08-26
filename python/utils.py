@@ -116,17 +116,17 @@ def readlines(fil=None):
 
 
 # Write all lines to file
-def writelines(lines=None,fil=None,overwrite=True):
+def writelines(filename=None,lines=None,overwrite=True):
     '''
     Write a list of lines to a file.
     
     Parameters
     ----------
+    filename : str
+        The filename to write the lines to.
     lines : list
          The list of lines to write to a file.
-    fil : str
-        The filename to write the lines to.
-    overwrite : bool, optional, default is true
+    overwrite : bool, optional, default is True
         If the output file already exists, then overwrite it.
 
     Returns
@@ -138,17 +138,25 @@ def writelines(lines=None,fil=None,overwrite=True):
 
     .. code-block:: python
 
-       writelines(lines,"file.txt")
+       writelines("file.txt",lines)
 
     '''
+    # Not enough inputs
     if lines is None:
         print("No lines input")
         return
-    if fil is None:
+    if filename is None:
         print("No file name input")
         return
-    if overwrite & os.path.exists(fil): os.remove(fil)
-    f = open(fil,'w')
+    # Check if the file exists already
+    if os.path.exists(filename):
+        if overwrite is True:
+            os.remove(filename)
+        else:
+            print(filename+" already exists and overwrite=False")
+            return
+    # Write the file
+    f = open(filename,'w')
     f.writelines(lines)
     f.close()
 
@@ -233,16 +241,20 @@ def numlines(fil):
 
 
 # Set up basic logging to screen
-def basiclogger():
+def basiclogger(name=None):
     '''
-    This sets up a basic logger that write just to the screen.
+    This sets up a basic logger that writes just to the screen.
     '''
-    logger = logging.getLogger()
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter('%(levelname)-2s %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.setLevel(logging.NOTSET)
+    if name is None: name = "log"
+    logger = logging.getLogger(name)
+    # Only add a handler if none exists
+    #  the logger might already have been created
+    if len(logger.handlers)==0:
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter('%(levelname)-2s %(message)s')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
     return logger
 
 

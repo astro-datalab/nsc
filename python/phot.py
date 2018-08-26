@@ -18,11 +18,8 @@ from astropy.utils.exceptions import AstropyWarning
 from astropy.table import Table, Column
 import time
 import shutil
-import re
 import subprocess
-import glob
 import logging
-import socket
 #from scipy.signal import convolve2d
 from scipy.ndimage.filters import convolve
 import astropy.stats
@@ -140,7 +137,7 @@ def parsepars(lines):
 # Read DAOPHOT files
 def daoread(fil):
     '''
-    This program reads in DAOPHOT-style files and return a numpy structured array.
+    This program reads in DAOPHOT-style files and return an astropy table.
     The supported types are .coo, .lst, .ap (in development), and .als.
 
     Parameters
@@ -150,8 +147,8 @@ def daoread(fil):
 
     Returns
     -------
-    cat : numpy structured array
-        The DAOPHOT catalog as a numpy structured array.
+    cat : astropy table
+        The DAOPHOT catalog as an astropy table.
 
     Example
     -------
@@ -261,7 +258,6 @@ def daoread(fil):
             for j in range(naper):
                 err[j] = np.array(line2[lo2[j+3]:hi2[j+3]],dtype=float)
             cat[i]['ERR'] = err
-        return cat
     # NL = 3  list
     elif nl==3:
         dtype = np.dtype([('ID',long),('X',float),('Y',float),('MAG',float),('ERR',float),('SKY',float)])
@@ -276,8 +272,9 @@ def daoread(fil):
                 cat[i][names[j]] = np.array(line1[lo[j]:hi[j]],dtype=dtype[names[j]])
     else:
         print("Cannot load this file")
-        return
-    return cat
+        return None
+    # Return as astropy Table
+    return Table(cat)
 
 
 # Make meta-data dictionary for an image:
@@ -436,7 +433,7 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",logger=None,naxis1=Non
 
     '''
 
-    if logger is None: logger=basiclogger()   # set up basic logger if necessary
+    if logger is None: logger = basiclogger('phot')   # set up basic logger if necessary
     # Not enough inputs
     if cat is None:
         logger.warning("No catalog input")
@@ -593,7 +590,7 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
 
     '''
 
-    if logger is None: logger=basiclogger()   # set up basic logger if necessary
+    if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     logger.info("-- Running SExtractor --")
 
     # Not enough inputs
@@ -700,7 +697,7 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
     shutil.copyfile(configdir+"default.param","default.param")
 
     # Read in configuration file and modify for this image
-    line = readlines('default.config')
+    lines = readlines('default.config')
 
     # Gain, saturation, pixscale
 
@@ -812,13 +809,12 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
         mag = cat["MAG_AUTO"][gdcat]
         mag_sorted = np.sort(mag)
         maglim = mag_sorted[int(np.round(0.90*ngdcat))]
-        self._sexmaglim = maglim
         logger.info("Estimated magnitude limit = %6.2f mag" % maglim)
 
     # Delete temporary files
-    os.remove(wfluxfile)
-    os.remove(wmaskfile)
-    os.remove(wwtfile)
+    os.remove(sfluxfile)
+    os.remove(smaskfile)
+    os.remove(swtfile)
     #os.remove("default.conv")
 
     return cat
@@ -849,7 +845,7 @@ def sexfwhm(cat=None,logger=None):
 
     '''
 
-    if logger is None: logger=basiclogger()   # set up basic logger if necessary
+    if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     # Make sure we have the SE catalog
     if cat is None:
         logger.warning("No catalog input")
@@ -879,7 +875,7 @@ def sexfwhm(cat=None,logger=None):
 
 # Pick PSF candidates using SE catalog
 #-------------------------------------
-def sexpickpsf(cat=None,fwhm=None,outfile=None,nstars=100,logger=None):
+def sexpickpsf(cat=None,fwhm=None,meta=None,outfile=None,nstars=100,logger=None):
     '''
     Pick PSF stars using a Source Extractor catalog and output to a DAOPHOT-style file.
 
@@ -889,6 +885,8 @@ def sexpickpsf(cat=None,fwhm=None,outfile=None,nstars=100,logger=None):
         The Source Extractor catalog.
     fwhm : float
          The seeing FWHM of the exposure (in arcsec).
+    meta : astropy dictionary
+         The metal-data dictionary for the image.    
     outfile : str
            The filaname of the DAOPHOT-style lst file to write the PSF stars to.
     nstars : int, optional, default is 100
@@ -908,11 +906,11 @@ def sexpickpsf(cat=None,fwhm=None,outfile=None,nstars=100,logger=None):
 
     .. code-block:: python
 
-        psfcat = sexpickpsf(cat,fwhm,"psfstars.lst",nstars=100)
+        psfcat = sexpickpsf(cat,fwhm,meta,"psfstars.lst",nstars=100)
 
     '''
 
-    if logger is None: logger=basiclogger()   # set up basic logger if necessary
+    if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
 
     # Make sure we have the SE catalog
     if cat is None:
@@ -921,6 +919,10 @@ def sexpickpsf(cat=None,fwhm=None,outfile=None,nstars=100,logger=None):
     # Make sure we have FWHM
     if fwhm is None:
         logger.warning("No FWHM input")
+        return
+    # Make sure we have meta
+    if meta is None:
+        logger.warning("No meta-data dictionary input")
         return
     # Make sure we have the output file
     if outfile is None:
@@ -963,12 +965,13 @@ def sexpickpsf(cat=None,fwhm=None,outfile=None,nstars=100,logger=None):
         raise
 
     # Candidate PSF stars, use only Nstars, and sort by magnitude
-    psfcat = np.sort(cat[gdcat],order='MAG_AUTO')
+    si = np.argsort(cat[gdcat]['MAG_AUTO'])
+    psfcat = cat[gdcat][si]
     if ngdcat>nstars: psfcat=psfcat[0:nstars]
     logger.info(str(len(psfcat))+" PSF stars found")
 
     # Output them in DAO format
-    sextodao(psfcat,outfile,format="lst")
+    sextodao(psfcat,meta,outfile,format="lst")
     if os.path.exists(outfile) is False:
         logger.error("Output file "+outfile+" NOT found")
         raise
@@ -984,7 +987,7 @@ def sexpickpsf(cat=None,fwhm=None,outfile=None,nstars=100,logger=None):
 #--------------------------
 def mkopt(base=None,meta=None,VA=1,LO=7.0,TH=3.5,LS=0.2,HS=1.0,LR=-1.0,HR=1.0,
           WA=-2,AN=-6,EX=5,PE=0.75,PR=5.0,CR=2.5,CE=6.0,MA=50.0,RED=1.0,WA2=0.0,
-          fitradius_fwhm=1.0,logger=None):
+          fitradius_fwhm=1.0,HI=None,RD=None,GA=None,FW=None,logger=None):
     '''
     Create the DAOPHOT and ALLSTAR option files (.opt and .als.opt) for an exposure.
 
@@ -994,8 +997,7 @@ def mkopt(base=None,meta=None,VA=1,LO=7.0,TH=3.5,LS=0.2,HS=1.0,LR=-1.0,HR=1.0,
          The base name to use for the option files.  The DAOPHOT option file will
          be called `base`.opt and the ALLSTAR option file `base`.als.opt
     meta : astropy dictionary
-         The metal-data dictionary for the image.
-    
+         The metal-data dictionary for the image.    
     VA : int, default = 1
        The variable type of PSF to use.
        -1: Analytic PSF only
@@ -1106,7 +1108,7 @@ def mkopt(base=None,meta=None,VA=1,LO=7.0,TH=3.5,LS=0.2,HS=1.0,LR=-1.0,HR=1.0,
     #AN = -6     # It will try all PSF models (#1-6) and use the one with the lowest chi value
     #EX =  5     # extra PSF passes
 
-    if logger is None: logger=basiclogger()   # set up basic logger if necessary
+    if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
 
     optfile = base+".opt"
     alsoptfile = base+".als.opt"
@@ -1225,7 +1227,7 @@ def mkdaoim(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,logge
 
     '''
 
-    if logger is None: logger=basiclogger()   # set up basic logger if necessary
+    if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
 
     # Not enough inputs
     if fluxfile is None:
@@ -1318,8 +1320,8 @@ def mkdaoim(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,logge
     if nbdpix>0: flux[bdpix]=6e4
     logger.info("%d bad pixels masked" % nbdpix)
 
-    fhead.append('GAIN',meta["gain"])
-    fhead.append('RDNOISE',meta["rdnoise"])
+    fhead.append('GAIN',meta["GAIN"])
+    fhead.append('RDNOISE',meta["RDNOISE"])
 
     # Write new image
     logger.info("Wrote DAOPHOT-ready image to "+outfile)
@@ -1350,7 +1352,7 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
 
     Returns
     -------
-    cat : numpy structured array
+    cat : astropy table
         The DAOPHOT FIND catalog.
 
     The output catalog and logfile will also be created.
@@ -1364,7 +1366,7 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
 
     '''
 
-    if logger is None: logger=basiclogger()   # set up basic logger if necessary
+    if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     logger.info("-- Running DAOPHOT detection --")
 
     # Make sure we have the image file name
@@ -1499,7 +1501,7 @@ def daoaperphot(imfile=None,coofile=None,optfile=None,apertures=None,outfile=Non
 
     Returns
     -------
-    cat : numpy structured array
+    cat : astropy table
         The DAOPHOT aperture photometry catalog.
 
     The output catalog and logfile will also be created.
@@ -1513,7 +1515,7 @@ def daoaperphot(imfile=None,coofile=None,optfile=None,apertures=None,outfile=Non
 
     '''
 
-    if logger is None: logger=basiclogger()   # set up basic logger if necessary
+    if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     logger.info("-- Running DAOPHOT aperture photometry --")
 
     # Make sure we have the image file name
@@ -1687,7 +1689,7 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
 
     Returns
     -------
-    cat : numpy structured array
+    cat : astropy table
         The list of PSF stars.
 
     The output catalog and logfile will also be created.
@@ -1701,7 +1703,7 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
 
     '''
 
-    if logger is None: logger=basiclogger()   # set up basic logger if necessary
+    if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     logger.info("-- Running DAOPHOT PICKPSF -- ")
 
     # Make sure we have the image file name
@@ -1852,7 +1854,7 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
 
     '''
 
-    if logger is None: logger=basiclogger()   # set up basic logger if necessary
+    if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     logger.info("-- Running DAOPHOT PSF -- ")
 
     # Make sure we have the image file name
@@ -2022,7 +2024,7 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
 
     '''
 
-    if logger is None: logger=basiclogger()   # set up basic logger if necessary
+    if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     logger.info("-- Subtracting PSF stars neighbors -- ")
 
     # Make sure we have the image file name
@@ -2196,7 +2198,7 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
 
     '''
 
-    if logger is None: logger=basiclogger()   # set up basic logger if necessary
+    if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     logger.info("-- Creating PSF Iteratively --")
 
     # Make sure we have the image file name
@@ -2216,7 +2218,7 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
     if neifile is None: neifile = base+".nei"
     if nstfile is None: nstfile = base+".nsf"
     if grpfile is None: grpfile = base+".grp"
-    for f in [outfile,logfile,,psffile,nstfile,grpfile,neifile]:
+    for f in [outfile,logfile,psffile,nstfile,grpfile,neifile]:
         if os.path.exists(f): os.remove(f)
 
     # Check that necessary files exist
@@ -2331,7 +2333,7 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
 
     Returns
     -------
-    cat : numpy structured array
+    cat : astropy table
         The catalog of ALLSTAR sources.
 
     The PSF subtracted image and logfile will also be created.
@@ -2345,7 +2347,7 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
 
     '''
 
-    if logger is None: logger=basiclogger()   # set up basic logger if necessary
+    if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     logger.info("-- Running ALLSTAR --")
 
     # Make sure we have the image file name
@@ -2455,6 +2457,6 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
 # Run DAOGROW to calculate aperture corrections
 #----------------------------------------------
 def daogrow(logger=None):
-    if logger is None: logger=basiclogger()   # set up basic logger if necessary
+    if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     print("not implemented yet")
 
