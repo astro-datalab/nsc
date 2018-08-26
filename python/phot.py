@@ -1352,7 +1352,7 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
     # Make sure we have the image file name
     if imfile is None:
         logger.warning("No image filename input")
-        return
+        return None
 
     # Set up filenames, make sure they don't exist
     base = os.path.basename(imfile)
@@ -1370,7 +1370,7 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
     tbase = os.path.basename(tfile)
     timfile = tbase+".fits"
     toptfile = tbase+".opt"
-    toutfile = base+".coo"
+    toutfile = tbase+".coo"
     os.symlink(imfile,timfile)
     os.symlink(optfile,toptfile)
 
@@ -1411,7 +1411,7 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
 
     # Check that the output file exists
     if os.path.exists(toutfile) is True:
-        # Copy output file to the final filename
+        # Move output file to the final filename
         os.rename(toutfile,outfile)
         # Remove the temporary links
         for f in [tfile,timfile,toptfile]: os.remove(f)
@@ -1496,11 +1496,11 @@ def daoaperphot(imfile=None,coofile=None,optfile=None,apertures=None,outfile=Non
     # Make sure we have the image file name
     if imfile is None:
         logger.warning("No image filename input")
-        return
+        return None
     # Make sure we have the source list
     if coofile is None:
         logger.warning("No source list not input")
-        return
+        return None
 
     # Set up filenames, make sure they don't exist
     base = os.path.basename(imfile)
@@ -1523,7 +1523,7 @@ def daoaperphot(imfile=None,coofile=None,optfile=None,apertures=None,outfile=Non
     tcoofile = tbase+cooext
     toptfile = tbase+".opt"
     tapersfile = tbase+".apers"
-    toutfile = base+".ap"
+    toutfile = tbase+".ap"
     os.symlink(imfile,timfile)
     os.symlink(optfile,toptfile)
     os.symlink(coofile,tcoofile)
@@ -1540,7 +1540,7 @@ def daoaperphot(imfile=None,coofile=None,optfile=None,apertures=None,outfile=Non
     nap = len(apertures)
     if nap<3:
         logger.warning("Only "+str(nap)+" apertures input.  Need at least 3")
-        return
+        return None
     f = open(tapersfile,'w')
     for i in range(nap-2):
         # use hexidecimal for aperture id, 2 digits, first starts with A
@@ -1595,11 +1595,11 @@ def daoaperphot(imfile=None,coofile=None,optfile=None,apertures=None,outfile=Non
     except OSError as e:
         logger.error("DAOPHOT aperture photometry failed:"+str(e))
         logger.error(e)
-        raise
+        raise Exception("DAOPHOT failed")
 
     # Check that the output file exists
     if os.path.exists(toutfile) is True:
-        # Copy output file to the final filename
+        # Move output file to the final filename
         os.rename(toutfile,outfile)
         # Remove the temporary links
         for f in [tfile,timfile,toptfile,tcoofile,tapersfile]: os.remove(f)
@@ -1632,46 +1632,93 @@ def daoaperphot(imfile=None,coofile=None,optfile=None,apertures=None,outfile=Non
 
 # Pick PSF stars using DAOPHOT
 #-----------------------------
-def daopickpsf(catfile=None,maglim=None,nstars=100,logger=None):
+def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optfile=None,logfile=None,logger=None):
+    '''
+    This runs DAOPHOT aperture photometry on an image.
+
+    Parameters
+    ----------
+    imfile : str
+           The filename of the DAOPHOT-ready FITS image.
+    catfile : str
+           The catalog file from which to pick PSF stars.  This is normally the .ap file.
+    maglim : float
+           The magnitude limit for this image.  
+    ntars : int, optional, default = 100
+          The number of PSF stars to pick.  
+    optfile : str, optional
+            The option file for `imfile`.  By default it is assumed that this is
+            the base name of `imfile` with a ".opt" suffix.
+    outfile : str, optional
+            The output filename of the aperture photometry catalog.  By default this is
+            the base name of `imfile` with a ".lst" suffix.
+    logfile : str, optional
+            The name of the logfile to constrain the output of the DAOPHOT FIND
+            run.  By default this is the base name of `imfile` with a ".lst.log" suffix.
+    logger : logging object
+           The logger to use for the loggin information.
+
+    Returns
+    -------
+    cat : numpy structured array
+        The list of PSF stars.
+
+    The output catalog and logfile will also be created.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        psfcat = daopickpsf("image.fits","image.coo",19.5,nstars=100)
+
+    '''
 
     if logger is None: logger=basiclogger()   # set up basic logger if necessary
+    logger.info("-- Running DAOPHOT PICKPSF -- ")
+
+    # Make sure we have the image file name
+    if imfile is None:
+        logger.warning("No image filename input")
+        return None
+    # Make sure we have the catalog file name
+    if catfile is None:
+        logger.warning("No catalog filename input")
+        return None
 
     # Set up filenames, make sure they don't exist
-    base = os.path.basename(self.daofile)
+    base = os.path.basename(imfile)
     base = os.path.splitext(os.path.splitext(base)[0])[0]
-    optfile = base+".opt"
+    if optfile is None: optfile = base+".opt"
+    if outfile is None: outfile = base+".lst"
+    if logfile is None: logfile = base+".lst.log"
     scriptfile = base+".pickpsf.sh"
-    outfile = base+".lst"
-    logfile = base+".lst.log"
     if os.path.exists(outfile): os.remove(outfile)
     if os.path.exists(logfile): os.remove(logfile)
     if os.path.exists(scriptfile): os.remove(scriptfile)
 
-    # What detection/coordinate file
-    if catfile is None:
-        if os.path.exists(base+".ap") is False:
-            logger.warning("No catalog file input and "+base+".ap NOT found")
-            return
-        catfile = base+".ap"
-
-    # Magnitude limit
-    if maglim is None:
-        if self.maglim is None:
-            logger.warning("No magnitude input and MAGLIMIT not set yet")
-            raise
-        maglim = self.maglim-1.0
+    # Make temporary short filenames to DAOPHOT can handle them
+    tid,tfile = tempfile.mkstemp(prefix="tlst",dir=".")
+    tbase = os.path.basename(tfile)
+    timfile = tbase+".fits"
+    toptfile = tbase+".opt"
+    catext = os.path.splitext(catfile)[1]
+    tcatfile = tbase+catext
+    toutfile = tbase+".lst"
+    os.symlink(imfile,timfile)
+    os.symlink(optfile,toptfile)
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
             "daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
-            ""+optfile+"\n" \
+            ""+toptfile+"\n" \
             "\n" \
-            "ATTACH "+base+".fits\n" \
+            "ATTACH "+timfile+"\n" \
             "PICKPSF\n" \
-            ""+catfile+"\n" \
-            ""+str(nstars)+","+str(maglim)+"\n" \
-            ""+outfile+"\n" \
+            ""+tcatfile+"\n" \
+            ""+str(nstars)+","+str(maglim-1.0)+"\n" \
+            ""+toutfile+"\n" \
             "EXIT\n" \
             "EXIT\n" \
             "END_DAOPHOT\n"
@@ -1685,7 +1732,6 @@ def daopickpsf(catfile=None,maglim=None,nstars=100,logger=None):
     if os.path.exists("daophot.opt") is False: shutil.copyfile(base+".opt","daophot.opt")
 
     # Run the script
-    logger.info("-- Running DAOPHOT PICKPSF -- ")
     try:
         retcode = subprocess.call(["./"+scriptfile],stderr=subprocess.STDOUT,shell=True)
         if retcode < 0:
@@ -1695,10 +1741,15 @@ def daopickpsf(catfile=None,maglim=None,nstars=100,logger=None):
     except OSError as e:
         logger.error("DAOPHOT PICKPSF failed:"+str(e))
         logger.error(e)
-        raise
+        raise Exception("DAOPHOT failed")
 
     # Check that the output file exists
-    if os.path.exists(outfile) is True:
+    if os.path.exists(toutfile) is True:
+        # Move output file to the final filename
+        os.rename(toutfile,outfile)
+        # Remove the temporary links
+        for f in [tfile,timfile,toptfile,tcatfile]: os.remove(f)
+
         # Get info from the logfile
         if os.path.exists(logfile):
             plines = readlines(logfile)
@@ -1708,58 +1759,119 @@ def daopickpsf(catfile=None,maglim=None,nstars=100,logger=None):
     # Failure
     else:
         logger.error("Output file "+outfile+" NOT Found")
-        raise
+        raise Exception("DAOPHOT failed")
 
     # Delete the script
     os.remove(scriptfile)
 
+    # Return the catalog
+    return daoread(outfile)
+
 
 # Run DAOPHOT PSF
 #-------------------
-def daopsf(listfile=None,apfile=None,imfile=None,verbose=False,logger=None):
+def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfile=None,logfile=None,verbose=False,logger=None):
+    '''
+    This runs DAOPHOT PSF to create a .psf file.
+
+    Parameters
+    ----------
+    imfile : str
+           The filename of the DAOPHOT-ready FITS image.
+    listfile : str
+           The filename of the list of PSF stars.
+    optfile : str, optional
+            The option file for `imfile`.  By default it is assumed that this is
+            the base name of `imfile` with a ".opt" suffix.
+    apfile : str, optional
+           The filename of the aperture photometry file.  By default it is assumed
+           that this is the base name of `imfile` with a ".ap" suffix.
+    neifile : str, optional
+            The output neighbors file.  By default this is the base name of `imfile`
+            with a ".nei" suffix.
+    outfile : str, optional
+            The output filename of the aperture photometry catalog.  By default this is
+            the base name of `imfile` with a ".psf" suffix.
+    logfile : str, optional
+            The name of the logfile to constrain the output of the DAOPHOT FIND
+            run.  By default this is the base name of `imfile` with a ".psf.log" suffix.
+    verbose : bool, default is False
+            Verbose output of the DAOPHOT PSF parameter errors and PSF star profile errors.
+    logger : logging object
+           The logger to use for the loggin information.
+
+    Returns
+    -------
+    pararr : list
+           A list of lists giving the parameters for the various PSF parameter fits.
+    parchi : list
+           The array of chi values for the various parameter fits.
+    profs : structured  numpy array
+          The catalog of PSF star profiles giving ID, CHI and FLAG.
+
+    The output catalog and logfile will be created.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        pararr, parchi, profs = daopsf("image.fits","image.st")
+
+    '''
 
     if logger is None: logger=basiclogger()   # set up basic logger if necessary
+    logger.info("-- Running DAOPHOT PSF -- ")
+
+    # Make sure we have the image file name
+    if imfile is None:
+        logger.warning("No image filename input")
+        return None
+    # Make sure we have the list file name
+    if listfile is None:
+        logger.warning("No list filename input")
+        return None
+
     # Set up filenames, make sure they don't exist
-    base = os.path.basename(self.daofile)
+    base = os.path.basename(imfile)
     base = os.path.splitext(os.path.splitext(base)[0])[0]
-    optfile = base+".opt"
+    if optfile is None: optfile = base+".opt"
+    if apfile is None: apfile = base+".ap"
+    if outfile is None: outfile = base+".psf"
+    if logfile is None: logfile = base+".psf.log"
+    if neifile is None: neifile = base+".nei"
     scriptfile = base+".psf.sh"
-    outfile = base+".psf"
-    logfile = base+".psf.log"
-    neifile = base+".nei"
     if os.path.exists(outfile): os.remove(outfile)
+    if os.path.exists(neifile): os.remove(neifile)
     if os.path.exists(logfile): os.remove(logfile)
     if os.path.exists(scriptfile): os.remove(scriptfile)
-    if os.path.exists(neifile): os.remove(neifile)
 
-    # Aperture photometry file
-    if apfile is None:
-        if os.path.exists(base+".ap") is False:
-            logger.warning("No aperture photometry file input and "+base+".ap NOT found")
-            return
-        apfile = base+".ap"
-    # List file
-    if listfile is None:
-        if os.path.exists(base+".lst") is False:
-            logger.warning("No PSF candidates list input and "+base+".lst NOT found")
-            return
-        listfile = base+".lst"
-    # Image file
-    if imfile is None: imfile = base+".fits"
-
-    logger.info("-- Running DAOPHOT PSF -- ")
+    # Make temporary short filenames to DAOPHOT can handle them
+    tid,tfile = tempfile.mkstemp(prefix="tpsf",dir=".")
+    tbase = os.path.basename(tfile)
+    timfile = tbase+".fits"
+    toptfile = tbase+".opt"
+    tapfile = tbase+".ap"
+    listext = os.path.splitext(listfile)[1]
+    tlistfile = tbase+listext
+    toutfile = tbase+".psf"
+    tneifile = tbase+".nei"
+    os.symlink(imfile,timfile)
+    os.symlink(optfile,toptfile)
+    os.symlink(listfile,tlistfile)
+    os.symlink(apfile,tapfile)
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
             "daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
-            ""+optfile+"\n" \
+            ""+toptfile+"\n" \
             "\n" \
-            "ATTACH "+imfile+"\n" \
+            "ATTACH "+timfile+"\n" \
             "PSF\n" \
-            ""+apfile+"\n" \
-            ""+listfile+"\n" \
-            ""+outfile+"\n" \
+            ""+tapfile+"\n" \
+            ""+tlistfile+"\n" \
+            ""+toutfile+"\n" \
             "\n" \
             "EXIT\n" \
             "EXIT\n" \
@@ -1783,10 +1895,16 @@ def daopsf(listfile=None,apfile=None,imfile=None,verbose=False,logger=None):
     except OSError as e:
         logger.error("DAOPHOT PSF failed:"+str(e))
         logger.error(e)
-        raise
+        raise Exception("DAOPHOT failed")
 
     # Check that the output file exists
-    if os.path.exists(outfile) is True:
+    if os.path.exists(toutfile) is True:
+        # Move output file to the final filename
+        os.rename(toutfile,outfile)
+        os.rename(tneifile,neifile)
+        # Remove the temporary links
+        for f in [tfile,timfile,toptfile,tlisttfile,tapfile]: os.remove(f)        
+
         # Get info from the logfile
         if os.path.exists(logfile):
             plines = readlines(logfile)
@@ -1806,11 +1924,11 @@ def daopsf(listfile=None,apfile=None,imfile=None,verbose=False,logger=None):
                 profs = parseprofs(proflines)
             else:
                 logger.error("No DAOPHOT profile errors found in logfile")
-                raise
+                raise Exception("DAOPHOT problem")
     # Failure
     else:
         logger.error("Output file "+outfile+" NOT Found")
-        raise
+        raise Exception("DAOPHOT output not found")
 
     # Delete the script
     os.remove(scriptfile)
