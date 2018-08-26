@@ -10,7 +10,7 @@ __version__ = '20180823'  # yyyymmdd
 
 import re
 import logging
-#import os
+import os
 #import sys
 #import numpy as np
 #import warnings
@@ -116,7 +116,7 @@ def readlines(fil=None):
 
 
 # Write all lines to file
-def writelines(lines=None,fil=None):
+def writelines(lines=None,fil=None,overwrite=True):
     '''
     Write a list of lines to a file.
     
@@ -126,7 +126,9 @@ def writelines(lines=None,fil=None):
          The list of lines to write to a file.
     fil : str
         The filename to write the lines to.
-   
+    overwrite : bool, optional, default is true
+        If the output file already exists, then overwrite it.
+
     Returns
     -------
     Nothing is returned.  The lines are written to `fil`.
@@ -145,6 +147,7 @@ def writelines(lines=None,fil=None):
     if fil is None:
         print("No file name input")
         return
+    if overwrite & os.path.exists(fil): os.remove(fil)
     f = open(fil,'w')
     f.writelines(lines)
     f.close()

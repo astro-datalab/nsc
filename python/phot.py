@@ -164,6 +164,11 @@ def daoread(fil):
 
     '''
 
+    # Not enough inputs
+    if fil is None:
+        print("No file name input")
+        return None
+    # Make sure the file exists
     if os.path.exists(fil) is False:
         print(fil+" NOT found")
         return None
@@ -610,6 +615,12 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
     if configdir is None:
         logger.warning("No configdir input")
         return
+
+    # Check that necessary files exist
+    for f in [fluxfile,wtfile,maskfile]:
+        if os.path.exists(f) is False:
+            logger.warning(f+" NOT found")
+            return None
 
     base = os.path.basename(fluxfile)
     base = os.path.splitext(os.path.splitext(base)[0])[0]
@@ -1233,6 +1244,13 @@ def mkdaoim(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,logge
         logger.warning("No outfile input")
         return
 
+    # Check that necessary files exist
+    for f in [fluxfile,wtfile,maskfile]:
+        if os.path.exists(f) is False:
+            logger.warning(f+" NOT found")
+            return None
+
+    # Load the FITS files
     flux,fhead = fits.getdata(fluxfile,header=True)
     wt,whead = fits.getdata(wtfile,header=True)
     mask,mhead = fits.getdata(maskfile,header=True)
@@ -1361,9 +1379,14 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
     if outfile is None: outfile = base+".coo"
     if logfile is None: logfile = base+".coo.log"
     scriptfile = base+".coo.sh"
-    if os.path.exists(outfile): os.remove(outfile)
-    if os.path.exists(logfile): os.remove(logfile)
-    if os.path.exists(scriptfile): os.remove(scriptfile)
+    for f in [outfile,logfile,scriptfile]:
+        if os.path.exists(f): os.remove(f)
+
+    # Check that necessary files exist
+    for f in [imfile,optfile]:
+        if os.path.exists(f) is False:
+            logger.warning(f+" NOT found")
+            return None
 
     # Make temporary short filenames to DAOPHOT can handle them
     tid,tfile = tempfile.mkstemp(prefix="tcoo",dir=".")
@@ -1510,10 +1533,14 @@ def daoaperphot(imfile=None,coofile=None,optfile=None,apertures=None,outfile=Non
     if logfile is None: logfile = base+".ap.log"
     apersfile = base+".apers"
     scriptfile = base+".coo.sh"
-    if os.path.exists(outfile): os.remove(outfile)
-    if os.path.exists(apersfile): os.remove(apersfile)
-    if os.path.exists(logfile): os.remove(logfile)
-    if os.path.exists(scriptfile): os.remove(scriptfile)
+    for f in [outfile,apersfile,logfile,scriptfile]:
+        if os.path.exists(f): os.remove(f)
+
+    # Check that necessary files exist
+    for f in [imfile,optfile,coofile]:
+        if os.path.exists(f) is False:
+            logger.warning(f+" NOT found")
+            return None
 
     # Make temporary short filenames to DAOPHOT can handle them
     tid,tfile = tempfile.mkstemp(prefix="tap",dir=".")
@@ -1693,9 +1720,14 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
     if outfile is None: outfile = base+".lst"
     if logfile is None: logfile = base+".lst.log"
     scriptfile = base+".pickpsf.sh"
-    if os.path.exists(outfile): os.remove(outfile)
-    if os.path.exists(logfile): os.remove(logfile)
-    if os.path.exists(scriptfile): os.remove(scriptfile)
+    for f in [outfile,logfile,scriptfile]:
+        if os.path.exists(f): os.remove(f)
+
+    # Check that necessary files exist
+    for f in [imfile,catfile,optfile]:
+        if os.path.exists(f) is False:
+            logger.warning(f+" NOT found")
+            return None
 
     # Make temporary short filenames to DAOPHOT can handle them
     tid,tfile = tempfile.mkstemp(prefix="tlst",dir=".")
@@ -1816,7 +1848,7 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
 
     .. code-block:: python
 
-        pararr, parchi, profs = daopsf("image.fits","image.st")
+        pararr, parchi, profs = daopsf("image.fits","image.lst")
 
     '''
 
@@ -1841,10 +1873,14 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
     if logfile is None: logfile = base+".psf.log"
     if neifile is None: neifile = base+".nei"
     scriptfile = base+".psf.sh"
-    if os.path.exists(outfile): os.remove(outfile)
-    if os.path.exists(neifile): os.remove(neifile)
-    if os.path.exists(logfile): os.remove(logfile)
-    if os.path.exists(scriptfile): os.remove(scriptfile)
+    for f in [outfile,neifile,logfile,scriptfile]:
+        if os.path.exists(f): os.remove(f)
+
+    # Check that necessary files exist
+    for f in [imfile,listfile,optfile,apfile]:
+        if os.path.exists(f) is False:
+            logger.warning(f+" NOT found")
+            return None
 
     # Make temporary short filenames to DAOPHOT can handle them
     tid,tfile = tempfile.mkstemp(prefix="tpsf",dir=".")
@@ -1938,71 +1974,127 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
 
 # Subtract neighbors of PSF stars
 #--------------------------------
-def subpsfnei(lstfile=None,photfile=None,outfile=None,psffile=None,imfile=None,logger=None):
+def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,psffile=None,
+              nstfile=None,grpfile=None,logfile=None,logger=None):
+    '''
+    This subtracts neighbors of PSF stars so that an improved PSF can be made.
+
+    Parameters
+    ----------
+    imfile : str
+           The filename of the DAOPHOT-ready FITS image.
+    listfile : str
+           The filename of the list of PSF stars.
+    photfile : str, optional
+           The filename of the photometry file (normally the .nei aperture photometry file).
+           By default it is assumed that this is the base name of `imfile` with a ".nei" suffix.
+    outfile : str
+            The FITS filename for the image with the neighbors subtracted.  By default this is
+            the base name of `imfile` with a "a.fits" suffix.
+    optfile : str, optional
+            The option file for `imfile`.  By default it is assumed that this is
+            the base name of `imfile` with a ".opt" suffix.
+    psffile : str, optional
+           The name of the PSF file.  By default it is assumed that this is the base name of
+           `imfile` with a ".psf" suffix.
+    nstfile : str, optional
+           The name of the output .nst file.
+           By default it is assumed that this is the base name of `imfile` with a ".nst" suffix.
+    grpfile : str, optional
+           The name of the output .grp file that contains information on the groups of stars.
+           By default it is assumed that this is the base name of `imfile` with a ".grp" suffix.
+    logfile : str, optional
+            The name of the logfile to constrain the output of the DAOPHOT FIND
+            run.  By default this is the base name of `imfile` with a ".subnei.log" suffix.
+    logger : logging object
+           The logger to use for the loggin information.
+
+    Returns
+    -------
+    Nothing is returned.  The subtracted image and logfile will be created.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        daopsfnei("image.fits","image.lst","imagea.fits")
+
+    '''
 
     if logger is None: logger=basiclogger()   # set up basic logger if necessary
-    # Set up filenames, make sure the output ones don't exist
-    base = os.path.basename(self.daofile)
-    base = os.path.splitext(os.path.splitext(base)[0])[0]
-    optfile = base+".opt"
-    scriptfile = base+".subnei.sh"
-    logfile = base+".subnei.log"
-    nstfile = base+".nst"
-    grpfile = base+".grp"
-    if imfile is None: imfile = base+".fits"
-    if outfile is None: outfile = base+"a.fits"
-    if os.path.exists(outfile): os.remove(outfile)
-    if os.path.exists(logfile): os.remove(logfile)
-    if os.path.exists(scriptfile): os.remove(scriptfile)
-    if os.path.exists(nstfile): os.remove(nstfile)
-    if os.path.exists(grpfile): os.remove(grpfile)
-    # Check that image file exists
-    if os.path.exists(imfile) is False:
-        logger.error(imfile+" NOT Found")
-        return
-    # Phot file (normally .nei file)
-    if photfile is None: 
-        if os.path.exists(base+".nei") is False:
-            logger.warning("Photometry file not input and "+base+".nei NOT found")
-            return
-        photfile = base+".nei"
-    # List file
-    if lstfile is None: 
-        if os.path.exists(base+".lst") is False:
-            logger.warning("List file not input and "+base+".lst NOT found")
-            return
-        lstfile = base+".lst"
-    # PSF file
-    if psffile is None: 
-        if os.path.exists(base+".psf") is False:
-            logger.warning("PSF file not input and "+base+".psf NOT found")
-            return
-        psffile = base+".psf"
-
     logger.info("-- Subtracting PSF stars neighbors -- ")
+
+    # Make sure we have the image file name
+    if imfile is None:
+        logger.warning("No image filename input")
+        return
+    # Make sure we have the list file name
+    if listfile is None:
+        logger.warning("No list filename input")
+        return
+    # Make sure we have the subtracted image (output) file name
+    if outfile is None:
+        logger.warning("No subtracted image file name input")
+        return
+
+    # Set up filenames, make sure they don't exist
+    base = os.path.basename(imfile)
+    base = os.path.splitext(os.path.splitext(base)[0])[0]
+    if optfile is None: optfile = base+".opt"
+    if photfile is None: photfile = base+".nei"
+    if outfile is None: outfile = base+"a.fits"
+    if logfile is None: logfile = base+".subnei.log"
+    if nstfile is None: nstfile = base+".nsf"
+    if grpfile is None: grpfile = base+".grp"
+    scriptfile = base+".subnei.sh"
+    for f in [outfile,logfile,scriptfile,nstfile,grpfile]:
+        if os.path.exists(f): os.remove(f)
+
+    # Check that necessary files exist
+    for f in [imfile,listfile,optfile,psffile,photfile]:
+        if os.path.exists(f) is False:
+            logger.warning(f+" NOT found")
+            return
+
+    # Make temporary short filenames to DAOPHOT can handle them
+    tid,tfile = tempfile.mkstemp(prefix="tsubnei",dir=".")
+    tbase = os.path.basename(tfile)
+    timfile = tbase+".fits"
+    toptfile = tbase+".opt"
+    tphotfile = tbase+".ap"
+    listext = os.path.splitext(listfile)[1]
+    tlistfile = tbase+listext
+    toutfile = tbase+"a.fits"
+    tnstfile = tbase+".nst"
+    tgrpfile = tbase+".grp"
+    os.symlink(imfile,timfile)
+    os.symlink(optfile,toptfile)
+    os.symlink(listfile,tlistfile)
+    os.symlink(photfile,tphotfile)
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
             "daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
-            ""+optfile+"\n" \
+            ""+toptfile+"\n" \
             "\n" \
-            "ATTACH "+imfile+"\n" \
+            "ATTACH "+timfile+"\n" \
             "GROUP\n" \
-            ""+photfile+"\n" \
-            ""+psffile+"\n" \
+            ""+tphotfile+"\n" \
+            ""+tpsffile+"\n" \
             "5.\n" \
-            ""+grpfile+"\n" \
+            ""+tgrpfile+"\n" \
             "NSTAR\n" \
-            ""+psffile+"\n" \
-            ""+grpfile+"\n" \
-            ""+nstfile+"\n" \
+            ""+tpsffile+"\n" \
+            ""+tgrpfile+"\n" \
+            ""+tnstfile+"\n" \
             "SUBSTAR\n" \
-            ""+psffile+"\n" \
-            ""+nstfile+"\n" \
+            ""+tpsffile+"\n" \
+            ""+tnstfile+"\n" \
             "y\n" \
-            ""+lstfile+"\n" \
-            ""+outfile+"\n" \
+            ""+tlstfile+"\n" \
+            ""+toutfile+"\n" \
             "\n" \
             "EXIT\n" \
             "END_DAOPHOT\n"
@@ -2025,12 +2117,19 @@ def subpsfnei(lstfile=None,photfile=None,outfile=None,psffile=None,imfile=None,l
     except OSError as e:
         logger.error("PSF star neighbor subtracting failed:"+str(e))
         logger.error(e)
-        raise
+        raise Exception("PSF subtraction failed")
 
     # Check that the output file exists
-    if os.path.exists(outfile) is False:
+    if os.path.exists(toutfile):
+        # Move output file to the final filename
+        os.rename(toutfile,outfile)
+        os.rename(tnstfile,nstfile)
+        os.rename(tgrpfile,grpfile)
+        # Remove the temporary links
+        for f in [tfile,timfile,toptfile,tlistfile,tphotfile]: os.remove(f)
+    else:
         logger.error("Output file "+outfile+" NOT Found")
-        raise
+        raise Exception("PSF subtraction failed")
 
     # Delete the script
     os.remove(scriptfile)
@@ -2038,43 +2137,100 @@ def subpsfnei(lstfile=None,photfile=None,outfile=None,psffile=None,imfile=None,l
 
 # Create DAOPHOT PSF
 #-------------------
-def createpsf(listfile=None,apfile=None,doiter=True,maxiter=5,minstars=6,subneighbors=True,verbose=False,logger=None):
+def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,maxiter=5,minstars=6,subneighbors=True,
+              subfile=None,optfile=None,nstfile=None,grpfile=None,verbose=False,logger=None):
+    '''
+    Iteratively create a DAOPHOT PSF for an image.
+
+    Parameters
+    ----------
+    imfile : str
+           The filename of the DAOPHOT-ready FITS image.
+    apfile : str, optional
+           The filename of the photometry file (normally the .ap aperture photometry file).
+           By default it is assumed that this is the base name of `imfile` with a ".ap" suffix.
+    listfile : str, optional
+           The filename that will contain the final list of PSF stars.  By default this is the
+           base name of `imfile` with a ".lst" suffix.
+    psffile : str, optional
+           The name of the PSF file.  By default it is assumed that this is the base name of
+           `imfile` with a ".psf" suffix.
+    doiter : bool, default is True
+          Iteratively remove bad or suspect PSF stars and refit the PSF.
+    maxiter : int, optional, default = 5
+            The maximum number of iterations of removing suspect stars.
+    minstars : int, optional, default = 6
+            The minimum required stars for a PSF.
+    subneighbors : bool, optional, default = True
+             Subtract stars neighboring the PSF stars and then refit the PSF.
+    subfile : str, optional
+            The FITS filename for the image with the neighbors subtracted.  By default this is
+            the base name of `imfile` with a "a.fits" suffix.
+    optfile : str, optional
+            The option file for `imfile`.  By default it is assumed that this is
+            the base name of `imfile` with a ".opt" suffix.
+    nstfile : str, optional
+           The name of the output .nst file.
+           By default it is assumed that this is the base name of `imfile` with a ".nst" suffix.
+    grpfile : str, optional
+           The name of the output .grp file that contains information on the groups of stars.
+           By default it is assumed that this is the base name of `imfile` with a ".grp" suffix.
+    logfile : str, optional
+            The name of the logfile to constrain the output of the DAOPHOT FIND
+            run.  By default this is the base name of `imfile` with a ".subnei.log" suffix.
+    verbose : bool, default is False
+            Verbose output of the DAOPHOT PSF parameter errors and PSF star profile errors.
+    logger : logging object
+           The logger to use for the loggin information.
+
+    Returns
+    -------
+    Nothing is returned.  The PSF, subtracted image and logfile are created.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        createpsf("image.fits","image.lst","imagea.fits")
+
+    '''
 
     if logger is None: logger=basiclogger()   # set up basic logger if necessary
     logger.info("-- Creating PSF Iteratively --")
 
-    # Set up filenames, make sure they don't exist
-    base = os.path.basename(self.daofile)
-    base = os.path.splitext(os.path.splitext(base)[0])[0]
-    optfile = base+".opt"
-    scriptfile = base+".psf.sh"
-    outfile = base+".psf"
-    logfile = base+".psf.log"
-    neifile = base+".nei"
-    imfile = base+".fits"
-    if os.path.exists(outfile): os.remove(outfile)
-    if os.path.exists(logfile): os.remove(logfile)
-    if os.path.exists(scriptfile): os.remove(scriptfile)
-    if os.path.exists(neifile): os.remove(neifile)
+    # Make sure we have the image file name
+    if imfile is None:
+        logger.warning("No image filename input")
+        return
 
-    # Aperture photometry file
-    if apfile is None:
-        if os.path.exists(base+".ap") is False:
-            logger.warning("No aperture photometry file input and "+base+".ap NOT found")
+    # Set up filenames, make sure they don't exist
+    base = os.path.basename(imfile)
+    base = os.path.splitext(os.path.splitext(base)[0])[0]
+    if optfile is None: optfile = base+".opt"
+    if listfile is None: listfile = base+".lst"
+    if apfile is None: apfile = base+".ap"
+    if psffile is None: psffile = base+".psf"
+    if subfile is None: outfile = base+"a.fits"
+    if logfile is None: logfile = base+".cpsf.log"
+    if neifile is None: neifile = base+".nei"
+    if nstfile is None: nstfile = base+".nsf"
+    if grpfile is None: grpfile = base+".grp"
+    for f in [outfile,logfile,,psffile,nstfile,grpfile,neifile]:
+        if os.path.exists(f): os.remove(f)
+
+    # Check that necessary files exist
+    for f in [imfile,optfile,listfile,apfile]:
+        if os.path.exists(f) is False:
+            logger.warning(f+" NOT found")
             return
-        apfile = base+".ap"
-    # List file
-    if listfile is None:
-        if os.path.exists(base+".lst") is False:
-            logger.warning("No PSF candidates list input and "+base+".lst NOT found")
-            return
-        listfile = base+".lst"
+
     # Working list file
     wlistfile = listfile+"1"
     if os.path.exists(wlistfile): os.remove(wlistfile)
     shutil.copy(listfile,wlistfile)
 
-    # Make copy of original list
+    # Make copy of original PSF list
     if os.path.exists(listfile+".orig"): os.remove(listfile+".orig")
     shutil.copy(listfile,listfile+".orig")
 
@@ -2088,7 +2244,7 @@ def createpsf(listfile=None,apfile=None,doiter=True,maxiter=5,minstars=6,subneig
 
         # Run DAOPSF
         try:
-            pararr, parchi, profs = self.daopsf(wlistfile,apfile)
+            pararr, parchi, profs = daopsf(imfile,wlistfile,apfile)
         except:
             logger.error("Failure in DAOPSF")
             raise
@@ -2108,13 +2264,9 @@ def createpsf(listfile=None,apfile=None,doiter=True,maxiter=5,minstars=6,subneig
             # Remove the lines from listlines
             newlistlines = remove_indices(listlines,ind2+3)
             # Write new list
-            os.remove(wlistfile)
-            f = open(wlistfile,'w')
-            f.writelines(newlistlines)
-            f.close()
+            writelines(wlistfile,newlistlines,overwrite=True)
             logger.info("  Removing IDs="+str(" ".join(profs[bdstars]['ID'].astype(str))))
             logger.info("  "+str(nbdstars)+" bad stars removed. "+str(nstars-nbdstars)+" PSF stars left")
-
         # Should we end
         if (iter==maxiter) | (nbdstars==0) | (nstars<=minstars): endflag=1
         iter = iter+1
@@ -2122,16 +2274,16 @@ def createpsf(listfile=None,apfile=None,doiter=True,maxiter=5,minstars=6,subneig
     # Subtract PSF star neighbors
     if subneighbors:
         subfile = base+"a.fits"
-        #try:
-        self.subpsfnei(wlistfile,neifile,subfile,imfile=imfile,psffile=outfile)
-        #except:
-        #    logger.error("Subtracting neighbors failed.  Keeping original PSF file")
+        try:
+            subpsfnei(imfile,wlistfile,neifile,subfile,psffile=psffile)
+        except:
+            logger.error("Subtracting neighbors failed.  Keeping original PSF file")
         # Check that the subtracted image exist and rerun DAOPSF
         if os.path.exists(subfile):
             # Final run of DAOPSF
             logger.info("Final DAOPDF run")
             try:
-                pararr, parchi, profs = self.daopsf(wlistfile,apfile)
+                pararr, parchi, profs = daopsf(imfile,wlistfile,apfile)
             except:
                 logger.error("Failure in DAOPSF")
                 raise
@@ -2139,7 +2291,7 @@ def createpsf(listfile=None,apfile=None,doiter=True,maxiter=5,minstars=6,subneig
             logger.info("Getting aperture photometry for PSF stars")
             apertures = [3.0, 3.7965, 4.8046, 6.0803, 7.6947, 9.7377, 12.3232, 15.5952, 19.7360, \
                          24.9762, 31.6077, 40.0000, 50.0000]
-            self.daoaperphot(wlistfile,apertures,subfile)
+            psfcat = daoaperphot(wlistfile,apertures,subfile)
 
     # Copy working list to final list
     if os.path.exists(listfile): os.remove(listfile)
@@ -2149,45 +2301,110 @@ def createpsf(listfile=None,apfile=None,doiter=True,maxiter=5,minstars=6,subneig
 
 # Run ALLSTAR
 #-------------
-def allstar(psffile=None,apfile=None,subfile=None,logger=None):
+def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfile=None,logfile=None,logger=None):
+    '''
+    Run DAOPHOT ALLSTAR on an image.
+
+    Parameters
+    ----------
+    imfile : str
+           The filename of the DAOPHOT-ready FITS image.
+    psffile : str, optional
+           The name of the PSF file.  By default it is assumed that this is the base name of
+           `imfile` with a ".psf" suffix.
+    apfile : str, optional
+           The filename of the photometry file (normally the .ap aperture photometry file).
+           By default it is assumed that this is the base name of `imfile` with a ".ap" suffix.
+    subfile : str, optional
+            The FITS filename for the image with the neighbors subtracted.  By default this is
+            the base name of `imfile` with a "s.fits" suffix.
+    outfile : str, optional
+            The file name of the final .als source catalog.
+    optfile : str, optional
+            The option file for `imfile`.  By default it is assumed that this is
+            the base name of `imfile` with a ".opt" suffix.
+    logfile : str, optional
+            The name of the logfile to constrain the output of the DAOPHOT FIND
+            run.  By default this is the base name of `imfile` with a ".subnei.log" suffix.
+    logger : logging object
+           The logger to use for the loggin information.
+
+    Returns
+    -------
+    cat : numpy structured array
+        The catalog of ALLSTAR sources.
+
+    The PSF subtracted image and logfile will also be created.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        cat = allstar("image.fits","image.psf")
+
+    '''
 
     if logger is None: logger=basiclogger()   # set up basic logger if necessary
+    logger.info("-- Running ALLSTAR --")
+
+    # Make sure we have the image file name
+    if imfile is None:
+        logger.warning("No image filename input")
+        return
+    # Make sure we have the list file name
+    if listfile is None:
+        logger.warning("No list filename input")
+        return
+    # Make sure we have the subtracted image (output) file name
+    if outfile is None:
+        logger.warning("No subtracted image file name input")
+        return
+
     # Set up filenames, make sure they don't exist
-    base = os.path.basename(self.daofile)
+    base = os.path.basename(imfile)
     base = os.path.splitext(os.path.splitext(base)[0])[0]
-    optfile = base+".als.opt"
-    scriptfile = base+".als.sh"
-    if apfile is None:
-        if os.path.exists(base+".ap") is False:
-            logger.warning("apfile not input and "+base+".ap NOT found")
-            return
-        apfile = base+".ap"
-    if psffile is None:
-        if os.path.exists(base+".psf") is False:
-            logger.warning("psffile not input and "+base+".psf NOT found")
-            return
-        psffile = base+".psf"
+    if optfile is None: optfile = base+".als.opt"
+    if apfile is None: apfile = base+".ap"
     if subfile is None: subfile = base+"s.fits"
-    outfile = base+".als"
-    logfile = base+".als.log"
-    if os.path.exists(outfile): os.remove(outfile)
-    if os.path.exists(subfile): os.remove(subfile)
-    if os.path.exists(logfile): os.remove(logfile)
-    if os.path.exists(scriptfile): os.remove(scriptfile)
+    if outfile is None: outfile = base+".als"
+    if logfile is None: logfile = base+".als.log"
+    scriptfile = base+".als.sh"
+    for f in [outfile,subfile,logfile,scriptfile]:
+        if os.path.exists(f): os.remove(f)
+
+    # Check that necessary files exist
+    for f in [imfile,psffile,apfile,optfile]:
+        if os.path.exists(f) is False:
+            logger.warning(f+" NOT found")
+            return
+
+    # Make temporary short filenames to DAOPHOT can handle them
+    tid,tfile = tempfile.mkstemp(prefix="tsubnei",dir=".")
+    tbase = os.path.basename(tfile)
+    timfile = tbase+".fits"
+    toptfile = tbase+".als.opt"
+    tapfile = tbase+".ap"
+    tpsffile = tbase+".psf"
+    tsubfile = tbase+"s.fits"
+    toutfile = tbase+".als"
+    os.symlink(imfile,timfile)
+    os.symlink(optfile,toptfile)
+    os.symlink(apfile,tapfile)
+    os.symlink(psffile,tpsffile)
 
     # Load the option file lines
     optlines = readlines(optfile)
-
     # Lines for the DAOPHOT ALLSTAR script
     lines = ["#!/bin/sh\n",
              "allstar << END_ALLSTAR >> "+logfile+"\n"]
     lines += optlines
     lines += ["\n",
-              base+".fits\n",
-              psffile+"\n",
-              apfile+"\n",
-              outfile+"\n",
-              subfile+"\n",
+              timfile+"\n",
+              tpsffile+"\n",
+              tapfile+"\n",
+              toutfile+"\n",
+              tsubfile+"\n",
               "EXIT\n",
               "EXIT\n",
               "END_ALLSTAR\n"]
@@ -2201,7 +2418,6 @@ def allstar(psffile=None,apfile=None,subfile=None,logger=None):
     if os.path.exists("allstar.opt") is False: shutil.copyfile(optfile,"allstar.opt")
 
     # Run the script
-    logger.info("-- Running ALLSTAR --")
     try:
         retcode = subprocess.call(["./"+scriptfile],stderr=subprocess.STDOUT,shell=False)
         if retcode < 0:
@@ -2211,10 +2427,15 @@ def allstar(psffile=None,apfile=None,subfile=None,logger=None):
     except OSError as e:
         logger.warning("ALLSTAR failed:"+str(e))
         logger.warning(e)
-        raise
+        raise Exception("ALLSTAR failed")
 
     # Check that the output file exists
     if os.path.exists(outfile) is True:
+        # Move output file to the final filename
+        os.rename(toutfile,outfile)
+        os.rename(tsubfile,subfile)
+        # Remove the temporary links
+        for f in [tfile,timfile,toptfile,tpsffile,tapfile]: os.remove(f)        
         # How many sources converged
         num = numlines(outfile)-3
         logger.info(str(num)+" stars converged")
@@ -2222,11 +2443,13 @@ def allstar(psffile=None,apfile=None,subfile=None,logger=None):
     # Failure
     else:
         logger.error("Output file "+outfile+" NOT Found")
-        raise
+        raise Exception("ALLSTAR failed")
 
     # Delete the script
     os.remove(scriptfile)
 
+    # Return the final catalog
+    return daoread(outfile)
 
 
 # Run DAOGROW to calculate aperture corrections
