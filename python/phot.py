@@ -28,7 +28,7 @@ from scipy.ndimage.filters import convolve
 import astropy.stats
 import struct
 import tempfile
-from .utils import *
+from utils import *
 
 # Ignore these warnings, it's a bug
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -219,9 +219,10 @@ def daoread(fil):
         #
         #  The columns are: ID, X, Y, Mag1, Mag2, etc..
         #                   Sky, St.Dev. of sky, skew of sky, Mag1err, Mag2err, etc.
+        ncols = len(lines[4].split())
         naper = ncols-3   # apertures
-        nstars = (numlines(fil)-3.0)/3.0  # stars
-        dtype = np.dtype([('ID',long),('X',float),('Y',float),('SKY',float),('SKYSIG',float),('SKYSKEW',float),('MAG',float,aper),('ERR',float,naper)])
+        nstars = long((numlines(fil)-3.0)/3.0)  # stars
+        dtype = np.dtype([('ID',long),('X',float),('Y',float),('SKY',float),('SKYSIG',float),('SKYSKEW',float),('MAG',float,naper),('ERR',float,naper)])
         cat = np.zeros(nstars,dtype=dtype)
         # for line 1
         lengths1 = np.concatenate([np.array([7,9,9]),np.zeros(naper,dtype=int)+9])
@@ -230,14 +231,14 @@ def daoread(fil):
         hi1 = lo1+lengths1
         names1 = ['ID','X','Y']+['MAG'+f for f in (np.arange(naper)+1).astype(str)]
         # for line 2
-        lengths2 = np.concatenate([np.array([14,6,6]),np.zeros(naper,dtype=int)+8])
+        lengths2 = np.concatenate([np.array([14,6,6]),np.zeros(naper,dtype=int)+9])
         lo2 = np.concatenate((np.array([0]), np.cumsum(lengths2[0:-1])))
         hi2 = lo2+lengths2
         names1 = ['SKY','SKYSIG','SKYSKEW']+['ERR'+f for f in (np.arange(naper)+1).astype(str)]
         for i in range(nstars):
             # line 1
             # ID, X, Y, Mag1, Mag2, etc.. 
-            line1 = lines[i*3+3]
+            line1 = lines[i*3+4]
             cat[i]['ID'] = long(line1[lo1[0]:hi1[0]])
             cat[i]['X'] = float(line1[lo1[1]:hi1[1]])
             cat[i]['Y'] = float(line1[lo1[2]:hi1[2]])
@@ -247,7 +248,7 @@ def daoread(fil):
             cat[i]['MAG'] = mag
             # line 2
             # Sky, St.Dev. of sky, skew of sky, Mag1err, Mag2err, etc.  
-            line2 = lines[i*3+4]
+            line2 = lines[i*3+5]
             cat[i]['SKY'] = float(line2[lo2[0]:hi2[0]])
             cat[i]['SKYSIG'] = float(line2[lo2[1]:hi2[1]])
             cat[i]['SKYSKEW'] = float(line2[lo2[2]:hi2[2]])
@@ -255,7 +256,6 @@ def daoread(fil):
             for j in range(naper):
                 err[j] = np.array(line2[lo2[j+3]:hi2[j+3]],dtype=float)
             cat[i]['ERR'] = err
-
         return cat
     # NL = 3  list
     elif nl==3:
