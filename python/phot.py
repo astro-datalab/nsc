@@ -581,6 +581,8 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
     -------
     cat : astropy Table
         The final Source Extractor catalog.
+    maglim : float
+        The magnitude limit of the exposure.
 
     The catalog is written to `outfile` and the output of Source Extractor to `logfile`.
 
@@ -589,7 +591,7 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
 
     .. code-block:: python
 
-        cat = runsex("flux.fits","wt.fits","mask.fits",meta,"cat.fits","/data/config/","sex.log")
+        cat, maglim = runsex("flux.fits","wt.fits","mask.fits",meta,"cat.fits","/data/config/","sex.log")
 
     '''
 
@@ -820,7 +822,7 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
     os.remove(swtfile)
     #os.remove("default.conv")
 
-    return cat
+    return cat,maglim
 
 
 # Determine seeing FWHM using SE catalog
@@ -1508,6 +1510,8 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
     -------
     cat : astropy table
         The DAOPHOT aperture photometry catalog.
+    maglim : float
+        The magnitude limit of the exposure.
 
     The output catalog and logfile will also be created.
 
@@ -1516,7 +1520,7 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
 
     .. code-block:: python
 
-        cat = daoaperphot("image.fits","image.coo")
+        cat, maglim = daoaperphot("image.fits","image.coo")
 
     '''
 
@@ -1659,7 +1663,7 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
 
     # Return the catalog
     logger.info("Output file = "+outfile)
-    return daoread(outfile)
+    return daoread(outfile), maglim
 
 
 # Pick PSF stars using DAOPHOT
@@ -2310,7 +2314,7 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
             logger.info("Getting aperture photometry for PSF stars")
             apertures = [3.0, 3.7965, 4.8046, 6.0803, 7.6947, 9.7377, 12.3232, 15.5952, 19.7360, \
                          24.9762, 31.6077, 40.0000, 50.0000]
-            psfcat = daoaperphot(subfile,wlistfile,apertures,optfile=optfile)
+            psfcat, maglim = daoaperphot(subfile,wlistfile,apertures,optfile=optfile)
 
     # Copy working list to final list
     if os.path.exists(listfile): os.remove(listfile)
