@@ -61,7 +61,7 @@ def parseprofs(lines):
         profs = parseprofs(lines)
 
     '''
-    dtype = np.dtype([('ID',int),('CHI',float),('FLAG',np.str_,3)])
+    dtype = np.dtype([('ID',int),('CHI',float),('FLAG',np.str_,10)])
     profs = np.zeros(len(lines)*5,dtype=dtype)
     profs['ID'] = -1
     cnt = 0L
@@ -74,6 +74,9 @@ def parseprofs(lines):
                 id1 = line1[0:7]
                 chi1 = line1[7:14]
                 flag1 = line1[14:17]
+                if chi1 == " satura":
+                    chi1 = 99.99
+                    flag1 = "saturated"
                 if id1.strip() != "":
                     profs[cnt]['ID'] = int(id1)
                     profs[cnt]['CHI'] = float(chi1)
@@ -1443,7 +1446,7 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
 
         # Get info from the logfile
         if os.path.exists(logfile) is True:
-            dflines = readlines(logfile)
+            dlines = readlines(logfile)
             l1 = grep(dlines,"Sky mode and standard deviation")
             if len(l1)>0:
                 logger.info(l1[0].strip())   # clip \n
@@ -1469,12 +1472,13 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
     os.remove(scriptfile)
 
     # Load and return the catalog
+    logger.info("Output file = "+outfile)
     return daoread(outfile)
 
 
 # DAOPHOT aperture photometry
 #----------------------------
-def daoaperphot(imfile=None,coofile=None,optfile=None,apertures=None,outfile=None,logfile=None,logger=None):
+def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=None,logfile=None,logger=None):
     '''
     This runs DAOPHOT aperture photometry on an image.
 
@@ -1482,17 +1486,18 @@ def daoaperphot(imfile=None,coofile=None,optfile=None,apertures=None,outfile=Non
     ----------
     imfile : str
            The filename of the DAOPHOT-ready FITS image.
-    coofile : str
+    coofile : str, optional
             The filename of the catalog of sources for which to obtain aperture photometry.
-    optfile : str, optional
-            The option file for `imfile`.  By default it is assumed that this is
-            the base name of `imfile` with a ".opt" suffix.
+            By default it is assumed that this is the base name of `imfile` with a ".coo" suffix.
     apertures : list or array, optional
              The list of aperture to use.  The last two are used as the inner and outer sky radius.
              The default apertures are: apertures = [3.0, 6.0803, 9.7377, 15.5952, 19.7360, 40.0, 50.0]
     outfile : str, optional
             The output filename of the aperture photometry catalog.  By default this is
             the base name of `imfile` with a ".ap" suffix.
+    optfile : str, optional
+            The option file for `imfile`.  By default it is assumed that this is
+            the base name of `imfile` with a ".opt" suffix.
     logfile : str, optional
             The name of the logfile to constrain the output of the DAOPHOT FIND
             run.  By default this is the base name of `imfile` with a ".ap.log" suffix.
@@ -1522,15 +1527,12 @@ def daoaperphot(imfile=None,coofile=None,optfile=None,apertures=None,outfile=Non
     if imfile is None:
         logger.warning("No image filename input")
         return None
-    # Make sure we have the source list
-    if coofile is None:
-        logger.warning("No source list not input")
-        return None
 
     # Set up filenames, make sure they don't exist
     base = os.path.basename(imfile)
     base = os.path.splitext(os.path.splitext(base)[0])[0]
     if optfile is None: optfile = base+".opt"
+    if coofile is None: coofile = base+".coo"
     if outfile is None: outfile = base+".ap"
     if logfile is None: logfile = base+".ap.log"
     apersfile = base+".apers"
@@ -1558,7 +1560,7 @@ def daoaperphot(imfile=None,coofile=None,optfile=None,apertures=None,outfile=Non
     os.symlink(coofile,tcoofile)
     os.symlink(apersfile,tapersfile)
 
-    logger.info("coofile = "+coofile+"   outfile = "+outfile)
+    logger.info("coofile = "+coofile)
 
     # Make apertures file
     if apertures is None:
@@ -1656,6 +1658,7 @@ def daoaperphot(imfile=None,coofile=None,optfile=None,apertures=None,outfile=Non
     if movedpsf is True: os.rename(psftemp,base+".psf")
 
     # Return the catalog
+    logger.info("Output file = "+outfile)
     return daoread(outfile)
 
 
@@ -1741,6 +1744,7 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
     toutfile = tbase+".lst"
     os.symlink(imfile,timfile)
     os.symlink(optfile,toptfile)
+    os.symlink(catfile,tcatfile)
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
@@ -1789,7 +1793,7 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
             plines = readlines(logfile)
             l1 = grep(plines,"suitable candidates were found.")
             if len(l1)>0:
-                logger.info(l1[0].strip()+"   "+outfile)   # clip \n
+                logger.info(l1[0].strip())   # clip \n
     # Failure
     else:
         logger.error("Output file "+outfile+" NOT Found")
@@ -1799,6 +1803,7 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
     os.remove(scriptfile)
 
     # Return the catalog
+    logger.info("Output file = "+outfile)
     return daoread(outfile)
 
 
@@ -1821,7 +1826,7 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
            The filename of the aperture photometry file.  By default it is assumed
            that this is the base name of `imfile` with a ".ap" suffix.
     neifile : str, optional
-            The output neighbors file.  By default this is the base name of `imfile`
+            The output PSF stars and neighbors file.  By default this is the base name of `imfile`
             with a ".nei" suffix.
     outfile : str, optional
             The output filename of the aperture photometry catalog.  By default this is
@@ -1941,7 +1946,7 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
         os.rename(toutfile,outfile)
         os.rename(tneifile,neifile)
         # Remove the temporary links
-        for f in [tfile,timfile,toptfile,tlisttfile,tapfile]: os.remove(f)        
+        for f in [tfile,timfile,toptfile,tlistfile,tapfile]: os.remove(f)        
 
         # Get info from the logfile
         if os.path.exists(logfile):
@@ -1954,12 +1959,13 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
                 parlines = plines[l1[0]+1:l2[0]-1]
                 pararr, parchi = parsepars(parlines)
                 minchi = np.min(parchi)
-                logger.info("  Chi = "+str(minchi))
+                logger.info("Chi = "+str(minchi))
             # Get profile errors
             if len(l2)>0:
                 proflines = plines[l2[0]+1:l3[0]-1]
                 if verbose: logger.info(" ".join(proflines))
                 profs = parseprofs(proflines)
+                logger.info(str(len(profs))+" PSF stars used")
             else:
                 logger.error("No DAOPHOT profile errors found in logfile")
                 raise Exception("DAOPHOT problem")
@@ -1971,6 +1977,8 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
     # Delete the script
     os.remove(scriptfile)
 
+    # Return the parameter and profile error information
+    logger.info("Output file = "+outfile)
     return pararr, parchi, profs
 
 
@@ -2020,7 +2028,7 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
 
     .. code-block:: python
 
-        daopsfnei("image.fits","image.lst","imagea.fits")
+        subpsfnei("image.fits","image.lst","image.nei","imagea.fits")
 
     '''
 
@@ -2047,7 +2055,8 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
     if photfile is None: photfile = base+".nei"
     if outfile is None: outfile = base+"a.fits"
     if logfile is None: logfile = base+".subnei.log"
-    if nstfile is None: nstfile = base+".nsf"
+    if psffile is None: psffile = base+".psf"
+    if nstfile is None: nstfile = base+".nst"
     if grpfile is None: grpfile = base+".grp"
     scriptfile = base+".subnei.sh"
     for f in [outfile,logfile,scriptfile,nstfile,grpfile]:
@@ -2068,12 +2077,14 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
     listext = os.path.splitext(listfile)[1]
     tlistfile = tbase+listext
     toutfile = tbase+"a.fits"
+    tpsffile = tbase+".psf"
     tnstfile = tbase+".nst"
     tgrpfile = tbase+".grp"
     os.symlink(imfile,timfile)
     os.symlink(optfile,toptfile)
     os.symlink(listfile,tlistfile)
     os.symlink(photfile,tphotfile)
+    os.symlink(psffile,tpsffile)
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
@@ -2095,7 +2106,7 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
             ""+tpsffile+"\n" \
             ""+tnstfile+"\n" \
             "y\n" \
-            ""+tlstfile+"\n" \
+            ""+tlistfile+"\n" \
             ""+toutfile+"\n" \
             "\n" \
             "EXIT\n" \
@@ -2136,11 +2147,14 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
     # Delete the script
     os.remove(scriptfile)
 
+    # Print final output filename
+    logger.info("Output file = "+outfile)
+
 
 # Create DAOPHOT PSF
 #-------------------
 def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,maxiter=5,minstars=6,subneighbors=True,
-              subfile=None,optfile=None,nstfile=None,grpfile=None,verbose=False,logger=None):
+              subfile=None,optfile=None,neifile=None,nstfile=None,grpfile=None,logfile=None,verbose=False,logger=None):
     '''
     Iteratively create a DAOPHOT PSF for an image.
 
@@ -2171,8 +2185,11 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
     optfile : str, optional
             The option file for `imfile`.  By default it is assumed that this is
             the base name of `imfile` with a ".opt" suffix.
+    neifile : str, optional
+           The name of the output .nei file of PSF stars and neighbors.  By default is is assumed
+           that this is the base name of `imfile` with a ".nei" suffix.
     nstfile : str, optional
-           The name of the output .nst file.
+           The name of the output .nst file created by NSTAR.
            By default it is assumed that this is the base name of `imfile` with a ".nst" suffix.
     grpfile : str, optional
            The name of the output .grp file that contains information on the groups of stars.
@@ -2194,7 +2211,7 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
 
     .. code-block:: python
 
-        createpsf("image.fits","image.lst","imagea.fits")
+        createpsf("image.fits","image.ap","image.lst","image.psf")
 
     '''
 
@@ -2293,7 +2310,7 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
             logger.info("Getting aperture photometry for PSF stars")
             apertures = [3.0, 3.7965, 4.8046, 6.0803, 7.6947, 9.7377, 12.3232, 15.5952, 19.7360, \
                          24.9762, 31.6077, 40.0000, 50.0000]
-            psfcat = daoaperphot(wlistfile,apertures,subfile)
+            psfcat = daoaperphot(subfile,wlistfile,apertures,optfile=optfile)
 
     # Copy working list to final list
     if os.path.exists(listfile): os.remove(listfile)
@@ -2318,7 +2335,7 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
            The filename of the photometry file (normally the .ap aperture photometry file).
            By default it is assumed that this is the base name of `imfile` with a ".ap" suffix.
     subfile : str, optional
-            The FITS filename for the image with the neighbors subtracted.  By default this is
+            The FITS filename for the image with all stars subtracted.  By default this is
             the base name of `imfile` with a "s.fits" suffix.
     outfile : str, optional
             The file name of the final .als source catalog.
@@ -2354,18 +2371,11 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
     if imfile is None:
         logger.warning("No image filename input")
         return
-    # Make sure we have the list file name
-    if listfile is None:
-        logger.warning("No list filename input")
-        return
-    # Make sure we have the subtracted image (output) file name
-    if outfile is None:
-        logger.warning("No subtracted image file name input")
-        return
 
     # Set up filenames, make sure they don't exist
     base = os.path.basename(imfile)
     base = os.path.splitext(os.path.splitext(base)[0])[0]
+    if psffile is None: psffile = base+".psf"
     if optfile is None: optfile = base+".als.opt"
     if apfile is None: apfile = base+".ap"
     if subfile is None: subfile = base+"s.fits"
@@ -2432,16 +2442,17 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
         raise Exception("ALLSTAR failed")
 
     # Check that the output file exists
-    if os.path.exists(outfile) is True:
+    if os.path.exists(toutfile) is True:
         # Move output file to the final filename
         os.rename(toutfile,outfile)
         os.rename(tsubfile,subfile)
+        logger.info("Output file = "+outfile)
         # Remove the temporary links
         for f in [tfile,timfile,toptfile,tpsffile,tapfile]: os.remove(f)        
         # How many sources converged
         num = numlines(outfile)-3
         logger.info(str(num)+" stars converged")
-        logger.info("Final catalog is "+outfile)
+        logger.info("Output file = "+outfile)
     # Failure
     else:
         logger.error("Output file "+outfile+" NOT Found")
