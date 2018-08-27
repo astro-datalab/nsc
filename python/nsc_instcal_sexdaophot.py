@@ -223,11 +223,13 @@ class Exposure:
             t0 = time.time()
             self.logger.info(" ")
             self.logger.info("=== Processing subimage "+str(i)+" ===")
+            # Load the chip
             self.loadchip(i)
             self.logger.info("CCDNUM = "+str(self.chip.ccdnum))
+            # Process it
             self.chip.process()
+            # Clean up 
             self.chip.cleanup()
-            # Copy files to final location?
             self.logger.info("dt = "+str(time.time()-t0)+" seconds")
 
     
@@ -492,10 +494,11 @@ class Chip:
 
 
     # Write SE catalog in DAO format
-    def sextodao(self,outfile,format="coo"):
+    def sextodao(self,cat=None,outfile=None,format="coo"):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
         if outfile is None: outfile=daobase+".coo"
+        if cat is None: cat=self.sexcat
         sextodao(self.sexcat,self.meta,outfile=outfile,format=format,logger=self.logger)
 
     # Run Source Extractor
@@ -504,7 +507,7 @@ class Chip:
         basedir, tmpdir = getnscdirs(self.nscversion)
         configdir = basedir+"config/"
         sexcatfile = "flux_sex.cat.fits"
-        sexcat, maglim = runsex(self.fluxfile,self.wtfile,self.maskfile,self.meta,sexcatfile,self.configdir,logger=self.logger)
+        sexcat, maglim = runsex(self.fluxfile,self.wtfile,self.maskfile,self.meta,sexcatfile,configdir,logger=self.logger)
         self.sexcat = sexcatfile
         self.sexcat = sexcat
         self._sexmaglim = maglim
@@ -525,10 +528,12 @@ class Chip:
 
     # Make DAOPHOT option files
     #--------------------------
-    def mkopt(self,kwargs):
+    #def mkopt(self,**kwargs):
+    def mkopt(self):
         base = os.path.basename(self.daofile)
         base = os.path.splitext(os.path.splitext(base)[0])[0]
-        mkopt(base,self.meta,logger=self.logger,**kwargs)
+        #mkopt(base,self.meta,logger=self.logger,**kwargs)
+        mkopt(base,self.meta,logger=self.logger)
         
     # Make image ready for DAOPHOT
     def mkdaoim(self):
@@ -555,14 +560,14 @@ class Chip:
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
         if maglim is None: maglim=self.maglim
-        psfcat = daopickpsf(self.daofile,daobase+".ap",maglim,nstars,outfile=daobase+".lst",logger=self.logger)
+        psfcat = daopickpsf(self.daofile,daobase+".ap",maglim,daobase+".lst",nstars,logger=self.logger)
 
     # Run DAOPHOT PSF
     #-------------------
     def daopsf(self,verbose=False):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        psfcat = daopickpsf(self.daofile,daobase+".ap",maglim,nstars,outfile=daobase+".lst",verbose=verbose,logger=self.logger)
+        psfcat = daopsf(self.daofile,daobase+".lst",outfile=daobase+".lst",verbose=verbose,logger=self.logger)
 
     # Subtract neighbors of PSF stars
     #--------------------------------
@@ -663,12 +668,13 @@ class Chip:
     #----------------------
     def process(self):
         self.runsex()
+        self.logger("-- Getting ready to run DAOPHOT --")
         self.mkopt()
         self.mkdaoim()
         #self.daodetect()
         # Create DAOPHOT-style coo file
         # Need to use SE positions
-        self.sextodao(self.sexcat,outfile="flux_dao.coo")
+        self.sextodao(outfile="flux_dao.coo")
         self.daoaperphot()
         self.daopickpsf()
         self.createpsf()

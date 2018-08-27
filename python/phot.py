@@ -702,7 +702,7 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
     shutil.copyfile(configdir+"default.param","default.param")
 
     # Read in configuration file and modify for this image
-    lines = readlines('default.config')
+    lines = readlines(configdir+'default.config')
 
     # Gain, saturation, pixscale
 
@@ -1197,7 +1197,7 @@ def mkopt(base=None,meta=None,VA=1,LO=7.0,TH=3.5,LS=0.2,HS=1.0,LR=-1.0,HR=1.0,
         f.write("%2s = %8.2f\n" % (anotarr2[j], outarr2[j]))
     f.close()
 
-    logger.info(" Created "+optfile+" and "+alsoptfile)
+    logger.info("Created "+optfile+" and "+alsoptfile)
 
 
 # Make image ready for DAOPHOT
@@ -1640,6 +1640,7 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
         for f in [tfile,timfile,toptfile,tcoofile,tapersfile]: os.remove(f)
 
         # Get info from the logfile
+        maglim = None
         if os.path.exists(logfile):
             plines = readlines(logfile)
             l1 = grep(plines,"Estimated magnitude limit")
@@ -2267,7 +2268,7 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
 
         # Run DAOPSF
         try:
-            pararr, parchi, profs = daopsf(imfile,wlistfile,apfile)
+            pararr, parchi, profs = daopsf(imfile,wlistfile,apfile,logger=logger)
         except:
             logger.error("Failure in DAOPSF")
             raise
@@ -2298,7 +2299,7 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
     if subneighbors:
         subfile = base+"a.fits"
         try:
-            subpsfnei(imfile,wlistfile,neifile,subfile,psffile=psffile)
+            subpsfnei(imfile,wlistfile,neifile,subfile,psffile=psffile,logger=logger)
         except:
             logger.error("Subtracting neighbors failed.  Keeping original PSF file")
         # Check that the subtracted image exist and rerun DAOPSF
@@ -2306,7 +2307,7 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
             # Final run of DAOPSF
             logger.info("Final DAOPDF run")
             try:
-                pararr, parchi, profs = daopsf(imfile,wlistfile,apfile)
+                pararr, parchi, profs = daopsf(imfile,wlistfile,apfile,logger=logger)
             except:
                 logger.error("Failure in DAOPSF")
                 raise
@@ -2314,7 +2315,7 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
             logger.info("Getting aperture photometry for PSF stars")
             apertures = [3.0, 3.7965, 4.8046, 6.0803, 7.6947, 9.7377, 12.3232, 15.5952, 19.7360, \
                          24.9762, 31.6077, 40.0000, 50.0000]
-            psfcat, maglim = daoaperphot(subfile,wlistfile,apertures,optfile=optfile)
+            psfcat, maglim = daoaperphot(subfile,wlistfile,apertures,optfile=optfile,logger=logger)
 
     # Copy working list to final list
     if os.path.exists(listfile): os.remove(listfile)
