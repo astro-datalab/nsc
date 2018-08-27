@@ -1676,8 +1676,8 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
            The catalog file from which to pick PSF stars.  This is normally the .ap file.
     maglim : float
            The magnitude limit for this image.  
-    ntars : int, optional, default = 100
-          The number of PSF stars to pick.  
+    nstars : int, optional, default = 100
+           The number of PSF stars to pick.  
     optfile : str, optional
             The option file for `imfile`.  By default it is assumed that this is
             the base name of `imfile` with a ".opt" suffix.
