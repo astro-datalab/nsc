@@ -272,6 +272,7 @@ class Chip:
         self.sexcatfile = None
         self.sexcat = None
         self.seeing = None
+        self.apcorr = None
         # Internal hidden variables
         self._rdnoise = None
         self._gain = None
@@ -593,11 +594,13 @@ class Chip:
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
         alscat = allstar(daobase+".fits",daobase+".psf",daobase+".ap",outfile=daobase+".als",logger=self.logger)
         
-    # Run DAOGROW to calculate aperture corrections
-    #----------------------------------------------
-    def daogrow(self):
-        pass
-
+    # Get aperture correction
+    #------------------------
+    def getapcor(self):
+        daobase = os.path.basename(self.daofile)
+        daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
+        apcorr = apcor(daobase+"a.fits",daobase+".lst",daobase+".psf",self.meta,daobase+".als.opt",logger=self.logger)
+        self.apcorr = apcorr
 
     # Combine SE and DAOPHOT catalogs
     #--------------------------------
@@ -619,6 +622,12 @@ class Chip:
         # Load ALS catalog
         als = Table(daoread(daobase+".als"))
         nals = len(als)
+
+        # Apply aperture correction
+        if self.apcorr is None:
+            self.logger.error("No aperture correction available")
+            return
+        als['MAG'] -= self.apcorr
 
         # Just add columns to the SE catalog
         ncat = len(self.sexcat)
@@ -682,6 +691,7 @@ class Chip:
         self.daopickpsf()
         self.createpsf()
         self.allstar()
+        self.getapcor()
         self.finalcat()
 
         # Do I need to rerun daoaperphot to get aperture

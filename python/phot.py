@@ -137,6 +137,55 @@ def parsepars(lines):
     return out, chi
 
 
+# Write DAOPHOT apertures files
+def aperswrite(filename=None,apertures=None):
+    '''
+    This program creates a DAOPHOT file with apertures with an array/list of apertures.
+    The last two are assumed to be the inner and outer sky apertures.
+
+    Parameters
+    ----------
+    filename : str
+        The filename for the apertures.
+    apertures : list or array
+        The array of apertures.
+
+    Returns
+    -------
+    Nothing is returned but the apertures file is created.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        aperswrite("photo.opt",apertures)
+
+    '''
+    # Not enough inputs
+    if filename is None:
+        print("No file name input")
+        return
+    if apertures is None:
+        print("No apertures input")
+        return
+
+    # Make apertures file
+    nap = len(apertures)
+    if nap<3:
+        print("Only "+str(nap)+" apertures input.  Need at least 3")
+        return
+    f = open(filename,'w')
+    for i in range(nap-2):
+        # use hexidecimal for aperture id, 2 digits, first starts with A
+        id = hex(160+i+1)
+        id = id[2:].capitalize()
+        f.write("%2s = %7.4f\n" % (id,apertures[i]))
+    f.write("IS = %7.4f\n" % apertures[nap-2])
+    f.write("OS = %7.4f\n" % apertures[nap-1])
+    f.close()
+
+
 # Read DAOPHOT files
 def daoread(fil):
     '''
@@ -183,11 +232,13 @@ def daoread(fil):
     # NL  is a code indicating the file type:
     # NL = 3 a group file
     # NL = 2 an aperture photometry file
-    # NL = 1 other (output from FIND, PEAK, or NSTAR) or ALLSTAR
+    # NL = 1 other (output from FIND, PEAK, or NSTAR) or ALLSTAR, DAOGROW
     # NL = 0 a file without a header
     
     # Check number of columns
-    ncols = len(lines[3].split())
+    arr1 = lines[3].split()
+    if len(arr1)==0: arr1 = lines[4].split()
+    ncols = len(arr1)
 
     # NL = 1  coo file
     if (nl==1) & (ncols==7):
@@ -201,8 +252,26 @@ def daoread(fil):
             line1 = lines[i+3]
             for j in range(len(names)):
                 cat[i][names[j]] = np.array(line1[lo[j]:hi[j]],dtype=dtype[names[j]])
+    # NL = 1  tot file
+    if (nl==1) & (ncols==9) & (arr1[-1].isdigit() is True):
+        # NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD
+        #  1  2046  4094   117.7 38652.0   13.12    3.00    3.91    1.55    6.00
+        #  
+        #     11  454.570   37.310  13.9710   0.0084  164.683   14.040  -0.0690        6
+        #     36  287.280   93.860  14.5110   0.0126  165.018   14.580  -0.0690        6
+        dtype = np.dtype([('ID',long),('X',float),('Y',float),('MAG',float),('ERR',float),('SKY',float),('MAGFAP',float),('APCORR',float),('FINALAP',int)])
+        cat = np.zeros(nstars,dtype=dtype)
+        lengths = np.array([7,9,9,9,9,9,9,9,9])
+        lo = np.concatenate((np.array([0]), np.cumsum(lengths[0:-1])))
+        hi = lo+lengths
+        names = cat.dtype.names
+        for i in range(nstars):
+            line1 = lines[i+3]
+            for j in range(len(names)):
+                cat[i][names[j]] = np.array(line1[lo[j]:hi[j]],dtype=dtype[names[j]])
+
     # NL = 1  als file
-    elif (nl==1) & (ncols==9):
+    elif (nl==1) & (ncols==9) & (arr1[-1].isdigit() is False):
         dtype = np.dtype([('ID',long),('X',float),('Y',float),('MAG',float),('ERR',float),('SKY',float),('ITER',float),('CHI',float),('SHARP',float)])
         cat = np.zeros(nstars,dtype=dtype)
         lengths = np.array([7,9,9,9,9,9,9,9,9])
@@ -1480,7 +1549,7 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
 
 # DAOPHOT aperture photometry
 #----------------------------
-def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=None,logfile=None,logger=None):
+def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=None,apersfile=None,logfile=None,logger=None):
     '''
     This runs DAOPHOT aperture photometry on an image.
 
@@ -1500,6 +1569,8 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
     optfile : str, optional
             The option file for `imfile`.  By default it is assumed that this is
             the base name of `imfile` with a ".opt" suffix.
+    apersfile : str, optional
+              The file that will constrain the apertures used.
     logfile : str, optional
             The name of the logfile to constrain the output of the DAOPHOT FIND
             run.  By default this is the base name of `imfile` with a ".ap.log" suffix.
@@ -1539,7 +1610,7 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
     if coofile is None: coofile = base+".coo"
     if outfile is None: outfile = base+".ap"
     if logfile is None: logfile = base+".ap.log"
-    apersfile = base+".apers"
+    if apersfile is None: apersfile = base+".apers"
     scriptfile = base+".coo.sh"
     for f in [outfile,apersfile,logfile,scriptfile]:
         if os.path.exists(f): os.remove(f)
@@ -1562,7 +1633,6 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
     os.symlink(imfile,timfile)
     os.symlink(optfile,toptfile)
     os.symlink(coofile,tcoofile)
-    os.symlink(apersfile,tapersfile)
 
     logger.info("coofile = "+coofile)
 
@@ -1572,19 +1642,20 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
         #apertures = [3.0, 3.7965, 4.8046, 6.0803, 7.6947, 9.7377, 12.3232, 15.5952, 19.7360, \
         #             24.9762, 31.6077, 40.0000, 50.0000]
         apertures = [3.000, 6.0803, 9.7377, 15.5952, 19.7360, 40.0000, 50.0000]
-    nap = len(apertures)
-    if nap<3:
-        logger.warning("Only "+str(nap)+" apertures input.  Need at least 3")
-        return None
-    f = open(tapersfile,'w')
-    for i in range(nap-2):
-        # use hexidecimal for aperture id, 2 digits, first starts with A
-        id = hex(160+i+1)
-        id = id[2:].capitalize()
-        f.write("%2s = %7.4f\n" % (id,apertures[i]))
-    f.write("IS = %7.4f\n" % apertures[nap-2])
-    f.write("OS = %7.4f\n" % apertures[nap-1])
-    f.close()
+    aperswrite(tapersfile,apertures)
+    #nap = len(apertures)
+    #if nap<3:
+    #    logger.warning("Only "+str(nap)+" apertures input.  Need at least 3")
+    #    return None
+    #f = open(tapersfile,'w')
+    #for i in range(nap-2):
+    #    # use hexidecimal for aperture id, 2 digits, first starts with A
+    #    id = hex(160+i+1)
+    #    id = id[2:].capitalize()
+    #    f.write("%2s = %7.4f\n" % (id,apertures[i]))
+    #f.write("IS = %7.4f\n" % apertures[nap-2])
+    #f.write("OS = %7.4f\n" % apertures[nap-1])
+    #f.close()
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
@@ -1636,6 +1707,7 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
     if os.path.exists(toutfile) is True:
         # Move output file to the final filename
         os.rename(toutfile,outfile)
+        if apersfile is not None: shutil.copyfile(tapersfile,apersfile)
         # Remove the temporary links
         for f in [tfile,timfile,toptfile,tcoofile,tapersfile]: os.remove(f)
 
@@ -2305,17 +2377,17 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
         # Check that the subtracted image exist and rerun DAOPSF
         if os.path.exists(subfile):
             # Final run of DAOPSF
-            logger.info("Final DAOPDF run")
+            logger.info("Final DAOPSF run")
             try:
                 pararr, parchi, profs = daopsf(imfile,wlistfile,apfile,logger=logger)
             except:
                 logger.error("Failure in DAOPSF")
                 raise
             # Get aperture photometry for PSF stars from subtracted image
-            logger.info("Getting aperture photometry for PSF stars")
-            apertures = [3.0, 3.7965, 4.8046, 6.0803, 7.6947, 9.7377, 12.3232, 15.5952, 19.7360, \
-                         24.9762, 31.6077, 40.0000, 50.0000]
-            psfcat, maglim = daoaperphot(subfile,wlistfile,apertures,optfile=optfile,logger=logger)
+            #logger.info("Getting aperture photometry for PSF stars")
+            #apertures = [3.0, 3.7965, 4.8046, 6.0803, 7.6947, 9.7377, 12.3232, 15.5952, 19.7360, \
+            #             24.9762, 31.6077, 40.0000, 50.0000]
+            #psfcat, maglim = daoaperphot(subfile,wlistfile,apertures,optfile=optfile,logger=logger)
 
     # Copy working list to final list
     if os.path.exists(listfile): os.remove(listfile)
@@ -2397,7 +2469,7 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
             return
 
     # Make temporary short filenames to DAOPHOT can handle them
-    tid,tfile = tempfile.mkstemp(prefix="tsubnei",dir=".")
+    tid,tfile = tempfile.mkstemp(prefix="tals",dir=".")
     tbase = os.path.basename(tfile)
     timfile = tbase+".fits"
     toptfile = tbase+".als.opt"
@@ -2451,7 +2523,6 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
         # Move output file to the final filename
         os.rename(toutfile,outfile)
         os.rename(tsubfile,subfile)
-        logger.info("Output file = "+outfile)
         # Remove the temporary links
         for f in [tfile,timfile,toptfile,tpsffile,tapfile]: os.remove(f)        
         # How many sources converged
@@ -2470,9 +2541,235 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
     return daoread(outfile)
 
 
-# Run DAOGROW to calculate aperture corrections
-#----------------------------------------------
-def daogrow(logger=None):
-    if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
-    print("not implemented yet")
+# Calculate aperture corrections
+#-------------------------------
+def daogrow(photfile,aperfile,meta,logfile=None,logger=None):
+    '''
+    Run DAOGROW that calculates curve of growths using aperture photometry.
 
+    Parameters
+    ----------
+    photfile : str
+             The aperture photometry file.
+    aperfile : str
+             The file containing the apertures used for the aperture photometry.
+    meta : astropy header
+           The meta-data dictionary for the image.
+    logfile : str, optional
+            The name of the logfile to constrain the output of the DAOPHOT FIND
+            run.  By default this is the base name of `imfile` with a ".gro.log" suffix.
+    logger : logging object
+           The logger to use for the logging information.
+
+    Returns
+    -------
+    Nothing is returned but the .tot and other DAOGROW files are cerated.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        daogrow("im101a.ap","photo.opt",meta)
+
+    '''
+    if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
+    logger.info("-- Running DAOGROW --")
+
+    # Make sure we have apfile
+    if photfile is None:
+        logger.warning("No photfile input")
+        return
+    # Make sure we have apfile
+    if aperfile is None:
+        logger.warning("No aperfile input")
+        return
+    # Make sure we have the meta-data dictionary
+    if meta is None:
+        logger.warning("No meta input")
+        return
+
+    # Check that necessary files exist
+    for f in [photfile,aperfile]:
+        if os.path.exists(f) is False:
+            logger.warning(apfile+" NOT found")
+            return
+
+    # Set up filenames, make sure they don't exist
+    base = os.path.basename(photfile)
+    base = os.path.splitext(os.path.splitext(base)[0])[0]
+    if logfile is None: logfile = base+".gro.log"
+    outfile = base+".tot"
+    scriptfile = base+".gro.sh"
+    for f in [logfile,scriptfile,outfile,base+".poi",base+".cur",base+".gro",base+".crl"]:
+        if os.path.exists(f): os.remove(f)
+
+    # Make temporary short filenames to DAOPHOT can handle them
+    tid,tfile = tempfile.mkstemp(prefix="tcoo",dir=".")
+    tbase = os.path.basename(tfile)
+    tphotfile = tbase+".ap"
+    taperfile = tbase+".opt"
+    textfile = tbase+".ext"
+    tinffile = tbase+".inf"
+    toutfile = tbase+".tot"
+    os.symlink(photfile,tphotfile)
+    os.symlink(aperfile,taperfile)
+
+    # Write the .inf and .ext files
+    # F1-00507800_01a                11  04 51  1.900    30.000
+    dateobs = meta['DATE-OBS']
+    timearr = (dateobs.split('T')[1]).split(':')
+    lines = " %-23s %9d %3d %2d %6.3f %9.3f\n" % (tbase,int(timearr[0]),int(timearr[1]),int(float(timearr[2])),meta['airmass'],meta['exptime'])
+    writelines(tinffile,lines)
+    # .ext just has the .ap filename
+    writelines(textfile,tphotfile+"\n")
+
+    # Lines for the DAOPHOT script
+    lines = "#!/bin/sh\n" \
+            "daogrow << DONE >> "+logfile+"\n" \
+            ""+taperfile+"\n" \
+            "\n" \
+            ""+tinffile+"\n" \
+            ""+textfile+"\n" \
+            "3\n" \
+            "0.9,0.0\n" \
+            "0.2\n" \
+            "DONE\n"
+    # Write the script
+    f = open(scriptfile,'w')
+    f.writelines(lines)
+    f.close()
+    os.chmod(scriptfile,0775)
+
+    # Run the script
+    try:
+        retcode = subprocess.call(["./"+scriptfile],stderr=subprocess.STDOUT,shell=False)
+        if retcode < 0:
+            logger.error("Child was terminated by signal"+str(-retcode))
+        else:
+            pass
+    except OSError as e:
+        logger.error("DAOGROW failed:"+str(e))
+        logger.error(e)
+        raise Exception("DAOGROW failed")
+
+    # Check that the outfile file exists
+    if os.path.exists(toutfile) is True:
+        # Move output file to the final filename
+        os.rename(toutfile,outfile)
+        if os.path.exists(tbase+".poi"): os.rename(tbase+".poi",base+".poi")
+        if os.path.exists(tbase+".cur"): os.rename(tbase+".cur",base+".cur")
+        if os.path.exists(tbase+".gro"): os.rename(tbase+".gro",base+".gro")
+        if os.path.exists(tbase+".crl"): os.rename(tbase+".crl",base+".crl")
+        # Remove the temporary links
+        for f in [tfile,tphotfile,taperfile,tinffile,textfile]: os.remove(f)
+
+    # Failure
+    else:
+        logger.error("Output file "+outfile+" NOT Found")
+        raise Exception("Output not found")
+
+    # Delete the script
+    os.remove(scriptfile)
+
+    # Load and return the catalog
+    logger.info("Output file = "+outfile)
+
+
+
+# Calculate aperture corrections
+#-------------------------------
+def apcor(imfile=None,listfile=None,psffile=None,meta=None,optfile=None,logger=None):
+    '''
+    Calculate the aperture correction for an image.
+
+    Parameters
+    ----------
+    imfile : str
+           The filename of the PSF-neighbor-subtracted image.
+    listfile : str
+           The list of PSF stars.
+    psffile : str, optional
+           The name of the PSF file.
+    meta : astropy headre
+         The meta-data dictionary for the image.
+    optfile : str, optional
+            The option file for `imfile`.
+    logfile : str, optional
+            The name of the logfile to constrain the output of the DAOPHOT FIND
+            run.  By default this is the base name of `imfile` with a ".daogrow.log" suffix.
+    logger : logging object
+           The logger to use for the loggin information.
+
+    Returns
+    -------
+    apcor : float
+        The aperture correction in magnitudes.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        apcor = apcor("im101a.fits","im101.lst","im101.psf",meta,"im101.opt")
+
+    '''
+    if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
+    logger.info("-- Calculating aperture correction --")
+
+    # Make sure we have imfile
+    if imfile is None:
+        logger.warning("No image filename input")
+        return
+    # Make sure we have listfile
+    if listfile is None:
+        logger.warning("No listfile input")
+        return
+    # Make sure we have psffile
+    if psffile is None:
+        logger.warning("No psffile input")
+        return
+    # Make sure we have optfile
+    if optfile is None:
+        logger.warning("No optfile input")
+        return
+    # Make sure we have meta
+    if meta is None:
+        logger.warning("No meta input")
+        return
+
+
+    # Check that necessary files exist
+    for f in [imfile,listfile,psffile,optfile]:
+        if os.path.exists(f) is False:
+            logger.warning(f+" NOT found")
+            return
+
+    base = os.path.basename(imfile)
+    base = os.path.splitext(os.path.splitext(base)[0])[0]
+
+    # Step 1: Get aperture photometry for the PSF stars on the PSF-neighbor subtracted image
+    logger.info("Getting aperture photometry for PSF stars")
+    apertures = [3.0, 3.7965, 4.8046, 6.0803, 7.6947, 9.7377, 12.3232, 15.5952, 19.7360, \
+                 24.9762, 31.6077, 40.0000, 50.0000]
+    apersfile = base+".apers"
+    apcat, maglim = daoaperphot(imfile,listfile,apertures,optfile=optfile,apersfile=apersfile,logger=logger)
+
+    # Step 2: Get PSF photometry from the same image
+    psfcat = allstar(imfile,psffile,base+".ap",optfile=optfile,logger=logger)
+
+    # Step 3: Run DAOGROW
+    #  it creates a .tot, .cur, .poi files
+    #  use .tot and .als files to calculate delta mag for each star (see mkdel.pro)
+    #  and then a total aperture correction for all the stars.
+    daogrow(base+".ap",apersfile,meta,logger=logger)
+
+    # Step 4: Calculate median aperture correction
+    totcat = daoread(base+".tot")
+    # Match up with the stars we are deleting
+    mid, ind1, ind2 = np.intersect1d(psfcat['ID'],totcat['ID'],return_indices=True)
+    apcorr = np.median(psfcat[ind1]['MAG']-totcat[ind2]['MAG'])
+
+    logger.info("aperture correction = %7.3f mag" % apcorr)
+
+    return apcorr
