@@ -511,6 +511,9 @@ class Chip:
         self.sexcat = sexcatfile
         self.sexcat = sexcat
         self._sexmaglim = maglim
+        # Set the FWHM as well
+        fwhm = sexfwhm(sexcat,logger=self.logger)
+        self.meta['FWHM'] = fwhm
 
     # Determine FWHM using SE catalog
     #--------------------------------
@@ -668,7 +671,7 @@ class Chip:
     #----------------------
     def process(self):
         self.runsex()
-        self.logger("-- Getting ready to run DAOPHOT --")
+        self.logger.info("-- Getting ready to run DAOPHOT --")
         self.mkopt()
         self.mkdaoim()
         #self.daodetect()

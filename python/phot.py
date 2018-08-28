@@ -873,7 +873,7 @@ def sexfwhm(cat=None,logger=None):
         gdcat = ((cat['MAG_AUTO']< 50) & (cat['MAGERR_AUTO']<0.08))
         ngdcat = np.sum(gdcat)            
     medfwhm = np.median(cat[gdcat]['FWHM_WORLD']*3600.)
-    logger.info('  FWHM = %5.2f arcsec (%d sources)' % (medfwhm, ngdcat))
+    logger.info('FWHM = %5.2f arcsec (%d sources)' % (medfwhm, ngdcat))
 
     return medfwhm
 
