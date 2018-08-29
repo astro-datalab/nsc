@@ -585,7 +585,7 @@ class Chip:
     def createpsf(self,listfile=None,apfile=None,doiter=True,maxiter=5,minstars=6,subneighbors=True,verbose=False):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        createpsf(daobase+".fits",daobase+".ap",daobase+".lst",logger=self.logger)
+        createpsf(daobase+".fits",self.meta,daobase+".ap",daobase+".lst",logger=self.logger)
         
     # Run ALLSTAR
     #-------------
@@ -674,6 +674,8 @@ class Chip:
         # Write to file
         self.logger.info("Final catalog = "+outfile)
         newcat.write(outfile,overwrite=True)
+        fits.append(outfile,0,self.meta)  # meta is header of 2nd extension
+        #fits.writeto(outfile,0,self.meta,overwrite=True)  # meta is header
 
 
     # Process a single chip
