@@ -571,7 +571,7 @@ class Chip:
     def daopsf(self,verbose=False):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        psfcat = daopsf(self.daofile,daobase+".lst",outfile=daobase+".lst",verbose=verbose,logger=self.logger)
+        psfcat = daopsf(self.daofile,daobase+".lst",outfile=daobase+".psf",verbose=verbose,logger=self.logger)
 
     # Subtract neighbors of PSF stars
     #--------------------------------

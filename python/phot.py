@@ -36,7 +36,7 @@ warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 def parseprofs(lines):
     '''
     This parses the PSF profile errors output from the DAOPHOT PSF program.
-    It returns a numpy structured array with ID, CHI, FLAG for the PSF stars.
+    It returns a numpy structured array with ID, SIG, FLAG for the PSF stars.
 
     This is an example of the PDF profile error lines:
     1044  0.010      1039  0.010       304  0.013      1118  0.020       119  0.027   
@@ -51,7 +51,7 @@ def parseprofs(lines):
     Returns
     -------
     profs : numpy structured array
-          The catalog containing ID, CHI and FLAG columns for the PSF stars.
+          The catalog containing ID, SIG, and FLAG columns for the PSF stars.
 
     Example
     -------
@@ -61,7 +61,13 @@ def parseprofs(lines):
         profs = parseprofs(lines)
 
     '''
-    dtype = np.dtype([('ID',int),('CHI',float),('FLAG',np.str_,10)])
+
+    # From psf.f
+    # SIG is the root-mean-square scatter about the best-fitting analytic
+    # function averaged over the central disk of radius FITRAD, expressed
+    # as a fraction of the peak amplitude of the analytic model.
+
+    dtype = np.dtype([('ID',int),('SIG',float),('FLAG',np.str_,10)])
     profs = np.zeros(len(lines)*5,dtype=dtype)
     profs['ID'] = -1
     cnt = 0L
@@ -72,14 +78,14 @@ def parseprofs(lines):
             for j in range(5):
                 line1 = l[j*17:j*17+17]
                 id1 = line1[0:7]
-                chi1 = line1[7:14]
+                sig1 = line1[7:14]
                 flag1 = line1[14:17]
-                if chi1 == " satura":
-                    chi1 = 99.99
+                if sig1 == " satura":
+                    sig1 = 99.99
                     flag1 = "saturated"
                 if id1.strip() != "":
                     profs[cnt]['ID'] = int(id1)
-                    profs[cnt]['CHI'] = float(chi1)
+                    profs[cnt]['SIG'] = float(sig1)
                     profs[cnt]['FLAG'] = flag1.strip()
                     cnt = cnt + 1
     # Trimming any blank ones
@@ -2230,7 +2236,7 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
 
 # Create DAOPHOT PSF
 #-------------------
-def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,maxiter=5,minstars=6,subneighbors=True,
+def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,maxiter=5,minstars=6,nsigrej=2,subneighbors=True,
               subfile=None,optfile=None,neifile=None,nstfile=None,grpfile=None,logfile=None,verbose=False,logger=None):
     '''
     Iteratively create a DAOPHOT PSF for an image.
@@ -2254,6 +2260,8 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
             The maximum number of iterations of removing suspect stars.
     minstars : int, optional, default = 6
             The minimum required stars for a PSF.
+    nsigrej : float, optional, default = 2
+            Reject stars with profile rms scatter higher than 2x the median.
     subneighbors : bool, optional, default = True
              Subtract stars neighboring the PSF stars and then refit the PSF.
     subfile : str, optional
@@ -2335,22 +2343,32 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
     if doiter is False: maxiter=1
     iter = 1
     endflag = 0
+    lastchi = 99.99
+    dchi_thresh = 0.002
     while (endflag==0):
         logger.info("Iter = "+str(iter))
 
         # Run DAOPSF
         try:
             pararr, parchi, profs = daopsf(imfile,wlistfile,apfile,logger=logger)
+            chi = np.min(parchi)
         except:
             logger.error("Failure in DAOPSF")
             raise
 
         # Check for bad stars
         nstars = len(profs)
-        bdstars = (profs['FLAG'] != '')
+        gdstars = (profs['FLAG'] != 'saturated')
+        medsig = np.median(profs['SIG'][gdstars])
+        bdstars = (profs['FLAG'] != '') | (profs['SIG']>nsigrej*medsig)
         nbdstars = np.sum(bdstars)
-        logger.info("  "+str(nbdstars)+" stars with flags")
-        # Delete stars with flags
+        # Make sure we have enough stars left
+        if (nstars-nbdstars < minstars):
+            nbdstars = nstars-minstars
+            si = np.argsort(profs['SIG'])[::-1]
+            bdstars = si[0:nbdstars]  # take the worse ones
+        logger.info("  "+str(nbdstars)+" stars with flag or high sig")
+        # Delete stars with flags or high SIG values
         if (nbdstars>0) & (nstars>minstars):
             listlines = readlines(wlistfile)
             # Read the list
@@ -2364,8 +2382,9 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
             logger.info("  Removing IDs="+str(" ".join(profs[bdstars]['ID'].astype(str))))
             logger.info("  "+str(nbdstars)+" bad stars removed. "+str(nstars-nbdstars)+" PSF stars left")
         # Should we end
-        if (iter==maxiter) | (nbdstars==0) | (nstars<=minstars): endflag=1
+        if (iter==maxiter) | (nbdstars==0) | (nstars<=minstars) | (np.abs(lastchi-chi)<dchi_thresh): endflag=1
         iter = iter+1
+        lastchi = chi
 
     # Subtract PSF star neighbors
     if subneighbors:
@@ -2383,11 +2402,6 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
             except:
                 logger.error("Failure in DAOPSF")
                 raise
-            # Get aperture photometry for PSF stars from subtracted image
-            #logger.info("Getting aperture photometry for PSF stars")
-            #apertures = [3.0, 3.7965, 4.8046, 6.0803, 7.6947, 9.7377, 12.3232, 15.5952, 19.7360, \
-            #             24.9762, 31.6077, 40.0000, 50.0000]
-            #psfcat, maglim = daoaperphot(subfile,wlistfile,apertures,optfile=optfile,logger=logger)
 
     # Copy working list to final list
     if os.path.exists(listfile): os.remove(listfile)
