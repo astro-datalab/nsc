@@ -203,7 +203,7 @@ class Exposure:
             os.remove(maskfile)
         fits.writeto(maskfile,mask,header=mhead,output_verify='warn')        
         # Create the chip object
-        self.chip = Chip(fluxfile,wtfile,maskfile)
+        self.chip = Chip(fluxfile,wtfile,maskfile,self.base)
         self.chip.bigextension = extension
         self.chip.nscversion = self.nscversion
         self.chip.outdir = self.outdir
@@ -257,10 +257,11 @@ class Exposure:
 # Class to represent a single chip of an exposure
 class Chip:
 
-    def __init__(self,fluxfile,wtfile,maskfile):
+    def __init__(self,fluxfile,wtfile,maskfile,bigbase):
         self.fluxfile = fluxfile
         self.wtfile = wtfile
         self.maskfile = maskfile
+        self.bigbase = bigbase
         self.bigextension = None
         base = os.path.basename(fluxfile)
         base = os.path.splitext(os.path.splitext(base)[0])[0]
@@ -585,14 +586,14 @@ class Chip:
     def createpsf(self,listfile=None,apfile=None,doiter=True,maxiter=5,minstars=6,subneighbors=True,verbose=False):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        createpsf(daobase+".fits",self.meta,daobase+".ap",daobase+".lst",logger=self.logger)
+        createpsf(daobase+".fits",daobase+".ap",daobase+".lst",meta=self.meta,logger=self.logger)
         
     # Run ALLSTAR
     #-------------
     def allstar(self,psffile=None,apfile=None,subfile=None):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        alscat = allstar(daobase+".fits",daobase+".psf",daobase+".ap",outfile=daobase+".als",logger=self.logger)
+        alscat = allstar(daobase+".fits",daobase+".psf",daobase+".ap",outfile=daobase+".als",meta=self.meta,logger=self.logger)
         
     # Get aperture correction
     #------------------------
@@ -601,6 +602,7 @@ class Chip:
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
         apcorr = apcor(daobase+"a.fits",daobase+".lst",daobase+".psf",self.meta,daobase+".als.opt",logger=self.logger)
         self.apcorr = apcorr
+        self.meta['apcor'] = (apcorr,"Aperture correction in mags")
 
     # Combine SE and DAOPHOT catalogs
     #--------------------------------
@@ -673,9 +675,15 @@ class Chip:
 
         # Write to file
         self.logger.info("Final catalog = "+outfile)
-        newcat.write(outfile,overwrite=True)
-        fits.append(outfile,0,self.meta)  # meta is header of 2nd extension
-        #fits.writeto(outfile,0,self.meta,overwrite=True)  # meta is header
+        fits.writeto(outfile,None,self.meta,overwrite=True)  # meta in PDU header
+        #  append the table in extension 1
+        hdulist = fits.open(outfile)
+        hdu = fits.table_to_hdu(newcat)
+        hdulist.append(hdu)
+        hdulist.writeto(outfile,overwrite=True)
+        hdulist.close()
+        #newcat.write(outfile,overwrite=True)
+        #fits.append(outfile,0,self.meta)  # meta is header of 2nd extension
 
 
     # Process a single chip
@@ -718,27 +726,27 @@ class Chip:
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
         # Copy the files we want to keep
         # final combined catalog, logs
-        outcatfile = self.outdir+self.base+"_"+str(self.ccdnum)+".fits"
+        outcatfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".fits"
         if os.path.exists(outcatfile): os.remove(outcatfile)
         shutil.copyfile("flux.cat.fits",outcatfile)
         # Copy DAOPHOT opt files
-        outoptfile = self.outdir+self.base+"_"+str(self.ccdnum)+".opt"
+        outoptfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".opt"
         if os.path.exists(outoptfile): os.remove(outoptfile)
         shutil.copyfile(daobase+".opt",outoptfile)
-        outalsoptfile = self.outdir+self.base+"_"+str(self.ccdnum)+".als.opt"
+        outalsoptfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".als.opt"
         if os.path.exists(outalsoptfile): os.remove(outalsoptfile)
         shutil.copyfile(daobase+".als.opt",outalsoptfile)
         # Copy DAOPHOT PSF star list
-        outlstfile = self.outdir+self.base+"_"+str(self.ccdnum)+".psf.lst"
+        outlstfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".psf.lst"
         if os.path.exists(outlstfile): os.remove(outlstfile)
         shutil.copyfile(daobase+".lst",outlstfile)
         # Copy DAOPHOT PSF file
-        outpsffile = self.outdir+self.base+"_"+str(self.ccdnum)+".psf"
+        outpsffile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".psf"
         if os.path.exists(outpsffile): os.remove(outpsffile)
         shutil.copyfile(daobase+".psf",outpsffile)
         # Copy DAOPHOT .apers file??
         # Copy SE config file
-        outconfigfile = self.outdir+self.base+"_"+str(self.ccdnum)+".sex.config"
+        outconfigfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".sex.config"
         if os.path.exists(outconfigfile): os.remove(outconfigfile)
         shutil.copyfile("default.config",outconfigfile)
 
@@ -755,7 +763,7 @@ class Chip:
         f = open(base+".logs","w")
         f.writelines("".join(loglines))
         f.close()
-        outlogfile =  self.outdir+self.base+"_"+str(self.ccdnum)+".logs"
+        outlogfile =  self.outdir+self.bigbase+"_"+str(self.ccdnum)+".logs"
         if os.path.exists(outlogfile): os.remove(outlogfile)
         shutil.copyfile(base+".logs",outlogfile)
 

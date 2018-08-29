@@ -2236,8 +2236,8 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
 
 # Create DAOPHOT PSF
 #-------------------
-def createpsf(imfile=None,meta=None,apfile=None,listfile=None,psffile=None,doiter=True,maxiter=5,minstars=6,nsigrej=2,subneighbors=True,
-              subfile=None,optfile=None,neifile=None,nstfile=None,grpfile=None,logfile=None,verbose=False,logger=None):
+def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,maxiter=5,minstars=6,nsigrej=2,subneighbors=True,
+              subfile=None,optfile=None,neifile=None,nstfile=None,grpfile=None,meta=None,logfile=None,verbose=False,logger=None):
     '''
     Iteratively create a DAOPHOT PSF for an image.
 
@@ -2245,8 +2245,6 @@ def createpsf(imfile=None,meta=None,apfile=None,listfile=None,psffile=None,doite
     ----------
     imfile : str
            The filename of the DAOPHOT-ready FITS image.
-    meta : str
-           The meta-data dictionary for this image.
     apfile : str, optional
            The filename of the photometry file (normally the .ap aperture photometry file).
            By default it is assumed that this is the base name of `imfile` with a ".ap" suffix.
@@ -2281,6 +2279,8 @@ def createpsf(imfile=None,meta=None,apfile=None,listfile=None,psffile=None,doite
     grpfile : str, optional
            The name of the output .grp file that contains information on the groups of stars.
            By default it is assumed that this is the base name of `imfile` with a ".grp" suffix.
+    meta : str, optional
+           The meta-data dictionary for this image.
     logfile : str, optional
             The name of the logfile to constrain the output of the DAOPHOT FIND
             run.  By default this is the base name of `imfile` with a ".subnei.log" suffix.
@@ -2298,7 +2298,7 @@ def createpsf(imfile=None,meta=None,apfile=None,listfile=None,psffile=None,doite
 
     .. code-block:: python
 
-        createpsf("image.fits",meta,"image.ap","image.lst","image.psf")
+        createpsf("image.fits","image.ap","image.lst","image.psf")
 
     '''
 
@@ -2308,10 +2308,6 @@ def createpsf(imfile=None,meta=None,apfile=None,listfile=None,psffile=None,doite
     # Make sure we have the image file name
     if imfile is None:
         logger.warning("No image filename input")
-        return
-    # Make sure we have the meta-data dictionary
-    if meta is None:
-        logger.warning("Meta not input")
         return
 
     # Set up filenames, make sure they don't exist
@@ -2411,8 +2407,9 @@ def createpsf(imfile=None,meta=None,apfile=None,listfile=None,psffile=None,doite
                 raise
 
     # Put information in meta
-    meta['PSFCHI'] = (chi,"Final PSF Chi value")
-    meta['PSFSTARS'] = (len(profs),"Number of PSF stars")
+    if meta is not None:
+        meta['PSFCHI'] = (chi,"Final PSF Chi value")
+        meta['PSFSTARS'] = (len(profs),"Number of PSF stars")
 
     # Copy working list to final list
     if os.path.exists(listfile): os.remove(listfile)
@@ -2422,7 +2419,7 @@ def createpsf(imfile=None,meta=None,apfile=None,listfile=None,psffile=None,doite
 
 # Run ALLSTAR
 #-------------
-def allstar(imfile=None,meta=None,psffile=None,apfile=None,subfile=None,outfile=None,optfile=None,logfile=None,logger=None):
+def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfile=None,meta=None,logfile=None,logger=None):
     '''
     Run DAOPHOT ALLSTAR on an image.
 
@@ -2430,8 +2427,6 @@ def allstar(imfile=None,meta=None,psffile=None,apfile=None,subfile=None,outfile=
     ----------
     imfile : str
            The filename of the DAOPHOT-ready FITS image.
-    meta : str
-           The meta-data dictionary for this image.
     psffile : str, optional
            The name of the PSF file.  By default it is assumed that this is the base name of
            `imfile` with a ".psf" suffix.
@@ -2446,6 +2441,8 @@ def allstar(imfile=None,meta=None,psffile=None,apfile=None,subfile=None,outfile=
     optfile : str, optional
             The option file for `imfile`.  By default it is assumed that this is
             the base name of `imfile` with a ".opt" suffix.
+    meta : str, optional
+           The meta-data dictionary for this image.
     logfile : str, optional
             The name of the logfile to constrain the output of the DAOPHOT FIND
             run.  By default this is the base name of `imfile` with a ".subnei.log" suffix.
@@ -2464,7 +2461,7 @@ def allstar(imfile=None,meta=None,psffile=None,apfile=None,subfile=None,outfile=
 
     .. code-block:: python
 
-        cat = allstar("image.fits",meta,"image.psf")
+        cat = allstar("image.fits","image.psf")
 
     '''
 
@@ -2474,10 +2471,6 @@ def allstar(imfile=None,meta=None,psffile=None,apfile=None,subfile=None,outfile=
     # Make sure we have the image file name
     if imfile is None:
         logger.warning("No image filename input")
-        return
-    # Make sure we have the meta-data dictionary
-    if meta is None:
-        logger.warning("Meta not input")
         return
 
     # Set up filenames, make sure they don't exist
@@ -2569,7 +2562,8 @@ def allstar(imfile=None,meta=None,psffile=None,apfile=None,subfile=None,outfile=
     os.remove(scriptfile)
 
     # Put information in the header
-    meta["NALLSTAR"] = (len(num),"Number of ALLSTAR converged sources")
+    if meta is not None:
+        meta["NALLSTAR"] = (num,"Number of ALLSTAR converged sources")
 
     # Return the final catalog
     return daoread(outfile)
