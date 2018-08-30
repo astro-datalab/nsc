@@ -600,7 +600,7 @@ class Chip:
     def getapcor(self):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        apcorr = apcor(daobase+"a.fits",daobase+".lst",daobase+".psf",self.meta,daobase+".als.opt",logger=self.logger)
+        apcorr = apcor(daobase+"a.fits",daobase+".lst",daobase+".psf",self.meta,optfile=daobase+'.opt',alsoptfile=daobase+".als.opt",logger=self.logger)
         self.apcorr = apcorr
         self.meta['apcor'] = (apcorr,"Aperture correction in mags")
 

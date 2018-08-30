@@ -2440,7 +2440,7 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
             The file name of the final .als source catalog.
     optfile : str, optional
             The option file for `imfile`.  By default it is assumed that this is
-            the base name of `imfile` with a ".opt" suffix.
+            the base name of `imfile` with a ".als.opt" suffix.
     meta : str, optional
            The meta-data dictionary for this image.
     logfile : str, optional
@@ -2707,7 +2707,7 @@ def daogrow(photfile,aperfile,meta,logfile=None,logger=None):
 
 # Calculate aperture corrections
 #-------------------------------
-def apcor(imfile=None,listfile=None,psffile=None,meta=None,optfile=None,logger=None):
+def apcor(imfile=None,listfile=None,psffile=None,meta=None,optfile=None,alsoptfile=None,logger=None):
     '''
     Calculate the aperture correction for an image.
 
@@ -2722,7 +2722,9 @@ def apcor(imfile=None,listfile=None,psffile=None,meta=None,optfile=None,logger=N
     meta : astropy headre
          The meta-data dictionary for the image.
     optfile : str, optional
-            The option file for `imfile`.
+            The DAOPHOT option file for `imfile`.
+    alsoptfile : str, optional
+            The ALLSTAR option file for `imfile`.
     logfile : str, optional
             The name of the logfile to constrain the output of the DAOPHOT FIND
             run.  By default this is the base name of `imfile` with a ".daogrow.log" suffix.
@@ -2761,6 +2763,10 @@ def apcor(imfile=None,listfile=None,psffile=None,meta=None,optfile=None,logger=N
     if optfile is None:
         logger.warning("No optfile input")
         return
+    # Make sure we have alsoptfile
+    if alsoptfile is None:
+        logger.warning("No alsoptfile input")
+        return
     # Make sure we have meta
     if meta is None:
         logger.warning("No meta input")
@@ -2784,7 +2790,7 @@ def apcor(imfile=None,listfile=None,psffile=None,meta=None,optfile=None,logger=N
     apcat, maglim = daoaperphot(imfile,listfile,apertures,optfile=optfile,apersfile=apersfile,logger=logger)
 
     # Step 2: Get PSF photometry from the same image
-    psfcat = allstar(imfile,psffile,base+".ap",optfile=optfile,logger=logger)
+    psfcat = allstar(imfile,psffile,base+".ap",optfile=alsoptfile,logger=logger)
 
     # Step 3: Run DAOGROW
     #  it creates a .tot, .cur, .poi files
