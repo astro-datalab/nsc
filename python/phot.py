@@ -477,7 +477,7 @@ def makemeta(fluxfile=None,header=None):
 
 
 # Write SE catalog in DAO format
-def sextodao(cat=None,meta=None,outfile=None,format="lst",logger=None,naxis1=None,naxis2=None,saturate=None,rdnoise=None,gain=None):
+def sextodao(cat=None,meta=None,outfile=None,format="lst",naxis1=None,naxis2=None,saturate=None,rdnoise=None,gain=None,lowbad=None,logger=None):
     '''
     This writes out a Source Extractor catalog in a DAOPHOT format.
 
@@ -492,8 +492,6 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",logger=None,naxis1=Non
             The output filename.
     format : str, (lst, coo, ap, als)
            The output DAOPHOT format (lst, coo, ap, als).
-    logger : logger object, optional
-           The Logger to use for logging output.
     naxis1 : int, optional
            The X-dimensional size (in pixels) of the image.
     naxis2 : int, optional
@@ -504,6 +502,10 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",logger=None,naxis1=Non
            The read noise of the image (in electrons).
     gain : float, optional
            The gain of the image (electrons/ADU).
+    lowbad : float, optional
+           The lower limit of the good range of values.
+    logger : logger object, optional
+           The Logger to use for logging output.
 
     Returns
     -------
@@ -1429,6 +1431,12 @@ def mkdaoim(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,logge
 
     fhead.append('GAIN',meta["GAIN"])
     fhead.append('RDNOISE',meta["RDNOISE"])
+
+    # DAOPHOT can only handle BITPIX=16, 32, -32
+    if fhead['BITPIX'] not in [16,32,-3]:
+        logger.info("BITPIX="+str(fhead['BITPIX'])+" DAOPHOT can only handle 16,32,-32.  Changing to -32")
+        flux = np.array(flux,dtype=np.float32)
+        fhead['BITPIX'] = -32
 
     # Write new image
     logger.info("Wrote DAOPHOT-ready image to "+outfile)
