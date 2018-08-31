@@ -130,14 +130,21 @@ def parsepars(lines):
         out, chi = parseparse(lines)
 
     '''
+    # Only want lines with ">>"
+    #  somtimes theare is a  "Failed to converge." line
+    lines2 = grep(lines,">>")
+    if len(lines2)==0:
+        print("No lines with >> found")
+        return None, None
     out = []
     chi = []
-    for i in range(len(lines)):
-        line1 = lines[i].strip()
+    for i in range(len(lines2)):
+        line1 = lines2[i].strip()
         if line1[0:2] == ">>": line1=line1[2:]  # strip leading >>
         line1.strip()
         arr = line1.split()                # split on whitespace
         if len(arr)>0:
+            chi.append(float(arr[0]))
             chi.append(float(arr[0]))
             out.append(arr)
     return out, chi
@@ -531,6 +538,15 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",logger=None,naxis1=Non
     if saturate is None: saturate=meta['SATURATE']
     if rdnoise is None: rdnoise=meta['RDNOISE']
     if gain is None: gain=meta['GAIN']
+    if lowbad is None:
+        if meta.get('SKYMED') is not None:
+            skymed = meta['SKYMED']
+            skyrms = meta['SKYRMS']
+            lowbad = skymed-7.*skyrms > 0.0
+        else:
+            logger.info("No sky value found in meta.  Using LOWBAD=1.0")
+            lowbad = 1.0
+
 
     # Formats: coo, lst, ap, als
 
@@ -560,7 +576,7 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",logger=None,naxis1=Non
         # Header
         f.write(" NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD\n")
         f.write("  3 %5d %5d %7.1f %7.1f %7.2f %7.2f %7.2f %7.2f %7.2f\n" %
-                (naxis1,naxis2,1000.0,saturate,100.0,3.0,gain,rdnoise/gain,3.9))
+                (naxis1,naxis2,lowbad,saturate,100.0,3.0,gain,rdnoise/gain,3.9))
         f.write("\n")
         #f.write("  3  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90\n")
         # Write the data
@@ -582,7 +598,7 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",logger=None,naxis1=Non
         # Header
         f.write(" NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD\n")
         f.write("  3 %5d %5d %7.1f %7.1f %7.2f %7.2f %7.2f %7.2f %7.2f\n" %
-                (naxis1,naxis2,1000.0,saturate,100.0,3.0,gain,rdnoise/gain,3.9))
+                (naxis1,naxis2,lowbad,saturate,100.0,3.0,gain,rdnoise/gain,3.9))
         f.write("\n")
         #f.write("  3  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90\n")
         # Write the data
@@ -609,7 +625,7 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",logger=None,naxis1=Non
         # Header
         f.write(" NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD\n")
         f.write("  3 %5d %5d %7.1f %7.1f %7.2f %7.2f %7.2f %7.2f %7.2f\n" %
-                (naxis1,naxis2,1000.0,saturate,100.0,3.0,gain,rdnoise/gain,3.9))
+                (naxis1,naxis2,lowbad,saturate,100.0,3.0,gain,rdnoise/gain,3.9))
         f.write("\n")
         #f.write("  3  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90\n")
         # Write the data
@@ -648,7 +664,7 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
               default.config, default.conv, default.nnw, default.param
     logfile : str, optional
             The name to use for the logfile.  If this is not input then the name will
-            be the base name of `fluxfile` with the suffix ".sex.log".
+            be the base name of `fluxfile` with the suffix "_sex.log".
     logger : logger object, optional
            The Logger to use for logging output.
 
@@ -701,7 +717,7 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
 
     base = os.path.basename(fluxfile)
     base = os.path.splitext(os.path.splitext(base)[0])[0]
-    if logfile is None: logfile=base+".sex.log"
+    if logfile is None: logfile=base+"_sex.log"
 
     # Working filenames
     sexbase = base+"_sex"
@@ -890,6 +906,17 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
         mag_sorted = np.sort(mag)
         maglim = mag_sorted[int(np.round(0.90*ngdcat))]
         logger.info("Estimated magnitude limit = %6.2f mag" % maglim)
+        # Get background value and RMS and add to meta
+        plines = readlines(logfile)
+        plines2 = grep(plines,'Background')
+        arr = plines2[0].split()
+        ind1 = grep(arr,'Background:',index=True)
+        ind2 = grep(arr,'RMS',index=True)
+        ind3 = grep(arr,'Threshold',index=True)
+        background = np.float(arr[ind1[0]+1])
+        rms = np.float(arr[ind2[0]+1])
+        meta["SKYMED"] = (background,"Median sky background")
+        meta["SKYRMS"] = (rms,"RMS of sky")
 
     # Delete temporary files
     os.remove(sfluxfile)
