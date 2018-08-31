@@ -477,7 +477,7 @@ def makemeta(fluxfile=None,header=None):
 
 
 # Write SE catalog in DAO format
-def sextodao(cat=None,meta=None,outfile=None,format="lst",naxis1=None,naxis2=None,saturate=None,rdnoise=None,gain=None,lowbad=None,logger=None):
+def sextodao(cat=None,meta=None,outfile=None,format="lst",naxis1=None,naxis2=None,saturate=None,rdnoise=None,gain=None,lowbad=None,thresh=None,logger=None):
     '''
     This writes out a Source Extractor catalog in a DAOPHOT format.
 
@@ -504,6 +504,8 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",naxis1=None,naxis2=Non
            The gain of the image (electrons/ADU).
     lowbad : float, optional
            The lower limit of the good range of values.
+    thresh : float, optional
+           The detection threshold.
     logger : logger object, optional
            The Logger to use for logging output.
 
@@ -545,9 +547,11 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",naxis1=None,naxis2=Non
             skymed = meta['SKYMED']
             skyrms = meta['SKYRMS']
             lowbad = skymed-7.*skyrms > 0.0
+            thresh = skyrms*3.5
         else:
             logger.info("No sky value found in meta.  Using LOWBAD=1.0")
             lowbad = 1.0
+    if thresh is None: thresh=20.0
 
 
     # Formats: coo, lst, ap, als
@@ -578,7 +582,7 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",naxis1=None,naxis2=Non
         # Header
         f.write(" NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD\n")
         f.write("  3 %5d %5d %7.1f %7.1f %7.2f %7.2f %7.2f %7.2f %7.2f\n" %
-                (naxis1,naxis2,lowbad,saturate,100.0,3.0,gain,rdnoise/gain,3.9))
+                (naxis1,naxis2,lowbad,saturate,thresh,3.0,gain,rdnoise/gain,3.9))
         f.write("\n")
         #f.write("  3  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90\n")
         # Write the data
@@ -600,7 +604,7 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",naxis1=None,naxis2=Non
         # Header
         f.write(" NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD\n")
         f.write("  3 %5d %5d %7.1f %7.1f %7.2f %7.2f %7.2f %7.2f %7.2f\n" %
-                (naxis1,naxis2,lowbad,saturate,100.0,3.0,gain,rdnoise/gain,3.9))
+                (naxis1,naxis2,lowbad,saturate,thresh,3.0,gain,rdnoise/gain,3.9))
         f.write("\n")
         #f.write("  3  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90\n")
         # Write the data
@@ -627,7 +631,7 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",naxis1=None,naxis2=Non
         # Header
         f.write(" NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD\n")
         f.write("  3 %5d %5d %7.1f %7.1f %7.2f %7.2f %7.2f %7.2f %7.2f\n" %
-                (naxis1,naxis2,lowbad,saturate,100.0,3.0,gain,rdnoise/gain,3.9))
+                (naxis1,naxis2,lowbad,saturate,thresh,3.0,gain,rdnoise/gain,3.9))
         f.write("\n")
         #f.write("  3  2046  4094  1472.8 38652.0   80.94    3.00    3.91    1.55    3.90\n")
         # Write the data
