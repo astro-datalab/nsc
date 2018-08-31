@@ -2571,7 +2571,7 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
 
 # Calculate aperture corrections
 #-------------------------------
-def daogrow(photfile,aperfile,meta,logfile=None,logger=None):
+def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=None,logger=None):
     '''
     Run DAOGROW that calculates curve of growths using aperture photometry.
 
@@ -2583,6 +2583,13 @@ def daogrow(photfile,aperfile,meta,logfile=None,logger=None):
              The file containing the apertures used for the aperture photometry.
     meta : astropy header
            The meta-data dictionary for the image.
+    nfree : float, optional, default = 3
+          The number of parameters to fit.  Max is 5.
+    fixedvals : float, optional
+          The values for the parameters that are fixed.  Shoul have 5-nfree elements.
+          By default they are [1.03, 0.2, 0.1, 0.6, 0.0].
+    maxerr : float, optional, default = 0.2
+           The maximum error to allow in DAOGROW.
     logfile : str, optional
             The name of the logfile to constrain the output of the DAOPHOT FIND
             run.  By default this is the base name of `imfile` with a ".gro.log" suffix.
@@ -2591,14 +2598,16 @@ def daogrow(photfile,aperfile,meta,logfile=None,logger=None):
 
     Returns
     -------
-    Nothing is returned but the .tot and other DAOGROW files are cerated.
+    totcat : astropy table
+           The aperture corrected photometry file (.tot).
+    Also, the .tot and other DAOGROW files are created. 
 
     Example
     -------
 
     .. code-block:: python
 
-        daogrow("im101a.ap","photo.opt",meta)
+        totcat = daogrow("im101a.ap","photo.opt",meta)
 
     '''
     if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
@@ -2607,21 +2616,27 @@ def daogrow(photfile,aperfile,meta,logfile=None,logger=None):
     # Make sure we have apfile
     if photfile is None:
         logger.warning("No photfile input")
-        return
+        return None
     # Make sure we have apfile
     if aperfile is None:
         logger.warning("No aperfile input")
-        return
+        return None
     # Make sure we have the meta-data dictionary
     if meta is None:
         logger.warning("No meta input")
-        return
+        return None
+
+    # Checked number of elements for fixedvals
+    if fixedvals is not None:
+        if len(fixedvals) != 5-nfree:
+            logger.warning("Fixedvals must have 5-nfree elements."+str(len(fixedvals))+" found.")
+            return None
 
     # Check that necessary files exist
     for f in [photfile,aperfile]:
         if os.path.exists(f) is False:
             logger.warning(apfile+" NOT found")
-            return
+            return None
 
     # Set up filenames, make sure they don't exist
     base = os.path.basename(photfile)
@@ -2652,6 +2667,11 @@ def daogrow(photfile,aperfile,meta,logfile=None,logger=None):
     # .ext just has the .ap filename
     writelines(textfile,tphotfile+"\n")
 
+    # The fixed values for the other parameters that are fixed
+    if fixedvals is None:
+        allfixedvals = [1.03, 0.2, 0.1, 0.6, 0.0]
+        fixedvals = allfixedvals[nfree:]
+
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
             "daogrow << DONE >> "+logfile+"\n" \
@@ -2659,9 +2679,9 @@ def daogrow(photfile,aperfile,meta,logfile=None,logger=None):
             "\n" \
             ""+tinffile+"\n" \
             ""+textfile+"\n" \
-            "3\n" \
-            "0.9,0.0\n" \
-            "0.2\n" \
+            ""+str(nfree)+"\n" \
+            ""+",".join(np.array(fixedvals).astype(str))+"\n" \
+            ""+str(maxerr)+"\n" \
             "DONE\n"
     # Write the script
     f = open(scriptfile,'w')
@@ -2703,6 +2723,8 @@ def daogrow(photfile,aperfile,meta,logfile=None,logger=None):
     # Load and return the catalog
     logger.info("Output file = "+outfile)
 
+    # Return the .tot catalog
+    return daoread(outfile)
 
 
 # Calculate aperture corrections
@@ -2796,7 +2818,14 @@ def apcor(imfile=None,listfile=None,psffile=None,meta=None,optfile=None,alsoptfi
     #  it creates a .tot, .cur, .poi files
     #  use .tot and .als files to calculate delta mag for each star (see mkdel.pro)
     #  and then a total aperture correction for all the stars.
-    daogrow(base+".ap",apersfile,meta,logger=logger)
+    totcat = daogrow(base+".ap",apersfile,meta,logger=logger)
+    # Check that the magnitudes arent' all NANs, this can sometimes happen
+    if np.sum(np.isnan(totcat['MAG'])) > 0:
+        logger.info("DAOGROW .tot file has NANs.  Trying 2 free parameters instead.")
+        totcat = daogrow(base+".ap",apersfile,meta,nfree=2,logger=logger)
+    if np.sum(np.isnan(totcat['MAG'])) > 0:
+        logger.info("DAOGROW .tot file has NANs.  Trying 4 free parameters instead.")
+        totcat = daogrow(base+".ap",apersfile,meta,nfree=4,logger=logger)
 
     # Step 4: Calculate median aperture correction
     totcat = daoread(base+".tot")
