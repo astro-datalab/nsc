@@ -442,15 +442,21 @@ def makemeta(fluxfile=None,header=None):
             rdnoise = (rdnoisea+rdnoiseb)*0.5
             meta["RDNOISE"] = rdnoise
         # Check other names
-        else:
+        if meta.get('RDNOISE') is None:
             for name in ['READNOIS','ENOISE']:
                 if name in meta.keys(): meta['RDNOISE']=meta[name]
+        # Bok
+        if meta['INSTCODE'] == 'ksb':
+            meta['RDNOISE']= [6.625, 7.4, 8.2, 7.1][meta['CCDNUM']-1]
+        if meta.get('RDNOISE') is None:
+            print('No RDNOISE found')
+            return
     #- GAIN -
     if "GAIN" not in meta.keys():
         try:
             gainmap = { 'c4d': lambda x: 0.5*(x.get('GAINA')+x.get('GAINB')),
                         'k4m': lambda x: x.get('GAIN'),
-                        'ksb': lambda x: [1.3,1.5,1.4,1.4][ccdnum-1] }  # bok gain in HDU0, use list here
+                        'ksb': lambda x: [1.3,1.5,1.4,1.4][x.get['CCDNUM']-1] }  # bok gain in HDU0, use list here
             gain = gainmap[meta["INSTCODE"]](meta)
             meta["GAIN"] = gain
         except:
