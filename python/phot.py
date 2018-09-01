@@ -1443,7 +1443,7 @@ def mkdaoim(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,logge
     fhead.append('RDNOISE',meta["RDNOISE"])
 
     # DAOPHOT can only handle BITPIX=16, 32, -32
-    if fhead['BITPIX'] not in [16,32,-3]:
+    if fhead['BITPIX'] not in [16,32,-32]:
         logger.info("BITPIX="+str(fhead['BITPIX'])+" DAOPHOT can only handle 16,32,-32.  Changing to -32")
         flux = np.array(flux,dtype=np.float32)
         fhead['BITPIX'] = -32
