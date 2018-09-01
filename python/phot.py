@@ -2707,7 +2707,11 @@ def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=Non
     # F1-00507800_01a                11  04 51  1.900    30.000
     dateobs = meta['DATE-OBS']
     timearr = (dateobs.split('T')[1]).split(':')
-    lines = " %-23s %9d %3d %2d %6.3f %9.3f\n" % (tbase,int(timearr[0]),int(timearr[1]),int(float(timearr[2])),meta['airmass'],meta['exptime'])
+    if meta.get('airmass') is not None:
+        airmass = meta['airmass']
+    else: 
+        airmass = 1.0
+    lines = " %-23s %9d %3d %2d %6.3f %9.3f\n" % (tbase,int(timearr[0]),int(timearr[1]),int(float(timearr[2])),airmass,meta['exptime'])
     writelines(tinffile,lines)
     # .ext just has the .ap filename
     writelines(textfile,tphotfile+"\n")
