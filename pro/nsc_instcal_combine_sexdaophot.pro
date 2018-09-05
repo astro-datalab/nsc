@@ -155,7 +155,7 @@ schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,raerr:0.0d0,decerr:0.0d0,pmra:0.0d
               ndetu:0,nphotu:0,umag:0.0,urms:0.0,uerr:0.0,uasemi:0.0,ubsemi:0.0,utheta:0.0,$
               ndetg:0,nphotg:0,gmag:0.0,grms:0.0,gerr:0.0,gasemi:0.0,gbsemi:0.0,gtheta:0.0,$
               ndetr:0,nphotr:0,rmag:0.0,rrms:0.0,rerr:0.0,rasemi:0.0,rbsemi:0.0,rtheta:0.0,$
-              ndeti:0,nphoti:0,imag:99.9,irms:0.0,ierr:0.0,iasemi:0.0,ibsemi:0.0,itheta:0.0,$
+              ndeti:0,nphoti:0,imag:0.0,irms:0.0,ierr:0.0,iasemi:0.0,ibsemi:0.0,itheta:0.0,$
               ndetz:0,nphotz:0,zmag:0.0,zrms:0.0,zerr:0.0,zasemi:0.0,zbsemi:0.0,ztheta:0.0,$
               ndety:0,nphoty:0,ymag:0.0,yrms:0.0,yerr:0.0,yasemi:0.0,ybsemi:0.0,ytheta:0.0,$
               ndetvr:0,nphotvr:0,vrmag:0.0,vrrms:0.0,vrerr:0.0,vrasemi:0.0,vrbsemi:0.0,vrtheta:0.0,$
@@ -187,6 +187,10 @@ FOR i=0,nlist-1 do begin
     pos = strpos(file,'_cat')
     metafile = strmid(file,0,pos)+'_meta.fits'
   endif
+  if file_test(metafile) eq 0 then begin
+    print,metafile,' NOT FOUND'
+    goto,BOMB
+  endif
   meta = MRDFITS(metafile,1,/silent)
   meta.base = strtrim(meta.base)
   meta.expnum = strtrim(meta.expnum)
@@ -212,7 +216,7 @@ FOR i=0,nlist-1 do begin
   print,'  ',strtrim(ncat,2),' sources'
 
   ; Make sure it's in the right format
-  if n_tags(cat) ne 45 then begin   ; 49 for v1
+  if n_tags(cat) ne 55 then begin   ; 49 for v1
     print,'  This catalog does not have the right format. Skipping'
     goto,BOMB
   endif
