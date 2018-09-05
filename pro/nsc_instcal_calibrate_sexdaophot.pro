@@ -44,9 +44,9 @@ printlog,logf,'This is a '+instrument+' exposure'
 ;-----------------------------
 printlog,logf,'' & printlog,logf,'Step 1. Read in the catalogs'
 printlog,logf,'-----------------------------'
-catfiles1 = file_search(expdir+'/'+base+'_[1-9].psphot.cat.fits',count=ncatfiles1)
+catfiles1 = file_search(expdir+'/'+base+'_[1-9].fits',count=ncatfiles1)
 if ncatfiles1 gt 0 then push,catfiles,catfiles1
-catfiles2 = file_search(expdir+'/'+base+'_[0-9][0-9].psphot.cat.fits',count=ncatfiles2)
+catfiles2 = file_search(expdir+'/'+base+'_[0-9][0-9].fits',count=ncatfiles2)
 if ncatfiles2 gt 0 then push,catfiles,catfiles2
 ncatfiles = n_elements(catfiles)
 if ncatfiles eq 0 then begin
@@ -113,15 +113,16 @@ for i=0,ncatfiles-1 do begin
   hd = headfits(catfiles[i],exten=1)
   cat1 = MRDFITS(catfiles[i],1,/silent)
   ncat1 = sxpar(hd,'naxis2')  ; handles empty catalogs
-  ;; The IPP_IDET numbers are all negative for some reason
-  cat1.ipp_idet = cat1.ipp_idet-min(cat1.ipp_idet)+1
   ;ncat1 = n_elements(cat1)
   chstr[i].filename = catfiles[i]
   chstr[i].ccdnum = ccdnum
   chstr[i].nsources = ncat1
   ; Get the chip corners
-  ;; mdl.fits[0] has the original header
-  hd1 = HEADFITS(expdir+'/'+base+'_'+strtrim(ccdnum,2)+'.psphot.mdl.fits',exten=0)
+  hd1 = HEADFITS(catfiles[i],exten=0)
+  if n_elements(hd1) lt 20 then begin
+    print,'Old version of NSC_INSTCAL_SEXDAOPHOT.PY run on this exposure.  RERUN!'
+    return
+  endif
   nx = sxpar(hd1,'NAXIS1')
   ny = sxpar(hd1,'NAXIS2')
   extast,hd1,ast,noparams  ; check the WCS
@@ -136,30 +137,26 @@ for i=0,ncatfiles-1 do begin
     temp = cat[cnt:cnt+ncat1-1]
     STRUCT_ASSIGN,cat1,temp,/nozero
     temp.ccdnum = ccdnum
-    temp.ra = cat1.ra_psf  ; add these here in case the astrometric correction fails later on
-    temp.dec = cat1.dec_psf
-    ;; Add coordinate uncertainties
-    ;;   sigma = 0.644*FWHM/SNR
-    ;;   SNR = 1.087/magerr
-    ;snr = 1.087/temp.magerr_auto
-    ;bderr = where(temp.magerr_auto gt 10 and temp.magerr_iso lt 10,nbderr)
-    ;if nbderr gt 0 then snr[bderr]=1.087/temp[bderr].magerr_iso
-    ;bderr = where(temp.magerr_auto gt 10 and temp.magerr_iso gt 10,nbderr)
-    ;if nbderr gt 0 then snr[bderr] = 1
-    ;coorderr = 0.664*(temp.fwhm_world*3600)/snr
-    ;; Use X/Y_PSF_SIG and convert to arcsec
-    ;temp.raerr = coorderr
-    ;temp.decerr = coorderr
-    ;pixscale = max(abs(ast.cd))*3600.   ; "/pix
-    temp.raerr = cat1.x_psf_sig*abs(cat1.pltscale)
-    temp.decerr = cat1.y_psf_sig*abs(cat1.pltscale)
+    temp.ra = cat1.rapsf  ; add these here in case the astrometric correction fails later on
+    temp.dec = cat1.decpsf
+    ; Add coordinate uncertainties
+    ;   sigma = 0.644*FWHM/SNR
+    ;   SNR = 1.087/magerr
+    snr = 1.087/temp.magerr_auto
+    bderr = where(temp.magerr_auto gt 10 and temp.magerr_iso lt 10,nbderr)
+    if nbderr gt 0 then snr[bderr]=1.087/temp[bderr].magerr_iso
+    bderr = where(temp.magerr_auto gt 10 and temp.magerr_iso gt 10,nbderr)
+    if nbderr gt 0 then snr[bderr] = 1
+    coorderr = 0.664*(temp.fwhm_world*3600)/snr
+    temp.raerr = coorderr
+    temp.decerr = coorderr
     ; Stuff into main structure
     cat[cnt:cnt+ncat1-1] = temp
     cnt += ncat1
-    cenra = mean(minmax(cat1.ra_psf))
+    cenra = mean(minmax(cat1.rapsf))
     ; Wrapping around RA=0
-    if range(cat1.ra_psf) gt 100 then begin
-      ra = cat1.ra_psf
+    if range(cat1.rapsf) gt 100 then begin
+      ra = cat1.rapsf
       bdra = where(ra gt 180,nbdra)
       if nbdra gt 0 then ra[bdra]-=360
       bdra2 = where(ra lt -180,nbdra2)
@@ -168,7 +165,7 @@ for i=0,ncatfiles-1 do begin
       if cenra lt 0 then cenra+=360
     endif
     chstr[i].cenra = cenra
-    chstr[i].cendec = mean(minmax(cat1.dec_psf))
+    chstr[i].cendec = mean(minmax(cat1.decpsf))
   endif
   BOMB1:
 endfor
@@ -212,7 +209,7 @@ printlog,logf,'FWHM = ',stringize(medfwhm,ndec=2),' arcsec'
 
 ; Load the logfile and get absolute flux filename
 READLINE,expdir+'/'+base+'.log',loglines
-ind = where(stregex(loglines,'Step #2: Copying InstCal images from mass store archive',/boolean) eq 1,nind)
+ind = where(stregex(loglines,'Copying InstCal images from mass store archive',/boolean) eq 1,nind)
 fline = loglines[ind[0]+1]
 lo = strpos(fline,'/archive')
 ; make sure the mss1 directory is correct for this server
@@ -265,7 +262,7 @@ printlog,logf,'MJD = ',stringize(mjd,ndec=4,/nocomma)
 ; Set some catalog values
 cat.filter = filter
 cat.mjd = mjd
-cat.sourceid = instrument+'.'+strtrim(expnum,2)+'.'+strtrim(cat.ccdnum,2)+'.'+strtrim(cat.ipp_idet,2)
+cat.sourceid = instrument+'.'+strtrim(expnum,2)+'.'+strtrim(cat.ccdnum,2)+'.'+strtrim(cat.number,2)
 
 ; Start the exposure-level structure
 expstr = {file:fluxfile,wtfile:wtfile,maskfile:maskfile,instrument:'',base:base,expnum:long(expnum),ra:0.0d0,dec:0.0d0,dateobs:string(dateobs),$
@@ -300,14 +297,14 @@ if n_elements(inpref) eq 0 then begin
 endif else begin
   printlog,logf,'Reference catalogs input'
   if rawrap eq 0 then begin
-    gdref = where(inpref.ra ge min(cat.ra_psf)-0.01 and inpref.ra le max(cat.ra_psf)+0.01 and $
-                  inpref.dec ge min(cat.dec_psf)-0.01 and inpref.dec le max(cat.dec_psf)+0.01,ngdref)
+    gdref = where(inpref.ra ge min(cat.rapsf)-0.01 and inpref.ra le max(cat.rapsf)+0.01 and $
+                  inpref.dec ge min(cat.decpsf)-0.01 and inpref.dec le max(cat.decpsf)+0.01,ngdref)
   endif else begin
-    ra = cat.ra_psf
+    ra = cat.rapsf
     bdra = where(ra gt 180,nbdra)
     if nbdra gt 0 then ra[bdra]-=360
     gdref = where((inpref.ra le max(ra)+0.01 or inpref.ra ge min(ra+360)-0.01) and $
-                  inpref.dec ge min(cat.dec_psf)-0.01 and inpref.dec le max(cat.dec_psf)+0.01,ngdref)
+                  inpref.dec ge min(cat.decpsf)-0.01 and inpref.dec le max(cat.decpsf)+0.01,ngdref)
   endelse
   ref = inpref[gdref]
   printlog,logf,strtrim(ngdref,2),' reference stars in our region'
@@ -323,7 +320,7 @@ printlog,logf,'--------------------------------'
 gdgaia = where(ref.source gt 0,ngdgaia)
 gaia = ref[gdgaia]
 ; Match everything to Gaia at once, this is much faster!
-SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat.ra_psf,cat.dec_psf,1.0,ind1,ind2,/sph,count=ngmatch
+SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat.rapsf,cat.decpsf,1.0,ind1,ind2,/sph,count=ngmatch
 if ngmatch eq 0 then begin
   printlog,logf,'No gaia matches'
   return
@@ -331,7 +328,7 @@ endif
 allgaiaind = lonarr(ncat)-1
 allgaiaind[ind2] = ind1
 allgaiadist = fltarr(ncat)+999999.
-allgaiadist[ind2] = sphdist(gaia[ind1].ra_icrs,gaia[ind1].de_icrs,cat[ind2].ra_psf,cat[ind2].dec_psf,/deg)*3600
+allgaiadist[ind2] = sphdist(gaia[ind1].ra_icrs,gaia[ind1].de_icrs,cat[ind2].rapsf,cat[ind2].decpsf,/deg)*3600
 ; CCD loop
 For i=0,nchips-1 do begin
   if chstr[i].nsources eq 0 then goto,BOMB
@@ -376,7 +373,7 @@ For i=0,nchips-1 do begin
 
   ; Rotate to coordinates relative to the center of the field
   ROTSPHCEN,gaia2.ra_icrs,gaia2.de_icrs,chstr[i].cenra,chstr[i].cendec,gaialon,gaialat,/gnomic
-  ROTSPHCEN,cat2.ra_psf,cat2.dec_psf,chstr[i].cenra,chstr[i].cendec,lon1,lat1,/gnomic
+  ROTSPHCEN,cat2.rapsf,cat2.decpsf,chstr[i].cenra,chstr[i].cendec,lon1,lat1,/gnomic
   ; ---- Fit RA as function of RA/DEC ----
   londiff = gaialon-lon1
   err = sqrt(gaia2.e_ra_icrs^2 + cat2.raerr^2)
@@ -426,7 +423,7 @@ For i=0,nchips-1 do begin
                 ' GAIA matches  RMS(RA/DEC)=',stringize(rarms,ndec=3)+'/'+stringize(decrms,ndec=3),' STDERR(RA/DEC)=',$
                 stringize(rastderr,ndec=4)+'/'+stringize(decstderr,ndec=4),' arcsec'
   ; Apply to all sources
-  ROTSPHCEN,cat1.ra_psf,cat1.dec_psf,chstr[i].cenra,chstr[i].cendec,lon,lat,/gnomic
+  ROTSPHCEN,cat1.rapsf,cat1.decpsf,chstr[i].cenra,chstr[i].cendec,lon,lat,/gnomic
   lon2 = lon + FUNC_POLY2D(lon,lat,racoef)
   lat2 = lat + FUNC_POLY2D(lon,lat,deccoef)
   ROTSPHCEN,lon2,lat2,chstr[i].cenra,chstr[i].cendec,ra2,dec2,/reverse,/gnomic
@@ -487,12 +484,15 @@ CASE instfilt of
   gmagerr = 2.5*alog10(1.0+ref1.e_fg/ref1.fg)
   ; (G-J)o = G-J-1.12*EBV
   col = ref1.gmag - ref1.jmag - 1.12*cat1.ebv
-  gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.psf_qf gt 0.9 and $
+  gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                abs(cat1.sharp) lt 1.0 and cat1.chi lt 3.0 and cat1.class_star gt 0.8 and $
+                cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and ref1.qflg eq 'AAA' and $
                 ref1.e_jmag lt 0.05 and finite(ref1.nuv) eq 1 and ref1.nuv lt 50 and col ge 0.8 and col le 1.1,ngdcat)
   ;  if the seeing is bad then class_star sometimes doens't work well
   if medfwhm gt 1.8 and ngdcat lt 100 then begin
-    gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.psf_qf gt 0.9 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  abs(cat1.sharp) lt 1.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and ref1.qflg eq 'AAA' and $
                   ref1.e_jmag lt 0.05 and finite(ref1.nuv) eq 1 and ref1.nuv lt 50 and col ge 0.8 and col le 1.1,ngdcat)
   endif
@@ -533,10 +533,12 @@ end
     cat1 = cat[ind2]
     ref1 = ref[ind1]
     ; Make quality and error cuts
-    gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.psf_qf gt 0.9 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  abs(cat1.sharp) lt 1.0 and cat1.chi lt 3.0 and cat1.magpsf lt 50 and cat1.class_star gt 0.8 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_gmag gt 0 and ref1.ps_gmag lt 21.0,ngdcat)
     if ngdcat lt 10 then $
-      gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
+      gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                    abs(cat1.sharp) lt 1.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
                     cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_gmag gt 0 and ref1.ps_gmag lt 21.0,ngdcat)
     if ngdcat eq 0 then begin
       printlog,logf,'No stars that pass all of the quality/error cuts'
@@ -566,12 +568,14 @@ end
     ref1 = ref[ind1]
     ; Make quality and error cuts
     col = ref1.jmag-ref1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
-    gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.psf_qf gt 0.9 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  abs(cat1.sharp) lt 1.0 and cat1.chi lt 3.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.class_star gt 0.8 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ref1.qflg eq 'AAA' and $
                   ref1.e_jmag lt 0.05 and ref1.e_apass_gmag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
     ;  if the seeing is bad then class_star sometimes doens't work well
     if medfwhm gt 1.8 and ngdcat lt 100 then begin
-      gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
+      gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                    abs(cat1.sharp) lt 1.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
                     cat1.fwhm_world*3600 lt 2*medfwhm and ref1.qflg eq 'AAA' and $
                     ref1.e_jmag lt 0.05 and ref1.e_apass_gmag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
     endif
@@ -611,11 +615,13 @@ end
     cat1 = cat[ind2]
     ref1 = ref[ind1]
     ; Make quality and error cuts
-    gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.psf_qf gt 0.9 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  abs(cat1.sharp) lt 1.0 and cat1.chi lt 3.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.class_star gt 0.8 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_rmag gt 0 and ref1.ps_rmag lt 21.0,ngdcat)
     ; Don't use CLASS_STAR threshold if not enough sources are selected
     if ngdcat lt 10 then $
-      gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
+      gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                    abs(cat1.sharp) lt 1.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
                     cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_rmag gt 0 and ref1.ps_rmag lt 21.0,ngdcat)
     if ngdcat eq 0 then begin
       printlog,logf,'No stars that pass all of the quality/error cuts'
@@ -645,12 +651,14 @@ end
     ref1 = ref[ind1]
     ; Make quality and error cuts
     col = ref1.jmag-ref1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
-    gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.psf_qf gt 0.9 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  abs(cat1.sharp) lt 1.0 and cat1.chi lt 3.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.class_star gt 0.8 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ref1.qflg eq 'AAA' and $
                   ref1.e_jmag lt 0.05 and ref1.e_apass_rmag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
     ;  if the seeing is bad then things don't work as well
     if medfwhm gt 1.8 and ngdcat lt 100 then begin
-      gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
+      gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                    abs(cat1.sharp) lt 1.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
                     cat1.fwhm_world*3600 lt 2*medfwhm and ref1.qflg eq 'AAA' and $
                     ref1.e_jmag lt 0.05 and ref1.e_apass_rmag lt 0.1 and col ge 0.3 and col le 0.7,ngdcat)
     endif
@@ -690,11 +698,13 @@ end
     cat1 = cat[ind2]
     ref1 = ref[ind1]
     ; Make quality and error cuts
-    gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.psf_qf gt 0.9 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  abs(cat1.sharp) lt 1.0 and cat1.chi lt 3.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.class_star gt 0.8 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_imag gt 0 and ref1.ps_imag lt 21.0,ngdcat)
     ; Don't use CLASS_STAR threshold if not enough sources are selected
     if ngdcat lt 10 then $
-      gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
+      gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                    abs(cat1.sharp) lt 1.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
                     cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_imag gt 0 and ref1.ps_imag lt 21.0,ngdcat)
     if ngdcat eq 0 then begin
       printlog,logf,'No stars that pass all of the quality/error cuts'
@@ -725,12 +735,14 @@ end
     ; Make quality and error cuts
     gmagerr = 2.5*alog10(1.0+ref1.e_fg/ref1.fg)
     col = ref1.jmag-ref1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
-    gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.psf_qf gt 0.9 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  abs(cat1.sharp) lt 1.0 and cat1.chi lt 3.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.class_star gt 0.8 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and ref1.qflg eq 'AAA' and $
                   ref1.e_jmag lt 0.05 and col ge 0.25 and col le 0.65,ngdcat)
     ;  if the seeing is bad then things don't work as well
     if medfwhm gt 1.8 and ngdcat lt 100 then $
-      gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
+      gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                    abs(cat1.sharp) lt 1.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
                     cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and ref1.qflg eq 'AAA' and $
                     ref1.e_jmag lt 0.05 and col ge 0.25 and col le 0.65,ngdcat)
     if ngdcat eq 0 then begin
@@ -767,10 +779,12 @@ end
     cat1 = cat[ind2]
     ref1 = ref[ind1]
     ; Make quality and error cuts
-    gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.psf_qf gt 0.9 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  abs(cat1.sharp) lt 1.0 and cat1.chi lt 3.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.class_star gt 0.8 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_zmag gt 0 and ref1.ps_zmag lt 21.0,ngdcat)
     if ngdcat lt 10 then $
-      gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
+      gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                    abs(cat1.sharp) lt 1.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
                     cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_zmag gt 0 and ref1.ps_zmag lt 21.0,ngdcat)
     if ngdcat eq 0 then begin
       printlog,logf,'No stars that pass all of the quality/error cuts'
@@ -800,12 +814,14 @@ end
     ref1 = ref[ind1]
     ; Make quality and error cuts
     col = ref1.jmag-ref1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
-    gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.psf_qf gt 0.9 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  abs(cat1.sharp) lt 1.0 and cat1.chi lt 3.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.class_star gt 0.8 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ref1.qflg eq 'AAA' and $
                   ref1.e_jmag lt 0.05 and col ge 0.4 and col le 0.65,ngdcat)
     ; if the seeing is bad then things don't work as well
     if medfwhm gt 1.8 and ngdcat lt 100 then $
-      gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
+      gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                    abs(cat1.sharp) lt 1.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
                     cat1.fwhm_world*3600 lt 2*medfwhm and ref1.qflg eq 'AAA' and $
                     ref1.e_jmag lt 0.05 and col ge 0.4 and col le 0.65,ngdcat)
     if ngdcat eq 0 then begin
@@ -841,10 +857,12 @@ end
     cat1 = cat[ind2]
     ref1 = ref[ind1]
     ; Make quality and error cuts
-    gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.psf_qf gt 0.9 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  abs(cat1.sharp) lt 1.0 and cat1.chi lt 3.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.class_star gt 0.8 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_ymag lt 21.0,ngdcat)
     if ngdcat lt 10 then $
-      gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
+      gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                    abs(cat1.sharp) lt 1.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
                     cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_ymag lt 21.0,ngdcat)
     if ngdcat eq 0 then begin
       printlog,logf,'No stars that pass all of the quality/error cuts'
@@ -874,12 +892,14 @@ end
     ref1 = ref[ind1]
     ; Make quality and error cuts
     col = ref1.jmag-ref1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
-    gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.psf_qf gt 0.9 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  abs(cat1.sharp) lt 1.0 and cat1.chi lt 3.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.class_star gt 0.8 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ref1.qflg eq 'AAA' and $
                   ref1.e_jmag lt 0.05 and col ge 0.4 and col le 0.7,ngdcat)
     ; if the seeing is bad then things don't work as well
     if medfwhm gt 1.8 and ngdcat lt 100 then $
-      gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
+      gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                    abs(cat1.sharp) lt 1.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
                     cat1.fwhm_world*3600 lt 2*medfwhm and ref1.qflg eq 'AAA' and $
                     ref1.e_jmag lt 0.05 and col ge 0.4 and col le 0.7,ngdcat)
     if ngdcat eq 0 then begin
@@ -915,12 +935,14 @@ end
   ; Make quality and error cuts
   gmagerr = 2.5*alog10(1.0+ref1.e_fg/ref1.fg)
   col = ref1.jmag-ref1.kmag-0.17*cat1.ebv  ; (J-Ks)o = J-Ks-0.17*EBV
-  gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.psf_qf gt 0.9 and $
+  gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                abs(cat1.sharp) lt 1.0 and cat1.chi lt 3.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and ref1.qflg eq 'AAA' and $
                 ref1.e_jmag lt 0.05 and col ge 0.2 and col le 0.6,ngdcat)
   ;  if the seeing is bad then things don't work as well
   if medfwhm gt 2 and ngdcat lt 100 then begin
-    gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  abs(cat1.sharp) lt 1.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and gmagerr lt 0.05 and ref1.qflg eq 'AAA' and $
                   ref1.e_jmag lt 0.05 and col ge 0.2 and col le 0.6,ngdcat)
   endif
@@ -953,10 +975,12 @@ end
   cat1 = cat[ind2]
   ref1 = ref[ind1]
   ; Make quality and error cuts
-  gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.psf_qf gt 0.9 and $
+  gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                abs(cat1.sharp) lt 1.0 and cat1.chi lt 3.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_gmag gt 0 and ref1.ps_gmag lt 21.0,ngdcat)
   if ngdcat lt 10 then $
-    gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  abs(cat1.sharp) lt 1.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_gmag gt 0 and ref1.ps_gmag lt 21.0,ngdcat)
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
@@ -986,10 +1010,12 @@ end
   cat1 = cat[ind2]
   ref1 = ref[ind1]
   ; Make quality and error cuts
-  gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.psf_qf gt 0.9 and $
+  gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                abs(cat1.sharp) lt 1.0 and cat1.chi lt 3.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_rmag gt 0 and ref1.ps_rmag lt 21.0,ngdcat)
   if ngdcat lt 10 then $
-    gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  abs(cat1.sharp) lt 1.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_rmag gt 0 and ref1.ps_rmag lt 21.0,ngdcat)
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
@@ -1019,10 +1045,12 @@ end
   cat1 = cat[ind2]
   ref1 = ref[ind1]
   ; Make quality and error cuts
-  gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.psf_qf gt 0.9 and $
+  gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                abs(cat1.sharp) lt 1.0 and cat1.chi lt 3.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.05 and cat1.class_star gt 0.8 and $
                 cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_zmag gt 0 and ref1.ps_zmag lt 21.0,ngdcat)
   if ngdcat lt 10 then $
-    gdcat = where(cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
+    gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                  abs(cat1.sharp) lt 1.0 and cat1.magpsf lt 50 and cat1.errpsf lt 0.10 and $
                   cat1.fwhm_world*3600 lt 2*medfwhm and ref1.ps_zmag gt 0 and ref1.ps_zmag lt 21.0,ngdcat)
   if ngdcat eq 0 then begin
     printlog,logf,'No stars that pass all of the quality/error cuts'
