@@ -1,0 +1,32 @@
+#Name        |    FORMAT  |     UNITS           |   UCD                              |  DESCRIPTION
+MEASID       |    CHAR    |     None            |   meta.id;meta.main                |  Unique measurement ID
+OBJECTID     |    CHAR    |     None            |   meta.id;meta.main                |  Unique object ID
+EXPOSURE     |    CHAR    |     None            |   meta.id;meta.main                |  Exposure name
+CCDNUM       |    INTEGER |     None            |   meta.id;meta.main                |  CCD number
+FILTER       |    CHAR    |     None            |   instr.filter                     |  Filter (u, g, r, i, z, Y, VR)
+MJD          |    DOUBLE  |     Days            |   time.epoch                       |  Observation Modified Julian Date
+X            |    REAL    |     Pixels          |   pos.cartesian.x                  |  Centroid in X-dimension (1st moment), in pixels
+Y            |    REAL    |     Pixels          |   pos.cartesian.y                  |  Centroid in Y-dimension (1st moment), in pixels
+RA           |    DOUBLE  |     Degrees         |   pos.eq.ra;meta.main              |  Right ascension (J2000.0) of object, in degrees
+RAERR        |    DOUBLE  |     Arcseconds      |   stat.error                       |  Uncertainty of RA
+DEC          |    DOUBLE  |     Degrees         |   pos.eq.dec;meta.main             |  Declination (J2000.0) of object, in degrees
+DECERR       |    DOUBLE  |     Arcseconds      |   stat.error                       |  Uncertainty in DEC
+MAG_AUTO     |    REAL    |     Magnitude       |   phot.mag                         |  Automatic elliptical aperture photometry
+MAGERR_AUTO  |    REAL    |     Magnitude       |   stat.error;phot.mag              |  Uncertainty in MAG_AUTO
+MAG_APER1    |    REAL    |     Magnitude       |   phot.mag                         |  Aperture photometry in 1" diameter aperture
+MAGERR_APER1 |    REAL    |     Magnitude       |   stat.error;phot.mag              |  Uncertainty in MAG_APER1
+MAG_APER2    |    REAL    |     Magnitude       |   phot.mag                         |  Aperture photometry in 2" diameter aperture
+MAGERR_APER2 |    REAL    |     Magnitude       |   stat.error;phot.mag              |  Uncertainty in MAG_APER2
+MAG_APER4    |    REAL    |     Magnitude       |   phot.mag                         |  Aperture photometry in 4" diameter aperture
+MAGERR_APER4 |    REAL    |     Magnitude       |   stat.error;phot.mag              |  Uncertainty in MAG_APER4
+MAG_APER8    |    REAL    |     Magnitude       |   phot.mag                         |  Aperture photometry in 8" diameter aperture
+MAGERR_APER8 |    REAL    |     Magnitude       |   stat.error;phot.mag              |  Uncertainty in MAG_APER8
+KRON_RADIUS  |    REAL    |     Arcseconds      |   phys.angSize                     |  Kron radius, in arcseconds
+ASEMI        |    REAL    |     Degrees         |   phys.angSize.smajAxis            |  Profile RMS along major axis, in arcseconds
+ASEMIERR     |    REAL    |     Degrees         |   stat.error;phys.angSize.smajAxis |  Uncertainty in ASEMI
+BSEMI        |    REAL    |     Degrees         |   phys.angSize.sminAxis            |  Profile RMS along minor axis, in arcseconds
+BSEMIERR     |    REAL    |     Degrees         |   stat.error;phys.angSize.smajAxis |  Uncertainty in BSEMI
+THETA        |    REAL    |     Degrees         |   pos.posAng                       |  Position-angle measured CCW East of North, in degrees
+THETAERR     |    REAL    |     Degrees         |   stat.error;pos.posAng            |  Uncertainty in THETA
+FWHM         |    REAL    |     Arcseconds      |   phys.angSize                     |  FWHM assuming a gaussian core, in arcseconds
+FLAGS        |    INTEGER |     None            |   meta.code                        |  SExtractor FLAG value 

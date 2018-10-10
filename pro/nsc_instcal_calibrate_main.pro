@@ -106,31 +106,101 @@ dirs = strarr(nexpdirs)+tmpdir
 ;; hulk
 ;PBS_DAEMON,cmd[0:6000],dirs[0:6000],jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
 
+; Rerun all u-band exposures
+;sum=mrdfits(dldir+'users/dnidever/nsc/instcal/v2/lists/nsc_instcal_calibrate.fits',1)
+;sum.filter = strtrim(sum.filter,2)
+;sum.expdir = strtrim(sum.expdir,2)
+;g=where(sum.filter eq 'u',ng)
+;expdir = sum[g].expdir
+;bd = where(strmid(expdir,0,4) eq '/net',nbd)
+;expdir[bd] = strmid(expdir[bd],4)
+;cmd = 'nsc_instcal_calibrate,"'+expdir+'",/redo'
+;dirs = strarr(ng)+tmpdir
 
-; Rerun failures with selfcal
+; Run self-cal on failed u-band exposures
 sum=mrdfits(dldir+'users/dnidever/nsc/instcal/v2/lists/nsc_instcal_calibrate.fits',1)
 sum.filter = strtrim(sum.filter,2)
+sum.instrument = strtrim(sum.instrument,2)
 sum.expdir = strtrim(sum.expdir,2)
-g=where(sum.success eq 1 and sum.nrefmatch le 5,ng)
-expdir = sum[g].expdir
-bd = where(strmid(expdir,0,4) eq '/net',nbd)
-expdir[bd] = strmid(expdir[bd],4)
+instfilt = sum.instrument+'-'+sum.filter
+ifilt = 'c4d-u'
+bd = where(instfilt eq ifilt and sum.nrefmatch eq 0,nbd)
+gd = where(instfilt eq ifilt and sum.nrefmatch gt 10,ngd)
+gdsum = sum[gd]
+
+refmatch = lonarr(nbd)
+for i=0,nbd-1 do begin
+  minradius = 0.43
+  if sum[bd[i]].instrument eq 'ksb' then minradius=minradius > 0.75
+  if sum[bd[i]].instrument eq 'c4d' then minradius=minradius > 1.1
+  MATCH,gdsum.pix,sum[bd[i]].pix,ind1,ind2,/sort,count=nmatch
+  if nmatch gt 0 then begin
+    gddec = gdsum[ind1].dec
+    dist = sphdist(gdsum[ind1].ra,gdsum[ind1].dec,sum[bd[i]].ra,sum[bd[i]].dec,/deg)
+    ;gddist = where(dist lt minradius or gddec gt -30,ngddist)
+    gddist = where(dist lt minradius,ngddist)
+    refmatch[i] = ngddist
+ endif
+endfor
+
+g = where(refmatch gt 0,ng)
+expdir = sum[bd[g]].expdir
+bb = where(strmid(expdir,0,4) eq '/net',nbb)
+expdir[bb] = strmid(expdir[bb],4)
 cmd = 'nsc_instcal_calibrate,"'+expdir+'",/redo,/selfcal'
 dirs = strarr(ng)+tmpdir
-lockfiles = expdir+file_basename(expdir)+'.lock'
-donefiles = expdir+file_basename(expdir)+'.caldone'
-done = where(file_test(donefiles) eq 1,ndone)
-if ndone gt 0 then remove,done,cmd,dirs
+;PBS_DAEMON,cmd,dirs,jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti 
 
+stop
 
 ; hulk
-;PBS_DAEMON,cmd[0:2781],dirs[0:2781],jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
+;PBS_DAEMON,cmd[0:3383],dirs[0:3383],jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
 
 ; thing
-;PBS_DAEMON,cmd[2782:5563],dirs[2782:5563],jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
+;PBS_DAEMON,cmd[3384:6767],dirs[3384:6767],jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
+
+; gp09
+;PBS_DAEMON,cmd[6768:*],dirs[6768:*],jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
+
+; Rerun failures with selfcal
+;sum=mrdfits(dldir+'users/dnidever/nsc/instcal/v2/lists/nsc_instcal_calibrate.fits',1)
+;sum.filter = strtrim(sum.filter,2)
+;sum.expdir = strtrim(sum.expdir,2)
+;g=where(sum.success eq 1 and sum.nrefmatch le 5,ng)
+;expdir = sum[g].expdir
+;bd = where(strmid(expdir,0,4) eq '/net',nbd)
+;expdir[bd] = strmid(expdir[bd],4)
+;cmd = 'nsc_instcal_calibrate,"'+expdir+'",/redo,/selfcal'
+;dirs = strarr(ng)+tmpdir
+;;lockfiles = expdir+file_basename(expdir)+'.lock'
+;;donefiles = expdir+file_basename(expdir)+'.caldone'
+;;done = where(file_test(donefiles) eq 1,ndone)
+;;if ndone gt 0 then remove,done,cmd,dirs,expdir
 
 ; hulk
-;PBS_DAEMON,cmd[5564:*],dirs[5564:*],jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
+;PBS_DAEMON,cmd[0:3586],dirs[0:3586],jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
+
+; thing
+;PBS_DAEMON,cmd[3587:7173],dirs[3587:7173],jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
+
+; gp09
+;PBS_DAEMON,cmd[7174:*],dirs[7174:*],jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
+
+
+; which ones still need to be done
+;outfile = expdir+'/'+file_basename(expdir)+'_meta.v1.fits'
+;otest = file_test(outfile)
+;done2 = where(otest eq 1,ndone2)
+;if ndone2 gt 0 then remove,done2,cmd,dirs
+
+; hulk
+;PBS_DAEMON,cmd[0:1143],dirs[0:1143],jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
+
+; thing
+;PBS_DAEMON,cmd[1144:2287],dirs[1144:2287],jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
+
+; gp09
+;PBS_DAEMON,cmd[2288:*],dirs[2288:*],jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
 
 stop
 
