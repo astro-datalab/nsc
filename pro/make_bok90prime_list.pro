@@ -4,7 +4,7 @@ pro make_bok90prime_list,all
 NSC_ROOTDIRS,dldir,mssdir,localdir
 dir = dldir+'users/dnidever/nsc/'
 
-version = 'v2'
+version = 'v3' ;'v2'
 
 ; Load all of the instcal exposures
 if n_elements(all) eq 0 then begin
@@ -13,7 +13,8 @@ if n_elements(all) eq 0 then begin
   all.dtnsanam = strtrim(all.dtnsanam,2)
   all.dtacqnam = strtrim(all.dtacqnam,2)
   all.proctype = strtrim(all.proctype,2)
-  all.prodtype2 = strtrim(all.prodtype2,2)
+  ;all.prodtype2 = strtrim(all.prodtype2,2)
+  all.prodtype = strtrim(all.prodtype,2)
   all.date_obs = strtrim(all.date_obs,2)
   all.plver = strtrim(all.plver,2)
   ; Fix URI, ALREADY FIXED!!!
@@ -23,7 +24,8 @@ if n_elements(all) eq 0 then begin
 endif
 
 ; Get just the images
-gdim = where(all.proctype eq 'InstCal' and all.prodtype2 eq 'image',ngim)
+;gdim = where(all.proctype eq 'InstCal' and all.prodtype2 eq 'image',ngim)
+gdim = where(all.proctype eq 'InstCal' and all.prodtype eq 'image',ngim)
 imstr = all[gdim]
 
 ; Get unique IDs
@@ -38,7 +40,7 @@ nrname = n_elements(urname)
 ;  this also demotes blank PLVER entries
 print,'Dealing with duplicates'
 ;  this could be faster with better index management
-;alldbl = doubles(rawname,/all)
+alldbl = doubles(rawname,/all)
 dbl = doubles(rawname,count=ndbl)
 undefine,torem
 for i=0,ndbl-1 do begin
@@ -111,7 +113,8 @@ release_month = long(strmid(release_date,5,2))
 release_day = long(strmid(release_date,8,2))
 release_mjd = JULDAY(release_month,release_day,release_year)-2400000.5d0
 ;release_cutoff = [2017,4,24]  ; v1 - April 24, 2017
-release_cutoff = [2017,10,11]  ; v2 - Oct 11, 2017
+;release_cutoff = [2017,10,11] ; v2 - Oct 11, 2017
+release_cutoff = [2018,10,9]  ; v2 - Oct 9, 2018
 release_cutoff_mjd = JULDAY(release_cutoff[1],release_cutoff[2],release_cutoff[0])-2400000.5d0
 gdrelease = where(release_mjd le release_cutoff_mjd,ngdrelease,comp=bdrelease,ncomp=nbdrelease)
 print,strtrim(ngdrelease,2),' exposures are PUBLIC'

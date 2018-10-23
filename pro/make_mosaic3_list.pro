@@ -4,27 +4,29 @@ pro make_mosaic3_list,all
 NSC_ROOTDIRS,dldir,mssdir,localdir
 dir = dldir+'users/dnidever/nsc/'
 
-version = 'v2'
+version = 'v3' ;'v2'
 
 ; Load all of the instcal exposures
 if n_elements(all) eq 0 then begin
-  ;all = mrdfits(dir+"mosaic3_archive_info.fits.gz",1)
+  ;all = mrdfits(dir+'instcal/'+version+'/lists/mosaic3_archive_info.fits.gz',1)
   all = mrdfits(dir+'instcal/'+version+'/lists/mosaic3_archive_info.fits.gz',1)
   all.dtnsanam = strtrim(all.dtnsanam,2)
   all.dtacqnam = strtrim(all.dtacqnam,2)
   all.proctype = strtrim(all.proctype,2)
-  all.prodtype2 = strtrim(all.prodtype2,2)
+  ;all.prodtype2 = strtrim(all.prodtype2,2)
+  all.prodtype = strtrim(all.prodtype,2)
   all.date_obs = strtrim(all.date_obs,2)
   all.plver = strtrim(all.plver,2)
-  ; Fix URI, ALREADY FIXED!!!
-  ;uri = repstr(all.uri, 'irods:///noao-tuc-z1/', '/net/mss1/archive/')
-  ;uri = strtrim(uri,2)
-  ;all.uri = uri
+  ;; Fix URI, ALREADY FIXED!!!
+  uri = repstr(all.uri, 'irods:///noao-tuc-z1/', '/net/mss1/archive/')
+  uri = strtrim(uri,2)
+  all.uri = uri
   all.uri = strtrim(all.uri,2)
 endif
 
 ; Get just the images
-gdim = where(all.proctype eq 'InstCal' and all.prodtype2 eq 'image',ngim)
+;gdim = where(all.proctype eq 'InstCal' and all.prodtype2 eq 'image',ngim)
+gdim = where(all.proctype eq 'InstCal' and all.prodtype eq 'image',ngim)
 imstr = all[gdim]
 
 ; Get unique IDs
@@ -42,8 +44,10 @@ print,'Dealing with duplicates'
 alldbl = doubles(rawname,/all)
 dbl = doubles(rawname)
 ndbl = n_elements(dbl)
+print,strtrim(ndbl,2),' duplicates'
 undefine,torem
 for i=0,ndbl-1 do begin
+  if i mod 1000 eq 0 then print,i
   MATCH,rawname[alldbl],rawname[dbl[i]],ind1,ind2,/sort,count=nmatch
   dblind1 = alldbl[ind1]
   plver = imstr[dblind1].plver
@@ -108,7 +112,8 @@ bd = where(str.maskfile eq '' or str.wtfile eq '',nbd)
 allraw = file_basename(all.dtacqnam)
 ; mask file
 strid = str[bd].rawname+'-'+str[bd].plver+'-InstCal-dqmask'
-allid = allraw+'-'+all.plver+'-'+all.proctype+'-'+all.prodtype2
+;allid = allraw+'-'+all.plver+'-'+all.proctype+'-'+all.prodtype2
+allid = allraw+'-'+all.plver+'-'+all.proctype+'-'+all.prodtype
 MATCH,allid,strid,ind1,ind2,/sort,count=nmatch
 str[bd[ind2]].maskfile = all[ind1].uri
 ; wtmap file
@@ -129,7 +134,8 @@ release_month = long(strmid(release_date,5,2))
 release_day = long(strmid(release_date,8,2))
 release_mjd = JULDAY(release_month,release_day,release_year)-2400000.5d0
 ;release_cutoff = [2017,4,24]  ; v1 - April 24, 2017
-release_cutoff = [2017,10,11]  ; v2 - Oct 11, 2017
+;release_cutoff = [2017,10,11]  ; v2 - Oct 11, 2017
+release_cutoff = [2018,10,9]  ; v3 - Oct 9, 2018
 release_cutoff_mjd = JULDAY(release_cutoff[1],release_cutoff[2],release_cutoff[0])-2400000.5d0
 gdrelease = where(release_mjd le release_cutoff_mjd,ngdrelease,comp=bdrelease,ncomp=nbdrelease)
 print,strtrim(ngdrelease,2),' exposures are PUBLIC'
