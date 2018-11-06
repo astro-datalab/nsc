@@ -25,14 +25,14 @@
 ; By D.Nidever  Feb 2017
 ;-
 
-pro nsc_instcal_main,version,redo=redo,nmulti=nmulti,maxjobs=maxjobs,silent=silent,unlock=unlock
+pro nsc_instcal_main,version,redo=redo,nmulti=nmulti,maxjobs=maxjobs,silent=silent,dolock=dolock,unlock=unlock
 
 ; Main NOAO DECam source catalog
-NSC_ROOTDIRS,dldir,mssdir,localdir
-;dir = "/datalab/users/dnidever/decamcatalog/"
+NSC_ROOTDIRS,dldir,mssdir,localdir,host
+hostname = first_el(strsplit(host,'.',/extract))
 if n_elements(maxjobs) eq 0 then maxjobs=48300L
 if n_elements(nmulti) eq 0 then nmulti=30
-if n_elements(version) eq 0 then version='v2'
+if n_elements(version) eq 0 then version='v3' ;v2
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 if file_test(tmpdir,/directory) eq 0 then file_mkdir,tmpdir
@@ -73,6 +73,12 @@ str.fluxfile = strtrim(str.fluxfile,2)
 str.maskfile = strtrim(str.maskfile,2)
 str.wtfile = strtrim(str.wtfile,2)
 print,strtrim(nstr,2),' InstCal images'
+
+;; Putting them in RANDOM but REPEATABLE order
+seed = 1
+print,'RANDOMIZING WITH SEED=1'
+si = sort(randomu(seed,n_elements(str)))
+str = str[si]
 
 ;; Only run exposures for our 6 test fields
 ;healpix = [37391, 64471, 153437, 153728, 190278, 194240]
@@ -131,7 +137,7 @@ for i=0,ngdexp-1 do begin
   expstr[i].allexist = 1    ; THIS TAKES TOO LONG!!!
   ; Does the output file exist
   ;if file_test(outfile) eq 1 or file_test(outfile+'.gz') eq 1 then expstr[i].done = 1
-  expstr[i].done = 0
+  ;expstr[i].done = 0
 
   ; Not all three files exist
   if expstr[i].allexist eq 0 then begin
@@ -168,6 +174,14 @@ for i=0,ngdexp-1 do begin
   BOMB:
 endfor
 
+; Compare to /dl1/users/dnidever/nsc/instcal/v3/lists/nsc_measure_expstr.fits
+sum = mrdfits('/dl1/users/dnidever/nsc/instcal/v3/lists/nsc_measure_expstr.fits',1)
+done = where(sum.done eq 1,ndone)
+if ndone gt 0 then begin
+  expstr[done].done = 1
+  expstr[done].torun = 0
+endif
+
 ; Have hulk help out gp09, ran last 10,000 of gp09's jobs
 ;torun = lindgen(10000)-10000+41633
 ;expstr.torun = 0
@@ -196,16 +210,26 @@ endfor
 ;expstr[torun].torun=1
 ;ntorun = n_elements(torun)
 
-; Rerun the failures
-sum = mrdfits('/dl1/users/dnidever/nsc/instcal/v2/lists/nsc_measure_summary.fits',1)
-bad = where(sum.success eq 0 or sum.chip1date gt sum.logdate,nbad)
-exp = file_basename(strtrim(expstr.fluxfile,2),'.fits.fz')
-MATCH,exp,strtrim(sum[bad].base,2),ind1,ind2,/sort,count=nmatch
-expstr.torun = 0
-expstr[ind1].torun = 1
+; 91945 exposures to run
 
-torun = where(expstr.torun eq 1,ntorun)
-stop
+;; Parcel out the jobs
+hosts = ['gp06','gp07','gp08','gp09','hulk','thing']
+nhosts = n_elements(hosts)
+torun = where(expstr.torun eq 1,nalltorun)
+nperhost = nalltorun/nhosts
+for i=0,nhosts-1 do $
+  if stregex(host,hosts[i],/boolean) eq 1 then torun=torun[i*nperhost:(i+1)*nperhost-1]
+ntorun = n_elements(torun)
+
+;; Rerun the failures
+;sum = mrdfits('/dl1/users/dnidever/nsc/instcal/v2/lists/nsc_measure_summary.fits',1)
+;bad = where(sum.success eq 0 or sum.chip1date gt sum.logdate,nbad)
+;exp = file_basename(strtrim(expstr.fluxfile,2),'.fits.fz')
+;MATCH,exp,strtrim(sum[bad].base,2),ind1,ind2,/sort,count=nmatch
+;expstr.torun = 0
+;expstr[ind1].torun = 1
+
+;torun = where(expstr.torun eq 1,ntorun)
 if ntorun eq 0 then begin
   print,'No exposures to process.'
   return
@@ -218,22 +242,25 @@ if ntorun gt maxjobs then begin
   expstr[torun[0:maxjobs-1]].submitted = 1
 endif else expstr[torun].submitted = 1
 tosubmit = where(expstr.submitted eq 1,ntosubmit)
+print,strtrim(ntosubmit,2),' jobs to submit'
 cmd = expstr[tosubmit].cmd
 cmddir = expstr[tosubmit].cmddir
 
 ; Lock the files that will be submitted
-print,'Locking files to be submitted'
-for i=0,ntosubmit-1 do begin
-  outfile = expstr[tosubmit[i]].outfile
-  if file_test(file_dirname(outfile),/directory) eq 0 then file_mkdir,file_dirname(outfile)  ; make directory
-  lockfile = outfile+'.lock'
-  testlock = file_test(lockfile)
-  if testlock eq 0 then touchzero,outfile+'.lock'  ; this is fast
-  expstr[tosubmit[i]].locked = 1
-endfor
+if keyword_set(dolock) then begin
+  print,'Locking files to be submitted'
+  for i=0,ntosubmit-1 do begin
+    outfile = expstr[tosubmit[i]].outfile
+    if file_test(file_dirname(outfile),/directory) eq 0 then file_mkdir,file_dirname(outfile)  ; make directory
+    lockfile = outfile+'.lock'
+    testlock = file_test(lockfile)
+    if testlock eq 0 then touchzero,outfile+'.lock'  ; this is fast
+    expstr[tosubmit[i]].locked = 1
+  endfor
+endif ; /dolock
 
 ; Saving the structure of jobs to run
-runfile = dir+'lists/nsc_instcal_main.'+logtime+'_run.fits'
+runfile = dir+'lists/nsc_instcal_main.'+hostname+'.'+logtime+'_run.fits'
 print,'Writing running information to ',runfile
 MWRFITS,expstr,runfile,/create
 
@@ -243,8 +270,10 @@ a = '' & read,a,prompt='Press RETURN to start'
 PBS_DAEMON,cmd,cmddir,jobs=jobs,/hyperthread,prefix='nsc',wait=5,nmulti=nmulti
 
 ; Unlocking files
-print,'Unlocking processed files'
-file_delete,expstr[tosubmit].outfile+'.lock',/allow,/quiet
+if keyword_set(dolock) then begin
+  print,'Unlocking processed files'
+  file_delete,expstr[tosubmit].outfile+'.lock',/allow,/quiet
+endif
 ;for i=0,ntosubmit-1 do file_delete,expstr[tosubmit[i]].outfile+'.lock',/allow
 ;for i=0,ntosubmit-1 do djs_unlockfile,expstr[tosubmit[i]].outfile
 
