@@ -2,10 +2,8 @@ pro nsc_instcal_calibrate_main,version,nmulti=nmulti,redo=redo
 
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
-if n_elements(version) eq 0 then version='v2'
+if n_elements(version) eq 0 then version='v3'  ; v2
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
-;dir = dldir+"users/dnidever/decamcatalog/"
-;dir = "/datalab/users/dnidever/decamcatalog/"
 tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 if file_test(dir,/directory) eq 0 then file_mkdir,dir+'logs/'
 if file_test(tmpdir,/directory) eq 0 then file_mkdir,tmpdir
@@ -118,37 +116,37 @@ dirs = strarr(nexpdirs)+tmpdir
 ;dirs = strarr(ng)+tmpdir
 
 ; Run self-cal on failed u-band exposures
-sum=mrdfits(dldir+'users/dnidever/nsc/instcal/v2/lists/nsc_instcal_calibrate.fits',1)
-sum.filter = strtrim(sum.filter,2)
-sum.instrument = strtrim(sum.instrument,2)
-sum.expdir = strtrim(sum.expdir,2)
-instfilt = sum.instrument+'-'+sum.filter
-ifilt = 'c4d-u'
-bd = where(instfilt eq ifilt and sum.nrefmatch eq 0,nbd)
-gd = where(instfilt eq ifilt and sum.nrefmatch gt 10,ngd)
-gdsum = sum[gd]
+;sum=mrdfits(dldir+'users/dnidever/nsc/instcal/v2/lists/nsc_instcal_calibrate.fits',1)
+;sum.filter = strtrim(sum.filter,2)
+;sum.instrument = strtrim(sum.instrument,2)
+;sum.expdir = strtrim(sum.expdir,2)
+;instfilt = sum.instrument+'-'+sum.filter
+;ifilt = 'c4d-u'
+;bd = where(instfilt eq ifilt and sum.nrefmatch eq 0,nbd)
+;gd = where(instfilt eq ifilt and sum.nrefmatch gt 10,ngd)
+;gdsum = sum[gd]
+;
+;refmatch = lonarr(nbd)
+;for i=0,nbd-1 do begin
+;  minradius = 0.43
+;  if sum[bd[i]].instrument eq 'ksb' then minradius=minradius > 0.75
+;  if sum[bd[i]].instrument eq 'c4d' then minradius=minradius > 1.1
+;  MATCH,gdsum.pix,sum[bd[i]].pix,ind1,ind2,/sort,count=nmatch
+;  if nmatch gt 0 then begin
+;    gddec = gdsum[ind1].dec
+;    dist = sphdist(gdsum[ind1].ra,gdsum[ind1].dec,sum[bd[i]].ra,sum[bd[i]].dec,/deg)
+;    ;gddist = where(dist lt minradius or gddec gt -30,ngddist)
+;    gddist = where(dist lt minradius,ngddist)
+;    refmatch[i] = ngddist
+; endif
+;endfor
 
-refmatch = lonarr(nbd)
-for i=0,nbd-1 do begin
-  minradius = 0.43
-  if sum[bd[i]].instrument eq 'ksb' then minradius=minradius > 0.75
-  if sum[bd[i]].instrument eq 'c4d' then minradius=minradius > 1.1
-  MATCH,gdsum.pix,sum[bd[i]].pix,ind1,ind2,/sort,count=nmatch
-  if nmatch gt 0 then begin
-    gddec = gdsum[ind1].dec
-    dist = sphdist(gdsum[ind1].ra,gdsum[ind1].dec,sum[bd[i]].ra,sum[bd[i]].dec,/deg)
-    ;gddist = where(dist lt minradius or gddec gt -30,ngddist)
-    gddist = where(dist lt minradius,ngddist)
-    refmatch[i] = ngddist
- endif
-endfor
-
-g = where(refmatch gt 0,ng)
-expdir = sum[bd[g]].expdir
-bb = where(strmid(expdir,0,4) eq '/net',nbb)
-expdir[bb] = strmid(expdir[bb],4)
-cmd = 'nsc_instcal_calibrate,"'+expdir+'",/redo,/selfcal'
-dirs = strarr(ng)+tmpdir
+;g = where(refmatch gt 0,ng)
+;expdir = sum[bd[g]].expdir
+;bb = where(strmid(expdir,0,4) eq '/net',nbb)
+;expdir[bb] = strmid(expdir[bb],4)
+;cmd = 'nsc_instcal_calibrate,"'+expdir+'",/redo,/selfcal'
+;dirs = strarr(ng)+tmpdir
 ;PBS_DAEMON,cmd,dirs,jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti 
 
 stop
