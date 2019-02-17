@@ -6,12 +6,17 @@ if n_elements(arr) eq 0 then begin
   return,-1
 endif
 
+narr = n_elements(arr)
 si = sort(arr)
 sarr = arr[si]
 brklo = where(sarr ne shift(sarr,1),nbrk)
-brkhi = [brklo[1:nbrk-1]-1,n_elements(arr)-1]
-num = brkhi-brklo+1
-index = {index:si,name:sarr[brklo],num:num,lo:brklo,hi:brkhi}
+if nbrk gt 0 then begin
+  brkhi = [brklo[1:nbrk-1]-1,narr-1]
+  num = brkhi-brklo+1
+  index = {index:si,value:sarr[brklo],num:num,lo:brklo,hi:brkhi}
+endif else begin
+  index = {index:si,value:arr[0],num:narr,lo:0L,hi:narr-1}
+endelse
 return,index
 
 end
