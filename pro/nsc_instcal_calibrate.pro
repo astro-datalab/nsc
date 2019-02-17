@@ -499,16 +499,25 @@ ref1 = ref[ind1]
 cat1 = cat[ind2]
 ;; Get the model magnitudes
 mmags = GETMODELMAG(ref1,instfilt,cendec,eqnfile)
-gdref = where(mmags[*,0] lt 50 and mmags[*,1] lt 5,ngdref)
-if ngdref eq 0 then begin
+;; Get the good sources
+gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+              cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
+              cat1.fwhm_world*3600 lt 2*medfwhm and mmags[*,0] lt 50 and mmags[*,1] lt 5,ngdcat)
+;  if the seeing is bad then class_star sometimes doens't work well
+if medfwhm gt 1.8 and ngdcat lt 100 then begin
+  gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
+                cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
+                cat1.fwhm_world*3600 lt 2*medfwhm and mmags[*,0] lt 50 and mmags[*,1] lt 5,ngdcat)
+endif
+if ngdcat eq 0 then begin
   printlog,logf,'No good reference sources'
   goto,ENDBOMB
 endif
-ref2 = ref1[gdref]
-mmags2 = mmags[gdref,*]
-cat2 = cat1[gdref]
-mag2 = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
+ref2 = ref1[gdcat]
+mmags2 = mmags[gdcat,*]
+cat2 = cat1[gdcat]
 ; Matched structure
+mag2 = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
 mstr = {col:float(mmags2[*,2]),mag:float(mag2),model:float(mmags[*,0]),err:float(mmags[*,1]),ccdnum:long(cat2.ccdnum)}
 ; Measure the zero-point
 NSC_INSTCAL_CALIBRATE_FITZPTERM,mstr,expstr,chstr
