@@ -60,6 +60,7 @@ if refname eq 'II/312/AIS' then refname='GALEX'
 if refname eq '2MASS-PSC' then refname='TMASS'
 if refname eq '2MASS' then refname='TMASS'
 if refname eq 'GAIA/GAIA' then refname='GAIA'
+if refname eq 'Skymapper' then refname='SKYMAPPER'
 
 if n_elements(file) eq 0 then file=tmpdir+'ref_'+stringize(cenra,ndec=5)+'_'+stringize(cendec,ndec=5)+'_'+stringize(radius,ndec=3)+'_'+refname+'.fits'
 
@@ -76,18 +77,28 @@ if file_test(file) eq 1 then begin
 ;--------------
 endif else begin
 
-  ; Use DataLab database search for Gaia and 2MASS if density is high                                                                                                              
-  if (refname eq 'TMASS' or refname eq 'GAIA' or refname eq 'PS') then begin
+  ; Use DataLab database search for Gaia and 2MASS if density is high
+  if (refname eq 'TMASS' or refname eq 'GAIA' or refname eq 'GAIADR2' or refname eq 'PS' or refname eq 'SKYMAPPER') then begin
     if refname eq 'TMASS' then begin
       tablename = 'twomass.psc'
       cols = 'designation,ra as raj2000,dec as dej2000,j_m as jmag,j_cmsig as e_jmag,h_m as hmag,h_cmsig as e_hmag,k_m as kmag,k_cmsig as e_kmag,ph_qual as qflg'
-      server = 'dldb1.sdm.noao.edu'
+      server = 'gp01.datalab.noao.edu'
+      ;server = 'dldb1.sdm.noao.edu'
     endif
+    racol = 'ra'
+    deccol = 'dec'
     if refname eq 'GAIA' then begin
       tablename = 'gaia_dr1.gaia_source'
       cols = 'source_id as source,ra as ra_icrs,ra_error as e_ra_icrs,dec as de_icrs,dec_error as e_de_icrs,'+$
              'phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,phot_g_mean_mag as gmag'
-      server = 'dldb1.sdm.noao.edu'
+      server = 'gp01.datalab.noao.edu'
+      ;server = 'dldb1.sdm.noao.edu'
+    endif
+    if refname eq 'GAIADR2' then begin
+      tablename = 'gaia_dr2.gaia_source'
+      cols = 'source_id as source,ra,ra_error,dec,dec_error,pmra,pmra_error,pmdec,pmdec_error,phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,'+$
+             'phot_g_mean_mag as gmag,phot_bp_mean_mag as bp,phot_rp_mean_mag as rp'
+      server = 'gp01.datalab.noao.edu'
     endif
     if refname eq 'PS' then begin
       ;tablename = 'cp_calib.ps1'
@@ -95,11 +106,19 @@ endif else begin
       cols = 'ra, dec, g as gmag, r as rmag, i as imag, z as zmag, y as ymag'
       server = 'gp02.datalab.noao.edu'
     endif
+    if refname eq 'SKYMAPPER' then begin
+      tablename = 'skymapper_dr1.master'
+      cols = 'raj2000, dej2000, g_psf as sm_gmag, e_g_psf as e_sm_gmag, r_psf as sm_rmag, e_r_psf as e_sm_rmag, i_psf as sm_imag, '+$
+             'e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag'
+      server = 'gp01.datalab.noao.edu'
+      racol = 'raj2000'
+      deccol = 'dej2000'
+    endif
 
     ; Use Postgres command with q3c cone search                                                                                                                                    
     refcattemp = repstr(file,'.fits','.txt')
     cmd = "psql -h "+server+" -U datalab -d tapdb -w --pset footer -c 'SELECT "+cols+" FROM "+tablename+$
-          " WHERE q3c_radial_query(ra,dec,"+stringize(cenra,ndec=4,/nocomma)+","+stringize(cendec,ndec=4,/nocomma)+$
+          " WHERE q3c_radial_query("+racol+","+deccol+","+stringize(cenra,ndec=4,/nocomma)+","+stringize(cendec,ndec=4,/nocomma)+$
           ","+stringize(radius,ndec=3)+")' > "+refcattemp
     file_delete,refcattemp,/allow
     file_delete,file,/allow

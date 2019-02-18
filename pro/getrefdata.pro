@@ -172,6 +172,7 @@ for i=0,nrefcat-1 do begin
   'PS': push,newtags,['ps_gmag','ps_rmag','ps_imag','ps_zmag','ps_ymag']
   'APASS': push,newtags,['apass_gmag','e_apass_gmag','apass_rmag','e_apass_rmag']
   'II/312/ais': push,newtags,['nuv','e_nuv']  ; Galex
+  'Skymapper': push,newtags,['sm_gmag','e_sm_gmag','sm_rmag','e_sm_rmag','sm_imag','e_sm_imag','sm_zmag','e_sm_zmag']  ; Skymapper DR1
   else: stop,refcat[i]+' NOT SUPPORTED'
   endcase
 endfor
@@ -199,7 +200,8 @@ for i=0,nrefcat-1 do begin
     ; New format, add tags
     schema = ref1[0]
     struct_assign,{dum:''},schema
-    schema = create_struct(schema,'ra',999999d0,'dec',999999.0d0)
+    if tag_exist(schema,'RA') eq 0 then $
+      schema = create_struct(schema,'ra',999999d0,'dec',999999.0d0)
     for j=0,nnewtags-1 do begin
       val0 = 99.99
       if newtags[j] eq 'qflg' then val0=''
@@ -253,6 +255,16 @@ for i=0,nrefcat-1 do begin
          ref[ind1].nuv = ref1[ind2].nuv
          ref[ind1].e_nuv = ref1[ind2].e_nuv
       end
+      'Skymapper': begin
+         ref[ind1].sm_gmag = ref1[ind2].sm_gmag
+         ref[ind1].e_sm_gmag = ref1[ind2].e_sm_gmag
+         ref[ind1].sm_rmag = ref1[ind2].sm_rmag
+         ref[ind1].e_sm_rmag = ref1[ind2].e_sm_rmag
+         ref[ind1].sm_imag = ref1[ind2].sm_imag
+         ref[ind1].e_sm_imag = ref1[ind2].e_sm_imag
+         ref[ind1].sm_zmag = ref1[ind2].sm_zmag
+         ref[ind1].e_sm_zmag = ref1[ind2].e_sm_zmag
+      end
       else: stop,catname+' NOT SUPPORTED'
       endcase
     endif
@@ -269,7 +281,10 @@ for i=0,nrefcat-1 do begin
       case refcat[i] of
       '2MASS-PSC': begin
          new.jmag = left1.jmag
+         new.e_jmag = left1.e_jmag
          new.kmag = left1.kmag
+         new.e_kmag = left1.e_kmag
+         new.qflg = left1.qflg
       end
       'PS': begin
          new.ps_gmag = left1.gmag
@@ -280,9 +295,24 @@ for i=0,nrefcat-1 do begin
       end
       'APASS': begin
          new.apass_gmag = left1.g_mag
+         new.e_apass_gmag = left1.e_g_mag
          new.apass_rmag = left1.r_mag
+         new.e_apass_rmag = left1.e_r_mag
       end
-      'II/312/ais': new.nuv = left1.nuv
+      'II/312/ais': begin
+         new.nuv = left1.nuv
+         new.e_nuv = left1.e_nuv
+      end
+      'Skymapper': begin
+         new.sm_gmag = left1.sm_gmag
+         new.e_sm_gmag = left1.e_sm_gmag
+         new.sm_rmag = left1.sm_rmag
+         new.e_sm_rmag = left1.e_sm_rmag
+         new.sm_imag = left1.sm_imag
+         new.e_sm_imag = left1.e_sm_imag
+         new.sm_zmag = left1.sm_zmag
+         new.e_sm_zmag = left1.e_sm_zmag
+      end
       else: stop,catname+' NOT SUPPORTED'
       endcase
       
