@@ -83,8 +83,8 @@ For i=0,n_elements(filter)-1 do begin
     if cendec gt -29 then begin
       push,refcat,['2MASS-PSC','PS']
     endif else begin
-      ; Use 2MASS and APASS to calibrate
-      push,refcat,['2MASS-PSC','APASS']
+      ; Use 2MASS and Skymapper to calibrate
+      push,refcat,['2MASS-PSC','APASS','Skymapper']
     endelse
   end
   ; DECam r-band
@@ -93,8 +93,8 @@ For i=0,n_elements(filter)-1 do begin
     if cendec gt -29 then begin
       push,refcat,['2MASS-PSC','PS']
     endif else begin
-      ; Use 2MASS and APASS to calibrate
-      push,refcat,['2MASS-PSC','APASS']
+      ; Use 2MASS and Skymapper to calibrate
+      push,refcat,['2MASS-PSC','APASS','Skymapper']
     endelse
   end
   ; DECam i-band
@@ -103,8 +103,8 @@ For i=0,n_elements(filter)-1 do begin
     if cendec gt -29 then begin
       push,refcat,['2MASS-PSC','PS']
     endif else begin
-      ; Use GAIA and 2MASS to calibrate
-      push,refcat,['2MASS-PSC']
+      ; Use Skymapper and 2MASS to calibrate
+      push,refcat,['2MASS-PSC','Skymapper']
     endelse
   end
   ; DECam z-band
@@ -113,8 +113,8 @@ For i=0,n_elements(filter)-1 do begin
     if cendec gt -29 then begin
       push,refcat,['2MASS-PSC','PS']
     endif else begin
-      ; Use GAIA and 2MASS to calibrate  
-      push,refcat,['2MASS-PSC']
+      ; Use Skymapper and 2MASS to calibrate
+      push,refcat,['2MASS-PSC','Skymapper']
     endelse
   end
   ; DECam Y-band
