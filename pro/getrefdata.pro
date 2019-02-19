@@ -159,15 +159,16 @@ if n_elements(refcat) gt 0 then begin
   ui = uniq(refcat,sort(refcat))
   refcat = refcat[ui]
   ; Always add Gaia at the beginning
-  refcat = ['GAIA/GAIA',refcat]
-endif else refcat='GAIA/GAIA'
+  ;refcat = ['GAIA/GAIA',refcat]
+  refcat = ['GAIADR2',refcat]
+endif else refcat='GAIADR2'   ;'GAIA/GAIA'
 nrefcat = n_elements(refcat)
 
 ; Figure out the new columns that need to be added
 undefine,newtags
 for i=0,nrefcat-1 do begin
   case refcat[i] of
-  'GAIA/GAIA':   ; do nothing
+  'GAIADR2':    ; do nothing
   '2MASS-PSC': push,newtags,['jmag','e_jmag','kmag','e_kmag','qflg']
   'PS': push,newtags,['ps_gmag','ps_rmag','ps_imag','ps_zmag','ps_ymag']
   'APASS': push,newtags,['apass_gmag','e_apass_gmag','apass_rmag','e_apass_rmag']
@@ -209,8 +210,10 @@ for i=0,nrefcat-1 do begin
     endfor
     ref = replicate(schema,n_elements(ref1))
     struct_assign,ref1,ref,/nozero
-    ref.ra = ref.ra_icrs
-    ref.dec = ref.de_icrs
+    if tag_exist(ref1,'RA') eq 0 then begin
+      ref.ra = ref.ra_icrs
+      ref.dec = ref.de_icrs
+    endif
 
   ; Crossmatch and add magnitudes
   endif else begin
