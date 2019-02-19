@@ -7,7 +7,7 @@ rootdir = smashred_rootdir()
 info = mrdfits(rootdir+'cp/red/photred/catalogs/final/v6/check_calibrated_v6.fits',1)
 ;restore,'/data/smash/cp/red/photred/catalogs/pro/check_calibrated.dat'
 gd = where(info.calflag eq 2 and info.nuchips gt 0 and long(strmid(info.field,5)) gt 60,ngd)
-fields = info[gd].field
+fields = strtrim(info[gd].field,2)
 nfields = n_elements(fields)
 
 catdir = rootdir+'cp/red/photred/catalogs/final/v6/'
@@ -25,6 +25,8 @@ fieldstr = replicate({field:'',fieldid:0,nmatch:0L,ucoef:dblarr(5),urms:99.99,ub
                       gbin:fltarr(31),rcoef:dblarr(4),rrms:99.99,rbin:fltarr(31),icoef:dblarr(4),irms:99.99,ibin:fltarr(31),$
                       zcoef:dblarr(5),zrms:99.99,zbin:fltarr(31)},nfields)
 ftags = tag_names(fieldstr)
+;restore,'/dl1/users/dnidever/nsc/smash_matched_catalog_v3.dat'
+;for i=68,nfields-1 do begin
 for i=0,nfields-1 do begin
   print,strtrim(i+1,2),'/',strtrim(nfields,2),' ',fields[i]
   info1 = info[gd[i]]

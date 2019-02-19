@@ -309,7 +309,7 @@ printlog,logf,'------------------------------------'
 ; Getting reference catalogs
 if n_elements(inpref) eq 0 then begin
   ; Search radius
-  radius = 1.1 * sqrt(2) * sqrt( (0.5*rarange)^2 + (0.5*decrange)^2 ) 
+  radius = 1.1 * sqrt( (0.5*rarange)^2 + (0.5*decrange)^2 ) 
   ;ref = GETREFDATA_V3(filter,cenra,cendec,radius,count=count)
   ref = GETREFDATA(instrument+'-'+filter,cenra,cendec,radius,count=count)
   if count eq 0 then begin

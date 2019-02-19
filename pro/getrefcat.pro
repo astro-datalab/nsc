@@ -145,7 +145,7 @@ endif else begin
     ;if refcat eq 'APASS' then cfa=0 else cfa=1  ; cfa doesn't have APASS
     cfa = 1  ; problems with CDS VizieR and cfa has APASS now
     ref = QUERYVIZIER(refcat,[cenra,cendec],radius*60,cfa=cfa)
-   
+
     ; Check for failure
     if size(ref,/type) ne 8 then begin
       if not keyword_set(silent) then printlog,logf,'Failure or No Results'
