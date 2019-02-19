@@ -24,7 +24,8 @@ if n_elements(ncpu) eq 0 then ncpu=1
 CPU, TPOOL_NTHREADS = ncpu
 
 base = file_basename(expdir)
-logf = expdir+'/'+base+'_calib.log'
+;logf = expdir+'/'+base+'_calib.log'
+logf = -1
 outfile = expdir+'/'+base+'_cat.fits'
 ;; get version number
 lo = strpos(expdir,'nsc/instcal/')
@@ -48,7 +49,7 @@ printlog,logf,'This is a '+instrument+' exposure'
 
 ;; Model magnitude equation file
 eqnfile = dldir+'users/dnidever/nsc/instcal/'+version+'/config/modelmag_equations.txt'
-printlog,logfile,'Using model magnitude equation file ',eqnfile
+printlog,logf,'Using model magnitude equation file ',eqnfile
 if file_test(eqnfile) eq 0 then begin
   printlog,logf,eqnfile+' NOT FOUND'
   return
@@ -192,9 +193,9 @@ if ngdchip eq 0 then begin
 endif
 ; Central coordinates of the entire field
 cendec = mean(minmax(chstr[gdchip].cendec))
-decrange = range(chstr[gdchip].cendec)
+decrange = range(chstr[gdchip].vdec)
 cenra = mean(minmax(chstr[gdchip].cenra))
-rarange = range(chstr[gdchip].cenra)*cos(cendec/!radeg)
+rarange = range(chstr[gdchip].vra)*cos(cendec/!radeg)
 ; Wrapping around RA=0
 if range(minmax(chstr[gdchip].cenra)) gt 100 then begin
  ra = chstr[gdchip].cenra
@@ -204,7 +205,13 @@ if range(minmax(chstr[gdchip].cenra)) gt 100 then begin
  if nbdra2 gt 0 then ra[bdra2]+=360
  cenra = mean(minmax(ra))
  if cenra lt 0 then cenra+=360
- rarange = range(ra)*cos(cendec/!radeg)
+ ;; use chip VRA to get RA range
+ vra = chstr[gdchip].vra
+ bdra = where(vra gt 180,nbdra)
+ if nbdra gt 0 then vra[bdra]-=360
+ bdra2 = where(vra lt -180,nbdra2)
+ if nbdra2 gt 0 then vra[bdra2]+=360
+ rarange = range(vra)*cos(cendec/!radeg)
  rawrap = 1
 endif else rawrap=0
 printlog,logf,'CENRA  = ',stringize(cenra,ndec=5)
@@ -302,8 +309,9 @@ printlog,logf,'------------------------------------'
 ; Getting reference catalogs
 if n_elements(inpref) eq 0 then begin
   ; Search radius
-  radius = 1.1 * sqrt( (0.5*rarange)^2 + (0.5*decrange)^2 ) 
-  ref = GETREFDATA_V3(filter,cenra,cendec,radius,count=count)
+  radius = 1.1 * sqrt(2) * sqrt( (0.5*rarange)^2 + (0.5*decrange)^2 ) 
+  ;ref = GETREFDATA_V3(filter,cenra,cendec,radius,count=count)
+  ref = GETREFDATA(instrument+'-'+filter,cenra,cendec,radius,count=count)
   if count eq 0 then begin
     printlog,logfi,'No Reference Data'
     return
@@ -371,8 +379,13 @@ For i=0,nchips-1 do begin
   ;  no bad CP flags
   ;  no SE truncated or incomplete data flags
   ;  must have good photometry
-  qcuts1 = where(cat1b.imaflags_iso eq 0 and not ((cat1b.flags and 8) eq 8) and not ((cat1b.flags and 16) eq 16) and $
-                 cat1b.mag_auto lt 50 and finite(gaia1b.pmra) eq 1 and finite(gaia1b.pmdec) eq 1,nqcuts1)
+  if tag_exist(gaia1b,'PMRA') and tag_exist(gaia1b,'PMDEC') then begin   ; we have proper motion information
+    qcuts1 = where(cat1b.imaflags_iso eq 0 and not ((cat1b.flags and 8) eq 8) and not ((cat1b.flags and 16) eq 16) and $
+                   cat1b.mag_auto lt 50 and finite(gaia1b.pmra) eq 1 and finite(gaia1b.pmdec) eq 1,nqcuts1)
+  endif else begin
+    qcuts1 = where(cat1b.imaflags_iso eq 0 and not ((cat1b.flags and 8) eq 8) and not ((cat1b.flags and 16) eq 16) and $
+                   cat1b.mag_auto lt 50,nqcuts1)
+  endelse
   if nqcuts1 eq 0 then begin
     printlog,logf,'Not enough stars after quality cuts'
     ; Add threshold to astrometric errors
@@ -387,11 +400,16 @@ For i=0,nchips-1 do begin
   ;; Precess the Gaia coordinates to the epoch of the observation
   ;; The reference epoch for Gaia DR2 is J2015.5 (compared to the
   ;; J2015.0 epoch for Gaia DR1).
-  gaiamjd = 57206.0d0
-  delt = (mjd-gaiamjd)/365.242170d0   ; convert to years
-  ;; convert from mas/yr->deg/yr and convert to angle in RA
-  gra_epoch = gaia2.ra + delt*gaia2.pmra/3600.0d0/1000.0d0/cos(gaia2.dec*d2r)
-  gdec_epoch = gaia2.dec + delt*gaia2.pmdec/3600.0d0/1000.0d0
+  if tag_exist(gaia2,'PMRA') and tag_exist(gaia2,'PMDEC') then begin
+    gaiamjd = 57206.0d0
+    delt = (mjd-gaiamjd)/365.242170d0   ; convert to years
+    ;; convert from mas/yr->deg/yr and convert to angle in RA
+    gra_epoch = gaia2.ra + delt*gaia2.pmra/3600.0d0/1000.0d0/cos(gaia2.dec*d2r)
+    gdec_epoch = gaia2.dec + delt*gaia2.pmdec/3600.0d0/1000.0d0
+  endif else begin
+    gra_epoch = gaia2.ra
+    gdec_epoch = gaia2.dec
+  endelse
 
   ; Rotate to coordinates relative to the center of the field
   ;ROTSPHCEN,gaia2.ra,gaia2.dec,chstr[i].cenra,chstr[i].cendec,gaialon,gaialat,/gnomic
@@ -399,7 +417,10 @@ For i=0,nchips-1 do begin
   ROTSPHCEN,cat2.alpha_j2000,cat2.delta_j2000,chstr[i].cenra,chstr[i].cendec,lon1,lat1,/gnomic
   ; ---- Fit RA as function of RA/DEC ----
   londiff = gaialon-lon1
-  err = sqrt(gaia2.ra_error^2 + cat2.raerr^2)
+  undefine,err
+  if tag_exist(gaia2,'RA_ERROR') then err = sqrt(gaia2.ra_error^2 + cat2.raerr^2)
+  if tag_exist(gaia2,'RA_ERROR') eq 0 and tag_exist(gaia2,'E_RA_ICRS') then err = sqrt(gaia2.e_ra_icrs^2 + cat2.raerr^2)
+  if n_elements(err) eq 0 then err=cat2.raerr
   lonmed = median([londiff])
   lonsig = mad([londiff]) > 1e-5   ; 0.036"
   gdlon = where(abs(londiff-lonmed) lt 3.0*lonsig,ngdlon)  ; remove outliers
@@ -422,7 +443,10 @@ For i=0,nchips-1 do begin
   endif else rarms=rarms1
   ; ---- Fit DEC as function of RA/DEC -----
   latdiff = gaialat-lat1
-  err = sqrt(gaia2.dec_error^2 + cat2.decerr^2)
+  undefine,err
+  if tag_exist(gaia2,'DEC_ERROR') then err = sqrt(gaia2.dec_error^2 + cat2.decerr^2)
+  if tag_exist(gaia2,'DEC_ERROR') eq 0 and tag_exist(gaia2,'E_DEC_ICRS') then err = sqrt(gaia2.e_de_icrs^2 + cat2.decerr^2)
+  if n_elements(err) eq 0 then err=cat2.decerr
   latmed = median([latdiff])
   latsig = mad([latdiff]) > 1e-5  ; 0.036"
   gdlat = where(abs(latdiff-latmed) lt 3.0*latsig,ngdlat)  ; remove outliers
@@ -518,7 +542,7 @@ mmags2 = mmags[gdcat,*]
 cat2 = cat1[gdcat]
 ; Matched structure
 mag2 = cat2.mag_auto + 2.5*alog10(exptime)  ; correct for the exposure time
-mstr = {col:float(mmags2[*,2]),mag:float(mag2),model:float(mmags[*,0]),err:float(mmags[*,1]),ccdnum:long(cat2.ccdnum)}
+mstr = {col:float(mmags2[*,2]),mag:float(mag2),model:float(mmags2[*,0]),err:float(mmags2[*,1]),ccdnum:long(cat2.ccdnum)}
 ; Measure the zero-point
 NSC_INSTCAL_CALIBRATE_FITZPTERM,mstr,expstr,chstr
 expstr.zptype = 1

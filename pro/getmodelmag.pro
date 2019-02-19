@@ -81,6 +81,7 @@ eqnstr.declim[0] = float(reform(dum[0,*]))
 eqnstr.declim[1] = float(reform(dum[1,*]))
 
 
+
 ;; Get the band for this FILTER and DEC.
 gd = where(strtrim(eqnstr.instrument,2)+'-'+strtrim(eqnstr.band,2) eq filter and dec ge eqnstr.declim[0] and dec le eqnstr.declim[1],ngd)
 if ngd eq 0 then begin
@@ -93,22 +94,24 @@ if ngd gt 1 then begin
 endif
 eqnstr1 = eqnstr[gd]
 
-;; No parentheses allowd
+;; No parentheses allowed
 if strpos(eqnstr1.coloreqn,'(') ne -1 or strpos(eqnstr1.coloreqn,')') ne -1 or $
    strpos(eqnstr1.modelmageqn,'(') ne -1 or strpos(eqnstr1.modelmageqn,')') ne -1 then begin
   print,'No parentheses allowed in the model magnitude equations'
   return,-999999.
 endif
 
+;; Are we using color?
+if eqnstr1.colorlim[0] lt -10 and eqnstr1.colorlim[1] gt 10 and $
+   strpos(strupcase(eqnstr1.modelmageqn),'COLOR') eq -1 then usecolor=0 else usecolor=1
+
 ;; Get all columns that we need
 coloreqn = eqnstr1.coloreqn
 qualitycuts = eqnstr1.qualitycuts
 modelmageqn = eqnstr1.modelmageqn
 coloreqn_cols = strsplit(coloreqn,'-+*',/extract)
-;qualitycuts_cols = strsplit(qualitycuts,'-+*<>=',/extract)
 modelmageqn_cols = strsplit(modelmageqn,'-+*',/extract)
-;cols = strupcase([coloreqn_cols, qualitycuts_cols, modelmageqn_cols])
-cols = strupcase([coloreqn_cols, modelmageqn_cols])
+if keyword_set(usecolor) then cols = strupcase([coloreqn_cols, modelmageqn_cols]) else cols=strupcase(modelmageqn_cols)
 ;; Remove numbers and "COLOR"
 bd = where(valid_num(cols) eq 1 or strupcase(cols) eq 'COLOR' or cols eq '??',nbd)
 if nbd gt 0 then begin
@@ -130,13 +133,27 @@ if ntagmatch lt ncols then begin
   if ntagmatch gt 0 then remove,ind2,leftind
   print,'Needed columns missing. '+strjoin(cols[leftind],' ')
 endif
+
+;; Make the color
+;;  replace the columns by CAT[GD].COLUMN
+if keyword_set(usecolor) then begin
+  coloreqn_cols = strupcase(strsplit(coloreqn,'-+*',/extract))
+  coloreqn_cols = coloreqn_cols[uniq(coloreqn_cols,sort(coloreqn_cols))]  ; unique ones
+  bd = where(valid_num(coloreqn_cols) eq 1,nbd)  ;; Remove numbers and "COLOR"
+  if nbd gt 0 then REMOVE,bd,coloreqn_cols
+  colcmd = strupcase(coloreqn)
+  for i=0,n_elements(coloreqn_cols)-1 do colcmd=repstr(colcmd,coloreqn_cols[i],'cat.'+coloreqn_cols[i])
+  dum = EXECUTE('color='+colcmd)
+endif else color=fltarr(ncat)
+
 ;; Make quality cuts
-magcolsind = where(stregex(cols,'mag$',/boolean,/fold_case) eq 1 and stregex(cols,'^e_',/boolean,/fold_case) eq 0,nmagcolsind)
+magcolsind = where((stregex(cols,'mag$',/boolean,/fold_case) eq 1 and stregex(cols,'^e_',/boolean,/fold_case) eq 0) or $
+                   cols eq 'NUV',nmagcolsind)
 ;; make sure all magnitudes are good (<50) and finite
-goodmagmask = bytarr(ncat)+1
+goodmask = bytarr(ncat)+1
 for i=0,nmagcolsind-1 do begin
   magind = where(strupcase(tags) eq strupcase(cols[magcolsind[i]]),nmagind)
-  goodmagmask AND= (cat.(magind[0]) lt 50 and cat.(magind[0]) gt 0 and finite(cat.(magind[0])) eq 1)
+  goodmask AND= (cat.(magind[0]) lt 50 and cat.(magind[0]) gt 0 and finite(cat.(magind[0])) eq 1)
 endfor
 ;; input quality cuts
 ;;  replace <=, <, >, >=, =, &, |
@@ -154,25 +171,15 @@ for i=0,n_elements(qualitycuts_cols)-1 do begin
   colind = where(tags eq strupcase(col),ncolind)
   if colind gt 0 then qualitycuts = repstr(qualitycuts,col,'cat.'+col)
 endfor
-dum = EXECUTE('goodmagmask AND= '+qualitycuts)
-
-gd = where(goodmagmask eq 1,ngd)
+dum = EXECUTE('goodmask AND= '+qualitycuts)
+;; Apply the color range
+if keyword_set(usecolor) then goodmask AND= (color ge eqnstr1.colorlim[0] and color le eqnstr1.colorlim[1])
+;; Get the sources that pass all cuts
+gd = where(goodmask eq 1,ngd)
 if ngd eq 0 then begin
   print,'No good sources left'
   return,-999999.
 endif
-
-;; Make the color
-;;  replace the columns by CAT[GD].COLUMN
-coloreqn_cols = strupcase(strsplit(coloreqn,'-+*',/extract))
-coloreqn_cols = coloreqn_cols[uniq(coloreqn_cols,sort(coloreqn_cols))]  ; unique ones
-bd = where(valid_num(coloreqn_cols) eq 1,nbd)  ;; Remove numbers and "COLOR"
-if nbd gt 0 then REMOVE,bd,coloreqn_cols
-colcmd = strupcase(coloreqn)
-for i=0,n_elements(coloreqn_cols)-1 do colcmd=repstr(colcmd,coloreqn_cols[i],'cat[gd].'+coloreqn_cols[i])
-dum = EXECUTE('color_gd='+colcmd)
-color = fltarr(ncat)+9.99
-color[gd] = color_gd
 
 ; Make the model magnitude
 ;;  replace the columns by CAT[GD].COLUMN
@@ -213,25 +220,27 @@ endfor
 
 ;; Calculate the color errors
 ;; get the columns
-colorerr_cols = strupcase(strsplit(coloreqn,'-+*',/extract))
-colorerr_cols = colorerr_cols[uniq(colorerr_cols,sort(colorerr_cols))]  ; unique ones
-bd = where(valid_num(colorerr_cols) eq 1 or strupcase(colorerr_cols) eq 'EBV',nbd)  ;; Remove numbers and "EBV"
-if nbd gt 0 then REMOVE,bd,colorerr_cols
-;; use - and + signs to break apart the components that need to be  squared
-coloreqn_terms = strupcase(strsplit(coloreqn,'-+',/extract))
-;; remove any terms that don't have a COLORERR_COLS in them
-okay = bytarr(n_elements(coloreqn_terms))
-for i=0,n_elements(coloreqn_terms)-1 do $
-  for j=0,n_elements(colorerr_cols)-1 do okay[i] OR= stregex(coloreqn_terms[i],colorerr_cols[j],/boolean)
-bd = where(okay eq 0,nbd)
-if nbd gt 0 then REMOVE,bd,coloreqn_terms
-;; Now create the equation, add in quadrature
-colorerrcmd = 'sqrt( '+strjoin('('+coloreqn_terms+')^2','+')+' )'
-colorerrcmd = strupcase(colorerrcmd)
-for i=0,n_elements(colorerr_cols)-1 do colorerrcmd=repstr(colorerrcmd,colorerr_cols[i],'err[gd].e_'+colorerr_cols[i])
-dum = EXECUTE('colorerr_gd='+colorerrcmd)
-colorerr = fltarr(ncat)+9.99
-colorerr[gd] = colorerr_gd
+if keyword_set(usecolor) then begin
+  colorerr_cols = strupcase(strsplit(coloreqn,'-+*',/extract))
+  colorerr_cols = colorerr_cols[uniq(colorerr_cols,sort(colorerr_cols))]  ; unique ones
+  bd = where(valid_num(colorerr_cols) eq 1 or strupcase(colorerr_cols) eq 'EBV',nbd)  ;; Remove numbers and "EBV"
+  if nbd gt 0 then REMOVE,bd,colorerr_cols
+  ;; use - and + signs to break apart the components that need to be  squared
+  coloreqn_terms = strupcase(strsplit(coloreqn,'-+',/extract))
+  ;; remove any terms that don't have a COLORERR_COLS in them
+  okay = bytarr(n_elements(coloreqn_terms))
+  for i=0,n_elements(coloreqn_terms)-1 do $
+    for j=0,n_elements(colorerr_cols)-1 do okay[i] OR= stregex(coloreqn_terms[i],colorerr_cols[j],/boolean)
+  bd = where(okay eq 0,nbd)
+  if nbd gt 0 then REMOVE,bd,coloreqn_terms
+  ;; Now create the equation, add in quadrature
+  colorerrcmd = 'sqrt( '+strjoin('('+coloreqn_terms+')^2','+')+' )'
+  colorerrcmd = strupcase(colorerrcmd)
+  for i=0,n_elements(colorerr_cols)-1 do colorerrcmd=repstr(colorerrcmd,colorerr_cols[i],'err[gd].e_'+colorerr_cols[i])
+  dum = EXECUTE('colorerr_gd='+colorerrcmd)
+  colorerr = fltarr(ncat)+9.99
+  colorerr[gd] = colorerr_gd
+endif else colorerr=fltarr(ncat)
 
 ;; The modelmag errors
 ;; get the columns
