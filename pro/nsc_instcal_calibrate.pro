@@ -118,7 +118,7 @@ add_tag,schema,'FILTER','',schema
 add_tag,schema,'MJD',0.0d0,schema
 cat = REPLICATE(schema,ncat)
 ; Start the chips summary structure
-chstr = replicate({expdir:'',instrument:'',filename:'',ccdnum:0L,nsources:0L,cenra:999999.0d0,cendec:999999.0d0,$
+chstr = replicate({expdir:'',instrument:'',filename:'',measfile:'',ccdnum:0L,nsources:0L,nmeas:0L,cenra:999999.0d0,cendec:999999.0d0,$
                    ngaiamatch:0L,ngoodgaiamatch:0L,rarms:999999.0,rastderr:999999.0,racoef:dblarr(4),decrms:999999.0,$
                    decstderr:999999.0,deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,$
                    zptermerr:999999.0,nrefmatch:0L,depth95:99.99,depth10sig:99.99},nchips)
@@ -598,26 +598,139 @@ endif
 ;--------------------------------------------------
 if keyword_set(redo) and keyword_set(selfcal) and expstr.zptype eq 2 then begin
   ; Create backup of original versions
-  printlog,logf,'Copying cat and meta files to v1 versions'
+  printlog,logf,'Copying meas and meta files to v1 versions'
   metafile = expdir+'/'+base+'_meta.fits'
   if file_test(metafile) eq 1 then FILE_COPY,metafile,expdir+'/'+base+'_meta.v1.fits',/overwrite
-  if file_test(outfile) eq 1 then FILE_COPY,outfile,expdir+'/'+base+'_cat.v1.fits',/overwrite
-  if file_test(logf) eq 1 then FILE_COPY,logf,expdir+'/'+base+'_calib.v1.log',/overwrite
 endif
 
-printlog,logf,'' & printlog,logf,'Writing final catalog to ',outfile
-;;; Create an output catalog for each chip
-;nsrc = long64(total(chstr.nsources,/cum))
-;lo = [0L,nsrc[0:nchips-2]]
-;hi = nsrc-1
-;for i=0,nchips-1 do begin
-;  outfile = expdir+'/'+base+'_cat'+strtrim(chstr[i].ccdnum,2)+'.fits'
-;  MWRFITS,cat[lo[i]:hi[i]],outfile,/create
-;  MWRFITS,chstr[i],outfile,/silent   ; add chip stucture for this chip
-;endfor
-MWRFITS,cat,outfile,/create
-;if file_test(outfile+'.gz') eq 1 then file_delete,outfile+'.gz'
-;spawn,['gzip',outfile],/noshell  ; makes little difference
+
+;; Create an output catalog for each chip
+nsrc = long64(total(chstr.nsources,/cum))
+lo = [0L,nsrc[0:nchips-2]]
+hi = nsrc-1
+for i=0,nchips-1 do begin
+  ncat1 = hi[i]-lo[i]+1
+  if ncat1 eq 0 then begin
+    printlog,logf,'No sources for CCDNUM='+strtrim(chstr[i].ccdnum,2)
+    goto,CHIPBOMB
+  endif
+  cat1 = cat[lo[i]:hi[i]]
+
+  ;; Apply QA cuts
+  ;;----------------
+
+  ;; Remove bad chip data
+  ;; Half of chip 31 for MJD>56660
+  ;;  c4d_131123_025436_ooi_r_v2 with MJD=56619 has problems too
+  ;;  if the background b/w the left and right half is large then BAd
+  lft31 = where(cat1.x_image lt 1024 and cat1.ccdnum eq 31,nlft31)
+  rt31 = where(cat1.x_image ge 1024 and cat1.ccdnum eq 31,nrt31)
+  if nlft31 gt 10 and nrt31 gt 10 then begin
+    lftback = median([cat1[lft31].background])
+    rtback = median([cat1[rt31].background])
+    mnback = 0.5*(lftback+rtback)
+    sigback = mad(cat1.background)
+    if abs(lftback-rtback) gt (sqrt(mnback)>sigback) then jump31=1 else jump31=0
+    ;printlog,logf,'  Big jump in CCDNUM 31 background levels'
+  endif else jump31=0
+  if expstr.mjd gt 56600 or jump31 eq 1 then begin  
+    badchip31 = 1
+    ;; Remove bad measurements
+    ;; X: 1-1024 okay
+    ;; X: 1025-2049 bad
+    ;; use 1000 as the boundary since sometimes there's a sharp drop
+    ;; at the boundary that causes problem sources with SExtractor
+    bdind = where(cat1.x_image gt 1000 and cat1.ccdnum eq 31,nbdind,comp=gdind,ncomp=ngdind)
+    if nbdind gt 0 then begin   ; some bad ones found
+      if ngdind eq 0 then begin   ; all bad
+        ;printlog,logf,'NO useful measurements in ',list[i].file
+        undefine,cat1
+        ncat1 = 0
+        goto,CHIPBOMB
+     endif else begin
+        ;printlog,logf,'  Removing '+strtrim(nbdind,2)+' bad chip 31 measurements, '+strtrim(ngdind,2)+' left.'
+        REMOVE,bdind,cat1
+        ncat1 = n_elements(cat1)
+     endelse
+    endif  ; some bad ones to remove
+  endif else badchip31=0     ; chip 31
+
+  ;; Make a cut on quality mask flag (IMAFLAGS_ISO)
+  bdcat = where(cat1.imaflags_iso gt 0,nbdcat)
+  if nbdcat gt 0 then begin
+    ;printlog,logf,'  Removing ',strtrim(nbdcat,2),' sources with bad CP flags.'
+    if nbdcat eq ncat1 then goto,CHIPBOMB
+    REMOVE,bdcat,cat1
+    ncat1 = n_elements(cat1)
+  endif
+
+  ;; Make cuts on SE FLAGS
+  ;;   this removes problematic truncatd sources near chip edges
+  bdseflags = where( ((cat1.flags and 8) eq 8) or $             ; object truncated
+                     ((cat1.flags and 16) eq 16),nbdseflags)    ; aperture truncate
+  if nbdseflags gt 0 then begin
+    ;printlog,logf,'  Removing ',strtrim(nbdseflags,2),' truncated sources'
+    if nbdseflags eq ncat1 then goto,CHIPBOMB
+    REMOVE,bdseflags,cat1
+    ncat1 = n_elements(cat1)
+  endif
+
+  ;; Removing low-S/N sources
+  ;;  snr = 1.087/err
+  snrcut = 5.0
+  bdsnr = where(1.087/cat1.magerr_auto lt snrcut,nbdsnr)
+  if nbdsnr gt 0 then begin
+    ;printlog,logf,'  Removing ',strtrim(nbdsnr,2),' sources with S/N<',strtrim(snrcut,2)
+    if nbdsnr eq ncat1 then goto,CHIPBOMB
+    REMOVE,bdsnr,cat1
+    ncat1 = n_elements(cat1)
+  endif
+
+  ;; Convert to final format
+  if ncat1 gt 0 then begin
+    schema = {measid:'',objectid:'',exposure:'',ccdnum:0,filter:'',mjd:0.0d0,x:0.0,y:0.0,ra:0.0d0,raerr:0.0,dec:0.0d0,decerr:0.0,$
+              mag_auto:0.0,magerr_auto:0.0,mag_aper1:0.0,magerr_aper1:0.0,mag_aper2:0.0,magerr_aper2:0.0,$
+              mag_aper4:0.0,magerr_aper4:0.0,mag_aper8:0.0,magerr_aper8:0.0,kron_radius:0.0,$
+              asemi:0.0,asemierr:0.0,bsemi:0.0,bsemierr:0.0,theta:0.0,thetaerr:0.0,fwhm:0.0,flags:0}
+    meas = replicate(schema,ncat1)
+    STRUCT_ASSIGN,cat1,meas,/nozero
+    meas.measid = strtrim(cat1.sourceid,2)
+    meas.exposure = base
+    meas.x = cat1.x_image
+    meas.y = cat1.y_image
+    meas.mag_auto = cat1.cmag
+    meas.magerr_auto = cat1.cerr
+    meas.mag_aper1 = cat1.mag_aper[0] + 2.5*alog10(exptime) + expstr.zpterm
+    meas.magerr_aper1 = cat1.magerr_aper[0]
+    meas.mag_aper2 = cat1.mag_aper[1] + 2.5*alog10(exptime) + expstr.zpterm
+    meas.magerr_aper2 = cat1.magerr_aper[1]
+    meas.mag_aper4 = cat1.mag_aper[2] + 2.5*alog10(exptime) + expstr.zpterm
+    meas.magerr_aper4 = cat1.magerr_aper[2]
+    meas.mag_aper8 = cat1.mag_aper[4] + 2.5*alog10(exptime) + expstr.zpterm
+    meas.magerr_aper8 = cat1.magerr_aper[4]
+    meas.asemi = cat1.a_world * 3600.            ; convert to arcsec
+    meas.asemierr = cat1.erra_world * 3600.      ; convert to arcsec
+    meas.bsemi = cat1.b_world * 3600.            ; convert to arcsec
+    meas.bsemierr = cat1.errb_world * 3600.      ; convert to arcsec
+    meas.theta = 90-cat1.theta_world             ; make CCW E of N
+    meas.thetaerr = cat1.errtheta_world
+    meas.fwhm = cat1.fwhm_world * 3600.          ; convert to arcsec
+
+    ;; Write to file
+    outfile = expdir+'/'+base+'_'+strtrim(chstr[i].ccdnum,2)+'_meas.fits'
+    chstr[i].nmeas = ncat1  ;; updating CHSTr
+    chstr[i].measfile = outfile
+
+    if keyword_set(redo) and keyword_set(selfcal) and expstr.zptype eq 2 then $   ; Create backup of original versions 
+      if file_test(outfile) eq 1 then FILE_COPY,outfile,expdir+'/'+base+'_'+strtrim(chstr[i].ccdnum,2)+'_meas.v1.fits',/overwrite
+
+    MWRFITS,meas,outfile,/create
+    MWRFITS,chstr[i],outfile,/silent   ; add chip stucture for this chip
+  endif
+  CHIPBOMB:
+endfor
+
+;; Meta-data file
 metafile = expdir+'/'+base+'_meta.fits'
 printlog,logf,'Writing metadata to ',metafile
 MWRFITS,expstr,metafile,/create
