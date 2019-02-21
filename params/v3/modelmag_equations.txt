@@ -1,0 +1,16 @@
+# BAND INSTRUMENT  DECRANGE       COLOREQN          COLORANGE    MODELMAGEQN                                            QUALITYCUTS
+  u      c4d      [-90,90]   GMAG-JMAG-1.12*EBV     [0.80,1.1]   0.2301*NUV+0.7616*GMAG+0.4937*COLOR+0.3943*EBV+0.1344  QFLG='AAA'
+  g      c4d      [-90,-29]  JMAG-KMAG-0.17*EBV     [0.35,0.65]  SM_GMAG+0.324*COLOR+0.150*EBV-0.073                    QFLG='AAA'
+  r      c4d      [-90,-29]  JMAG-KMAG-0.17*EBV	    [0.3,0.65]   SM_RMAG-0.1628*COLOR-0.018*EBV+0.0994                  QFLG='AAA'
+  i      c4d      [-90,-29]  JMAG-KMAG-0.17*EBV	    [0.2,0.7]    SM_IMAG-0.0132*COLOR+0.010*EBV+0.0940                  QFLG='AAA'
+  z      c4d      [-90,-29]  JMAG-KMAG-0.17*EBV	    [0.2,1.0]    SM_ZMAG-0.004*COLOR-0.052*EBV+0.064                    QFLG='AAA'
+  Y      c4d      [-90,-29]  JMAG-KMAG-0.17*EBV	    [0.4,0.7]    JMAG+0.54482*COLOR+0.20*EBV+0.663380                   QFLG='AAA'
+  VR     c4d      [-90,90]   JMAG-KMAG-0.17*EBV     [0.2,0.6]    GMAG                                                   QFLG='AAA'
+  g      c4d      [-29,90]   JMAG-KMAG-0.17*EBV     [-99,99]     PS_GMAG                                                PS_GMAG<21.0
+  r      c4d      [-29,90]   JMAG-KMAG-0.17*EBV	    [-99,99]     PS_RMAG                                                PS_RMAG<21.0
+  i      c4d      [-29,90]   JMAG-KMAG-0.17*EBV	    [-99,99]     PS_IMAG                                                PS_IMAG<21.0
+  z      c4d      [-29,90]   JMAG-KMAG-0.17*EBV	    [-99,99]     PS_ZMAG                                                PS_ZMAG<21.0
+  Y      c4d      [-29,90]   JMAG-KMAG-0.17*EBV	    [-99,99]     PS_YMAG                                                PS_YMAG<21.0
+  g      ksb      [-29,90]   JMAG-KMAG-0.17*EBV     [-99,99]     PS_GMAG                                                PS_GMAG<21.0
+  r      ksb      [-29,90]   JMAG-KMAG-0.17*EBV     [-99,99]     PS_RMAG                                                PS_RMAG<21.0
+  z      k4m      [-29,90]   JMAG-KMAG-0.17*EBV     [-99,99]     PS_ZMAG                                                PS_ZMAG<21.0
