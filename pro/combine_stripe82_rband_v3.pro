@@ -128,7 +128,7 @@ bindata,jk0[gd],model_mag[gd]-allcat[gd].cmag,xbin,ybin,binsize=0.05,/med,min=0,
 oplot,xbin,ybin,ps=-1,co=255
 gdbin = where(xbin ge 0.3 and xbin le 0.7,ngdbin)
 coef = robust_poly_fitq(xbin[gdbin],ybin[gdbin],1)
-; 
+; -0.0954313     0.122835
 xx = scale_vector(findgen(100),-1,3)
 oplot,xx,poly(xx,coef),co=250
 oplot,[-1,3],[0,0],linestyle=2,co=255
@@ -157,8 +157,8 @@ ps_open,file,/color,thick=4,/encap
 device,/inches,xsize=8.5,ysize=9.5
 jk0 = allref.tmass_jmag-allref.tmass_kmag-0.17*allcat.ebv
 ; ORIGINAL: SM_RMAG-0.040*COLOR-0.018*EBV+0.004
-; ADJUSTED: SM_RMAG-0.XXX*COLOR-0.018*EBV+0.XXX
-model_mag = allref.sm_rmag - 0.040*jk0 - 0.018*allref.ebv + 0.004
+; ADJUSTED: SM_RMAG-0.1628*COLOR-0.018*EBV+0.0994
+model_mag = allref.sm_rmag -0.1628*jk0 - 0.018*allref.ebv + 0.0994
 gd = where(allcat.class_star gt 0.8 and allref.tmass_phqual eq 'AAA' and allcat.fwhm_world*3600 lt 2.0,ngd)
 hess,jk0[gd],model_mag[gd]-allcat[gd].cmag,dx=0.02,dy=0.02,xr=[-0.1,1.3],yr=[-1,1],/log,xtit='(J-Ks)o',ytit='Model-Mag',tit='ADJUSTED r-band'
 bindata,jk0[gd],model_mag[gd]-allcat[gd].cmag,xbin,ybin,binsize=0.05,/med,min=0,max=1.2
