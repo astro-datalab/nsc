@@ -262,7 +262,7 @@ modelmagerrcmd = strupcase(modelmagerrcmd)
 for i=0,n_elements(modelmageqn_cols)-1 do modelmagerrcmd=repstr(modelmagerrcmd,modelmageqn_cols[i],'err[gd].e_'+modelmageqn_cols[i])
 modelmagerrcmd = repstr(modelmagerrcmd,'COLOR','COLORERR[gd]')
 dum = EXECUTE('modelmagerr_gd='+modelmagerrcmd)
-modelmagerr = fltarr(ncat)+9.99
+modelmagerr = fltarr(ncat)+99.90
 modelmagerr[gd] = modelmagerr_gd
 
 ;; combine modelmag and modelmagerr
