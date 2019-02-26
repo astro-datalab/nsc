@@ -61,6 +61,8 @@ if refname eq '2MASS-PSC' then refname='TMASS'
 if refname eq '2MASS' then refname='TMASS'
 if refname eq 'GAIA/GAIA' then refname='GAIA'
 if refname eq 'Skymapper' then refname='SKYMAPPER'
+if refname eq 'GLIMPSE' then refname='II/293/glimpse'
+if refname eq 'SAGE' then refname='II/305/archive'
 
 if n_elements(file) eq 0 then file=tmpdir+'ref_'+stringize(cenra,ndec=5)+'_'+stringize(cendec,ndec=5)+'_'+stringize(radius,ndec=3)+'_'+refname+'.fits'
 
@@ -78,7 +80,7 @@ if file_test(file) eq 1 then begin
 endif else begin
 
   ; Use DataLab database search for Gaia and 2MASS if density is high
-  if (refname eq 'TMASS' or refname eq 'GAIA' or refname eq 'GAIADR2' or refname eq 'PS' or refname eq 'SKYMAPPER') then begin
+  if (refname eq 'TMASS' or refname eq 'GAIA' or refname eq 'GAIADR2' or refname eq 'PS' or refname eq 'SKYMAPPER' or refname eq 'ALLWISE') then begin
     if refname eq 'TMASS' then begin
       tablename = 'twomass.psc'
       cols = 'designation,ra as raj2000,dec as dej2000,j_m as jmag,j_cmsig as e_jmag,h_m as hmag,h_cmsig as e_hmag,k_m as kmag,k_cmsig as e_kmag,ph_qual as qflg'
@@ -114,7 +116,12 @@ endif else begin
       racol = 'raj2000'
       deccol = 'dej2000'
     endif
-
+    if refname eq 'ALLWISE' then begin
+      tablename = 'allwise.source'
+      cols = 'ra, dec, w1mpro as w1mag, w1sigmapro as w1err, w2mpro as w2mag, w2sigmapro as w2err'
+      server = 'gp02.datalab.noao.edu'
+    endif
+    
     ; Use Postgres command with q3c cone search                                                                                                                                    
     refcattemp = repstr(file,'.fits','.txt')
     cmd = "psql -h "+server+" -U datalab -d tapdb -w --pset footer -c 'SELECT "+cols+" FROM "+tablename+$

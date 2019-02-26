@@ -54,6 +54,20 @@ if file_test(out[0]) eq 0 then begin
   return,-1
 endif
 
+;; Figure out what reddening method we are using
+;;----------------------------------------------
+;; Extinction types:
+;; 1 - SFD, |b|>16 and RLMC>5.0 and RSMC>4.0 and max(EBV)<0.2
+;; 2 - RJCE ALLWISE, |b|<16 or max(EBV)>0.2 and not GLIMPSE or SAGE
+;;     data available
+;; 3 - RJCE GLIMPSE, GLIMPSE data available
+;; 4 - RJCE SAGE, SAGE data available
+ext_type = GETEXTTYPE(cenra,cendec,radius)
+
+;; If there is GLIMPSE or SAGE data, also get ALLWISE data
+;;  in case there is only partial coverage
+
+
 if not keyword_set(silent) then begin
   printlog,logf,'Getting reference catalogs for:'
   printlog,logf,'FILTER(S) = ',strjoin(filter,', ')
@@ -153,13 +167,16 @@ For i=0,n_elements(filter)-1 do begin
   end
   ENDCASE
 Endfor ; filter loop
+;; Extinction catalogs
+if ext_type ge 2 then push,refcat,'ALLWISE'
+if ext_type eq 3 then push,refcat,'GLIMPSE'
+if ext_type eq 4 then push,refcat,'SAGE'
 ; Some catalogs
 if n_elements(refcat) gt 0 then begin
   ; Get the unique ones
   ui = uniq(refcat,sort(refcat))
   refcat = refcat[ui]
   ; Always add Gaia at the beginning
-  ;refcat = ['GAIA/GAIA',refcat]
   refcat = ['GAIADR2',refcat]
 endif else refcat='GAIADR2'   ;'GAIA/GAIA'
 nrefcat = n_elements(refcat)
@@ -174,10 +191,13 @@ for i=0,nrefcat-1 do begin
   'APASS': push,newtags,['apass_gmag','e_apass_gmag','apass_rmag','e_apass_rmag']
   'II/312/ais': push,newtags,['nuv','e_nuv']  ; Galex
   'Skymapper': push,newtags,['sm_gmag','e_sm_gmag','sm_rmag','e_sm_rmag','sm_imag','e_sm_imag','sm_zmag','e_sm_zmag']  ; Skymapper DR1
+  'ALLWISE': push,newtags,['w1mag','w1err','w2mag','w2err']
+  'GLIMPSE': push,newtags,['gl_36mag','gl_36err','gl_45mag','gl_45err']
+  'SAGE': push,newtags,['sage_36mag','sage_36err','sage_45mag','sage_45err']
   else: stop,refcat[i]+' NOT SUPPORTED'
   endcase
 endfor
-push,newtags,'ebv'
+push,newtags,['ebv_sfd','ejk']
 if keyword_set(modelmags) then push,newtags,'model_mag'
 nnewtags = n_elements(newtags)
 
@@ -268,6 +288,24 @@ for i=0,nrefcat-1 do begin
          ref[ind1].sm_zmag = ref1[ind2].sm_zmag
          ref[ind1].e_sm_zmag = ref1[ind2].e_sm_zmag
       end
+      'ALLWISE': begin
+         ref[ind1].w1mag = ref1[ind2].w1mag
+         ref[ind1].w1err = ref1[ind2].w1err
+         ref[ind1].w2mag = ref1[ind2].w2mag
+         ref[ind1].w2err = ref1[ind2].w2err
+      end
+      'GLIMPSE': begin
+         ref[ind1].gl_36mag = ref1[ind2]._3_6_
+         ref[ind1].gl_36err = ref1[ind2].e__3_6_
+         ref[ind1].gl_45mag = ref1[ind2]._4_5_
+         ref[ind1].gl_45err = ref1[ind2].e__4_5_
+      end
+      'SAGE': begin
+         ref[ind1].sage_36mag = ref1[ind2]._3_6_
+         ref[ind1].sage_36err = ref1[ind2].e__3_6_
+         ref[ind1].sage_45mag = ref1[ind2]._4_5_
+         ref[ind1].sage_45err = ref1[ind2].e__4_5_
+      end
       else: stop,catname+' NOT SUPPORTED'
       endcase
     endif
@@ -316,6 +354,24 @@ for i=0,nrefcat-1 do begin
          new.sm_zmag = left1.sm_zmag
          new.e_sm_zmag = left1.e_sm_zmag
       end
+      'ALLWISE': begin
+         new.w1mag = left1.w1mag
+         new.w1err = left1.w1err
+         new.w2mag = left1.w2mag
+         new.w2err = left1.w2err
+      end
+      'GLIMPSE': begin
+         new.gl_36mag = left1._3_6mag
+         new.gl_36err = left1.e_3_6mag
+         new.gl_45mag = left1._4_5mag
+         new.gl_45err = left1.e_4_5mag
+      end
+      'SAGE': begin
+         new.sage_36mag = left1._3_6_
+         new.sage_36err = left1.e__3_6_
+         new.sage_45mag = left1._4_5_
+         new.sage_45err = left1.e__4_5_
+      end      
       else: stop,catname+' NOT SUPPORTED'
       endcase
       
@@ -334,7 +390,7 @@ endfor
 ; Add reddening
 glactc,ref.ra,ref.dec,2000.0,glon,glat,1,/deg
 ebv = dust_getval(glon,glat,/noloop,/interp)
-ref.ebv = ebv
+ref.ebv_sfd = ebv
 
 ; Get the model magnitudes
 if keyword_set(modelmags) then begin
