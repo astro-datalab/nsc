@@ -118,11 +118,11 @@ endif else begin
     endif
     if refname eq 'ALLWISE' then begin
       tablename = 'allwise.source'
-      cols = 'ra, dec, w1mpro as w1mag, w1sigmapro as w1err, w2mpro as w2mag, w2sigmapro as w2err'
-      server = 'gp02.datalab.noao.edu'
+      cols = 'ra, dec, w1mpro as w1mag, w1sigmpro as e_w1mag, w2mpro as w2mag, w2sigmpro as e_w2mag'
+      server = 'gp01.datalab.noao.edu'
     endif
     
-    ; Use Postgres command with q3c cone search                                                                                                                                    
+    ; Use Postgres command with q3c cone search
     refcattemp = repstr(file,'.fits','.txt')
     cmd = "psql -h "+server+" -U datalab -d tapdb -w --pset footer -c 'SELECT "+cols+" FROM "+tablename+$
           " WHERE q3c_radial_query("+racol+","+deccol+","+stringize(cenra,ndec=4,/nocomma)+","+stringize(cendec,ndec=4,/nocomma)+$
@@ -151,7 +151,8 @@ endif else begin
   endif else begin
     ;if refcat eq 'APASS' then cfa=0 else cfa=1  ; cfa doesn't have APASS
     cfa = 1  ; problems with CDS VizieR and cfa has APASS now
-    ref = QUERYVIZIER(refcat,[cenra,cendec],radius*60,cfa=cfa)
+    if refcat eq 'SAGE' then cfa=0
+    ref = QUERYVIZIER(refname,[cenra,cendec],radius*60,cfa=cfa,timeout=600,/silent)
 
     ; Check for failure
     if size(ref,/type) ne 8 then begin
@@ -180,6 +181,19 @@ endif else begin
       struct_assign,orig,ref
       ref.designation = orig._2mass
       undefine,orig
+    endif
+    ;; Fix NANs in ALLWISE
+    if refname eq 'ALLWISE' then begin
+      bd = where(finite(ref._3_6_) eq 0,nbd)
+      if nbd gt 0 then begin
+        ref[bd]._3_6_ = 99.99
+        ref[bd].e__3_6_ = 9.99
+      endif
+      bd = where(finite(ref._4_5_) eq 0,nbd)
+      if nbd gt 0 then begin
+        ref[bd]._4_5_ = 99.99
+        ref[bd].e__4_5_ = 9.99
+      endif
     endif
 
     ; Save the file

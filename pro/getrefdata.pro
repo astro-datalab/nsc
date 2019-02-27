@@ -74,6 +74,13 @@ if not keyword_set(silent) then begin
   printlog,logf,'CENRA  = ',strtrim(cenra,2)
   printlog,logf,'CENDEC = ',strtrim(cendec,2)
   printlog,logf,'RADIUS = ',strtrim(radius,2),' deg'
+  case ext_type of
+  1: printlog,logf,'Extinction Type: 1 - SFD'
+  2: printlog,logf,'Extinction Type: 2 - RJCE ALLWISE'
+  3: printlog,logf,'Extinction Type: 3 - RJCE GLIMPSE'
+  4: printlog,logf,'Extinction Type: 4 - RJCE SAGE'
+  else:
+  endcase
 endif
 
 ; Load the reference catalogs
@@ -98,7 +105,7 @@ For i=0,n_elements(filter)-1 do begin
       push,refcat,['2MASS-PSC','PS']
     endif else begin
       ; Use 2MASS and Skymapper to calibrate
-      push,refcat,['2MASS-PSC','APASS','Skymapper']
+      push,refcat,['2MASS-PSC','Skymapper']
     endelse
   end
   ; DECam r-band
@@ -108,7 +115,7 @@ For i=0,n_elements(filter)-1 do begin
       push,refcat,['2MASS-PSC','PS']
     endif else begin
       ; Use 2MASS and Skymapper to calibrate
-      push,refcat,['2MASS-PSC','APASS','Skymapper']
+      push,refcat,['2MASS-PSC','Skymapper']
     endelse
   end
   ; DECam i-band
@@ -186,25 +193,25 @@ undefine,newtags
 for i=0,nrefcat-1 do begin
   case refcat[i] of
   'GAIADR2':    ; do nothing
-  '2MASS-PSC': push,newtags,['jmag','e_jmag','kmag','e_kmag','qflg']
+  '2MASS-PSC': push,newtags,['jmag','e_jmag','hmag','e_hmag','kmag','e_kmag','qflg']
   'PS': push,newtags,['ps_gmag','ps_rmag','ps_imag','ps_zmag','ps_ymag']
   'APASS': push,newtags,['apass_gmag','e_apass_gmag','apass_rmag','e_apass_rmag']
   'II/312/ais': push,newtags,['nuv','e_nuv']  ; Galex
   'Skymapper': push,newtags,['sm_gmag','e_sm_gmag','sm_rmag','e_sm_rmag','sm_imag','e_sm_imag','sm_zmag','e_sm_zmag']  ; Skymapper DR1
-  'ALLWISE': push,newtags,['w1mag','w1err','w2mag','w2err']
-  'GLIMPSE': push,newtags,['gl_36mag','gl_36err','gl_45mag','gl_45err']
-  'SAGE': push,newtags,['sage_36mag','sage_36err','sage_45mag','sage_45err']
+  'ALLWISE': push,newtags,['w1mag','e_w1mag','w2mag','e_w2mag']
+  'GLIMPSE': push,newtags,['gl_36mag','e_gl_36mag','gl_45mag','e_gl_45mag']
+  'SAGE': push,newtags,['sage_36mag','e_sage_36mag','sage_45mag','e_sage_45mag']
   else: stop,refcat[i]+' NOT SUPPORTED'
   endcase
 endfor
-push,newtags,['ebv_sfd','ejk']
+push,newtags,['ebv_sfd','ejk','e_ejk','ext_type']
 if keyword_set(modelmags) then push,newtags,'model_mag'
 nnewtags = n_elements(newtags)
 
 ; Load the necessary catalogs
 nrefcat = n_elements(refcat)
 if not keyword_set(silent) then $
-  printlog,logf,strtrim(nrefcat,2),' reference catalogs to load'
+  printlog,logf,strtrim(nrefcat,2),' reference catalogs to load '+strjoin(refcat,' ')
 for i=0,nrefcat-1 do begin
   t0 = systime(1)
   if not keyword_set(silent) then $
@@ -226,6 +233,7 @@ for i=0,nrefcat-1 do begin
     for j=0,nnewtags-1 do begin
       val0 = 99.99
       if newtags[j] eq 'qflg' then val0=''
+      if newtags[j] eq 'ext_type' then val0=0
       schema = create_struct(schema,newtags[j],val0)
     endfor
     ref = replicate(schema,n_elements(ref1))
@@ -241,9 +249,9 @@ for i=0,nrefcat-1 do begin
     ; Get RA/DEC columns
     ; 2MASS, Galex, APASS use RAJ2000
     ; PS uses RA/DEC
-    if refcat[i] ne 'PS' then raind=where(tags1 eq 'RAJ2000',nraind) else $
+    if (refcat[i] ne 'PS' and refcat[i] ne 'ALLWISE') then raind=where(tags1 eq 'RAJ2000',nraind) else $
        raind=where(tags1 eq 'RA',nraind)
-    if refcat[i] ne 'PS' then decind=where(tags1 eq 'DEJ2000',ndecind) else $
+    if (refcat[i] ne 'PS' and refcat[i] ne 'ALLWISE') then decind=where(tags1 eq 'DEJ2000',ndecind) else $
        decind=where(tags1 eq 'DEC',ndecind)
 
     ; Crossmatch
@@ -257,6 +265,8 @@ for i=0,nrefcat-1 do begin
       '2MASS-PSC': begin
          ref[ind1].jmag = ref1[ind2].jmag
          ref[ind1].e_jmag = ref1[ind2].e_jmag
+         ref[ind1].hmag = ref1[ind2].hmag
+         ref[ind1].e_hmag = ref1[ind2].e_hmag
          ref[ind1].kmag = ref1[ind2].kmag
          ref[ind1].e_kmag = ref1[ind2].e_kmag
          ref[ind1].qflg = ref1[ind2].qflg
@@ -290,21 +300,21 @@ for i=0,nrefcat-1 do begin
       end
       'ALLWISE': begin
          ref[ind1].w1mag = ref1[ind2].w1mag
-         ref[ind1].w1err = ref1[ind2].w1err
+         ref[ind1].e_w1mag = ref1[ind2].e_w1mag
          ref[ind1].w2mag = ref1[ind2].w2mag
-         ref[ind1].w2err = ref1[ind2].w2err
+         ref[ind1].e_w2mag = ref1[ind2].e_w2mag
       end
       'GLIMPSE': begin
          ref[ind1].gl_36mag = ref1[ind2]._3_6_
-         ref[ind1].gl_36err = ref1[ind2].e__3_6_
+         ref[ind1].e_gl_36mag = ref1[ind2].e__3_6_
          ref[ind1].gl_45mag = ref1[ind2]._4_5_
-         ref[ind1].gl_45err = ref1[ind2].e__4_5_
+         ref[ind1].e_gl_45mag = ref1[ind2].e__4_5_
       end
       'SAGE': begin
          ref[ind1].sage_36mag = ref1[ind2]._3_6_
-         ref[ind1].sage_36err = ref1[ind2].e__3_6_
+         ref[ind1].e_sage_36mag = ref1[ind2].e__3_6_
          ref[ind1].sage_45mag = ref1[ind2]._4_5_
-         ref[ind1].sage_45err = ref1[ind2].e__4_5_
+         ref[ind1].e_sage_45mag = ref1[ind2].e__4_5_
       end
       else: stop,catname+' NOT SUPPORTED'
       endcase
@@ -323,6 +333,8 @@ for i=0,nrefcat-1 do begin
       '2MASS-PSC': begin
          new.jmag = left1.jmag
          new.e_jmag = left1.e_jmag
+         new.hmag = left1.hmag
+         new.e_hmag = left1.e_hmag
          new.kmag = left1.kmag
          new.e_kmag = left1.e_kmag
          new.qflg = left1.qflg
@@ -356,21 +368,21 @@ for i=0,nrefcat-1 do begin
       end
       'ALLWISE': begin
          new.w1mag = left1.w1mag
-         new.w1err = left1.w1err
+         new.e_w1mag = left1.e_w1mag
          new.w2mag = left1.w2mag
-         new.w2err = left1.w2err
+         new.e_w2mag = left1.e_w2mag
       end
       'GLIMPSE': begin
          new.gl_36mag = left1._3_6mag
-         new.gl_36err = left1.e_3_6mag
+         new.e_gl_36mag = left1.e_3_6mag
          new.gl_45mag = left1._4_5mag
-         new.gl_45err = left1.e_4_5mag
+         new.e_gl_45mag = left1.e_4_5mag
       end
       'SAGE': begin
          new.sage_36mag = left1._3_6_
-         new.sage_36err = left1.e__3_6_
+         new.e_sage_36mag = left1.e__3_6_
          new.sage_45mag = left1._4_5_
-         new.sage_45err = left1.e__4_5_
+         new.e_sage_45mag = left1.e__4_5_
       end      
       else: stop,catname+' NOT SUPPORTED'
       endcase
@@ -387,21 +399,15 @@ for i=0,nrefcat-1 do begin
   BOMB:
 endfor
 
-; Add reddening
-glactc,ref.ra,ref.dec,2000.0,glon,glat,1,/deg
-ebv = dust_getval(glon,glat,/noloop,/interp)
-ref.ebv_sfd = ebv
+;; Get extinction
+;;-------------------
+GETREDDENING,ref,ext_type
 
-; Get the model magnitudes
-if keyword_set(modelmags) then begin
-  model_mag = GETMODELMAG(ref,filter)
-  ref.model_mag = model_mag
-  gmodel = where(ref.model_mag lt 50,ngmodel)
-  if not keyword_set(silent) then $
-    printlog,logf,strtrim(ngmodel,2)+' stars with good model magnitudes'
-endif
+
 
 count = n_elements(ref)
+
+stop
 
 return,ref
 
