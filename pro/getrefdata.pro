@@ -32,6 +32,7 @@
 function getrefdata,filter,cenra,cendec,radius,count=count,saveref=saveref,silent=silent,$
                     dcr=dcr,modelmags=modelmags,logfile=logfile
 
+t0 = systime(1)
 undefine,ref
 count = 0
 
@@ -305,10 +306,10 @@ for i=0,nrefcat-1 do begin
          ref[ind1].e_w2mag = ref1[ind2].e_w2mag
       end
       'GLIMPSE': begin
-         ref[ind1].gl_36mag = ref1[ind2]._3_6_
-         ref[ind1].e_gl_36mag = ref1[ind2].e__3_6_
-         ref[ind1].gl_45mag = ref1[ind2]._4_5_
-         ref[ind1].e_gl_45mag = ref1[ind2].e__4_5_
+         ref[ind1].gl_36mag = ref1[ind2]._3_6mag
+         ref[ind1].e_gl_36mag = ref1[ind2].e_3_6mag
+         ref[ind1].gl_45mag = ref1[ind2]._4_5mag
+         ref[ind1].e_gl_45mag = ref1[ind2].e_4_5mag
       end
       'SAGE': begin
          ref[ind1].sage_36mag = ref1[ind2]._3_6_
@@ -400,14 +401,12 @@ for i=0,nrefcat-1 do begin
 endfor
 
 ;; Get extinction
-;;-------------------
+;;----------------
 GETREDDENING,ref,ext_type
-
-
 
 count = n_elements(ref)
 
-stop
+print,'dt=',stringize(systime(1)-t0,ndec=1),' sec'
 
 return,ref
 

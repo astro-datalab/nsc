@@ -54,7 +54,7 @@ if ext_type ge 2 then begin
       ejk = 1.5*0.918*(ref[gdglimpse].hmag-ref[gdglimpse].gl_45mag-0.08)
       e_ejk = 1.5*0.918*sqrt(ref[gdglimpse].e_hmag^2+ref[gdglimpse].e_gl_45mag^2)
       gdejk = where(ejk gt 0 and ejk lt ejk_sfd and e_ejk lt 0.2,ngdejk)
-      if ngdejkgt 0 then begin
+      if ngdejk gt 0 then begin
         ref[gdglimpse[gdejk]].ejk = ejk[gdejk]
         ref[gdglimpse[gdejk]].e_ejk = e_ejk[gdejk]
         ref[gdglimpse[gdejk]].ext_type = 3
@@ -86,16 +86,13 @@ if ext_type ge 2 then begin
     ejk = 1.5*0.918*(ref[gdwise].hmag-ref[gdwise].w2mag-0.05)
     e_ejk = 1.5*0.918*sqrt(ref[gdwise].e_hmag^2+ref[gdwise].e_w2mag^2)
     gdejk = where(ejk gt 0 and ejk lt ejk_sfd and e_ejk lt 0.2,ngdejk)
-    if ngdejkgt 0 then begin
+    if ngdejk gt 0 then begin
       ref[gdwise[gdejk]].ejk = ejk[gdejk]
       ref[gdwise[gdejk]].e_ejk = e_ejk[gdejk]
       ref[gdwise[gdejk]].ext_type = 2
     endif
   endif
 endif
-
-
-stop
 
 end
 
