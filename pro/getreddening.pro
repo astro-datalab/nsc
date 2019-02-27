@@ -53,9 +53,10 @@ if ext_type ge 2 then begin
     if ngdglimpse gt 0 then begin
       ejk = 1.5*0.918*(ref[gdglimpse].hmag-ref[gdglimpse].gl_45mag-0.08)
       e_ejk = 1.5*0.918*sqrt(ref[gdglimpse].e_hmag^2+ref[gdglimpse].e_gl_45mag^2)
-      gdejk = where(ejk gt 0 and ejk lt ejk_sfd and e_ejk lt 0.2,ngdejk)
+      ;gdejk = where(ejk gt 0 and ejk lt ejk_sfd[gdglimpse] and e_ejk lt 0.2,ngdejk)
+      gdejk = where(ejk lt ejk_sfd[gdglimpse],ngdejk)
       if ngdejk gt 0 then begin
-        ref[gdglimpse[gdejk]].ejk = ejk[gdejk]
+        ref[gdglimpse[gdejk]].ejk = ejk[gdejk] > 0.0
         ref[gdglimpse[gdejk]].e_ejk = e_ejk[gdejk]
         ref[gdglimpse[gdejk]].ext_type = 3
       endif
@@ -69,9 +70,10 @@ if ext_type ge 2 then begin
     if ngdsage gt 0 then begin
       ejk = 1.5*0.918*(ref[gdsage].hmag-ref[gdsage].sage_45mag-0.08)
       e_ejk = 1.5*0.918*sqrt(ref[gdsage].e_hmag^2+ref[gdsage].e_sage_45mag^2)
-      gdejk = where(ejk gt 0 and ejk lt ejk_sfd and e_ejk lt 0.2,ngdejk)
+      ;gdejk = where(ejk gt 0 and ejk lt ejk_sfd[gdsage] and e_ejk lt 0.2,ngdejk)
+      gdejk = where(ejk lt ejk_sfd[gdsage],ngdejk)
       if ngdejk gt 0 then begin
-        ref[gdsage[gdejk]].ejk = ejk[gdejk]
+        ref[gdsage[gdejk]].ejk = ejk[gdejk] > 0.0
         ref[gdsage[gdejk]].e_ejk = e_ejk[gdejk]
         ref[gdsage[gdejk]].ext_type = 4
       endif
@@ -85,9 +87,10 @@ if ext_type ge 2 then begin
   if ngdwise gt 0 then begin
     ejk = 1.5*0.918*(ref[gdwise].hmag-ref[gdwise].w2mag-0.05)
     e_ejk = 1.5*0.918*sqrt(ref[gdwise].e_hmag^2+ref[gdwise].e_w2mag^2)
-    gdejk = where(ejk gt 0 and ejk lt ejk_sfd and e_ejk lt 0.2,ngdejk)
+    ;gdejk = where(ejk gt 0 and ejk lt ejk_sfd[gdwise] and e_ejk lt 0.2,ngdejk)
+    gdejk = where(ejk lt ejk_sfd[gdwise],ngdejk)
     if ngdejk gt 0 then begin
-      ref[gdwise[gdejk]].ejk = ejk[gdejk]
+      ref[gdwise[gdejk]].ejk = ejk[gdejk] > 0.0
       ref[gdwise[gdejk]].e_ejk = e_ejk[gdejk]
       ref[gdwise[gdejk]].ext_type = 2
     endif

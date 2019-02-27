@@ -212,7 +212,7 @@ nnewtags = n_elements(newtags)
 ; Load the necessary catalogs
 nrefcat = n_elements(refcat)
 if not keyword_set(silent) then $
-  printlog,logf,strtrim(nrefcat,2),' reference catalogs to load '+strjoin(refcat,' ')
+  printlog,logf,strtrim(nrefcat,2),' reference catalogs to load: '+strjoin(refcat,', ')
 for i=0,nrefcat-1 do begin
   t0 = systime(1)
   if not keyword_set(silent) then $
@@ -312,9 +312,9 @@ for i=0,nrefcat-1 do begin
          ref[ind1].e_gl_45mag = ref1[ind2].e_4_5mag
       end
       'SAGE': begin
-         ref[ind1].sage_36mag = ref1[ind2]._3_6_
+         ref[ind1].sage_36mag = ref1[ind2].__3_6_
          ref[ind1].e_sage_36mag = ref1[ind2].e__3_6_
-         ref[ind1].sage_45mag = ref1[ind2]._4_5_
+         ref[ind1].sage_45mag = ref1[ind2].__4_5_
          ref[ind1].e_sage_45mag = ref1[ind2].e__4_5_
       end
       else: stop,catname+' NOT SUPPORTED'
@@ -380,9 +380,9 @@ for i=0,nrefcat-1 do begin
          new.e_gl_45mag = left1.e_4_5mag
       end
       'SAGE': begin
-         new.sage_36mag = left1._3_6_
+         new.sage_36mag = left1.__3_6_
          new.e_sage_36mag = left1.e__3_6_
-         new.sage_45mag = left1._4_5_
+         new.sage_45mag = left1.__4_5_
          new.e_sage_45mag = left1.e__4_5_
       end      
       else: stop,catname+' NOT SUPPORTED'
