@@ -39,8 +39,8 @@ ref.ebv_sfd = ebv
 ejk_sfd = 1.5*0.302*ref.ebv_sfd
 ref.ejk = ejk_sfd
 ref.e_ejk = 0.1   ; not sure what to put here
-bd = where(ref.ebv_sfd gt 0.3,nbd)   ; E(B-V)>0.3 is roughly where things break down
-if nbd gt 0 then ref[bd].e_ejk=10.0  
+bd = where(ref.ebv_sfd gt 0.3,nbd)   ; E(B-V)>0.3 is roughly where things "break down"
+if nbd gt 0 then ref[bd].e_ejk=1.0  
 ref.ext_type = 1
 
 ;; RJCE extinction
@@ -96,6 +96,10 @@ if ext_type ge 2 then begin
     endif
   endif
 endif
+
+;; Fix NANs in E_EJK
+bd = where(finite(ref.e_ejk) eq 0,nbd)
+if nbd gt 0 then ref[bd].e_ejk = 9.99
 
 end
 
