@@ -99,7 +99,8 @@ endif else begin
     if refname eq 'GAIADR2' then begin
       tablename = 'gaia_dr2.gaia_source'
       cols = 'source_id as source,ra,ra_error,dec,dec_error,pmra,pmra_error,pmdec,pmdec_error,phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,'+$
-             'phot_g_mean_mag as gmag,phot_bp_mean_mag as bp,phot_rp_mean_mag as rp'
+             'phot_g_mean_mag as gmag,phot_bp_mean_mag as bp,phot_bp_mean_flux as fbp,phot_bp_mean_flux_error as e_fbp,'+$
+             'phot_rp_mean_mag as rp,phot_rp_mean_flux as frp,phot_rp_mean_flux_error as e_frp'
       server = 'gp01.datalab.noao.edu'
     endif
     if refname eq 'PS' then begin
@@ -150,39 +151,46 @@ endif else begin
   ;   for low density with 2MASS/GAIA and always for GALEX and APASS
   endif else begin
 
-    ; Use python code, it's much faster, ~18x
-    tempfile = MKTEMP('vzr')
-    file_delete,tempfile+'.fits',/allow
-    pylines = 'python -c "from astroquery.vizier import Vizier;'+$
-              'import astropy.units as u;'+$
-              'import astropy.coordinates as coord;'+$
-              'Vizier.TIMEOUT = 600;'+$
-              'Vizier.ROW_LIMIT = -1;'+$
-              'result = Vizier.query_region(coord.SkyCoord(ra='+strtrim(cenra,2)+', dec='+strtrim(cendec,2)+$
-              ",unit=(u.deg,u.deg),frame='icrs'),width='"+strtrim(radius*60,2)+"m',catalog='"+refname+"');"+$
-              "df=result[0];df.write('"+tempfile+".fits')"+'"'
-    spawn,pylines,out,errout
-    if file_test(tempfile+'.fits') eq 0 then begin
-      if not keyword_set(silent) then printlog,logf,'No Results'
-      ref = -1
-      nref = 0
-      file_delete,[tempfile,tempfile+'.fits'],/allow
-      return,ref
-    endif
-    ref = MRDFITS(tempfile+'.fits',1,/silent)
-    file_delete,[tempfile,tempfile+'.fits'],/allow
+    ;; Use QUERYVIZIER for GALEX (python code has problems)
+    if refname eq 'II/312/ais' or refname eq 'GALEX' then begin
+      ;if refcat eq 'APASS' then cfa=0 else cfa=1  ; cfa doesn't have APASS
+      cfa = 1  ; problems with CDS VizieR and cfa has APASS now
+      if refcat eq 'SAGE' then cfa=0
+      ref = QUERYVIZIER(refname,[cenra,cendec],radius*60,cfa=cfa,timeout=600,/silent)
+      ; Check for failure
+      if size(ref,/type) ne 8 then begin
+        if not keyword_set(silent) then printlog,logf,'Failure or No Results'
+        ref = -1
+        nref = 0
+        return,ref
+      endif
 
-    ;;if refcat eq 'APASS' then cfa=0 else cfa=1  ; cfa doesn't have APASS
-    ;cfa = 1  ; problems with CDS VizieR and cfa has APASS now
-    ;if refcat eq 'SAGE' then cfa=0
-    ;ref = QUERYVIZIER(refname,[cenra,cendec],radius*60,cfa=cfa,timeout=600,/silent)
-    ;; Check for failure
-    ;if size(ref,/type) ne 8 then begin
-    ;  if not keyword_set(silent) then printlog,logf,'Failure or No Results'
-    ;  ref = -1
-    ;  nref = 0
-    ;  return,ref
-    ;endif
+    ;; Use Python code
+    endif else begin
+      ; Use python code, it's much faster, ~18x
+      tempfile = MKTEMP('vzr')
+      file_delete,tempfile+'.fits',/allow
+      pylines = 'python -c "from astroquery.vizier import Vizier;'+$
+                'import astropy.units as u;'+$
+                'import astropy.coordinates as coord;'+$
+                'Vizier.TIMEOUT = 600;'+$
+                'Vizier.ROW_LIMIT = -1;'+$
+                'result = Vizier.query_region(coord.SkyCoord(ra='+strtrim(cenra,2)+', dec='+strtrim(cendec,2)+$
+                ",unit=(u.deg,u.deg),frame='icrs'),width='"+strtrim(radius*60,2)+"m',catalog='"+refname+"');"+$
+                "df=result[0];"+$
+                "df.meta['description']=df.meta['description'][0:50];"+$
+                "df.write('"+tempfile+".fits')"+'"'
+      spawn,pylines,out,errout
+      if file_test(tempfile+'.fits') eq 0 then begin
+        if not keyword_set(silent) then printlog,logf,'No Results'
+        ref = -1
+        nref = 0
+        file_delete,[tempfile,tempfile+'.fits'],/allow
+        return,ref
+      endif
+      ref = MRDFITS(tempfile+'.fits',1,/silent)
+      file_delete,[tempfile,tempfile+'.fits'],/allow
+    endelse
 
     ; Fix/homogenize the GAIA tags
     if refname eq 'GAIA' then begin

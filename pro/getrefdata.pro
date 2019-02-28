@@ -193,7 +193,7 @@ nrefcat = n_elements(refcat)
 undefine,newtags
 for i=0,nrefcat-1 do begin
   case refcat[i] of
-  'GAIADR2':    ; do nothing
+  'GAIADR2': push,newtags,['source','ra','ra_error','dec','dec_error','pmra','pmra_error','pmdec','pmdecerr','gmag','e_gmag','bp','e_bp','rp','e_rp']
   '2MASS-PSC': push,newtags,['jmag','e_jmag','hmag','e_hmag','kmag','e_kmag','qflg']
   'PS': push,newtags,['ps_gmag','ps_rmag','ps_imag','ps_zmag','ps_ymag']
   'APASS': push,newtags,['apass_gmag','e_apass_gmag','apass_rmag','e_apass_rmag']
@@ -224,28 +224,34 @@ for i=0,nrefcat-1 do begin
   tags1 = tag_names(ref1)
 
 
-  ; First successful one, initialize the catalog
-  if n_elements(ref) eq 0 then begin
-    ; New format, add tags
-    schema = ref1[0]
-    struct_assign,{dum:''},schema
-    if tag_exist(schema,'RA') eq 0 then $
-      schema = create_struct(schema,'ra',999999d0,'dec',999999.0d0)
-    for j=0,nnewtags-1 do begin
-      val0 = 99.99
-      if newtags[j] eq 'qflg' then val0=''
-      if newtags[j] eq 'ext_type' then val0=0
+  ;; Initialize the catalog
+  undefine,schema
+  for j=0,nnewtags-1 do begin
+    val0 = 99.99
+    if newtags[j] eq 'qflg' then val0=''
+    if newtags[j] eq 'ext_type' then val0=0
+    if newtags[j] eq 'source' then val0=0LL
+    if newtags[j] eq 'ra' then val0=0.0d0
+    if newtags[j] eq 'dec' then val0=0.0d0
+    if n_elements(schema) eq 0 then schema=create_struct(newtags[j],val0) else $
       schema = create_struct(schema,newtags[j],val0)
-    endfor
-    ref = replicate(schema,n_elements(ref1))
+  endfor
+
+
+  ;; First successful one, initialize the catalog
+  if n_elements(ref) eq 0 then begin
+    ref = replicate(schema,nref1)
     struct_assign,ref1,ref,/nozero
     if tag_exist(ref1,'RA') eq 0 then begin
       ref.ra = ref.ra_icrs
       ref.dec = ref.de_icrs
     endif
+    ind1 = lindgen(nref1)
+    ind2 = lindgen(nref1)
+    nmatch = nref1
 
-  ; Crossmatch and add magnitudes
-  endif else begin
+  ;; Second and later
+ endif else begin
 
     ; Get RA/DEC columns
     ; 2MASS, Galex, APASS use RAJ2000
@@ -259,144 +265,169 @@ for i=0,nrefcat-1 do begin
     SRCMATCH,ref.ra,ref.dec,ref1.(raind),ref1.(decind),dcr,ind1,ind2,/sph,count=nmatch
     if not keyword_set(silent) then $
       printlog,logf,strtrim(nmatch,2)+' matches'
+ endelse
 
-    ; Add magnitude columns
-    if nmatch gt 0 then begin
-      case refcat[i] of
-      '2MASS-PSC': begin
-         ref[ind1].jmag = ref1[ind2].jmag
-         ref[ind1].e_jmag = ref1[ind2].e_jmag
-         ref[ind1].hmag = ref1[ind2].hmag
-         ref[ind1].e_hmag = ref1[ind2].e_hmag
-         ref[ind1].kmag = ref1[ind2].kmag
-         ref[ind1].e_kmag = ref1[ind2].e_kmag
-         ref[ind1].qflg = ref1[ind2].qflg
-      end
-      'PS': begin
-         ref[ind1].ps_gmag = ref1[ind2].gmag
-         ref[ind1].ps_rmag = ref1[ind2].rmag
-         ref[ind1].ps_imag = ref1[ind2].imag
-         ref[ind1].ps_zmag = ref1[ind2].zmag
-         ref[ind1].ps_ymag = ref1[ind2].ymag
-      end
-      'APASS': begin
-         ref[ind1].apass_gmag = ref1[ind2].g_mag
-         ref[ind1].e_apass_gmag = ref1[ind2].e_g_mag
-         ref[ind1].apass_rmag = ref1[ind2].r_mag
-         ref[ind1].e_apass_rmag = ref1[ind2].e_r_mag
-      end
-      'II/312/ais': begin
+  ; Add magnitude columns
+  if nmatch gt 0 then begin
+    case refcat[i] of
+    'GAIADR2': begin
+      temp = ref[ind1]
+      struct_assign,ref1[ind2],temp,/nozero
+      temp.e_gmag = 2.5*alog10(1.0+ref1[ind2].e_fg/ref1[ind2].fg)
+      temp.e_bp = 2.5*alog10(1.0+ref1[ind2].e_fbp/ref1[ind2].fbp)
+      temp.e_rp = 2.5*alog10(1.0+ref1[ind2].e_frp/ref1[ind2].frp)
+      ref[ind1] = temp
+    end
+    '2MASS-PSC': begin
+       ref[ind1].jmag = ref1[ind2].jmag
+       ref[ind1].e_jmag = ref1[ind2].e_jmag
+       ref[ind1].hmag = ref1[ind2].hmag
+       ref[ind1].e_hmag = ref1[ind2].e_hmag
+       ref[ind1].kmag = ref1[ind2].kmag
+       ref[ind1].e_kmag = ref1[ind2].e_kmag
+       ref[ind1].qflg = ref1[ind2].qflg
+    end
+    'PS': begin
+       ref[ind1].ps_gmag = ref1[ind2].gmag
+       ref[ind1].ps_rmag = ref1[ind2].rmag
+       ref[ind1].ps_imag = ref1[ind2].imag
+       ref[ind1].ps_zmag = ref1[ind2].zmag
+       ref[ind1].ps_ymag = ref1[ind2].ymag
+    end
+    'APASS': begin
+       ref[ind1].apass_gmag = ref1[ind2].g_mag
+       ref[ind1].e_apass_gmag = ref1[ind2].e_g_mag
+       ref[ind1].apass_rmag = ref1[ind2].r_mag
+       ref[ind1].e_apass_rmag = ref1[ind2].e_r_mag
+    end
+    'II/312/ais': begin
+       if tag_exist(ref1,'NUV') then begin
          ref[ind1].nuv = ref1[ind2].nuv
          ref[ind1].e_nuv = ref1[ind2].e_nuv
-      end
-      'Skymapper': begin
-         ref[ind1].sm_gmag = ref1[ind2].sm_gmag
-         ref[ind1].e_sm_gmag = ref1[ind2].e_sm_gmag
-         ref[ind1].sm_rmag = ref1[ind2].sm_rmag
-         ref[ind1].e_sm_rmag = ref1[ind2].e_sm_rmag
-         ref[ind1].sm_imag = ref1[ind2].sm_imag
-         ref[ind1].e_sm_imag = ref1[ind2].e_sm_imag
-         ref[ind1].sm_zmag = ref1[ind2].sm_zmag
-         ref[ind1].e_sm_zmag = ref1[ind2].e_sm_zmag
-      end
-      'ALLWISE': begin
-         ref[ind1].w1mag = ref1[ind2].w1mag
-         ref[ind1].e_w1mag = ref1[ind2].e_w1mag
-         ref[ind1].w2mag = ref1[ind2].w2mag
-         ref[ind1].e_w2mag = ref1[ind2].e_w2mag
-      end
-      'GLIMPSE': begin
-         ref[ind1].gl_36mag = ref1[ind2]._3_6mag
-         ref[ind1].e_gl_36mag = ref1[ind2].e_3_6mag
-         ref[ind1].gl_45mag = ref1[ind2]._4_5mag
-         ref[ind1].e_gl_45mag = ref1[ind2].e_4_5mag
-      end
-      'SAGE': begin
-         ref[ind1].sage_36mag = ref1[ind2].__3_6_
-         ref[ind1].e_sage_36mag = ref1[ind2].e__3_6_
-         ref[ind1].sage_45mag = ref1[ind2].__4_5_
-         ref[ind1].e_sage_45mag = ref1[ind2].e__4_5_
-      end
-      else: stop,catname+' NOT SUPPORTED'
-      endcase
-    endif
+       endif else begin
+         ref[ind1].nuv = ref1[ind2].nuvmag
+         ref[ind1].e_nuv = ref1[ind2].e_nuvmag
+       endelse
+    end
+    'Skymapper': begin
+       ref[ind1].sm_gmag = ref1[ind2].sm_gmag
+       ref[ind1].e_sm_gmag = ref1[ind2].e_sm_gmag
+       ref[ind1].sm_rmag = ref1[ind2].sm_rmag
+       ref[ind1].e_sm_rmag = ref1[ind2].e_sm_rmag
+       ref[ind1].sm_imag = ref1[ind2].sm_imag
+       ref[ind1].e_sm_imag = ref1[ind2].e_sm_imag
+       ref[ind1].sm_zmag = ref1[ind2].sm_zmag
+       ref[ind1].e_sm_zmag = ref1[ind2].e_sm_zmag
+    end
+    'ALLWISE': begin
+       ref[ind1].w1mag = ref1[ind2].w1mag
+       ref[ind1].e_w1mag = ref1[ind2].e_w1mag
+       ref[ind1].w2mag = ref1[ind2].w2mag
+       ref[ind1].e_w2mag = ref1[ind2].e_w2mag
+    end
+    'GLIMPSE': begin
+       ref[ind1].gl_36mag = ref1[ind2]._3_6mag
+       ref[ind1].e_gl_36mag = ref1[ind2].e_3_6mag
+       ref[ind1].gl_45mag = ref1[ind2]._4_5mag
+       ref[ind1].e_gl_45mag = ref1[ind2].e_4_5mag
+    end
+    'SAGE': begin
+       ref[ind1].sage_36mag = ref1[ind2].__3_6_
+       ref[ind1].e_sage_36mag = ref1[ind2].e__3_6_
+       ref[ind1].sage_45mag = ref1[ind2].__4_5_
+       ref[ind1].e_sage_45mag = ref1[ind2].e__4_5_
+    end
+    else: stop,catname+' NOT SUPPORTED'
+    endcase
+  endif
 
-    ; Add leftover ones
-    if nmatch lt n_elements(ref1) then begin
-      left1 = ref1
-      remove,ind2,left1
-      nleft1 = n_elements(left1)
-      new = replicate(schema,nleft1)
-      new.ra = left1.(raind)
-      new.dec = left1.(decind)
+  ; Add leftover ones
+  if nmatch lt n_elements(ref1) then begin
+    left1 = ref1
+    remove,ind2,left1
+    nleft1 = n_elements(left1)
+    new = replicate(schema,nleft1)
+    new.ra = left1.(raind)
+    new.dec = left1.(decind)
       
-      case refcat[i] of
-      '2MASS-PSC': begin
-         new.jmag = left1.jmag
-         new.e_jmag = left1.e_jmag
-         new.hmag = left1.hmag
-         new.e_hmag = left1.e_hmag
-         new.kmag = left1.kmag
-         new.e_kmag = left1.e_kmag
-         new.qflg = left1.qflg
-      end
-      'PS': begin
-         new.ps_gmag = left1.gmag
-         new.ps_rmag = left1.rmag
-         new.ps_imag = left1.imag
-         new.ps_zmag = left1.zmag
-         new.ps_ymag = left1.ymag
-      end
-      'APASS': begin
-         new.apass_gmag = left1.g_mag
-         new.e_apass_gmag = left1.e_g_mag
-         new.apass_rmag = left1.r_mag
-         new.e_apass_rmag = left1.e_r_mag
-      end
-      'II/312/ais': begin
+    case refcat[i] of
+    'GAIADR2': begin
+      temp = ref[ind1]
+      struct_assign,left1,new
+      new.e_gmag = 2.5*alog10(1.0+left1.e_fg/left1.fg)
+      new.e_bp = 2.5*alog10(1.0+left1.e_fbp/left1.fbp)
+      new.e_rp = 2.5*alog10(1.0+left1.e_frp/left1.frp)
+    end
+    '2MASS-PSC': begin
+       new.jmag = left1.jmag
+       new.e_jmag = left1.e_jmag
+       new.hmag = left1.hmag
+       new.e_hmag = left1.e_hmag
+       new.kmag = left1.kmag
+       new.e_kmag = left1.e_kmag
+       new.qflg = left1.qflg
+    end
+    'PS': begin
+       new.ps_gmag = left1.gmag
+       new.ps_rmag = left1.rmag
+       new.ps_imag = left1.imag
+       new.ps_zmag = left1.zmag
+       new.ps_ymag = left1.ymag
+    end
+    'APASS': begin
+       new.apass_gmag = left1.g_mag
+       new.e_apass_gmag = left1.e_g_mag
+       new.apass_rmag = left1.r_mag
+       new.e_apass_rmag = left1.e_r_mag
+    end
+    'II/312/ais': begin
+       if tag_exist(left1,'NUV') then begin
          new.nuv = left1.nuv
          new.e_nuv = left1.e_nuv
-      end
-      'Skymapper': begin
-         new.sm_gmag = left1.sm_gmag
-         new.e_sm_gmag = left1.e_sm_gmag
-         new.sm_rmag = left1.sm_rmag
-         new.e_sm_rmag = left1.e_sm_rmag
-         new.sm_imag = left1.sm_imag
-         new.e_sm_imag = left1.e_sm_imag
-         new.sm_zmag = left1.sm_zmag
-         new.e_sm_zmag = left1.e_sm_zmag
-      end
-      'ALLWISE': begin
-         new.w1mag = left1.w1mag
-         new.e_w1mag = left1.e_w1mag
-         new.w2mag = left1.w2mag
-         new.e_w2mag = left1.e_w2mag
-      end
-      'GLIMPSE': begin
-         new.gl_36mag = left1._3_6mag
-         new.e_gl_36mag = left1.e_3_6mag
-         new.gl_45mag = left1._4_5mag
-         new.e_gl_45mag = left1.e_4_5mag
-      end
-      'SAGE': begin
-         new.sage_36mag = left1.__3_6_
-         new.e_sage_36mag = left1.e__3_6_
-         new.sage_45mag = left1.__4_5_
-         new.e_sage_45mag = left1.e__4_5_
-      end      
-      else: stop,catname+' NOT SUPPORTED'
-      endcase
+       endif else begin
+         new.nuv = left1.nuvmag
+         new.e_nuv = left1.e_nuvmag
+       endelse
+    end
+    'Skymapper': begin
+       new.sm_gmag = left1.sm_gmag
+       new.e_sm_gmag = left1.e_sm_gmag
+       new.sm_rmag = left1.sm_rmag
+       new.e_sm_rmag = left1.e_sm_rmag
+       new.sm_imag = left1.sm_imag
+       new.e_sm_imag = left1.e_sm_imag
+       new.sm_zmag = left1.sm_zmag
+       new.e_sm_zmag = left1.e_sm_zmag
+    end
+    'ALLWISE': begin
+       new.w1mag = left1.w1mag
+       new.e_w1mag = left1.e_w1mag
+       new.w2mag = left1.w2mag
+       new.e_w2mag = left1.e_w2mag
+    end
+    'GLIMPSE': begin
+       new.gl_36mag = left1._3_6mag
+       new.e_gl_36mag = left1.e_3_6mag
+       new.gl_45mag = left1._4_5mag
+       new.e_gl_45mag = left1.e_4_5mag
+    end
+    'SAGE': begin
+       new.sage_36mag = left1.__3_6_
+       new.e_sage_36mag = left1.e__3_6_
+       new.sage_45mag = left1.__4_5_
+       new.e_sage_45mag = left1.e__4_5_
+    end      
+    else: stop,catname+' NOT SUPPORTED'
+    endcase
       
-      ; Combine the two
-      old = ref
-      ref = replicate(schema,n_elements(old)+nleft1)
-      ref[0:n_elements(old)-1] = old
-      ref[n_elements(old):*] = new
-      undefine,old,new,left1
-    endif
+    ; Combine the two
+    old = ref
+    ref = replicate(schema,n_elements(old)+nleft1)
+    ref[0:n_elements(old)-1] = old
+    ref[n_elements(old):*] = new
+    undefine,old,new,left1
+  endif
 
-  endelse  ; second reference catalog
   BOMB:
 endfor
 

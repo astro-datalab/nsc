@@ -198,7 +198,7 @@ modelmag[gd] = modelmag_gd
 ;;  Each magnitude has an E_MAG error except for PS and Gaia GMAG
 ;; If we are using PS or GMAG then add the errors for the
 undefine,adderrtags
-if (where(cols eq 'GMAG'))[0] ne -1 then push,adderrtags,'E_GMAG'
+;if (where(cols eq 'GMAG'))[0] ne -1 then push,adderrtags,'E_GMAG'
 psmagind = where(stregex(cols,'^PS_',/boolean) eq 1 and stregex(cols,'MAG$',/boolean) eq 1,npsmagind)
 for i=0,npsmagind-1 do push,adderrtags,'E_'+cols[psmagind]
 nadderrtags = n_elements(adderrtags)
@@ -210,7 +210,7 @@ if nerrtags gt 1 then for i=1,nerrtags-1 do errschema=create_struct(errschema,er
 if nadderrtags gt 0 then for i=0,nadderrtags-1 do errschema=create_struct(errschema,adderrtags[i],0.001)
 err = replicate(errschema,ncat)
 struct_assign,cat,err,/nozero
-if (where(cols eq 'GMAG'))[0] ne -1 then err.e_gmag = 2.5*alog10(1.0+cat.e_fg/cat.fg)
+;if (where(cols eq 'GMAG'))[0] ne -1 then err.e_gmag = 2.5*alog10(1.0+cat.e_fg/cat.fg)
 ;; leave the PS errors at 0.001
 ;; convert NAN or 99.99 to 9.99 to be consistent
 for i=0,n_tags(err)-1 do begin
