@@ -166,10 +166,11 @@ endif else begin
       if not keyword_set(silent) then printlog,logf,'No Results'
       ref = -1
       nref = 0
+      file_delete,[tempfile,tempfile+'.fits'],/allow
       return,ref
     endif
     ref = MRDFITS(tempfile+'.fits',1,/silent)
-    file_delete,tempfile+'.fits'
+    file_delete,[tempfile,tempfile+'.fits'],/allow
 
     ;;if refcat eq 'APASS' then cfa=0 else cfa=1  ; cfa doesn't have APASS
     ;cfa = 1  ; problems with CDS VizieR and cfa has APASS now
