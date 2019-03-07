@@ -40,6 +40,16 @@ for i=0,nind-1 do begin
   cat.expnum = str[ind[i]].expnum
   print,strtrim(i+1,2),' ',base,' ',str[ind[i]].expnum,' ',strtrim(ncat,2)
 
+  cendec = mean(minmax(cat.dec))
+  cenra = mean(minmax(cat.ra))
+  if range(cat.ra) gt 100 then begin
+    ra = cat.ra
+    bd = where(ra gt 180,nbd)
+    if nbd gt 0 then ra[bd]-=360
+    cenra = mean(minmax(ra))
+    if cenra lt 0 then cenra+=360
+  endif
+
   ;; Load the Gaia file
   ;gaiafile = str[ind[i]].expdir+'/'+file_basename(str[ind[i]].expdir)+'_GAIA.fits'
   ;if file_test(gaiafile) eq 0 then goto,BOMB
@@ -76,7 +86,74 @@ for i=0,nind-1 do begin
   ;apass1 = apass[index[gd,2]]
   SRCMATCH,ref.ra,ref.dec,cat.ra,cat.dec,dcr,ind1,ind2,/sph,count=nmatch
   print,'  ',strtrim(nmatch,2),' matches to reference data'
-  if nmatch eq 0 then goto,BOMB
+
+  ;; Get reference data
+  if nmatch eq 0 then begin
+    filters='c4d-'+['u','g','r','i','z','Y','VR']
+    ref0 = GETREFDATA(filters,cenra,cendec,1.8)
+    ;; gets ps, gaia, tmass, allwise, galex, ejk
+    ;; put ref data in correct format
+    refschema = ref[0]
+    struct_assign,{dum:''},refschema
+    ;; make all 99.99 by default
+    for k=0,n_tags(refschema)-1 do begin
+      type = size(refschema.(k),/type)
+      if type eq 4 or type eq 5 then refschema.(k)=99.99
+    endfor
+    ref1 = replicate(refschema,n_elements(ref0))
+    ref1.ra = ref0.ra
+    ref1.dec = ref0.dec
+    ref1.ps1_gmag = ref0.ps_gmag
+    ref1.ps1_rmag = ref0.ps_rmag
+    ref1.ps1_imag = ref0.ps_imag
+    ref1.ps1_zmag = ref0.ps_zmag
+    ref1.ps1_ymag = ref0.ps_ymag
+    ref1.gaia_gmag = ref0.gmag
+    ref1.gaia_gerr = ref0.e_gmag
+    ref1.gaia_bp = ref0.bp
+    ref1.gaia_bperr = ref0.e_bp
+    ref1.gaia_rp = ref0.rp
+    ref1.gaia_rperr = ref0.e_rp
+    ref1.tmass_jmag = ref0.jmag
+    ref1.tmass_jerr = ref0.e_jmag
+    ref1.tmass_hmag = ref0.hmag
+    ref1.tmass_herr = ref0.e_hmag
+    ref1.tmass_kmag = ref0.kmag
+    ref1.tmass_kerr = ref0.e_kmag
+    ref1.tmass_phqual = ref0.qflg
+    ref1.galex_nuv = ref0.nuv
+    ref1.galex_nuverr = ref0.e_nuv
+    ;; apass, sm, allwise
+    ref1.allwise_w1mag = ref0.w1mag
+    ref1.allwise_w1err = ref0.e_w1mag
+    ref1.allwise_w2mag = ref0.w2mag
+    ref1.allwise_w2err = ref0.e_w2mag
+    ref1.ebv = ref0.ebv_sfd
+    ref1.ejk = ref0.ejk
+    ref1.e_ejk = ref0.e_jk
+    ref1.ext_type = ref0.ext_type
+    ;; Add Skymapper data
+    ;; need to get apass and skymapper
+    ;apass0 = GETREFCAT(cenra,cendec,'APASS')
+    sm = GETREFCAT(cenra,cendec,1.8,'SKYMAPPER')
+    SRCMATCH,ref1.ra,ref1.dec,sm.raj2000,sm.dej2000,1.0,ind1,ind2,/sph,coun=nmatch
+    if nmatch gt 0 then begin
+      ref1[ind1].sm_gmag = sm[ind2].sm_gmag
+      ref1[ind1].sm_gerr = sm[ind2].e_sm_gmag
+      ref1[ind1].sm_rmag = sm[ind2].sm_rmag
+      ref1[ind1].sm_rerr = sm[ind2].e_sm_rmag
+      ref1[ind1].sm_imag = sm[ind2].sm_imag
+      ref1[ind1].sm_ierr = sm[ind2].e_sm_imag
+      ref1[ind1].sm_zmag = sm[ind2].sm_zmag
+      ref1[ind1].sm_zerr = sm[ind2].e_sm_zmag
+    endif
+
+    ;; Now match to the DECam exposure
+    SRCMATCH,ref1.ra,ref1.dec,cat.ra,cat.dec,dcr,ind1,ind2,/sph,count=nmatch
+    if nmatch eq 0 then goto,BOMB
+
+stop
+  endif
   ref1 = ref[ind1]
   cat1 = cat[ind2]
 
