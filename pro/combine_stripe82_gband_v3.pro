@@ -7,7 +7,7 @@ filter = 'g'
 NSC_ROOTDIRS,dldir,mssdir,localdir
 dir = dldir+"users/dnidever/nsc/"
 str = mrdfits(dir+'instcal/t3b/lists/nsc_instcal_calibrate.fits',1)
-str.expdir = file_dirname(strtrim(str.expdir,2))
+;str.expdir = file_dirname(strtrim(str.expdir,2))
 ;str.expdir = strtrim(str.expdir,2)
 str.filter = strtrim(str.filter,2)
 str.expnum = strtrim(str.expnum,2)
@@ -24,21 +24,102 @@ ind = where(str.filter eq filter,nind)
 print,strtrim(nind,2),' exposures for BAND=',filter
 
 ;; Load the reference data
-ref = mrdfits('/dl1/users/dnidever/nsc/Stripe82_v3.fits',1)
+ref = mrdfits('/dl1/users/dnidever/nsc/Stripe82_v3_ejk.fits',1)
 
 for i=0,nind-1 do begin
+  expdir = str[ind[i]].expdir
   base = file_basename(str[ind[i]].expdir)
   ;file = repstr(strtrim(str[ind[i]].metafile,2),'meta','cat')
-  file = str[ind[i]].expdir+'/'+file_basename(str[ind[i]].expdir,'_meta.fits')+'_cat.fits'
-  if file_test(file) eq 0 then begin
-    print,file,' NOT FOUND'
-    goto,BOMB
-  endif
-  cat = mrdfits(file,1,/silent)
+  metafile = str[ind[i]].expdir+'/'+base+'_meta.fits'
+  catfile = str[ind[i]].expdir+'/'+base+'_cat.fits'
+
+  ;; Individual meas files
+  if file_test(metafile) eq 1 and file_test(catfile) eq 0 then begin
+    measfiles = file_search(expdir+'/'+base+'_*_meas.fits',count=nmeasfiles)
+    undefine,cat
+    ;; Get the number of sources first
+    ncat = 0L
+    for j=0,nmeasfiles-1 do begin
+      head = headfits(measfiles[j],exten=1)
+      ncat += sxpar(head,'NAXIS2')
+    endfor
+    cat0 = MRDFITS(measfiles[0],1,/silent)
+    schema = cat0[0]
+    struct_assign,{dum:''},schema
+    cat = REPLICATE(schema,ncat)
+    cnt = 0LL
+    ;; Now load the data
+    for j=0,nmeasfiles-1 do begin
+      cat1 = MRDFITS(measfiles[j],1,/silent)
+      ncat1 = n_elements(cat1)
+      cat[cnt:cnt+ncat1-1] = cat1
+      cnt += ncat1
+    endfor
+
+  ;; Single old calibrated photometry file
+  endif else begin
+    cat1 = mrdfits(catfile,1,/silent)
+    ncat1 = n_elements(cat1)
+    expstr = mrdfits(metafile,1,/silent)
+    
+    ;; Make a cut on quality mask flag (IMAFLAGS_ISO)
+    bdcat = where(cat1.imaflags_iso gt 0,nbdcat)
+    if nbdcat gt 0 then begin
+      if nbdcat eq ncat1 then goto,BOMB
+      REMOVE,bdcat,cat1
+      ncat1 = n_elements(cat1)
+    endif  
+    ;; Make cuts on SE FLAGS
+    ;;   this removes problematic truncatd sources near chip edges
+    bdseflags = where( ((cat1.flags and 8) eq 8) or $             ; object truncated
+                     ((cat1.flags and 16) eq 16),nbdseflags)    ; aperture truncated
+    if nbdseflags gt 0 then begin
+      if nbdseflags eq ncat1 then goto,BOMB
+      REMOVE,bdseflags,cat1
+      ncat1 = n_elements(cat1)
+    endif
+    ;; Removing low-S/N sources
+    ;;  snr = 1.087/err
+    snrcut = 5.0
+    bdsnr = where(1.087/cat1.magerr_auto lt snrcut,nbdsnr)
+    if nbdsnr gt 0 then begin
+      if nbdsnr eq ncat1 then goto,BOMB
+      REMOVE,bdsnr,cat1
+      ncat1 = n_elements(cat1)
+    endif
+    ;; Convert to measurement format
+    schema = {measid:'',objectid:'',exposure:'',ccdnum:0,filter:'',mjd:0.0d0,x:0.0,y:0.0,ra:0.0d0,raerr:0.0,dec:0.0d0,decerr:0.0,$
+              mag_auto:0.0,magerr_auto:0.0,mag_aper1:0.0,magerr_aper1:0.0,mag_aper2:0.0,magerr_aper2:0.0,$
+              mag_aper4:0.0,magerr_aper4:0.0,mag_aper8:0.0,magerr_aper8:0.0,kron_radius:0.0,$
+              asemi:0.0,asemierr:0.0,bsemi:0.0,bsemierr:0.0,theta:0.0,thetaerr:0.0,fwhm:0.0,flags:0}
+    cat = replicate(schema,ncat1)
+    STRUCT_ASSIGN,cat1,cat,/nozero
+    cat.measid = strtrim(cat1.sourceid,2)
+    cat.exposure = base
+    cat.x = cat1.x_image
+    cat.y = cat1.y_image
+    cat.mag_auto = cat1.cmag
+    cat.magerr_auto = cat1.cerr
+    cat.mag_aper1 = cat1.mag_aper[0] + 2.5*alog10(expstr.exptime) + expstr.zpterm
+    cat.magerr_aper1 = cat1.magerr_aper[0]
+    cat.mag_aper2 = cat1.mag_aper[1] + 2.5*alog10(expstr.exptime) + expstr.zpterm
+    cat.magerr_aper2 = cat1.magerr_aper[1]
+    cat.mag_aper4 = cat1.mag_aper[2] + 2.5*alog10(expstr.exptime) + expstr.zpterm
+    cat.magerr_aper4 = cat1.magerr_aper[2]
+    cat.mag_aper8 = cat1.mag_aper[4] + 2.5*alog10(expstr.exptime) + expstr.zpterm
+    cat.magerr_aper8 = cat1.magerr_aper[4]
+    cat.asemi = cat1.a_world * 3600.            ; convert to arcsec
+    cat.asemierr = cat1.erra_world * 3600.      ; convert to arcsec
+    cat.bsemi = cat1.b_world * 3600.            ; convert to arcsec
+    cat.bsemierr = cat1.errb_world * 3600.      ; convert to arcsec
+    cat.theta = 90-cat1.theta_world             ; make CCW E of N
+    cat.thetaerr = cat1.errtheta_world
+    cat.fwhm = cat1.fwhm_world * 3600.          ; convert to arcsec
+    ;add_tag,cat,'expnum','',cat
+    ;cat.exposure = str[ind[i]].expnum
+  endelse
   ncat = n_elements(cat)
-  add_tag,cat,'expnum','',cat
-  cat.expnum = str[ind[i]].expnum
-  print,strtrim(i+1,2),' ',base,' ',str[ind[i]].expnum,' ',strtrim(ncat,2)
+  print,strtrim(i+1,2),' ',base,' ',str[ind[i]].base,' ',strtrim(ncat,2)
 
   cendec = mean(minmax(cat.dec))
   cenra = mean(minmax(cat.ra))
@@ -50,40 +131,8 @@ for i=0,nind-1 do begin
     if cenra lt 0 then cenra+=360
   endif
 
-  ;; Load the Gaia file
-  ;gaiafile = str[ind[i]].expdir+'/'+file_basename(str[ind[i]].expdir)+'_GAIA.fits'
-  ;if file_test(gaiafile) eq 0 then goto,BOMB
-  ;gaia = MRDFITS(gaiafile,1,/silent)
-  ;
-  ;; Load the 2MASS file
-  ;tmassfile = str[ind[i]].expdir+'/'+file_basename(str[ind[i]].expdir)+'_TMASS.fits'
-  ;if file_test(tmassfile) eq 0 then goto,BOMB
-  ;tmass = MRDFITS(tmassfile,1,/silent)
-  ;
-  ;; Load the APASS file
-  ;apassfile = str[ind[i]].expdir+'/'+file_basename(str[ind[i]].expdir)+'_APASS.fits'
-  ;if file_test(apassfile) eq 0 then goto,BOMB
-  ;apass = MRDFITS(apassfile,1,/silent)
-
   ; Matching
-  index = lonarr(ncat,3)-1
   dcr = 1.0
-  ;SRCMATCH,gaia.ra_icrs,gaia.de_icrs,cat.ra,cat.dec,dcr,gind1,gind2,/sph,count=ngmatch
-  ;if ngmatch gt 0 then index[gind2,0] = gind1
-  ;SRCMATCH,tmass.raj2000,tmass.dej2000,cat.ra,cat.dec,dcr,tind1,tind2,/sph,count=ntmatch
-  ;if ntmatch gt 0 then index[tind2,1] = tind1
-  ;SRCMATCH,apass.raj2000,apass.dej2000,cat.ra,cat.dec,dcr,aind1,aind2,/sph,count=namatch
-  ;if namatch gt 0 then index[aind2,2] = aind1
-  ;gd = where(total(index gt -1,2) eq 3,ngd)
-  ;print,'  ',strtrim(ngd,2),' matches to GAIA, 2MASS and APASS'
-  ;if ngd eq 0 then begin
-  ;  print,'No matches to GAIA, 2MASS and APASS'
-  ;  goto,BOMB
-  ;endif
-  ;cat1 = cat[gd]
-  ;gaia1 = gaia[index[gd,0]]
-  ;tmass1 = tmass[index[gd,1]]
-  ;apass1 = apass[index[gd,2]]
   SRCMATCH,ref.ra,ref.dec,cat.ra,cat.dec,dcr,ind1,ind2,/sph,count=nmatch
   print,'  ',strtrim(nmatch,2),' matches to reference data'
 
@@ -130,7 +179,7 @@ for i=0,nind-1 do begin
     ref1.allwise_w2err = ref0.e_w2mag
     ref1.ebv = ref0.ebv_sfd
     ref1.ejk = ref0.ejk
-    ref1.e_ejk = ref0.e_jk
+    ref1.e_ejk = ref0.e_ejk
     ref1.ext_type = ref0.ext_type
     ;; Add Skymapper data
     ;; need to get apass and skymapper
@@ -151,8 +200,6 @@ for i=0,nind-1 do begin
     ;; Now match to the DECam exposure
     SRCMATCH,ref1.ra,ref1.dec,cat.ra,cat.dec,dcr,ind1,ind2,/sph,count=nmatch
     if nmatch eq 0 then goto,BOMB
-
-stop
   endif
   ref1 = ref[ind1]
   cat1 = cat[ind2]
@@ -175,7 +222,6 @@ stop
   allref[cnt:cnt+nmatch-1] = tempref
   cnt += nmatch
 
-  ;stop
   BOMB:
 endfor
 ; Trim extra elements
