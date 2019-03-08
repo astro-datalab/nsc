@@ -61,7 +61,7 @@ if abs(cengb) lt 5 and (cengl lt 65 or cengl gt 290) then begin
   dd = reform(dd)
   ncat = 0
   cnt = 0L
-  while (ncat eq 0) do begin
+  while (ncat eq 0) and (cnt lt 9) do begin
     cat = QUERYVIZIER('II/293/glimpse',[rr[cnt],dd[cnt]],1.0,count=ncat,/silent)
     cnt++
   endwhile
@@ -80,7 +80,7 @@ if lmcrad lt 5.0 or smcrad lt 4.0 then begin
   dd = reform(dd)
   ncat = 0
   cnt = 0L
-  while (ncat eq 0) do begin
+  while (ncat eq 0) and (cnt lt 9) do begin
     cat = QUERYVIZIER('II/305/archive',[rr[cnt],dd[cnt]],1.0,count=ncat,/silent)
     cnt++
   endwhile

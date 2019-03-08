@@ -43,25 +43,44 @@ list2 = list[ind2]
 
 ;; Pick successful Stripe82 griz exposures
 filter = strmid(list2.filter,0,1)
-gd = where((list2.ra lt 61 or list2.ra gt 259) and (list2.dec ge -1.5 and list2.dec le 1.5) and $
-           (filter eq 'g' or filter eq 'r' or filter eq 'i' or filter eq 'z') and $
-           list2.exposure ge 30 and sum2.success eq 1,ngd)
+;gd = where((list2.ra lt 61 or list2.ra gt 259) and (list2.dec ge -1.5 and list2.dec le 1.5) and $
+;           (filter eq 'g' or filter eq 'r' or filter eq 'i' or filter eq 'z') and $
+;           list2.exposure ge 30 and sum2.success eq 1,ngd)
 
-;; Add the SMASH u-band exposures
-restore,'/dl1/users/dnidever/nsc/smash_matched_catalog_v3.dat'
-fieldstr.field = strtrim(fieldstr.field,2)
-smashinfo = mrdfits('/dl1/users/dnidever/smash/cp/red/photred/catalogs/final/v6/check_calibrated_v6.fits',1)
-smashinfo.field = strtrim(smashinfo.field,2)
-MATCH,smashinfo.field,fieldstr.field,ind1,ind2,/sort
-smashinfo2 = smashinfo[ind1]
-undefine,sind
-for i=0,n_elements(smashinfo2)-1 do begin
-  dist = sphdist(smashinfo2[i].ra,smashinfo2[i].dec,list2.ra,list2.dec,/deg)
-  ind1 = where(dist lt 1.0 and filter eq 'u' and list2.exposure gt 10,nind1)
-  if nind1 gt 0 then push,sind,ind1
+;; Add more low latitude fields, 349 exposures
+glactc,ra1,dec1,2000.0,5,1,2,/deg
+glactc,ra2,dec2,2000.0,5,5,2,/deg 
+glactc,ra3,dec3,2000.0,5,10,2,/deg
+glactc,ra4,dec4,2000.0,5,15,2,/deg
+glactc,ra5,dec5,2000.0,10,20,2,/deg
+glactc,ra6,dec6,2000.0,15,20,2,/deg
+glactc,ra7,dec7,2000.0,30,25,2,/deg
+ra = [ra1,ra2,ra3,ra4,ra5,ra6,ra7]
+dec = [dec1,dec2,dec3,dec4,dec5,dec6,dec7]
+for i=0,n_elements(ra)-1 do begin
+  gd1 = where(list2.ra ge ra[i]-2 and list2.ra le ra[i]+2 and list2.dec ge dec[i]-2 and list2.dec le dec[i]+2 and $
+              (filter eq 'g' or filter eq 'r' or filter eq 'i' or filter eq 'z') and $
+              list2.exposure ge 30 and sum2.success eq 1,ngd1)
+  if ngd1 eq 0 then stop,'no exposures'
+  if ngd1 gt 0 then push,gd,gd1
 endfor
-gd = [gd,sind]
 ngd = n_elements(gd)
+
+;;; Add the SMASH u-band exposures
+;restore,'/dl1/users/dnidever/nsc/smash_matched_catalog_v3.dat'
+;fieldstr.field = strtrim(fieldstr.field,2)
+;smashinfo = mrdfits('/dl1/users/dnidever/smash/cp/red/photred/catalogs/final/v6/check_calibrated_v6.fits',1)
+;smashinfo.field = strtrim(smashinfo.field,2)
+;MATCH,smashinfo.field,fieldstr.field,ind1,ind2,/sort
+;smashinfo2 = smashinfo[ind1]
+;undefine,sind
+;for i=0,n_elements(smashinfo2)-1 do begin
+;  dist = sphdist(smashinfo2[i].ra,smashinfo2[i].dec,list2.ra,list2.dec,/deg)
+;  ind1 = where(dist lt 1.0 and filter eq 'u' and list2.exposure gt 10,nind1)
+;  if nind1 gt 0 then push,sind,ind1
+;endfor
+;gd = [gd,sind]
+;ngd = n_elements(gd)
 
 ;; 6746 exposures, about 1200-1900 in each band
 ;; 633 SMASH u-band exposures as well

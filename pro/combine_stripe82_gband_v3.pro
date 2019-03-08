@@ -8,7 +8,7 @@ NSC_ROOTDIRS,dldir,mssdir,localdir
 dir = dldir+"users/dnidever/nsc/"
 str = mrdfits(dir+'instcal/t3b/lists/nsc_instcal_calibrate.fits',1)
 ;str.expdir = file_dirname(strtrim(str.expdir,2))
-;str.expdir = strtrim(str.expdir,2)
+str.expdir = strtrim(str.expdir,2)
 str.filter = strtrim(str.filter,2)
 str.expnum = strtrim(str.expnum,2)
 

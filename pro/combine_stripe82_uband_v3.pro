@@ -122,8 +122,11 @@ file = plotdir+'stripe82_uband_magdiff_color'
 ps_open,file,/color,thick=4,/encap
 device,/inches,xsize=8.5,ysize=9.5
 gj0 = allref.gaia_gmag - allref.tmass_jmag - 1.12*allref.ebv
-model_mag = 0.2452*allref.galex_nuv + 0.7486*allref.gaia_gmag + 0.3717*gj0 + 0.350*allref.ebv + 0.1352
-gd = where(allcat.class_star ge 0.8 and allcat.fwhm_world*3600 lt 2.0,ngd)
+;model_mag = 0.2452*allref.galex_nuv + 0.7486*allref.gaia_bp + 0.3717*gj0 + 0.350*allref.ebv + 0.1352
+;model_mag = 0.2452*allref.galex_nuv + 0.7486*allref.gaia_bp + 0.10*gj0 + 0.15
+model_mag = 0.2452*allref.galex_nuv + 0.7486*allref.gaia_bp + 0.10*gj0 + 0.20
+gd = where(allcat.class_star ge 0.8 and allcat.fwhm_world*3600 lt 2.0 and allref.tmass_jmag lt 50 and allref.gaia_gmag lt 50 and $
+           allref.gaia_bp lt 50 and allref.galex_nuv lt 50,ngd)
 hess,gj0[gd],model_mag[gd]-allcat[gd].cmag,dx=0.02,dy=0.02,xr=[-0.5,2.0],yr=[-1,1],/log,xtit='(G-J)o',ytit='Model-Mag',tit='u-band'
 bindata,gj0[gd],model_mag[gd]-allcat[gd].cmag,xbin,ybin,binsize=0.05,/med,min=0.5,max=1.5
 oplot,xbin,ybin,ps=-1,co=255
@@ -142,10 +145,11 @@ spawn,['epstopdf',file+'.eps'],/noshell
 push,plots,file
 
 ; Get extinction part
-gd1 = where(allcat.class_star ge 0.8 and allcat.fwhm_world*3600 lt 2.0 and gj0 ge 0.8 and gj0 lt 1.2 and allcat.ebv gt 0.15,ngd1)
+gd1 = where(allcat.class_star ge 0.8 and allcat.fwhm_world*3600 lt 2.0 and gj0 ge 0.8 and gj0 lt 1.6 and allcat.ebv gt 0.15 and $
+            allref.galex_nuv lt 50 and allref.gaia_bp lt 50,ngd1)
 a = dblarr(4,ngd1)
 a[0,*] = allref[gd1].galex_nuv 
-a[1,*] = allref[gd1].gaia_gmag
+a[1,*] = allref[gd1].gaia_bp
 a[2,*] = allcat[gd1].ebv
 a[3,*] = 1
 b=allcat[gd1].cmag
@@ -153,19 +157,33 @@ SVDC, A, W, U, V
 factor = SVSOL(U, W, V, B)
 print,factor
 ; 0.27682490      0.73827996      0.39430181     0.052752100
+;; BP
+; 0.28361904      0.72709926     0.071857605     -0.12538462
 
-; Now nail down extinction and get the other terms
-gd1 = where(allcat.class_star ge 0.8 and allcat.fwhm_world*3600 lt 2.0 and gj0 ge 0.8 and gj0 lt 1.2 and allcat.ebv lt 0.1,ngd1)
+; Now fix extinction and get the other terms
+gd1 = where(allcat.class_star ge 0.8 and allcat.fwhm_world*3600 lt 2.0 and gj0 ge 0.8 and gj0 lt 1.6 and allcat.ebv lt 0.1 and $
+            allref.galex_nuv lt 50 and allref.gaia_bp lt 50,ngd1)
 a = dblarr(4,ngd1)
 a[0,*] = allref[gd1].galex_nuv
-a[1,*] = allref[gd1].gaia_gmag
+a[1,*] = allref[gd1].gaia_bp
 a[2,*] = gj0[gd1]
 a[3,*] = 1
-b=allcat[gd1].cmag-0.3943*allcat[gd1].ebv
+;b=allcat[gd1].cmag-0.3943*allcat[gd1].ebv
+;b=allcat[gd1].cmag-0.1086*allcat[gd1].ebv
+b=allcat[gd1].cmag-0.0719*allcat[gd1].ebv
 SVDC, A, W, U, V
 factor = SVSOL(U, W, V, B)
 print,factor
 ; 0.23011191      0.76160673      0.49370716      0.13443835
+;; BP
+; 0.21246783      0.77047660      0.49710051      0.11404724
+
+;; Model magnitudes
+;model_mag = 0.1641*allref.galex_nuv + 0.8251*allref.gaia_bp + 0.1964*gj0 + 0.1086*allref.ebv + 0.4326
+;model_mag = 0.2301*allref.galex_nuv + 0.7616*allref.gaia_bp + 0.15*gj0 + 0.3943*allref.ebv + 0.1344
+;model_mag = 0.1868*allref.galex_nuv + 0.7982*allref.gaia_bp + 0.315*gj0 + 0.2779
+;model_mag = 0.212*allref.galex_nuv + 0.77*allref.gaia_bp + 0.497*gj0+0.11   ;  NOT GOOD
+model_mag = 0.2452*allref.galex_nuv + 0.7486*allref.gaia_bp + 0.10*gj0 + 0.20
 
 ; versus EBV
 file = plotdir+'stripe82_uband_magdiff_ebv'
@@ -184,10 +202,11 @@ file = plotdir+'stripe82_uband_magdiff_color_adjusted'
 ps_open,file,/color,thick=4,/encap
 device,/inches,xsize=8.5,ysize=9.5
 gj0 = allref.gaia_gmag - allref.tmass_jmag - 1.12*allref.ebv
-; ORIGINAL: 0.2452*NUV+0.7486*GMAG+0.3717*COLOR+0.350*EBV+0.1352
-; ADJUSTED: 0.2301*NUV+0.7616*GMAG+0.4937*COLOR+0.3943*EBV+0.1344
-model_mag = 0.2246*allref.galex_nuv + 0.7703*allref.gaia_gmag + 0.4420*gj0 + 0.3799*allref.ebv + 0.1624
-gd = where(allcat.class_star ge 0.8 and allcat.fwhm_world*3600 lt 2.0,ngd)
+; ORIGINAL: 0.2452*NUV+0.7486*BP+0.3717*COLOR+0.350*EBV+0.1352
+; ADJUSTED: 0.2301*NUV+0.7616*BP+0.4937*COLOR+0.3943*EBV+0.1344
+;model_mag = 0.2246*allref.galex_nuv + 0.7703*allref.gaia_bp + 0.4420*gj0 + 0.3799*allref.ebv + 0.1624
+gd = where(allcat.class_star ge 0.8 and allcat.fwhm_world*3600 lt 2.0 and allref.tmass_jmag lt 50 and allref.gaia_bp lt 50 and $
+           allref.galex_nuv lt 50,ngd)
 hess,gj0[gd],model_mag[gd]-allcat[gd].cmag,dx=0.02,dy=0.02,xr=[-0.5,2.0],yr=[-1,1],/log,xtit='(G-J)o',ytit='Model-Mag',tit='u-band'
 bindata,gj0[gd],model_mag[gd]-allcat[gd].cmag,xbin,ybin,binsize=0.05,/med,min=0.5,max=1.5
 oplot,xbin,ybin,ps=-1,co=255

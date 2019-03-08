@@ -121,6 +121,7 @@ for i=0,nfields-1 do begin
 
   ;stop
 endfor
+mobj = mobj[0:cnt-1] ; trim extra elements
 
 stop
 
