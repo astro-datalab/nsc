@@ -14,24 +14,26 @@ glactc,ra4,dec4,2000.0,5,15,2,/deg
 glactc,ra5,dec5,2000.0,10,20,2,/deg
 glactc,ra6,dec6,2000.0,15,20,2,/deg
 glactc,ra7,dec7,2000.0,30,25,2,/deg
-ra = [ra1,ra2,ra3,ra4,ra5,ra6,ra7]
-dec = [dec1,dec2,dec3,dec4,dec5,dec6,dec7]
+rr = [ra1,ra2,ra3,ra4,ra5,ra6,ra7]
+dd = [dec1,dec2,dec3,dec4,dec5,dec6,dec7]
+radius = [1.0,1.0,1.0,1.0,2.0,2.0,2.0]
+n = n_elements(rr)
 ;glon = [5.0,5.0,5.0,5.0,10.0,15.0,30.0]
 ;glat = [1.0,5.0,10.0,15.0,20.0,20.0,25.0]
-for i=0,n_elements(ra)-1 do begin
-  gd1 = where(str.ra ge ra[i]-2 and str.ra le ra[i]+2 and str.dec ge dec[i]-2 and str.dec le dec[i]+2,ngd1)
-  if ngd1 eq 0 then stop,'no exposures'
-  if ngd1 gt 0 then push,gd,gd1
-endfor
-ngd = n_elements(gd)
-
-;; Load the metadata to figure out the area covered
-for i=0,ngd-1 do begin
-  metafile = str[gd[i]].expdir+'/'+str[gd[i]].base+'_meta.fits'
-  meta = mrdfits(metafile,1,/silent)
-  chstr1 = mrdfits(metafile,2,/silent)
-  push,chstr,chstr1
-endfor
+;for i=0,n_elements(ra)-1 do begin
+;  gd1 = where(str.ra ge ra[i]-2 and str.ra le ra[i]+2 and str.dec ge dec[i]-2 and str.dec le dec[i]+2,ngd1)
+;  if ngd1 eq 0 then stop,'no exposures'
+;  if ngd1 gt 0 then push,gd,gd1
+;endfor
+;ngd = n_elements(gd)
+;
+;;; Load the metadata to figure out the area covered
+;for i=0,ngd-1 do begin
+;  metafile = str[gd[i]].expdir+'/'+str[gd[i]].base+'_meta.fits'
+;  meta = mrdfits(metafile,1,/silent)
+;  chstr1 = mrdfits(metafile,2,/silent)
+;  push,chstr,chstr1
+;endfor
 ;mwrfits,chstr,'combine_stripe82_v3_midplane_chstr.fits',/create
 
 ;; Need 256<RA<
@@ -40,15 +42,15 @@ endfor
 ;dd = [8.872705,   -6.483075,  -10.434930,  -16.701443,  -18.169275,  -19.862927,  -21.725944,  -22.234040,  -23.927692, -24.943]
 ;radius = [3.0, 1.2, 3.0, 3.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
 ;n = n_elements(r)
-
-rr = [ 258.566626,  260.293983,  258.683339,  257.422835,  257.516206,  257.936374,  256.232359,  256.232359,  254.645057,  252.941042,  254.154861,$
-       254.364945,  256.115645,  256.115645,  257.866346,  257.843003,  259.430305,  258.986794,  261.040949,  260.434039,  262.838334,  264.472321,$
-       262.791649,  265.989595,  264.682405,  267.763638,  267.553554,  265.779511,  266.993330,  269.934506,  269.794450]
-dd = [  10.396394,    9.300361,    8.204327,    9.091593,    7.369254,   -6.461643,   -9.332207,  -11.419890,  -10.480433,  -11.524274,  -18.726779,$
-       -16.586904,  -15.699639,  -17.369785,  -16.430328,  -18.570203,  -17.630746,  -19.144316,  -18.622395,  -20.710078,  -21.492959,  -20.449117,$
-       -23.580641,  -21.284190,  -22.902144,  -22.484608,  -23.945986,  -23.737218,  -26.033669,  -23.424065,  -25.707364]
-n = n_elements(rr)
-radius = fltarr(n)+1.5
+;
+;rr = [ 258.566626,  260.293983,  258.683339,  257.422835,  257.516206,  257.936374,  256.232359,  256.232359,  254.645057,  252.941042,  254.154861,$
+;       254.364945,  256.115645,  256.115645,  257.866346,  257.843003,  259.430305,  258.986794,  261.040949,  260.434039,  262.838334,  264.472321,$
+;       262.791649,  265.989595,  264.682405,  267.763638,  267.553554,  265.779511,  266.993330,  269.934506,  269.794450]
+;dd = [  10.396394,    9.300361,    8.204327,    9.091593,    7.369254,   -6.461643,   -9.332207,  -11.419890,  -10.480433,  -11.524274,  -18.726779,$
+;       -16.586904,  -15.699639,  -17.369785,  -16.430328,  -18.570203,  -17.630746,  -19.144316,  -18.622395,  -20.710078,  -21.492959,  -20.449117,$
+;       -23.580641,  -21.284190,  -22.902144,  -22.484608,  -23.945986,  -23.737218,  -26.033669,  -23.424065,  -25.707364]
+;n = n_elements(rr)
+;radius = fltarr(n)+1.5
 ;radius = fltarr(n)+0.1
 
 ;plot,chstr.vra,chstr.vdec,ps=3
@@ -116,6 +118,7 @@ For i=0,n-1 do begin
   ref1.ejk = ref0.ejk
   ref1.e_ejk = ref0.e_ejk
   ref1.ext_type = ref0.ext_type
+
   ;; Add Skymapper data
   ;; need to get apass and skymapper
   ;apass0 = GETREFCAT(cenra,cendec,'APASS')
