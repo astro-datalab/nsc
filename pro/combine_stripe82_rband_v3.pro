@@ -155,12 +155,29 @@ for i=0,nind-1 do begin
   if n_elements(allcat) eq 0 then begin
     cat0 = cat[0]
     struct_assign,{dum:''},cat0
-    allcat = replicate(cat0,2e7)
+    allcat = replicate(cat0,6e7)
     ref0 = ref1[0]
     struct_assign,{dum:''},ref0
-    allref = replicate(ref0,2e7)
+    allref = replicate(ref0,6e7)
     cnt = 0LL
   endif
+  ;; add more elements
+  if cnt+nmatch gt n_elements(allcat) then begin
+    print,'Adding more elements'
+    oldallcat = allcat
+    catschema = cat[0]
+    struct_assign,{dum:''},catschema
+    allcat = replicate(catschema,n_elements(oldallcat)+5e6)
+    allcat[0:n_elements(oldallcat)-1] = oldallcat
+    undefine,oldallcat
+    oldallref = allref
+    refschema = ref1[0]
+    struct_assign,{dum:''},refschema
+    allref = replicate(refschema,n_elements(oldallref)+5e6)
+    allref[0:n_elemenets(oldallref)-1] = oldallref
+    undefine,oldallref
+  endif
+
   tempcat = allcat[cnt:cnt+nmatch-1]
   struct_assign,newcat,tempcat
   allcat[cnt:cnt+nmatch-1] = tempcat
