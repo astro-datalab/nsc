@@ -24,9 +24,9 @@ ind = where(str.filter eq filter,nind)
 print,strtrim(nind,2),' exposures for BAND=',filter
 
 ;; Load the reference data
-ref = mrdfits('/dl1/users/dnidever/nsc/Stripe82_v3_ejk.fits',1)
+ref1 = mrdfits('/dl1/users/dnidever/nsc/Stripe82_v3_ejk.fits',1)
 ref2 = mrdfits('/dl1/users/dnidever/nsc/Stripe82_v3_ejk_midplane.fits',1)
-ref = [ref,ref2]
+;ref = [ref,ref2]
 
 
 for i=0,nind-1 do begin
@@ -50,13 +50,13 @@ for i=0,nind-1 do begin
     schema = cat0[0]
     struct_assign,{dum:''},schema
     cat = REPLICATE(schema,ncat)
-    cnt = 0LL
+    catcnt = 0LL
     ;; Now load the data
     for j=0,nmeasfiles-1 do begin
       cat1 = MRDFITS(measfiles[j],1,/silent)
       ncat1 = n_elements(cat1)
-      cat[cnt:cnt+ncat1-1] = cat1
-      cnt += ncat1
+      cat[catcnt:catcnt+ncat1-1] = cat1
+      catcnt += ncat1
     endfor
 
   ;; Single old calibrated photometry file
@@ -133,34 +133,42 @@ for i=0,nind-1 do begin
     cenra = mean(minmax(ra))
     if cenra lt 0 then cenra+=360
   endif
+  glactc,cenra,cendec,2000.0,cengl,cengb,1,/deg
+
 
   ; Matching
   dcr = 1.0
-  SRCMATCH,ref.ra,ref.dec,cat.ra,cat.dec,dcr,ind1,ind2,/sph,count=nmatch
-  print,'  ',strtrim(nmatch,2),' matches to reference data'
-  if nmatch eq 0 then goto,BOMB
-  ref1 = ref[ind1]
-  cat1 = cat[ind2]
-
+  if abs(cendec) lt 5 then begin
+    SRCMATCH,ref1.ra,ref1.dec,cat.ra,cat.dec,dcr,ind1,ind2,/sph,count=nmatch
+    print,'  ',strtrim(nmatch,2),' matches to reference data'
+    if nmatch eq 0 then goto,BOMB
+    newref = ref1[ind1]
+    newcat = cat[ind2]
+  endif else begin
+    SRCMATCH,ref2.ra,ref2.dec,cat.ra,cat.dec,dcr,ind1,ind2,/sph,count=nmatch
+    print,'  ',strtrim(nmatch,2),' matches to reference data'
+    if nmatch eq 0 then goto,BOMB
+    newref = ref2[ind1]
+    newcat = cat[ind2]
+  endelse
 
   if n_elements(allcat) eq 0 then begin
     cat0 = cat[0]
     struct_assign,{dum:''},cat0
     allcat = replicate(cat0,2e7)
-    ref0 = ref[0]
+    ref0 = ref1[0]
     struct_assign,{dum:''},ref0
     allref = replicate(ref0,2e7)
     cnt = 0LL
   endif
   tempcat = allcat[cnt:cnt+nmatch-1]
-  struct_assign,cat1,tempcat
+  struct_assign,newcat,tempcat
   allcat[cnt:cnt+nmatch-1] = tempcat
   tempref = allref[cnt:cnt+nmatch-1]
-  struct_assign,ref1,tempref
+  struct_assign,newref,tempref
   allref[cnt:cnt+nmatch-1] = tempref
   cnt += nmatch
 
-  ;stop
   BOMB:
 endfor
 ; Trim extra elements
