@@ -726,7 +726,7 @@ for i=0,nchips-1 do begin
     schema = {measid:'',objectid:'',exposure:'',ccdnum:0,filter:'',mjd:0.0d0,x:0.0,y:0.0,ra:0.0d0,raerr:0.0,dec:0.0d0,decerr:0.0,$
               mag_auto:0.0,magerr_auto:0.0,mag_aper1:0.0,magerr_aper1:0.0,mag_aper2:0.0,magerr_aper2:0.0,$
               mag_aper4:0.0,magerr_aper4:0.0,mag_aper8:0.0,magerr_aper8:0.0,kron_radius:0.0,$
-              asemi:0.0,asemierr:0.0,bsemi:0.0,bsemierr:0.0,theta:0.0,thetaerr:0.0,fwhm:0.0,flags:0}
+              asemi:0.0,asemierr:0.0,bsemi:0.0,bsemierr:0.0,theta:0.0,thetaerr:0.0,fwhm:0.0,flags:0,class_star:0.0}
     meas = replicate(schema,ncat1)
     STRUCT_ASSIGN,cat1,meas,/nozero
     meas.measid = strtrim(cat1.sourceid,2)
@@ -750,6 +750,7 @@ for i=0,nchips-1 do begin
     meas.theta = 90-cat1.theta_world             ; make CCW E of N
     meas.thetaerr = cat1.errtheta_world
     meas.fwhm = cat1.fwhm_world * 3600.          ; convert to arcsec
+    meas.class_star = cat1.class_star
 
     ;; Write to file
     outfile = expdir+'/'+base+'_'+strtrim(chstr[i].ccdnum,2)+'_meas.fits'
