@@ -552,15 +552,50 @@ ENDBOMB:
 ; Use self-calibration
 if expstr.nrefmatch le 5 and keyword_set(selfcal) then begin
   NSC_INSTCAL_CALIBRATE_SELFCALZPTERM,expdir,cat,expstr,chstr
-  expstr.zptype = 2
+  expstr.zptype = 3
 endif
 ; Apply the zero-point to the full catalogs
-gdcatmag = where(cat.mag_auto lt 50,ngd)
-cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + expstr.zpterm
-cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + expstr.zptermerr^2)  ; add calibration error in quadrature
-; Print out the results
+;; USE CHIP-LEVEL ZERO-POINTS WHEN POSSIBLE!!!
+print,'USE CHIP-LEVEL ZERO-POINTS WHEN POSSIBLE!!!'
+;; Create an output catalog for each chip
+nsrc = long64(total(chstr.nsources,/cum))
+lo = [0L,nsrc[0:nchips-2]]
+hi = nsrc-1
+for i=0,nchips-1 do begin
+  ncat1 = hi[i]-lo[i]+1
+  if ncat1 gt 0 then begin
+    cat1 = cat[lo[i]:hi[i]]
+    if chstr[i].nrefmatch gt 5 then begin
+      chstr[i].zptype = 1
+    endif else begin
+      chstr[i].zpterm = expstr.zperm
+      chstr[i].zptermerr = expstr.zptermerr
+      chstr[i].zptype = 2
+    endelse
+
+    gdcatmag = where(cat1.mag_auto lt 50,ngd)
+    cat1[gdcatmag].cmag = cat1[gdcatmag].mag_auto + 2.5*alog10(exptime) + chstr[i].zpterm
+    cat1[gdcatmag].cerr = sqrt(cat1[gdcatmag].magerr_auto^2 + chstr[i].zptermerr^2)  ; add calibration error in quadrature
+    ;for j=0,n_elements(cat1.mag_aper)-1 do begin
+    ;  gdcatmag = where(cat1.mag_aper[j] lt 50,ngd)
+    ;  cat1[gdcatmag].cmag = cat1[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm
+    ;  cat1[gdcatmag].cerr = sqrt(cat1[gdcatmag].magerr_auto^2 + zptermerr^2)  ; add calibration error in quadrature
+    ;endfor
+    ; Print out the results
+    printlog,logf,'  CCDNUM=',strtrim(chstr[i].ccdnum,2),'  NREFSOURCES=',strtrim(chstr[i].nrefmatch,2),'  ZPTYPE=',strtrim(chstr[i].zptype,2),$
+                  '  ZPTERM=',stringize(zpterm,ndec=4),'+/-',stringize(zptermerr,ndec=4)
+    cat[lo[i]:hi[i]] = cat1  ;; stuff back in
+    stop
+  endif
+endfor
+
+stop
+;gdcatmag = where(cat.mag_auto lt 50,ngd)
+;cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + expstr.zpterm
+;cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + expstr.zptermerr^2)  ; add calibration error in quadrature
+;; Print out the results
 printlog,logf,'NPHOTREFMATCH=',strtrim(expstr.nrefmatch,2)
-printlog,logf,'ZPTERM=',stringize(expstr.zpterm,ndec=4),'+/-',stringize(expstr.zptermerr,ndec=4),'  SIG=',stringize(expstr.zptermsig,ndec=4),'mag'
+printlog,logf,'EXPOSURE ZPTERM=',stringize(expstr.zpterm,ndec=4),'+/-',stringize(expstr.zptermerr,ndec=4),'  SIG=',stringize(expstr.zptermsig,ndec=4),'mag'
 printlog,logf,'ZPSPATIALVAR:  RMS=',stringize(expstr.zpspatialvar_rms,ndec=3),' ',$
          'RANGE=',stringize(expstr.zpspatialvar_range,ndec=3),' NCCD=',strtrim(expstr.zpspatialvar_nccd,2)
 
@@ -691,7 +726,7 @@ for i=0,nchips-1 do begin
     schema = {measid:'',objectid:'',exposure:'',ccdnum:0,filter:'',mjd:0.0d0,x:0.0,y:0.0,ra:0.0d0,raerr:0.0,dec:0.0d0,decerr:0.0,$
               mag_auto:0.0,magerr_auto:0.0,mag_aper1:0.0,magerr_aper1:0.0,mag_aper2:0.0,magerr_aper2:0.0,$
               mag_aper4:0.0,magerr_aper4:0.0,mag_aper8:0.0,magerr_aper8:0.0,kron_radius:0.0,$
-              asemi:0.0,asemierr:0.0,bsemi:0.0,bsemierr:0.0,theta:0.0,thetaerr:0.0,fwhm:0.0,flags:0}
+              asemi:0.0,asemierr:0.0,bsemi:0.0,bsemierr:0.0,theta:0.0,thetaerr:0.0,fwhm:0.0,flags:0,class_star:0.0}
     meas = replicate(schema,ncat1)
     STRUCT_ASSIGN,cat1,meas,/nozero
     meas.measid = strtrim(cat1.sourceid,2)
@@ -700,13 +735,13 @@ for i=0,nchips-1 do begin
     meas.y = cat1.y_image
     meas.mag_auto = cat1.cmag
     meas.magerr_auto = cat1.cerr
-    meas.mag_aper1 = cat1.mag_aper[0] + 2.5*alog10(exptime) + expstr.zpterm
+    meas.mag_aper1 = cat1.mag_aper[0] + 2.5*alog10(exptime) + chstr[i].zpterm
     meas.magerr_aper1 = cat1.magerr_aper[0]
-    meas.mag_aper2 = cat1.mag_aper[1] + 2.5*alog10(exptime) + expstr.zpterm
+    meas.mag_aper2 = cat1.mag_aper[1] + 2.5*alog10(exptime) + chstr[i].zpterm
     meas.magerr_aper2 = cat1.magerr_aper[1]
-    meas.mag_aper4 = cat1.mag_aper[2] + 2.5*alog10(exptime) + expstr.zpterm
+    meas.mag_aper4 = cat1.mag_aper[2] + 2.5*alog10(exptime) + chstr[i].zpterm
     meas.magerr_aper4 = cat1.magerr_aper[2]
-    meas.mag_aper8 = cat1.mag_aper[4] + 2.5*alog10(exptime) + expstr.zpterm
+    meas.mag_aper8 = cat1.mag_aper[4] + 2.5*alog10(exptime) + chstr[i].zpterm
     meas.magerr_aper8 = cat1.magerr_aper[4]
     meas.asemi = cat1.a_world * 3600.            ; convert to arcsec
     meas.asemierr = cat1.erra_world * 3600.      ; convert to arcsec
@@ -715,6 +750,7 @@ for i=0,nchips-1 do begin
     meas.theta = 90-cat1.theta_world             ; make CCW E of N
     meas.thetaerr = cat1.errtheta_world
     meas.fwhm = cat1.fwhm_world * 3600.          ; convert to arcsec
+    meas.class_star = cat1.class_star
 
     ;; Write to file
     outfile = expdir+'/'+base+'_'+strtrim(chstr[i].ccdnum,2)+'_meas.fits'
