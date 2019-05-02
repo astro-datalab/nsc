@@ -97,6 +97,14 @@ if ext_type ge 2 then begin
   endif
 endif
 
+;; No good reddening
+bd = where(ref.ext_type eq 1 and ref.ebv_sfd gt 0.3,nbd)   ; E(B-V)>0.3 is roughly where things "break down"
+if nbd gt 0 then begin
+  ref[bd].ejk = 999999.0  
+  ref[bd].e_ejk = 999999.0
+  ref[bd].ext_type = 0
+endif
+
 ;; Fix NANs in E_EJK
 bd = where(finite(ref.e_ejk) eq 0,nbd)
 if nbd gt 0 then ref[bd].e_ejk = 9.99
