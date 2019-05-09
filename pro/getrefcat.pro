@@ -63,6 +63,7 @@ if refname eq 'GAIA/GAIA' then refname='GAIA'
 if refname eq 'Skymapper' then refname='SKYMAPPER'
 if refname eq 'GLIMPSE' then refname='II/293/glimpse'
 if refname eq 'SAGE' then refname='II/305/archive'
+if refname eq 'ATLASREFCAT2' then refname='ATLAS'
 
 if n_elements(file) eq 0 then file=tmpdir+'ref_'+stringize(cenra,ndec=5)+'_'+stringize(cendec,ndec=5)+'_'+stringize(radius,ndec=3)+'_'+refname+'.fits'
 
@@ -70,17 +71,19 @@ if not keyword_set(silent) then $
   printlog,logf,'Querying '+refname+': RA='+stringize(cenra,ndec=5)+' DEC='+stringize(cendec,ndec=5)+' Radius='+stringize(radius,ndec=3)
 
 ; Loading previously loaded file
-if file_test(file) eq 1 then begin
+If file_test(file) eq 1 then begin
   if not keyword_set(silent) then $
     printlog,logf,'Loading previously-saved file ',file
   ref = MRDFITS(file,1,/silent)
 
 ; Do the Query
 ;--------------
-endif else begin
+Endif else begin
 
-  ; Use DataLab database search for Gaia and 2MASS if density is high
-  if (refname eq 'TMASS' or refname eq 'GAIA' or refname eq 'GAIADR2' or refname eq 'PS' or refname eq 'SKYMAPPER' or refname eq 'ALLWISE') then begin
+  ; Use DataLab database search
+  ;----------------------------
+  If (refname eq 'TMASS' or refname eq 'GAIA' or refname eq 'GAIADR2' or refname eq 'PS' or refname eq 'SKYMAPPER' or $
+      refname eq 'ALLWISE' or refname eq 'ATLAS') then begin
     if refname eq 'TMASS' then begin
       tablename = 'twomass.psc'
       cols = 'designation,ra as raj2000,dec as dej2000,j_m as jmag,j_cmsig as e_jmag,h_m as hmag,h_cmsig as e_hmag,k_m as kmag,k_cmsig as e_kmag,ph_qual as qflg'
@@ -122,6 +125,14 @@ endif else begin
       cols = 'ra, dec, w1mpro as w1mag, w1sigmpro as e_w1mag, w2mpro as w2mag, w2sigmpro as e_w2mag'
       server = 'gp01.datalab.noao.edu'
     endif
+    if refname eq 'ATLAS' then begin
+      tablename = 'atlasrefcat2'
+      cols = 'objid,ra,dec,plx as parallax,dplx as parallax_error,pmra,dpmra as pmra_error,pmdec,dpmdec as pmdec_error,gaia,dgaia as gaiaerr,'+$
+             'bp,dbp as bperr,rp,drp as rperr,teff,agaia,dupvar,ag,rp1,r1,r10,g as gmag,dg as gerr,gchi,gcontrib,'+$
+             'r as rmag, dr as rerr,rchi,rcontrib,i as imag,di as ierr,ichi,icontrib,z as zmag,dz as zerr,zchi,zcontrib,nstat,'+$
+             'j as jmag,dj as jerr,h as hmag,dh as herr,k as kmag,dk as kerr'
+      server = 'gp10.datalab.noao.edu'
+    endif
     
     ; Use Postgres command with q3c cone search
     refcattemp = repstr(file,'.fits','.txt')
@@ -147,9 +158,34 @@ endif else begin
     endif
     file_delete,refcattemp,/allow
 
+    ;; Fix 0.0 mags/errs in ATLAS
+    if refname eq 'ATLAS' then begin
+      magcols = ['gaia','bp','rp','gmag','rmag','imag','zmag','jmag','hmag','kmag']
+      errcols = ['gaiaerr','bperr','rperr','gerr','rerr','ierr','zerr','jerr','herr','kerr']
+      tags = tag_names(ref)
+      ;; Set mags with 0.0 to 99.99
+      for j=0,n_elements(magcols)-1 do begin
+        colind = where(strupcase(tags) eq strupcase(magcols[j]),ncolind)
+        if colind gt 0 then begin
+          bdmag = where(ref.(colind[0]) le 0.0,nbdmag)
+          if nbdmag gt 0 then ref[bdmag].(colind[0])=99.99
+        endif
+      endfor
+      ;; Set errors with 0.0 to 9.99
+      for j=0,n_elements(errcols)-1 do begin
+        colind = where(strupcase(tags) eq strupcase(errcols[j]),ncolind)
+        if colind gt 0 then begin
+          bderr = where(ref.(colind[0]) le 0.0,nbderr)
+          if nbderr gt 0 then ref[bderr].(colind[0])=9.99
+        endif
+      endfor
+    endif
+
+
   ; Use QUERYVIZIER
+  ;----------------
   ;   for low density with 2MASS/GAIA and always for GALEX and APASS
-  endif else begin
+  Endif else begin
 
     ;; Use QUERYVIZIER for GALEX (python code has problems)
     if refname eq 'II/312/ais' or refname eq 'GALEX' then begin
@@ -166,7 +202,7 @@ endif else begin
       endif
 
     ;; Use Python code
-    endif else begin
+    Endif else begin
       ; Use python code, it's much faster, ~18x
       tempfile = MKTEMP('vzr')
       file_delete,tempfile+'.fits',/allow
@@ -232,8 +268,8 @@ endif else begin
         printlog,logf,'Saving catalog to file '+file
       MWRFITS,ref,file,/create  ; only save if necessary
     endif
-  endelse
-endelse
+  Endelse  ; use queryvizier.pro
+Endelse  ; do the query
 
 if not keyword_set(silent) then $
   printlog,logf,strtrim(n_elements(ref),2)+' sources found   dt=',stringize(systime(1)-t0,ndec=1),' sec.'

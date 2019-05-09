@@ -105,8 +105,9 @@ For i=0,n_elements(filter)-1 do begin
     if cendec gt -29 then begin
       push,refcat,['2MASS-PSC','PS']
     endif else begin
-      ; Use 2MASS and Skymapper to calibrate
-      push,refcat,['2MASS-PSC','Skymapper']
+      ;; Use 2MASS and Skymapper to calibrate
+      ;push,refcat,['2MASS-PSC','Skymapper']
+      push,refcat,['2MASS-PSC','ATLAS']
     endelse
   end
   ; DECam r-band
@@ -115,8 +116,9 @@ For i=0,n_elements(filter)-1 do begin
     if cendec gt -29 then begin
       push,refcat,['2MASS-PSC','PS']
     endif else begin
-      ; Use 2MASS and Skymapper to calibrate
-      push,refcat,['2MASS-PSC','Skymapper']
+      ;; Use 2MASS and Skymapper to calibrate
+      ;push,refcat,['2MASS-PSC','Skymapper']
+      push,refcat,['2MASS-PSC','ATLAS']
     endelse
   end
   ; DECam i-band
@@ -125,8 +127,9 @@ For i=0,n_elements(filter)-1 do begin
     if cendec gt -29 then begin
       push,refcat,['2MASS-PSC','PS']
     endif else begin
-      ; Use Skymapper and 2MASS to calibrate
-      push,refcat,['2MASS-PSC','Skymapper']
+      ;; Use Skymapper and 2MASS to calibrate
+      ;push,refcat,['2MASS-PSC','Skymapper']
+      push,refcat,['2MASS-PSC','ATLAS']
     endelse
   end
   ; DECam z-band
@@ -135,8 +138,9 @@ For i=0,n_elements(filter)-1 do begin
     if cendec gt -29 then begin
       push,refcat,['2MASS-PSC','PS']
     endif else begin
-      ; Use Skymapper and 2MASS to calibrate
-      push,refcat,['2MASS-PSC','Skymapper']
+      ;; Use Skymapper and 2MASS to calibrate
+      ;push,refcat,['2MASS-PSC','Skymapper']
+      push,refcat,['2MASS-PSC','ATLAS']
     endelse
   end
   ; DECam Y-band
@@ -202,6 +206,7 @@ for i=0,nrefcat-1 do begin
   'ALLWISE': push,newtags,['w1mag','e_w1mag','w2mag','e_w2mag']
   'GLIMPSE': push,newtags,['gl_36mag','e_gl_36mag','gl_45mag','e_gl_45mag']
   'SAGE': push,newtags,['sage_36mag','e_sage_36mag','sage_45mag','e_sage_45mag']
+  'ATLAS': push,newtags,['atlas_gmag','e_atlas_gmag','atlas_rmag','e_atlas_rmag','atlas_imag','e_atlas_imag','atlas_zmag','e_atlas_zmag']
   else: stop,refcat[i]+' NOT SUPPORTED'
   endcase
 endfor
@@ -256,9 +261,9 @@ for i=0,nrefcat-1 do begin
     ; Get RA/DEC columns
     ; 2MASS, Galex, APASS use RAJ2000
     ; PS uses RA/DEC
-    if (refcat[i] ne 'PS' and refcat[i] ne 'ALLWISE') then raind=where(tags1 eq 'RAJ2000',nraind) else $
+    if (refcat[i] ne 'PS' and refcat[i] ne 'ALLWISE' and refcat[i] ne 'ATLAS') then raind=where(tags1 eq 'RAJ2000',nraind) else $
        raind=where(tags1 eq 'RA',nraind)
-    if (refcat[i] ne 'PS' and refcat[i] ne 'ALLWISE') then decind=where(tags1 eq 'DEJ2000',ndecind) else $
+    if (refcat[i] ne 'PS' and refcat[i] ne 'ALLWISE' and refcat[i] ne 'ATLAS') then decind=where(tags1 eq 'DEJ2000',ndecind) else $
        decind=where(tags1 eq 'DEC',ndecind)
 
     ; Crossmatch
@@ -318,6 +323,16 @@ for i=0,nrefcat-1 do begin
        ref[ind1].e_sm_imag = ref1[ind2].e_sm_imag
        ref[ind1].sm_zmag = ref1[ind2].sm_zmag
        ref[ind1].e_sm_zmag = ref1[ind2].e_sm_zmag
+    end
+    'ATLAS': begin
+       ref[ind1].atlas_gmag = ref1[ind2].gmag
+       ref[ind1].e_atlas_gmag = ref1[ind2].gerr
+       ref[ind1].atlas_rmag = ref1[ind2].rmag
+       ref[ind1].e_atlas_rmag = ref1[ind2].rerr
+       ref[ind1].atlas_imag = ref1[ind2].imag
+       ref[ind1].e_atlas_imag = ref1[ind2].ierr
+       ref[ind1].atlas_zmag = ref1[ind2].zmag
+       ref[ind1].e_atlas_zmag = ref1[ind2].zerr
     end
     'ALLWISE': begin
        ref[ind1].w1mag = ref1[ind2].w1mag
@@ -398,6 +413,16 @@ for i=0,nrefcat-1 do begin
        new.e_sm_imag = left1.e_sm_imag
        new.sm_zmag = left1.sm_zmag
        new.e_sm_zmag = left1.e_sm_zmag
+    end
+    'ATLAS': begin
+       ref.atlas_gmag = left1.gmag
+       ref.e_atlas_gmag = left1.gerr
+       ref.atlas_rmag = left1.rmag
+       ref.e_atlas_rmag = left1.rerr
+       ref.atlas_imag = left1.imag
+       ref.e_atlas_imag = left1.ierr
+       ref.atlas_zmag = left1.zmag
+       ref.e_atlas_zmag = left1.zerr
     end
     'ALLWISE': begin
        new.w1mag = left1.w1mag
