@@ -120,7 +120,7 @@ cat = REPLICATE(schema,ncat)
 ; Start the chips summary structure
 chstr = replicate({expdir:'',instrument:'',filename:'',measfile:'',ccdnum:0L,nsources:0L,nmeas:0L,cenra:999999.0d0,cendec:999999.0d0,$
                    ngaiamatch:0L,ngoodgaiamatch:0L,rarms:999999.0,rastderr:999999.0,racoef:dblarr(4),decrms:999999.0,$
-                   decstderr:999999.0,deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,$
+                   decstderr:999999.0,deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zptype:0,zpterm:999999.0,$
                    zptermerr:999999.0,nrefmatch:0L,depth95:99.99,depth10sig:99.99},nchips)
 chstr.expdir = expdir
 chstr.instrument = instrument
@@ -465,9 +465,10 @@ For i=0,nchips-1 do begin
     decrms = MAD(diff[gdstars])
     decstderr = decrms/sqrt(ngdstars)
   endif else decrms=decrms1
-  printlog,logf,'  CCDNUM=',strtrim(chstr[i].ccdnum,2),'  NSOURCES=',strtrim(nchmatch,2),'  ',strtrim(ngmatch,2),'/',strtrim(nqcuts1,2),$
-                ' GAIA matches  RMS(RA/DEC)=',stringize(rarms,ndec=3)+'/'+stringize(decrms,ndec=3),' STDERR(RA/DEC)=',$
-                stringize(rastderr,ndec=4)+'/'+stringize(decstderr,ndec=4),' arcsec'
+  printlog,logf,'  CCDNUM=',string(chstr[i].ccdnum,format='(i3)'),'  NSOURCES=',string(nchmatch,format='(i5)'),'  ',$
+                string(ngmatch,format='(i5)'),'/',string(nqcuts1,format='(i5)'),' GAIA matches  RMS(RA/DEC)=',$
+                string(rarms,format='(f7.4)')+'/'+string(decrms,format='(f7.4)'),' STDERR(RA/DEC)=',$
+                string(rastderr,format='(f7.4)')+'/'+string(decstderr,format='(f7.4)'),' arcsec'
   ; Apply to all sources
   ROTSPHCEN,cat1.alpha_j2000,cat1.delta_j2000,chstr[i].cenra,chstr[i].cendec,lon,lat,/gnomic
   lon2 = lon + FUNC_POLY2D(lon,lat,racoef)
@@ -565,8 +566,10 @@ for i=0,nchips-1 do begin
   ncat1 = hi[i]-lo[i]+1
   if ncat1 gt 0 then begin
     cat1 = cat[lo[i]:hi[i]]
+    ;; Use chip-level zero-point
     if chstr[i].nrefmatch gt 5 then begin
       chstr[i].zptype = 1
+    ;; Use exposure-level zero-point
     endif else begin
       chstr[i].zpterm = expstr.zperm
       chstr[i].zptermerr = expstr.zptermerr
@@ -582,22 +585,17 @@ for i=0,nchips-1 do begin
     ;  cat1[gdcatmag].cerr = sqrt(cat1[gdcatmag].magerr_auto^2 + zptermerr^2)  ; add calibration error in quadrature
     ;endfor
     ; Print out the results
-    printlog,logf,'  CCDNUM=',strtrim(chstr[i].ccdnum,2),'  NREFSOURCES=',strtrim(chstr[i].nrefmatch,2),'  ZPTYPE=',strtrim(chstr[i].zptype,2),$
-                  '  ZPTERM=',stringize(zpterm,ndec=4),'+/-',stringize(zptermerr,ndec=4)
+    printlog,logf,'  CCDNUM=',string(chstr[i].ccdnum,format='(i3)'),'  NREFSOURCES=',string(chstr[i].nrefmatch,format='(i5)'),'  ZPTYPE=',$
+                  string(chstr[i].zptype,format='(i2)'),'  ZPTERM=',string(chstr[i].zpterm,format='(f7.4)'),'+/-',string(chstr[i].zptermerr,format='(f7.4)')
     cat[lo[i]:hi[i]] = cat1  ;; stuff back in
-    stop
   endif
 endfor
 
-stop
-;gdcatmag = where(cat.mag_auto lt 50,ngd)
-;cat[gdcatmag].cmag = cat[gdcatmag].mag_auto + 2.5*alog10(exptime) + expstr.zpterm
-;cat[gdcatmag].cerr = sqrt(cat[gdcatmag].magerr_auto^2 + expstr.zptermerr^2)  ; add calibration error in quadrature
 ;; Print out the results
 printlog,logf,'NPHOTREFMATCH=',strtrim(expstr.nrefmatch,2)
 printlog,logf,'EXPOSURE ZPTERM=',stringize(expstr.zpterm,ndec=4),'+/-',stringize(expstr.zptermerr,ndec=4),'  SIG=',stringize(expstr.zptermsig,ndec=4),'mag'
-printlog,logf,'ZPSPATIALVAR:  RMS=',stringize(expstr.zpspatialvar_rms,ndec=3),' ',$
-         'RANGE=',stringize(expstr.zpspatialvar_range,ndec=3),' NCCD=',strtrim(expstr.zpspatialvar_nccd,2)
+printlog,logf,'ZPSPATIALVAR:  RMS=',stringize(expstr.zpspatialvar_rms,ndec=4),' ',$
+         'RANGE=',stringize(expstr.zpspatialvar_range,ndec=4),' NCCD=',strtrim(expstr.zpspatialvar_nccd,2)
 
 ; Measure the depth
 ;   need good photometry
