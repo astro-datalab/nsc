@@ -415,14 +415,14 @@ for i=0,nrefcat-1 do begin
        new.e_sm_zmag = left1.e_sm_zmag
     end
     'ATLAS': begin
-       ref.atlas_gmag = left1.gmag
-       ref.e_atlas_gmag = left1.gerr
-       ref.atlas_rmag = left1.rmag
-       ref.e_atlas_rmag = left1.rerr
-       ref.atlas_imag = left1.imag
-       ref.e_atlas_imag = left1.ierr
-       ref.atlas_zmag = left1.zmag
-       ref.e_atlas_zmag = left1.zerr
+       new.atlas_gmag = left1.gmag
+       new.e_atlas_gmag = left1.gerr
+       new.atlas_rmag = left1.rmag
+       new.e_atlas_rmag = left1.rerr
+       new.atlas_imag = left1.imag
+       new.e_atlas_imag = left1.ierr
+       new.atlas_zmag = left1.zmag
+       new.e_atlas_zmag = left1.zerr
     end
     'ALLWISE': begin
        new.w1mag = left1.w1mag
