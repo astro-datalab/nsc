@@ -571,7 +571,7 @@ for i=0,nchips-1 do begin
       chstr[i].zptype = 1
     ;; Use exposure-level zero-point
     endif else begin
-      chstr[i].zpterm = expstr.zperm
+      chstr[i].zpterm = expstr.zpterm
       chstr[i].zptermerr = expstr.zptermerr
       chstr[i].zptype = 2
     endelse
