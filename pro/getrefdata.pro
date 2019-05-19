@@ -238,7 +238,7 @@ for i=0,nrefcat-1 do begin
     if newtags[j] eq 'source' then val0=0LL
     if newtags[j] eq 'ra' then val0=0.0d0
     if newtags[j] eq 'dec' then val0=0.0d0
-    if stregex(newtags[j],'contrib',/boolean) eq 1 then val0=0L
+    if stregex(newtags[j],'contrib',/boolean) eq 1 then val0=-1L
     if n_elements(schema) eq 0 then schema=create_struct(newtags[j],val0) else $
       schema = create_struct(schema,newtags[j],val0)
   endfor
