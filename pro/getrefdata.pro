@@ -206,7 +206,8 @@ for i=0,nrefcat-1 do begin
   'ALLWISE': push,newtags,['w1mag','e_w1mag','w2mag','e_w2mag']
   'GLIMPSE': push,newtags,['gl_36mag','e_gl_36mag','gl_45mag','e_gl_45mag']
   'SAGE': push,newtags,['sage_36mag','e_sage_36mag','sage_45mag','e_sage_45mag']
-  'ATLAS': push,newtags,['atlas_gmag','e_atlas_gmag','atlas_rmag','e_atlas_rmag','atlas_imag','e_atlas_imag','atlas_zmag','e_atlas_zmag']
+  'ATLAS': push,newtags,['atlas_gmag','e_atlas_gmag','atlas_gcontrib','atlas_rmag','e_atlas_rmag','atlas_rcontrib',$
+                         'atlas_imag','e_atlas_imag','atlas_icontrib','atlas_zmag','e_atlas_zmag','atlas_zcontrib']
   else: stop,refcat[i]+' NOT SUPPORTED'
   endcase
 endfor
@@ -327,12 +328,16 @@ for i=0,nrefcat-1 do begin
     'ATLAS': begin
        ref[ind1].atlas_gmag = ref1[ind2].gmag
        ref[ind1].e_atlas_gmag = ref1[ind2].gerr
+       ref[ind1].atlas_gcontrib = ref1[ind2].gcontrib
        ref[ind1].atlas_rmag = ref1[ind2].rmag
        ref[ind1].e_atlas_rmag = ref1[ind2].rerr
+       ref[ind1].atlas_rcontrib = ref1[ind2].rcontrib
        ref[ind1].atlas_imag = ref1[ind2].imag
        ref[ind1].e_atlas_imag = ref1[ind2].ierr
+       ref[ind1].atlas_icontrib = ref1[ind2].icontrib
        ref[ind1].atlas_zmag = ref1[ind2].zmag
        ref[ind1].e_atlas_zmag = ref1[ind2].zerr
+       ref[ind1].atlas_zcontrib = ref1[ind2].zcontrib
     end
     'ALLWISE': begin
        ref[ind1].w1mag = ref1[ind2].w1mag
@@ -417,12 +422,16 @@ for i=0,nrefcat-1 do begin
     'ATLAS': begin
        new.atlas_gmag = left1.gmag
        new.e_atlas_gmag = left1.gerr
+       new.atlas_gcontrib = left1.gcontrib
        new.atlas_rmag = left1.rmag
        new.e_atlas_rmag = left1.rerr
+       new.atlas_rcontrib = left1.rcontrib
        new.atlas_imag = left1.imag
        new.e_atlas_imag = left1.ierr
+       new.atlas_icontrib = left1.icontrib
        new.atlas_zmag = left1.zmag
        new.e_atlas_zmag = left1.zerr
+       new.atlas_zcontrib = left1.zcontrib
     end
     'ALLWISE': begin
        new.w1mag = left1.w1mag
