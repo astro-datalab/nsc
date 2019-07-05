@@ -8,7 +8,7 @@
 ; INPUTS:
 ;  cat        Structure of source with appropriate magnitude
 ;               columns.
-;  filter     Short filter name, e.g. 'g'.
+;  instfilt   Short instrument and filter name, e.g. 'c4d-g'.
 ;  dec        The declination of the exposure.
 ;  eqnfile    File with the model magnitude equations.
 ;
@@ -16,12 +16,12 @@
 ;  model_mag  An [Nsource,3] array with model magnitudes, errors and color.
 ;
 ; USAGE:
-;  IDL>model_mag = getmodelmag(cat,'g',-50.0,'modelmag_equations.txt')
+;  IDL>model_mag = getmodelmag(cat,'c4d-g',-50.0,'modelmag_equations.txt')
 ;
 ; By D. Nidever  Feb 2019
 ;-
 
-function getmodelmag,cat,filter,dec,eqnfile
+function getmodelmag,cat,instfilt,dec,eqnfile
 
 ; This calculates the model magnitude for stars given the
 ; the magnitudes in reference catalogs
@@ -35,8 +35,8 @@ function getmodelmag,cat,filter,dec,eqnfile
 
 ; Not enough inputs
 ncat = n_elements(cat)
-if ncat eq 0 or n_elements(filter) eq 0 or n_elements(dec) eq 0 or n_elements(eqnfile) eq 0 then begin
-  print,'Syntax - model_mag = getmodelmag(cat,filter,dec,eqnfile)'
+if ncat eq 0 or n_elements(instfilt) eq 0 or n_elements(dec) eq 0 or n_elements(eqnfile) eq 0 then begin
+  print,'Syntax - model_mag = getmodelmag(cat,instfilt,dec,eqnfile)'
   return,-1
 endif
 
@@ -54,8 +54,6 @@ if (Error_status ne 0) then begin
   return,-999999.
 endif
 
-; If no instrument is given then assume DECam
-instfilt = filter
 
 tags = tag_names(cat)
 
@@ -82,14 +80,14 @@ eqnstr.declim[1] = float(reform(dum[1,*]))
 
 
 
-;; Get the band for this FILTER and DEC.
-gd = where(strtrim(eqnstr.instrument,2)+'-'+strtrim(eqnstr.band,2) eq filter and dec ge eqnstr.declim[0] and dec le eqnstr.declim[1],ngd)
+;; Get the band for this INSTRUMENT-FILTER and DEC.
+gd = where(strtrim(eqnstr.instrument,2)+'-'+strtrim(eqnstr.band,2) eq instfilt and dec ge eqnstr.declim[0] and dec le eqnstr.declim[1],ngd)
 if ngd eq 0 then begin
-  print,'No model magnitude equation for FILTER='+filter+' and DEC='+stringize(dec,ndec=2)
+  print,'No model magnitude equation for INSTRUMENT-FILTER='+instfilt+' and DEC='+stringize(dec,ndec=2)
   return,-999999.
 endif
 if ngd gt 1 then begin
-  print,'Found multiple magnitude equation for FILTER='+filter+' and DEC='+stringize(dec,ndec=2)+'.  Using the first one.'
+  print,'Found multiple magnitude equation for INSTRUMENT-FILTER='+instfilt+' and DEC='+stringize(dec,ndec=2)+'.  Using the first one.'
   gd = gd[0]
 endif
 eqnstr1 = eqnstr[gd]
@@ -109,8 +107,8 @@ if eqnstr1.colorlim[0] lt -10 and eqnstr1.colorlim[1] gt 10 and $
 coloreqn = eqnstr1.coloreqn
 qualitycuts = eqnstr1.qualitycuts
 modelmageqn = eqnstr1.modelmageqn
-coloreqn_cols = strsplit(coloreqn,'-+*',/extract)
-modelmageqn_cols = strsplit(modelmageqn,'-+*',/extract)
+coloreqn_cols = strsplit(coloreqn,'-+*^',/extract)
+modelmageqn_cols = strsplit(modelmageqn,'-+*^',/extract)
 if keyword_set(usecolor) then cols = strupcase([coloreqn_cols, modelmageqn_cols]) else cols=strupcase(modelmageqn_cols)
 ;; Remove numbers and "COLOR"
 bd = where(valid_num(cols) eq 1 or strupcase(cols) eq 'COLOR' or cols eq '??',nbd)
@@ -137,9 +135,9 @@ endif
 ;; Make the color
 ;;  replace the columns by CAT[GD].COLUMN
 if keyword_set(usecolor) then begin
-  coloreqn_cols = strupcase(strsplit(coloreqn,'-+*',/extract))
+  coloreqn_cols = strupcase(strsplit(coloreqn,'-+*^',/extract))
   coloreqn_cols = coloreqn_cols[uniq(coloreqn_cols,sort(coloreqn_cols))]  ; unique ones
-  bd = where(valid_num(coloreqn_cols) eq 1,nbd)  ;; Remove numbers and "COLOR"
+  bd = where(valid_num(coloreqn_cols) eq 1,nbd)  ;; Remove numbers
   if nbd gt 0 then REMOVE,bd,coloreqn_cols
   colcmd = strupcase(coloreqn)
   for i=0,n_elements(coloreqn_cols)-1 do colcmd=repstr(colcmd,coloreqn_cols[i],'cat.'+coloreqn_cols[i])
@@ -183,7 +181,7 @@ endif
 
 ; Make the model magnitude
 ;;  replace the columns by CAT[GD].COLUMN
-modelmageqn_cols = strupcase(strsplit(modelmageqn,'-+*',/extract))
+modelmageqn_cols = strupcase(strsplit(modelmageqn,'-+*^',/extract))
 bd = where(valid_num(modelmageqn_cols) eq 1 or strupcase(modelmageqn_cols) eq 'COLOR',nbd)  ;; Remove numbers and "COLOR"
 if nbd gt 0 then REMOVE,bd,modelmageqn_cols
 modelmageqn_cols = modelmageqn_cols[uniq(modelmageqn_cols,sort(modelmageqn_cols))]  ; unique ones
@@ -200,7 +198,7 @@ modelmag[gd] = modelmag_gd
 undefine,adderrtags
 ;if (where(cols eq 'GMAG'))[0] ne -1 then push,adderrtags,'E_GMAG'
 psmagind = where(stregex(cols,'^PS_',/boolean) eq 1 and stregex(cols,'MAG$',/boolean) eq 1,npsmagind)
-for i=0,npsmagind-1 do push,adderrtags,'E_'+cols[psmagind]
+push,adderrtags,'E_'+cols[psmagind]
 nadderrtags = n_elements(adderrtags)
 ;; Making error structure
 errtagind = where(stregex(tags,'^E_',/boolean) eq 1,nerrtags)
@@ -221,7 +219,7 @@ endfor
 ;; Calculate the color errors
 ;; get the columns
 if keyword_set(usecolor) then begin
-  colorerr_cols = strupcase(strsplit(coloreqn,'-+*',/extract))
+  colorerr_cols = strupcase(strsplit(coloreqn,'-+*^',/extract))
   colorerr_cols = colorerr_cols[uniq(colorerr_cols,sort(colorerr_cols))]  ; unique ones
   bd = where(valid_num(colorerr_cols) eq 1 or strupcase(colorerr_cols) eq 'EBV',nbd)  ;; Remove numbers and "EBV"
   if nbd gt 0 then REMOVE,bd,colorerr_cols
@@ -244,7 +242,7 @@ endif else colorerr=fltarr(ncat)
 
 ;; The modelmag errors
 ;; get the columns
-modelmagerr_cols = strupcase(strsplit(modelmageqn,'-+*',/extract))
+modelmagerr_cols = strupcase(strsplit(modelmageqn,'-+*^',/extract))
 modelmagerr_cols = modelmagerr_cols[uniq(modelmagerr_cols,sort(modelmagerr_cols))]  ; unique ones
 bd = where(valid_num(modelmagerr_cols) eq 1 or strupcase(modelmagerr_cols) eq 'EBV',nbd)  ;; Remove numbers and "EBV"
 if nbd gt 0 then REMOVE,bd,modelmagerr_cols
