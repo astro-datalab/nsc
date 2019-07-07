@@ -557,7 +557,6 @@ if expstr.nrefmatch le 5 and keyword_set(selfcal) then begin
 endif
 ; Apply the zero-point to the full catalogs
 ;; USE CHIP-LEVEL ZERO-POINTS WHEN POSSIBLE!!!
-print,'USE CHIP-LEVEL ZERO-POINTS WHEN POSSIBLE!!!'
 ;; Create an output catalog for each chip
 nsrc = long64(total(chstr.nsources,/cum))
 lo = [0L,nsrc[0:nchips-2]]
@@ -566,15 +565,19 @@ for i=0,nchips-1 do begin
   ncat1 = hi[i]-lo[i]+1
   if ncat1 gt 0 then begin
     cat1 = cat[lo[i]:hi[i]]
-    ;; Use chip-level zero-point
-    if chstr[i].nrefmatch gt 5 then begin
-      chstr[i].zptype = 1
-    ;; Use exposure-level zero-point
-    endif else begin
-      chstr[i].zpterm = expstr.zpterm
-      chstr[i].zptermerr = expstr.zptermerr
-      chstr[i].zptype = 2
-    endelse
+    ;;; Use chip-level zero-point
+    ;if chstr[i].nrefmatch gt 5 then begin
+    ;  chstr[i].zptype = 1
+    ;;; Use exposure-level zero-point
+    ;endif else begin
+    ;  chstr[i].zpterm = expstr.zpterm
+    ;  chstr[i].zptermerr = expstr.zptermerr
+    ;  chstr[i].zptype = 2
+    ;endelse
+    ;; Always use exposure-level zero-points,  they are good enough
+    chstr[i].zpterm = expstr.zpterm
+    chstr[i].zptermerr = expstr.zptermerr
+    chstr[i].zptype = 2
 
     gdcatmag = where(cat1.mag_auto lt 50,ngd)
     cat1[gdcatmag].cmag = cat1[gdcatmag].mag_auto + 2.5*alog10(exptime) + chstr[i].zpterm

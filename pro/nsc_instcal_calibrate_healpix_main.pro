@@ -7,7 +7,7 @@ radeg = 180.0d0 / !dpi
 
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
-if n_elements(version) eq 0 then version='v2'
+if n_elements(version) eq 0 then version='v3'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 if file_test(dir,/directory) eq 0 then file_mkdir,dir+'logs/'
@@ -61,7 +61,7 @@ MATCH,str.fluxfile,'/net'+coords.file,ind1,ind2,/sort
 dist=sphdist(str[ind1].ra,str[ind1].dec,coords[ind2].ra,coords[ind2].dec,/deg)
 str[ind1].ra = coords[ind2].ra
 str[ind1].dec = coords[ind2].dec
-; 7 didn't match b/c the fluxfiles aren't found, trim them out
+; 13 didn't match b/c the fluxfiles aren't found, trim them out
 str = str[ind1]
 nstr = n_elements(str)
 
@@ -140,48 +140,32 @@ cmd = 'nsc_instcal_calibrate_healpix,'+strtrim(upix,2)
 if keyword_set(redo) then cmd+=',/redo'
 dirs = strarr(npix)+tmpdir
 
-; Only run healpix with DEC>-29
-g = where(str.dec gt -29,ng)
-uipix = uniq(list[g].pix,sort(list[g].pix))
-upix = list[g[uipix]].pix
-npix = n_elements(upix)
-print,strtrim(npix,2),' healpix to run'
-; Create the commands
-cmd = 'nsc_instcal_calibrate_healpix,'+strtrim(upix,2)
-if keyword_set(redo) then cmd+=',/redo'
-dirs = strarr(npix)+tmpdir
+;; Only run healpix with DEC>-29
+;g = where(str.dec gt -29,ng)
+;uipix = uniq(list[g].pix,sort(list[g].pix))
+;upix = list[g[uipix]].pix
+;npix = n_elements(upix)
+;print,strtrim(npix,2),' healpix to run'
+;; Create the commands
+;cmd = 'nsc_instcal_calibrate_healpix,'+strtrim(upix,2)
+;if keyword_set(redo) then cmd+=',/redo'
+;dirs = strarr(npix)+tmpdir
 
 ; RANDOMIZE
 rnd = sort(randomu(0,npix))
 cmd = cmd[rnd]
 dirs = dirs[rnd]
 
-; ONLY DEC>-29
-; gp09, run 1st batch, 8755
-;cmd = cmd[0:6006]
-;dirs = dirs[0:6006]
-
-; Hulk, run 2nd batch, 8755
-;cmd = cmd[6007:12013]
-;dirs = dirs[6007:12013]
-
-; Thing, run 3rd batch, 8755
-;cmd = cmd[12014:*]
-;dirs = dirs[12014:*]
-
+; 29,495 healpix, 14748 each
 
 ; ALL HEALPIX
-; gp09, run 1st batch, 8755
-;cmd = cmd[0:8754]
-;dirs = dirs[0:8754]
+; gp09, run 1st batch, 14748
+cmd = cmd[0:14747]
+dirs = dirs[0:14747]
 
-; Hulk, run 2nd batch, 8755
-;cmd = cmd[8755:17509]
-;dirs = dirs[8755:17509]
-
-; Thing, run 3rd batch, 8755
-;cmd = cmd[17510:*]
-;dirs = dirs[17510:*]
+; Thing, run 2nd batch, 14747
+;cmd = cmd[14748:*]
+;dirs = dirs[14748:*]
 
 ; rerun exposures that had coordinate problems and finished
 ; successfully the first time

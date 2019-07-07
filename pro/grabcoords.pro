@@ -59,7 +59,8 @@ for i=0,n_elements(files)-1 do begin
   line = file+sep+strtrim(ra,2)+sep+strtrim(dec,2)+sep+strtrim(wcscal,2)+sep+strtrim(telstat,2)+sep+$
          biasfil+sep+bpmfil+sep+bpm+sep+pupfil+sep+flatfil+sep+illumfil+sep+illumcor+sep+starfil
   base = file_basename(file,'.fits.fz')
-  outfile = '/d0/dnidever/nsc/instcal/v2/tmp/coords/'+base+'_coords.txt'
+  ;outfile = '/d0/dnidever/nsc/instcal/v2/tmp/coords/'+base+'_coords.txt'
+  outfile = '/data0/dnidever/nsc/instcal/v3/tmp/coords/'+base+'_coords.txt'
   writeline,outfile,line
   BOMB:
 endfor

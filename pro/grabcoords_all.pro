@@ -1,8 +1,8 @@
-pro grabcoords_all
+pro grabcoords_all,version
   
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
-if n_elements(version) eq 0 then version='v2'
+if n_elements(version) eq 0 then version='v3'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 if file_test(dir,/directory) eq 0 then file_mkdir,dir+'logs/'
@@ -25,7 +25,7 @@ fluxfiles = strmid(str.fluxfile,4)
 nbin = 100
 nbatch = ceil(nstr/float(nbin))
 cmd = strarr(nbatch)
-dir = strarr(nbatch)+'/d0/dnidever/nsc/instcal/v2/tmp/coords/'
+dir = strarr(nbatch)+'/data0/dnidever/nsc/instcal/'+version+'/tmp/coords/'
 for i=0L,nbatch-1 do begin
   lo = i*nbin
   hi = (lo+nbin-1) < (nstr-1)

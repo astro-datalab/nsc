@@ -9,7 +9,7 @@ radeg = 180.0d0 / !dpi
 
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
-if n_elements(version) eq 0 then version='v2'
+if n_elements(version) eq 0 then version='v3'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 if file_test(dir,/directory) eq 0 then file_mkdir,dir+'logs/'
@@ -52,6 +52,11 @@ list1.filter = strtrim(list1.filter,2)
 PIX2ANG_RING,nside,pix,centh,cenphi
 cenra = cenphi[0]*radeg
 cendec = 90-centh[0]*radeg
+print,'RA  = ',stringize(cenra,ndec=6)
+print,'DEC = ',stringize(cendec,ndec=6)
+glactc,cenra,cendec,2000.0,glon,glat,1,/deg
+print,'L = ',stringize(glon,ndec=6)
+print,'B = ',stringize(glat,ndec=6)
 
 ; List of instrument-filters
 filters = strtrim(list1.instrument,2)+'-'+strtrim(strmid(list1.filter,0,2),2)
