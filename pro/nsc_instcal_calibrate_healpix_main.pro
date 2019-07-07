@@ -1,4 +1,4 @@
-pro nsc_instcal_calibrate_healpix_main,redo=redo
+pro nsc_instcal_calibrate_healpix_main,version=version,nmulti=nmulti,redo=redo
 
 ; Drive for NSC_INSTCAL_CALIBRATE_HEALPIX
 
