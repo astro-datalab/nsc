@@ -53,7 +53,6 @@ endif
 ind = ind[0]
 list = healstr[index[ind].lo:index[ind].hi]
 nlist = n_elements(list)
-
 ; GET EXPOSURES FOR NEIGHBORING PIXELS AS WELL
 ;  so we can deal with the edge cases
 NEIGHBOURS_RING,nside,pix,neipix,nneipix
@@ -140,7 +139,13 @@ radbound = sqrt(lonbound^2+latbound^2)
 frac = 1.0 + 1.5*max(buffsize/radbound)
 lonbuff = lonbound*frac
 latbuff = latbound*frac
-buffer = {cenra:cenra,cendec:cendec,lon:lonbuff,lat:latbuff,lr:minmax(lonbuff),br:minmax(latbuff)}
+ROTSPHCEN,lonbuff,latbuff,cenra,cendec,rabuff,decbuff,/gnomic,/reverse
+if range(rabuff) gt 100 then begin  ; deal with RA=0 wraparound
+  bd = where(rabuff gt 180,nbd)
+  if nbd gt 0 then rabuff[bd] -=360.0
+endif
+buffer = {cenra:cenra,cendec:cendec,rar:minmax(rabuff),decr:minmax(decbuff),ra:rabuff,dec:decbuff,lon:lonbuff,lat:latbuff,lr:minmax(lonbuff),br:minmax(latbuff)}
+
 
 ; Initialize the ID structure
 ;  this will contain the SourceID, Exposure name, ObjectID
@@ -150,7 +155,7 @@ nidstr = n_elements(idstr)
 idcnt = 0LL
 
 ; Initialize the object structure
-schema_obj = {id:'',pix:0L,ra:0.0d0,dec:0.0d0,raerr:0.0d0,decerr:0.0d0,pmra:0.0d0,$
+schema_obj = {objectid:'',pix:0L,ra:0.0d0,dec:0.0d0,raerr:0.0d0,decerr:0.0d0,pmra:0.0d0,$
               pmdec:0.0d0,pmraerr:0.0d0,pmdecerr:0.0d0,mjd:0.0d0,deltamjd:0.0,ndet:0L,nphot:0L,$
               ndetu:0,nphotu:0,umag:0.0,urms:0.0,uerr:0.0,uasemi:0.0,ubsemi:0.0,utheta:0.0,$
               ndetg:0,nphotg:0,gmag:0.0,grms:0.0,gerr:0.0,gasemi:0.0,gbsemi:0.0,gtheta:0.0,$
@@ -186,102 +191,146 @@ FOR i=0,nlist-1 do begin
     pos = strpos(file,'_cat')
     metafile = strmid(file,0,pos)+'_meta.fits'
   endif
+  if file_test(metafile) eq 0 then begin
+    print,metafile,' NOT FOUND'
+    goto,BOMB
+  endif
   meta = MRDFITS(metafile,1,/silent)
   meta.base = strtrim(meta.base)
   meta.expnum = strtrim(meta.expnum)
   meta.mjd = date2jd(meta.dateobs,/mjd)  ; recompute because some MJD are bad
+  chmeta = MRDFITS(metafile,2,/silent)   ; chip-level meta-data structure
   print,'  FILTER=',meta.filter,'  EXPTIME=',stringize(meta.exptime,ndec=1),' sec'
 
-  ; Check that all chips were astrometrically calibrated
-  chmeta = MRDFITS(metafile,2,/silent)
-  if tag_exist(chmeta,'gaianmatch') then bdch = where(chmeta.gaianmatch eq 0,nbdch) else $
-     bdch = where(chmeta.ngaiamatch eq 0,nbdch)
-  if nbdch gt 0 then begin
-    print,'  Not all chips are astrometrically calibrated for this exposure'
-    goto,BOMB
-  endif
+  ;; Check that all chips were astrometrically calibrated
+  ;chmeta = MRDFITS(metafile,2,/silent)
+  ;if tag_exist(chmeta,'gaianmatch') then bdch = where(chmeta.gaianmatch eq 0,nbdch) else $
+  ;   bdch = where(chmeta.ngaiamatch eq 0,nbdch)
+  ;if nbdch gt 0 then begin
+  ;  print,'  Not all chips are astrometrically calibrated for this exposure'
+  ;  goto,BOMB
+  ;endif
 
-  ; Load the exposure catalog
-  if file_test(list[i].file) eq 0 then begin
-    print,list[i].file,' NOT FOUND'
-    goto,BOMB
-  endif
-  cat = MRDFITS(list[i].file,1,/silent)
-  ncat = n_elements(cat)
-  print,'  ',strtrim(ncat,2),' sources'
+  ;; Loop over the chip files
+  undefine,cat
+  For j=0,n_elements(chmeta)-1 do begin
 
-  ; Make sure it's in the right format
-  if n_tags(cat) ne 45 then begin   ; 49 for v1
-    print,'  This catalog does not have the right format. Skipping'
-    goto,BOMB
-  endif
+    ;; Check that this chip was astrometrically calibrated
+    if chmeta[j].ngaiamatch eq 0 then begin
+      print,'This chip was not astrometrically calibrate'
+      goto,BOMB1
+    endif
 
-  ; Only include sources inside Boundary+Buffer zone
-  ;  -use ROI_CUT
-  ;  -reproject to tangent plane first so we don't have to deal
-  ;     with RA=0 wrapping or pol issues
-  ROTSPHCEN,cat.ra,cat.dec,buffer.cenra,buffer.cendec,lon,lat,/gnomic
-  if running_gdl() eq 0 then begin
-    ROI_CUT,buffer.lon,buffer.lat,lon,lat,ind0,ind1,fac=1000,/silent
-    nmatch = n_elements(ind1)
-  endif else begin
-    ; first use WHERE with X/Y limits
-    in1 = where(lon ge buffer.lr[0] and lon le buffer.lr[1] and $
-                lat ge buffer.br[0] and lat le buffer.br[1],nin1)
-    if nin1 gt 0 then begin
-      inmask = INSIDE(lon[in1],lat[in1],buffer.lon,buffer.lat)
-      in2 = where(inmask eq 1,nin2)
-      if nin2 gt 0 then ind1=in1[in2] else undefine,ind1
-      nmatch = nin2
+    ;; Check that this overlaps the healpix region
+    vra = chmeta[j].vra
+    vdec = chmeta[j].vdec
+    if range(vra) gt 100 then begin  ; deal with RA=0 wrapround
+      bd = where(vra gt 180,nbd)
+      if nbd gt 0 then vra[bd] -= 360
+    endif
+    if DOPOLYGONSOVERLAP(buffer.ra,buffer.dec,vra,vdec) eq 0 then begin
+      ;print,'This chip does NOT overlap the HEALPix region+buffer'
+      goto,BOMB1
+    endif
+
+    ;; Load the chip-level catalog
+    chfile = file_dirname(list[i].file)+'/'+file_basename(list[i].file,'.fits')+strtrim(chmeta[j].ccdnum,2)+'.fits'
+    if file_test(chfile) eq 0 then begin
+      print,chfile,' NOT FOUND'
+      goto,BOMB1
+    endif
+    cat1 = MRDFITS(chfile,1,/silent)
+    ncat1 = n_elements(cat1)
+    print,'  ',strtrim(ncat1,2),' sources'
+
+    ; Make sure it's in the right format
+    if n_tags(cat1) ne 45 then begin   ; 49 for v1
+      print,'  This catalog does not have the right format. Skipping'
+      goto,BOMB1
+    endif
+
+    ; Only include sources inside Boundary+Buffer zone
+    ;  -use ROI_CUT
+    ;  -reproject to tangent plane first so we don't have to deal
+    ;     with RA=0 wrapping or pol issues
+    ROTSPHCEN,cat1.ra,cat1.dec,buffer.cenra,buffer.cendec,lon,lat,/gnomic
+    if running_gdl() eq 0 then begin
+      ROI_CUT,buffer.lon,buffer.lat,lon,lat,ind0,ind1,fac=1000,/silent
+      nmatch = n_elements(ind1)
     endif else begin
-      undefine,ind1
-      nmatch = 0
+      ; first use WHERE with X/Y limits
+      in1 = where(lon ge buffer.lr[0] and lon le buffer.lr[1] and $
+                  lat ge buffer.br[0] and lat le buffer.br[1],nin1)
+      if nin1 gt 0 then begin
+        inmask = INSIDE(lon[in1],lat[in1],buffer.lon,buffer.lat)
+        in2 = where(inmask eq 1,nin2)
+        if nin2 gt 0 then ind1=in1[in2] else undefine,ind1
+        nmatch = nin2
+      endif else begin
+        undefine,ind1
+        nmatch = 0
+      endelse
     endelse
-  endelse
-  ; Only want source inside this pixel
-  if nmatch eq 0 then begin
-    print,'  No sources inside this pixel'
+    ; Only want source inside this pixel
+    if nmatch eq 0 then begin
+      print,'  No sources inside this pixel'
+      goto,BOMB
+    endif
+    print,'  ',strtrim(nmatch,2),' sources are inside this pixel'
+    cat1 = cat1[ind1]
+    ncat1 = nmatch
+
+    ;; Combine the catalogs
+    PUSH,cat,cat1
+    ;stop
+
+    BOMB1:
+
+  Endfor  ; chip loop
+  ncat = n_elements(cat)
+  if ncat eq 0 then begin
+    print,'This exposure does NOT cover the HEALPix'
     goto,BOMB
   endif
-  print,'  ',strtrim(nmatch,2),' sources are inside this pixel'
-  cat = cat[ind1]
-  ncat = nmatch
+ 
 
   ; Remove bad chip data
   ; Half of chip 31 for MJD>56660
   ;  c4d_131123_025436_ooi_r_v2 with MJD=56619 has problems too
   ;  if the background b/w the left and right half is large then BAd
-  lft31 = where(cat.x_image lt 1024 and cat.ccdnum eq 31,nlft31)
-  rt31 = where(cat.x_image ge 1024 and cat.ccdnum eq 31,nrt31)
-  if nlft31 gt 10 and nrt31 gt 10 then begin
-    lftback = median([cat[lft31].background])
-    rtback = median([cat[rt31].background])
-    mnback = 0.5*(lftback+rtback)
-    sigback = mad(cat.background)
-    if abs(lftback-rtback) gt (sqrt(mnback)>sigback) then jump31=1 else jump31=0
-    print,'  Big jump in CCDNUM 31 background levels'
-  endif else jump31=0
-  if meta.mjd gt 56600 or jump31 eq 1 then begin  
-    badchip31 = 1
-    ; Remove bad measurements
-    ; X: 1-1024 okay
-    ; X: 1025-2049 bad
-    ; use 1000 as the boundary since sometimes there's a sharp drop
-    ; at the boundary that causes problem sources with SExtractor
-    bdind = where(cat.x_image gt 1000 and cat.ccdnum eq 31,nbdind,comp=gdind,ncomp=ngdind)
-    if nbdind gt 0 then begin   ; some bad ones found
-      if ngdind eq 0 then begin   ; all bad
-        print,'NO useful measurements in ',list[i].file
-        undefine,cat
-        ncat = 0
-        goto,BOMB
-      endif else begin
-        print,'  Removing '+strtrim(nbdind,2)+' bad chip 31 measurements, '+strtrim(ngdind,2)+' left.'
-        REMOVE,bdind,cat
-        ncat = n_elements(cat)
-      endelse
-    endif  ; some bad ones to remove
-  endif else badchip31=0     ; chip 31
+  if meta.instrument eq 'c4d' then begin
+    lft31 = where(cat.x_image lt 1024 and cat.ccdnum eq 31,nlft31)
+    rt31 = where(cat.x_image ge 1024 and cat.ccdnum eq 31,nrt31)
+    if nlft31 gt 10 and nrt31 gt 10 then begin
+      lftback = median([cat[lft31].background])
+      rtback = median([cat[rt31].background])
+      mnback = 0.5*(lftback+rtback)
+      sigback = mad(cat.background)
+      if abs(lftback-rtback) gt (sqrt(mnback)>sigback) then jump31=1 else jump31=0
+      print,'  Big jump in CCDNUM 31 background levels'
+    endif else jump31=0
+    if meta.mjd gt 56600 or jump31 eq 1 then begin  
+      badchip31 = 1
+      ; Remove bad measurements
+      ; X: 1-1024 okay
+      ; X: 1025-2049 bad
+      ; use 1000 as the boundary since sometimes there's a sharp drop
+      ; at the boundary that causes problem sources with SExtractor
+      bdind = where(cat.x_image gt 1000 and cat.ccdnum eq 31,nbdind,comp=gdind,ncomp=ngdind)
+      if nbdind gt 0 then begin   ; some bad ones found
+        if ngdind eq 0 then begin   ; all bad
+          print,'NO useful measurements in ',list[i].file
+          undefine,cat
+          ncat = 0
+          goto,BOMB
+        endif else begin
+          print,'  Removing '+strtrim(nbdind,2)+' bad chip 31 measurements, '+strtrim(ngdind,2)+' left.'
+          REMOVE,bdind,cat
+          ncat = n_elements(cat)
+        endelse
+      endif  ; some bad ones to remove
+    endif else badchip31=0     ; chip 31
+  endif else badchip31=0
 
   ; Removing BAD sources
   ; Source Extractor FLAGS
@@ -378,7 +427,7 @@ FOR i=0,nlist-1 do begin
 
     ; Copy to final structure
     newexp = replicate(schema_obj,ncat)
-    newexp.id = strtrim(pix,2)+'.'+strtrim(lindgen(ncat)+1,2)
+    newexp.objectid = strtrim(pix,2)+'.'+strtrim(lindgen(ncat)+1,2)
     newexp.pix = pix
     newexp.ra = cat.ra
     newexp.dec = cat.dec
@@ -451,7 +500,7 @@ FOR i=0,nlist-1 do begin
     idstr[idcnt:idcnt+ncat-1].sourceid = cat.sourceid
     idstr[idcnt:idcnt+ncat-1].exposure = meta.base
     idstr[idcnt:idcnt+ncat-1].expnum = meta.expnum
-    idstr[idcnt:idcnt+ncat-1].objectid = newexp.id
+    idstr[idcnt:idcnt+ncat-1].objectid = newexp.objectid
     idstr[idcnt:idcnt+ncat-1].objectindex = lindgen(ncat)
     idcnt += ncat
 
@@ -549,7 +598,7 @@ FOR i=0,nlist-1 do begin
       idstr[idcnt:idcnt+nmatch-1].sourceid = newcat.sourceid
       idstr[idcnt:idcnt+nmatch-1].exposure = meta.base
       idstr[idcnt:idcnt+nmatch-1].expnum = meta.expnum
-      idstr[idcnt:idcnt+nmatch-1].objectid = cmb.id
+      idstr[idcnt:idcnt+nmatch-1].objectid = cmb.objectid
       idstr[idcnt:idcnt+nmatch-1].objectindex = ind1
       idcnt += nmatch
 
@@ -577,7 +626,7 @@ FOR i=0,nlist-1 do begin
 
       ; Copy to final structure
       newexp = replicate(schema_obj,ncat)
-      newexp.id = strtrim(pix,2)+'.'+strtrim(cnt+lindgen(ncat)+1,2)
+      newexp.objectid = strtrim(pix,2)+'.'+strtrim(cnt+lindgen(ncat)+1,2)
       newexp.pix = pix
       newexp.ra = cat.ra
       newexp.dec = cat.dec
@@ -650,7 +699,7 @@ FOR i=0,nlist-1 do begin
       idstr[idcnt:idcnt+ncat-1].sourceid = cat.sourceid
       idstr[idcnt:idcnt+ncat-1].exposure = meta.base
       idstr[idcnt:idcnt+ncat-1].expnum = strtrim(meta.expnum,2)
-      idstr[idcnt:idcnt+ncat-1].objectid = newexp.id
+      idstr[idcnt:idcnt+ncat-1].objectid = newexp.objectid
       idstr[idcnt:idcnt+ncat-1].objectindex = objectindex
       idcnt += ncat
     endif

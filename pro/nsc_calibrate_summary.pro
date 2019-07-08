@@ -1,4 +1,4 @@
-pro nsc_calibrate_summary
+pro nsc_calibrate_summary,version
 
 ; Create calibration summary file
 
@@ -6,7 +6,7 @@ radeg = 180.0d0 / !dpi
 
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
-if n_elements(version) eq 0 then version='v2'
+if n_elements(version) eq 0 then version='v3'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 
 t0 = systime(1)
@@ -97,7 +97,6 @@ for i=0,nlist-1 do begin
       dec = expstr[i].dec
       expstr[i].airmass = AIRMASS(jd,ra,dec,lat,lon)
    endif
-
   endif else expstr[i].success=0
 endfor
 ; Trim CHSTR structure
@@ -107,7 +106,7 @@ print,strtrim(ngd,2),' exposure successfully calibrated'
 print,'Writing summary file to ',dir+'lists/nsc_instcal_calibrate.fits'
 MWRFITS,expstr,dir+'lists/nsc_instcal_calibrate.fits',/create
 MWRFITS,chstr,dir+'lists/nsc_instcal_calibrate.fits',/silent
-
+spawn,['gzip',dir+'lists/nsc_instcal_calibrate.fits'],/noshell
 
 print,'dt=',stringize(systime(1)-t0,ndec=2),' sec'
 
