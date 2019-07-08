@@ -198,7 +198,7 @@ modelmag[gd] = modelmag_gd
 undefine,adderrtags
 ;if (where(cols eq 'GMAG'))[0] ne -1 then push,adderrtags,'E_GMAG'
 psmagind = where(stregex(cols,'^PS_',/boolean) eq 1 and stregex(cols,'MAG$',/boolean) eq 1,npsmagind)
-push,adderrtags,'E_'+cols[psmagind]
+if npsmagind gt 0 then push,adderrtags,'E_'+cols[psmagind]
 nadderrtags = n_elements(adderrtags)
 ;; Making error structure
 errtagind = where(stregex(tags,'^E_',/boolean) eq 1,nerrtags)
