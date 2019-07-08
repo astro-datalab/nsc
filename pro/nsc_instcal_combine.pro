@@ -7,7 +7,7 @@ t0 = systime(1)
 ;nside = 256
 if n_elements(nside) eq 0 then nside = 128
 NSC_ROOTDIRS,dldir,mssdir,localdir
-if n_elements(version) eq 0 then version='v2'
+if n_elements(version) eq 0 then version='v3'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 ;dir = '/datalab/users/dnidever/decamcatalog/instcal/'
 radeg = 180.0d0 / !dpi
@@ -213,6 +213,7 @@ FOR i=0,nlist-1 do begin
 
   ;; Loop over the chip files
   undefine,cat
+  catcount = 0LL
   For j=0,n_elements(chmeta)-1 do begin
 
     ;; Check that this chip was astrometrically calibrated
@@ -234,7 +235,7 @@ FOR i=0,nlist-1 do begin
     endif
 
     ;; Load the chip-level catalog
-    chfile = file_dirname(list[i].file)+'/'+file_basename(list[i].file,'.fits')+strtrim(chmeta[j].ccdnum,2)+'.fits'
+    chfile = file_dirname(list[i].file)+'/'+list[i].base+'_'+strtrim(chmeta[j].ccdnum,2)+'_meas.fits'
     if file_test(chfile) eq 0 then begin
       print,chfile,' NOT FOUND'
       goto,BOMB1
@@ -244,7 +245,7 @@ FOR i=0,nlist-1 do begin
     print,'  ',strtrim(ncat1,2),' sources'
 
     ; Make sure it's in the right format
-    if n_tags(cat1) ne 45 then begin   ; 49 for v1
+    if n_tags(cat1) ne 32 then begin   ; 49 for v1, 45 for v2
       print,'  This catalog does not have the right format. Skipping'
       goto,BOMB1
     endif
@@ -281,123 +282,22 @@ FOR i=0,nlist-1 do begin
     ncat1 = nmatch
 
     ;; Combine the catalogs
-    PUSH,cat,cat1
-    ;stop
+    if n_elements(cat) eq 0 then begin
+      cat_schema = cat1[0]
+      struct_assign,{dum:''},cat_schema
+      cat = replicate(cat_schema,total(chmeta.nsources))
+    endif
+    cat[catcount:catcount+ncat1-1] = cat1
+    catcount += ncat1
 
     BOMB1:
-
   Endfor  ; chip loop
+  if n_elements(cat) gt 0 then cat = cat[0:catcount-1]  ; trim excess
   ncat = n_elements(cat)
   if ncat eq 0 then begin
     print,'This exposure does NOT cover the HEALPix'
     goto,BOMB
   endif
- 
-
-  ; Remove bad chip data
-  ; Half of chip 31 for MJD>56660
-  ;  c4d_131123_025436_ooi_r_v2 with MJD=56619 has problems too
-  ;  if the background b/w the left and right half is large then BAd
-  if meta.instrument eq 'c4d' then begin
-    lft31 = where(cat.x_image lt 1024 and cat.ccdnum eq 31,nlft31)
-    rt31 = where(cat.x_image ge 1024 and cat.ccdnum eq 31,nrt31)
-    if nlft31 gt 10 and nrt31 gt 10 then begin
-      lftback = median([cat[lft31].background])
-      rtback = median([cat[rt31].background])
-      mnback = 0.5*(lftback+rtback)
-      sigback = mad(cat.background)
-      if abs(lftback-rtback) gt (sqrt(mnback)>sigback) then jump31=1 else jump31=0
-      print,'  Big jump in CCDNUM 31 background levels'
-    endif else jump31=0
-    if meta.mjd gt 56600 or jump31 eq 1 then begin  
-      badchip31 = 1
-      ; Remove bad measurements
-      ; X: 1-1024 okay
-      ; X: 1025-2049 bad
-      ; use 1000 as the boundary since sometimes there's a sharp drop
-      ; at the boundary that causes problem sources with SExtractor
-      bdind = where(cat.x_image gt 1000 and cat.ccdnum eq 31,nbdind,comp=gdind,ncomp=ngdind)
-      if nbdind gt 0 then begin   ; some bad ones found
-        if ngdind eq 0 then begin   ; all bad
-          print,'NO useful measurements in ',list[i].file
-          undefine,cat
-          ncat = 0
-          goto,BOMB
-        endif else begin
-          print,'  Removing '+strtrim(nbdind,2)+' bad chip 31 measurements, '+strtrim(ngdind,2)+' left.'
-          REMOVE,bdind,cat
-          ncat = n_elements(cat)
-        endelse
-      endif  ; some bad ones to remove
-    endif else badchip31=0     ; chip 31
-  endif else badchip31=0
-
-  ; Removing BAD sources
-  ; Source Extractor FLAGS
-  ; 1   The object has neighbours, bright and close enough to significantly bias the MAG AUTO photometry,
-  ;       or bad pixels (more than 10% of the integrated area affected),
-  ; 2   The object was originally blended with another one,
-  ; 4   At least one pixel of the object is saturated (or very close to),
-  ; 8   The object is truncated (too close to an image boundary),
-  ; 16  Object’s aperture data are incomplete or corrupted,
-  ; 32  Object’s isophotal data are incomplete or corrupted,
-  ; 64  A memory overflow occurred during deblending,
-  ; 128 A memory overflow occurred during extraction.
-  ; Don't use any of these.  That saturation one is already
-  ;  covered in the CP bitmask flag
-
-  ; --CP bit masks, Pre-V3.5.0 (PLVER)  
-  ; Bit     DQ Type
-  ; 1      detector bad pixel
-  ; 2      saturated
-  ; 4      interpolated
-  ; 16     single exposure cosmic ray
-  ; 64     bleed trail
-  ; 128    multi-exposure transient
-  ; --CP bit masks, V3.5.0 on (after ~10/28/2014), integer masks  
-  ;  1 = bad (in static bad pixel mask)
-  ;  2 = no value (for stacks)
-  ;  3 = saturated
-  ;  4 = bleed mask
-  ;  5 = cosmic ray
-  ;  6 = low weight
-  ;  7 = diff detect   
-  ; OR: the result is an arithmetic (bit-to-bit) OR of flag-map pixels.
-  ; The NIMAFLAGS ISO catalog parameter contains a number of relevant
-  ; flag-map pixels: the number of non-zero flag-map pixels in the
-  ; case of an OR or AND FLAG TYPE.
-
-  ; Make a cut on quality mask flag (IMAFLAGS_ISO)
-  bdcat = where(cat.imaflags_iso gt 0,nbdcat)
-  if nbdcat gt 0 then begin
-    print,'  Removing ',strtrim(nbdcat,2),' sources with bad CP flags.'
-    if nbdcat eq ncat then goto,BOMB
-    REMOVE,bdcat,cat
-    ncat = n_elements(cat)
-  endif
-
-  ; Make cuts on SE FLAGS
-  ;   this removes problematic truncatd sources near chip edges
-  bdseflags = where( ((cat.flags and 8) eq 8) or $             ; object truncated
-                     ((cat.flags and 16) eq 16),nbdseflags)    ; aperture truncate
-  if nbdseflags gt 0 then begin
-    print,'  Removing ',strtrim(nbdseflags,2),' truncated sources'
-    if nbdseflags eq ncat then goto,BOMB
-    REMOVE,bdseflags,cat
-    ncat = n_elements(cat)
-  endif
-
-  ; Removing low-S/N sources
-  ;  snr = 1.087/err
-  snrcut = 5.0
-  bdcatsnr = where(1.087/cat.magerr_auto lt snrcut,nbdcatsnr)
-  if nbdcatsnr gt 0 then begin
-    print,'  Removing ',strtrim(nbdcatsnr,2),' sources with S/N<',strtrim(snrcut,2)
-    if nbdcatsnr eq ncat then goto,BOMB
-    REMOVE,bdcatsnr,cat
-    ncat = n_elements(cat)
-  endif
-
 
   ; Add metadata to ALLMETA
   ;  Make sure it's in the right format
@@ -455,19 +355,12 @@ FOR i=0,nlist-1 do begin
     newexp.y2err = cat.erry2_world^2
     newexp.xy = cat.xy_world
     newexp.xyerr = cat.errxy_world^2
-    ;newexp.cxx = cat.cxx_world
-    ;newexp.cxxerr = cat.errcxx_world^2
-    ;newexp.cyy = cat.cyy_world
-    ;newexp.cyyerr = cat.errcyy_world^2
-    ;newexp.cxy = cat.cxy_world
-    ;newexp.cxyerr = cat.errcxy_world^2
     newexp.asemi = cat.a_world
     newexp.asemierr = cat.erra_world^2
     newexp.bsemi = cat.b_world
     newexp.bsemierr = cat.errb_world^2
     newexp.theta = cat.theta_world
     newexp.thetaerr = cat.errtheta_world^2
-    ;newexp.elongation = cat.elongation
     newexp.ellipticity = cat.ellipticity
     newexp.fwhm = cat.fwhm_world*3600  ; in arcsec
     newexp.flags = cat.flags
@@ -496,7 +389,6 @@ FOR i=0,nlist-1 do begin
     endif
     ; Add to IDSTR
     ;sourceid = strtrim(meta.expnum,2)+'.'+strtrim(cat.ccdnum,2)+'.'+strtrim(cat.number,2)
-    ;idstr[idcnt:idcnt+ncat-1].sourceid = sourceid
     idstr[idcnt:idcnt+ncat-1].sourceid = cat.sourceid
     idstr[idcnt:idcnt+ncat-1].exposure = meta.base
     idstr[idcnt:idcnt+ncat-1].expnum = meta.expnum
@@ -553,19 +445,12 @@ FOR i=0,nlist-1 do begin
       cmb.y2err += newcat.erry2_world^2
       cmb.xy += newcat.xy_world
       cmb.xyerr += newcat.errxy_world^2
-      ;cmb.cxx += newcat.cxx_world
-      ;cmb.cxxerr += newcat.errcxx_world^2
-      ;cmb.cyy += newcat.cyy_world
-      ;cmb.cyyerr += newcat.errcyy_world^2
-      ;cmb.cxy += newcat.cxy_world
-      ;cmb.cxyerr += newcat.errcxy_world^2
       cmb.asemi += newcat.a_world
       cmb.asemierr += newcat.erra_world^2
       cmb.bsemi += newcat.b_world
       cmb.bsemierr += newcat.errb_world^2
       cmb.theta += newcat.theta_world
       cmb.thetaerr += newcat.errtheta_world^2
-      ;cmb.elongation += newcat.elongation
       cmb.ellipticity += newcat.ellipticity
       cmb.fwhm += newcat.fwhm_world*3600  ; in arcsec
       cmb.flags OR= newcat.flags
@@ -594,7 +479,6 @@ FOR i=0,nlist-1 do begin
       endif
       ; Add to IDSTR
       ;sourceid = strtrim(meta.expnum,2)+'.'+strtrim(newcat.ccdnum,2)+'.'+strtrim(newcat.number,2)
-      ;idstr[idcnt:idcnt+nmatch-1].sourceid = sourceid
       idstr[idcnt:idcnt+nmatch-1].sourceid = newcat.sourceid
       idstr[idcnt:idcnt+nmatch-1].exposure = meta.base
       idstr[idcnt:idcnt+nmatch-1].expnum = meta.expnum
@@ -653,19 +537,12 @@ FOR i=0,nlist-1 do begin
       newexp.y2err = cat.erry2_world^2
       newexp.xy = cat.xy_world
       newexp.xyerr = cat.errxy_world^2
-      ;newexp.cxx = cat.cxx_world
-      ;newexp.cxxerr = cat.errcxx_world^2
-      ;newexp.cyy = cat.cyy_world
-      ;newexp.cyyerr = cat.errcyy_world^2
-      ;newexp.cxy = cat.cxy_world
-      ;newexp.cxyerr = cat.errcxy_world^2
       newexp.asemi = cat.a_world
       newexp.asemierr = cat.erra_world^2
       newexp.bsemi = cat.b_world
       newexp.bsemierr = cat.errb_world^2
       newexp.theta = cat.theta_world
       newexp.thetaerr = cat.errtheta_world^2
-      ;newexp.elongation = cat.elongation
       newexp.ellipticity = cat.ellipticity
       newexp.fwhm = cat.fwhm_world*3600  ; in arcsec
       newexp.flags = cat.flags
