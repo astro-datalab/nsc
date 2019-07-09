@@ -6,17 +6,8 @@ import numpy as np
 import warnings
 from astropy.io import fits
 from astropy.utils.exceptions import AstropyWarning
-#from astropy.wcs import WCS
-from astropy.table import Table
-#import time
-#import shutil
-#import re
-#import subprocess
-#import glob
-#import logging
-#import socket
-#from scipy.signal import convolve2d
-#from scipy.ndimage.filters import convolve
+from astropy.table import Table, vstack
+import healpy as hp
 
 # Combine data for one NSC healpix region
 if __name__ == "__main__":
@@ -33,19 +24,31 @@ if __name__ == "__main__":
     hostname = socket.gethostname()
     host = hostname.split('.')[0]
 
+    # Inputs
+    pix = args.pix
+    version = args.version
+    nside = args.nside
+    redo = args.redo
+    if ((redo=='True') or (redo=='TRUE') or (redo=='Yes') or (redo=='YES') or (redo=='Y') or (redo=='y')):
+        redo = True
+    else:
+        redo = False
+    outdir = args.outdir
+
     # on thing/hulk use
-    if (host == "thing") | (host == "hulk"):
-        dir = "/dl1/users/dnidever/nsc/instcal/"+verdir
+    if (host == "thing") or (host == "hulk"):
+        dir = "/dl1/users/dnidever/nsc/instcal/"+version+"/"
         mssdir = "/mss1/"
-        tmproot = "/d0/dnidever/nsc/instcal/"+verdir+"tmp/"
+        localdir = "/d0/"
+        tmproot = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
     # on gp09 use
-    if (host == "gp09") | (host == "gp08") | (host == "gp07") | (host == "gp06") | (host == "gp05"):
-        dir = "/net/dl1/users/dnidever/nsc/instcal/"+verdir
+    if (host == "gp09") or (host == "gp08") or (host == "gp07") or (host == "gp06") or (host == "gp05"):
+        dir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"?"
         mssdir = "/net/mss1/"
-        tmproot = "/data0/dnidever/nsc/instcal/"+verdir+"tmp/"
+        localdir = "/data0/"
+        tmproot = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
 
     t0 = time.time()
-
 
     # Not enough inputs
     n = len(sys.argv)
@@ -53,27 +56,11 @@ if __name__ == "__main__":
         print "Syntax - nsc_instcal_combine pix --version v# --nside ### --redo YES/NO --outdir OUTDIR"
         sys.exit()
 
-    # Inputs
-    pix = args.pix
-    version = args.version
-    nside = args.nside
-    redo = args.redo
-    if (redo=='True' | redo=='TRUE' | redo=='Yes' | redo='YES' | redo=='Y' | redo='y'):
-        redo = True
-    else:
-        redo = False
-    outdir = args.outdir
-    if outdir == '': outdir=dir+'combine/'
-
-    # Check that the directory exist
-    if os.path.exists(expdir) == False:
-        print(expdir+" NOT FOUND")
-        sys.exit()
-
     # Check if output file already exists
+    if outdir == '': outdir=dir+'combine/'
     subdir = str(int(pix)/1000)    # use the thousands to create subdirectory grouping
     outfile = outdir+'/'+subdir+'/'+str(pix)+'.fits'
-    if (os.path.exists(outfile) | os.path.exists(outfile+'.gz')) & ~redo:
+    if (os.path.exists(outfile) or os.path.exists(outfile+'.gz')) and ~redo:
         print(outfile+' EXISTS already and REDO not set')
         sys.exit()
 
@@ -84,31 +71,40 @@ if __name__ == "__main__":
     if os.path.exists(list) is False:
         print(listfile+" NOT FOUND")
         sys.exist()
-    healstr = fits.getdata(listfile,1)
-    index = fits.getdata(listfile,2)
+    healstr = Table(fits.getdata(listfile,1))
+    index = Table(fits.getdata(listfile,2))
     # Find our pixel
-    ind, = np.where(index['pix'] == pix)
+    ind, = np.where(index['PIX'] == pix)
     nind = len(ind)
     if nind == 0:
         print("No entries for Healpix pixel '"+str(pix)+"' in the list")
         sys.exit()
     ind = ind[0]
-    list = healstr[index[ind].lo:index[ind].hi]
-    nlist = n_elements(list)
+    hlist = healstr[index[ind]['LO']:index[ind]['HI']+1]
+    nlist = len(hlist)
     # GET EXPOSURES FOR NEIGHBORING PIXELS AS WELL
     #  so we can deal with the edge cases
-    NEIGHBOURS_RING,nside,pix,neipix,nneipix
-    for i=0,nneipix-1 do begin
-        ind = where(index.pix eq neipix[i],nind)
-        if nind gt 0 then begin
-            ind = ind[0]
-            list1 = healstr[index[ind].lo:index[ind].hi]
-            push,list,list1
+    neipix = hp.get_all_neighbours(nside,pix)
+    for neip in neipix:
+        ind1, = np.where(index['PIX'] == neip)
+        nind1 = len(ind1)
+        if nind1>0:
+            ind1 = ind1[0]
+            hlist1 = healstr[index[ind1]['LO']:index[ind1]['HI']+1]
+            hlist = vstack([hlist,hlist1])
+
     # Use entire exposure files
     # Get unique values
-    ui = np.uniq(list.file,sort(list.file))
-    list = list[ui]
-    nlist = len(list)
-    print(str(nlist)+' exposures that overlap this pixel and neighbors')
+    u, ui = np.unique(hlist['FILE'],return_index=True)
+    hlist = hlist[ui]
+    nhlist = len(hlist)
+    print(str(nhlist)+' exposures that overlap this pixel and neighbors')
 
-
+    # Get the boundary coordinates
+    #   healpy.boundaries but not sure how to do it in IDL
+    #   pix2vec_ring/nest can optionally return vertices but only 4
+    #     maybe subsample myself between the vectors
+    # Expand the boundary to include a "buffer" zone
+    #  to deal with edge cases
+    vecbound = hp.boundaries(nside,pix,step=100)
+    rabound, decbound = hp.vec2ang(np.transpose(vecbound),lonlat=True)
