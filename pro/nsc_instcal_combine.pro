@@ -148,8 +148,8 @@ buffer = {cenra:cenra,cendec:cendec,rar:minmax(rabuff),decr:minmax(decbuff),ra:r
 
 
 ; Initialize the ID structure
-;  this will contain the SourceID, Exposure name, ObjectID
-schema_idstr = {sourceid:'',exposure:'',expnum:'',objectid:'',objectindex:0LL}
+;  this will contain the MeasID, Exposure name, ObjectID
+schema_idstr = {measid:'',exposure:'',expnum:'',objectid:'',objectindex:0LL}
 idstr = replicate(schema_idstr,1e6)
 nidstr = n_elements(idstr)
 idcnt = 0LL
@@ -164,12 +164,9 @@ schema_obj = {objectid:'',pix:0L,ra:0.0d0,dec:0.0d0,raerr:0.0d0,decerr:0.0d0,pmr
               ndetz:0,nphotz:0,zmag:0.0,zrms:0.0,zerr:0.0,zasemi:0.0,zbsemi:0.0,ztheta:0.0,$
               ndety:0,nphoty:0,ymag:0.0,yrms:0.0,yerr:0.0,yasemi:0.0,ybsemi:0.0,ytheta:0.0,$
               ndetvr:0,nphotvr:0,vrmag:0.0,vrrms:0.0,vrerr:0.0,vrasemi:0.0,vrbsemi:0.0,vrtheta:0.0,$
-              x2:0.0,x2err:0.0,y2:0.0,y2err:0.0,xy:0.0,xyerr:0.0,asemi:0.0,asemierr:0.0,bsemi:0.0,$
-              bsemierr:0.0,theta:0.0,thetaerr:0.0,ellipticity:0.0,fwhm:0.0,flags:0,class_star:0.0,ebv:0.0}
-;              x2:0.0,x2err:0.0,y2:0.0,y2err:0.0,xy:0.0,xyerr:0.0,cxx:0.0,cxxerr:0.0,$
-;              cxy:0.0,cxyerr:0.0,cyy:0.0,cyyerr:0.0,asemi:0.0,asemierr:0.0,bsemi:0.0,$
-;              bsemierr:0.0,theta:0.0,thetaerr:0.0,elongation:0.0,$
-;              ellipticity:0.0,fwhm:0.0,flags:0,class_star:0.0,ebv:0.0}
+              ;x2:0.0,x2err:0.0,y2:0.0,y2err:0.0,xy:0.0,xyerr:0.0,ellipticity:0.0,
+              asemi:0.0,asemierr:0.0,bsemi:0.0,bsemierr:0.0,theta:0.0,thetaerr:0.0,$
+              fwhm:0.0,flags:0,class_star:0.0,ebv:0.0}
 tags = tag_names(schema_obj)
 obj = replicate(schema_obj,5e5)
 nobj = n_elements(obj)
@@ -305,7 +302,6 @@ FOR i=0,nlist-1 do begin
              airmass:0.0,nsources:0L,fwhm:0.0,nchips:0L,badchip31:0B,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,$
              zpterm:0.0,zptermerr:0.0,zptermsig:0.0,nrefmatch:0L}
   STRUCT_ASSIGN,meta,newmeta
-  newmeta.badchip31 = badchip31
   PUSH,allmeta,newmeta
 
   ; NDETX is good "detection" and morphology for this filter
@@ -339,30 +335,23 @@ FOR i=0,nlist-1 do begin
     newexp.ndet = 1
     ; Detection and morphology parameters for this FILTER
     newexp.(detind) = 1
-    newexp.(asemiind) = cat.a_world
-    newexp.(bsemiind) = cat.b_world
-    newexp.(thetaind) = cat.theta_world
+    newexp.(asemiind) = cat.asemi
+    newexp.(bsemiind) = cat.bsemi
+    newexp.(thetaind) = cat.theta
     ; Good photometry for this FILTER
-    gdmag = where(cat.cmag lt 50,ngdmag)
+    gdmag = where(cat.mag_auto lt 50,ngdmag)
     if ngdmag gt 0 then begin
-      newexp[gdmag].(magind) = 2.5118864d^cat[gdmag].cmag * (1.0d0/cat[gdmag].cerr^2)
-      newexp[gdmag].(errind) = 1.0d0/cat[gdmag].cerr^2
+      newexp[gdmag].(magind) = 2.5118864d^cat[gdmag].mag_auto * (1.0d0/cat[gdmag].magerr_auto^2)
+      newexp[gdmag].(errind) = 1.0d0/cat[gdmag].magerr_auto^2
       newexp[gdmag].(detphind) = 1
     endif
-    newexp.x2 = cat.x2_world
-    newexp.x2err = cat.errx2_world^2
-    newexp.y2 = cat.y2_world
-    newexp.y2err = cat.erry2_world^2
-    newexp.xy = cat.xy_world
-    newexp.xyerr = cat.errxy_world^2
-    newexp.asemi = cat.a_world
-    newexp.asemierr = cat.erra_world^2
-    newexp.bsemi = cat.b_world
-    newexp.bsemierr = cat.errb_world^2
-    newexp.theta = cat.theta_world
-    newexp.thetaerr = cat.errtheta_world^2
-    newexp.ellipticity = cat.ellipticity
-    newexp.fwhm = cat.fwhm_world*3600  ; in arcsec
+    newexp.asemi = cat.asemi
+    newexp.asemierr = cat.asemierr^2
+    newexp.bsemi = cat.bsemi
+    newexp.bsemierr = cat.bsemierr^2
+    newexp.theta = cat.theta
+    newexp.thetaerr = cat.thetaerr^2
+    newexp.fwhm = cat.fwhm  ; in arcsec
     newexp.flags = cat.flags
     newexp.class_star = cat.class_star
     obj[0:ncat-1] = newexp
@@ -374,8 +363,8 @@ FOR i=0,nlist-1 do begin
     totobj[0:ncat-1].decmjd2 = (1.0/cat.decerr^2) * newmeta.mjd^2  ; total(wt_dec*mjd^2)
     totobj[0:ncat-1].minmjd = newmeta.mjd
     totobj[0:ncat-1].maxmjd = newmeta.mjd
-    totobj[gdmag].(totind) = cat[gdmag].cmag                       ; sum(mag)
-    totobj[gdmag].(mag2ind) = double(cat[gdmag].cmag)^2            ; sum(mag^2), need dbl to precent underflow
+    totobj[gdmag].(totind) = cat[gdmag].mag_auto                   ; sum(mag)
+    totobj[gdmag].(mag2ind) = double(cat[gdmag].mag_auto)^2        ; sum(mag^2), need dbl to precent underflow
     cnt += ncat
 
     ; Add new elements to IDSTR
@@ -388,8 +377,7 @@ FOR i=0,nlist-1 do begin
       undefine,old
     endif
     ; Add to IDSTR
-    ;sourceid = strtrim(meta.expnum,2)+'.'+strtrim(cat.ccdnum,2)+'.'+strtrim(cat.number,2)
-    idstr[idcnt:idcnt+ncat-1].sourceid = cat.sourceid
+    idstr[idcnt:idcnt+ncat-1].measid = cat.measid
     idstr[idcnt:idcnt+ncat-1].exposure = meta.base
     idstr[idcnt:idcnt+ncat-1].expnum = meta.expnum
     idstr[idcnt:idcnt+ncat-1].objectid = newexp.objectid
@@ -428,43 +416,36 @@ FOR i=0,nlist-1 do begin
       cmb.mjd += newmeta.mjd                                       ; total(mjd^2)
       ; Detection and morphology parameters for this FILTER
       cmb.(detind)++
-      cmb.(asemiind) += newcat.a_world
-      cmb.(bsemiind) += newcat.b_world
-      cmb.(thetaind) += newcat.theta_world
+      cmb.(asemiind) += newcat.asemi
+      cmb.(bsemiind) += newcat.bsemi
+      cmb.(thetaind) += newcat.theta
       ; Good photometry for this FILTER
-      gdmag = where(newcat.cmag lt 50,ngdmag)
+      gdmag = where(newcat.mag_auto lt 50,ngdmag)
       if ngdmag gt 0 then begin
-        cmb[gdmag].(magind) += 2.5118864d^newcat[gdmag].cmag * (1.0d0/newcat[gdmag].cerr^2)
-        cmb[gdmag].(errind) += 1.0d0/newcat[gdmag].cerr^2
+        cmb[gdmag].(magind) += 2.5118864d^newcat[gdmag].mag_auto * (1.0d0/newcat[gdmag].magerr_auto^2)
+        cmb[gdmag].(errind) += 1.0d0/newcat[gdmag].magerr_auto^2
         cmb[gdmag].(detphind) += 1
         ; NPHOTX means good PHOT detection
       endif
-      cmb.x2 += newcat.x2_world
-      cmb.x2err += newcat.errx2_world^2
-      cmb.y2 += newcat.y2_world
-      cmb.y2err += newcat.erry2_world^2
-      cmb.xy += newcat.xy_world
-      cmb.xyerr += newcat.errxy_world^2
-      cmb.asemi += newcat.a_world
-      cmb.asemierr += newcat.erra_world^2
-      cmb.bsemi += newcat.b_world
-      cmb.bsemierr += newcat.errb_world^2
-      cmb.theta += newcat.theta_world
-      cmb.thetaerr += newcat.errtheta_world^2
-      cmb.ellipticity += newcat.ellipticity
-      cmb.fwhm += newcat.fwhm_world*3600  ; in arcsec
+      cmb.asemi += newcat.asemi
+      cmb.asemierr += newcat.asemierr^2
+      cmb.bsemi += newcat.bsemi
+      cmb.bsemierr += newcat.bsemierr^2
+      cmb.theta += newcat.theta
+      cmb.thetaerr += newcat.thetaerr^2
+      cmb.fwhm += newcat.fwhm  ; in arcsec
       cmb.flags OR= newcat.flags
       cmb.class_star += newcat.class_star
-      totcmb.ra += newcat.ra * (1.0/newcat.raerr^2)             ; total(wt*ra)
-      totcmb.dec += newcat.dec * (1.0/newcat.decerr^2)          ; total(wt*dec)
-      totcmb.ramjd +=  (1.0/newcat.raerr^2) * newmeta.mjd       ; total(wt_ra*mjd)
-      totcmb.decmjd +=  (1.0/newcat.decerr^2) * newmeta.mjd     ; total(wt_dec*mjd)
-      totcmb.ramjd2 +=  (1.0/newcat.raerr^2) * newmeta.mjd^2    ; total(wt_ra*mjd^2)
-      totcmb.decmjd2 +=  (1.0/newcat.decerr^2) * newmeta.mjd^2  ; total(wt_dec*mjd^2)
+      totcmb.ra += newcat.ra * (1.0/newcat.raerr^2)               ; total(wt*ra)
+      totcmb.dec += newcat.dec * (1.0/newcat.decerr^2)            ; total(wt*dec)
+      totcmb.ramjd +=  (1.0/newcat.raerr^2) * newmeta.mjd         ; total(wt_ra*mjd)
+      totcmb.decmjd +=  (1.0/newcat.decerr^2) * newmeta.mjd       ; total(wt_dec*mjd)
+      totcmb.ramjd2 +=  (1.0/newcat.raerr^2) * newmeta.mjd^2      ; total(wt_ra*mjd^2)
+      totcmb.decmjd2 +=  (1.0/newcat.decerr^2) * newmeta.mjd^2    ; total(wt_dec*mjd^2)
       totcmb.minmjd <= newmeta.mjd
       totcmb.maxmjd >= newmeta.mjd
-      totcmb[gdmag].(totind) += newcat[gdmag].cmag              ; sum(mag)
-      totcmb[gdmag].(mag2ind) += double(newcat[gdmag].cmag)^2   ; sum(mag^2), need dbl to prevent underflow
+      totcmb[gdmag].(totind) += newcat[gdmag].mag_auto            ; sum(mag)
+      totcmb[gdmag].(mag2ind) += double(newcat[gdmag].mag_auto)^2 ; sum(mag^2), need dbl to prevent underflow
       obj[ind1] = cmb  ; stuff it back in
       totobj[ind1] = totcmb
 
@@ -478,8 +459,7 @@ FOR i=0,nlist-1 do begin
         undefine,old
       endif
       ; Add to IDSTR
-      ;sourceid = strtrim(meta.expnum,2)+'.'+strtrim(newcat.ccdnum,2)+'.'+strtrim(newcat.number,2)
-      idstr[idcnt:idcnt+nmatch-1].sourceid = newcat.sourceid
+      idstr[idcnt:idcnt+nmatch-1].measid = newcat.measid
       idstr[idcnt:idcnt+nmatch-1].exposure = meta.base
       idstr[idcnt:idcnt+nmatch-1].expnum = meta.expnum
       idstr[idcnt:idcnt+nmatch-1].objectid = cmb.objectid
@@ -522,29 +502,22 @@ FOR i=0,nlist-1 do begin
       newexp.ndet = 1
       ; Detection and morphology parameters for this FILTER
       newexp.(detind) = 1
-      newexp.(asemiind) = cat.a_world
-      newexp.(bsemiind) = cat.b_world
-      newexp.(thetaind) = cat.theta_world
-      gdmag = where(cat.cmag lt 50,ngdmag)
+      newexp.(asemiind) = cat.asemi
+      newexp.(bsemiind) = cat.bsemi
+      newexp.(thetaind) = cat.theta
+      gdmag = where(cat.mag_auto lt 50,ngdmag)
       if ngdmag gt 0 then begin
-        newexp[gdmag].(magind) = 2.5118864d^cat[gdmag].cmag * (1.0d0/cat[gdmag].cerr^2)
-        newexp[gdmag].(errind) = 1.0d0/cat[gdmag].cerr^2
+        newexp[gdmag].(magind) = 2.5118864d^cat[gdmag].mag_auto * (1.0d0/cat[gdmag].magerr_auto^2)
+        newexp[gdmag].(errind) = 1.0d0/cat[gdmag].magerr_auto^2
         newexp[gdmag].(detphind) = 1
       endif
-      newexp.x2 = cat.x2_world
-      newexp.x2err = cat.errx2_world^2
-      newexp.y2 = cat.y2_world
-      newexp.y2err = cat.erry2_world^2
-      newexp.xy = cat.xy_world
-      newexp.xyerr = cat.errxy_world^2
-      newexp.asemi = cat.a_world
-      newexp.asemierr = cat.erra_world^2
-      newexp.bsemi = cat.b_world
-      newexp.bsemierr = cat.errb_world^2
-      newexp.theta = cat.theta_world
-      newexp.thetaerr = cat.errtheta_world^2
-      newexp.ellipticity = cat.ellipticity
-      newexp.fwhm = cat.fwhm_world*3600  ; in arcsec
+      newexp.asemi = cat.asemi
+      newexp.asemierr = cat.asemierr^2
+      newexp.bsemi = cat.bsemi
+      newexp.bsemierr = cat.bsemierr^2
+      newexp.theta = cat.theta
+      newexp.thetaerr = cat.thetaerr^2
+      newexp.fwhm = cat.fwhm  ; in arcsec
       newexp.flags = cat.flags
       newexp.class_star = cat.class_star
       obj[cnt:cnt+ncat-1] = newexp   ; stuff it in
@@ -556,8 +529,8 @@ FOR i=0,nlist-1 do begin
       totobj[cnt:cnt+ncat-1].decmjd2 = (1.0/cat.decerr^2) * newmeta.mjd^2  ; total(wt_dec*mjd^2)
       totobj[cnt:cnt+ncat-1].minmjd = newmeta.mjd
       totobj[cnt:cnt+ncat-1].maxmjd = newmeta.mjd
-      totobj[cnt+gdmag].(totind) = cat[gdmag].cmag                         ; sum(mag)
-      totobj[cnt+gdmag].(mag2ind) = double(cat[gdmag].cmag)^2              ; sum(mag^2), need dbl to prevent underflow
+      totobj[cnt+gdmag].(totind) = cat[gdmag].mag_auto                     ; sum(mag)
+      totobj[cnt+gdmag].(mag2ind) = double(cat[gdmag].mag_auto)^2          ; sum(mag^2), need dbl to prevent underflow
       objectindex = lindgen(ncat)+cnt
       cnt += ncat
 
@@ -571,9 +544,7 @@ FOR i=0,nlist-1 do begin
         undefine,old
       endif
       ; Add to IDSTR
-      ;sourceid = strtrim(meta.expnum,2)+'.'+strtrim(cat.ccdnum,2)+'.'+strtrim(cat.number,2)
-      ;idstr[idcnt:idcnt+ncat-1].sourceid = sourceid
-      idstr[idcnt:idcnt+ncat-1].sourceid = cat.sourceid
+      idstr[idcnt:idcnt+ncat-1].measid = cat.measid
       idstr[idcnt:idcnt+ncat-1].exposure = meta.base
       idstr[idcnt:idcnt+ncat-1].expnum = strtrim(meta.expnum,2)
       idstr[idcnt:idcnt+ncat-1].objectid = newexp.objectid
@@ -705,8 +676,7 @@ for i=0,nfilters-1 do begin
 endfor
 
 ; Average the morphology parameters, Need a separate counter for that maybe?
-;mtags = ['x2','y2','xy','cxx','cyy','cxy','asemi','bsemi','theta','elongation','ellipticity','fwhm','class_star']
-mtags = ['x2','y2','xy','asemi','bsemi','theta','ellipticity','fwhm','class_star']
+mtags = ['asemi','bsemi','theta','fwhm','class_star']
 nmtags = n_elements(mtags)
 gdet = where(obj.ndet gt 0,ngdet,comp=bdet,ncomp=nbdet)
 for i=0,nmtags-1 do begin
@@ -717,8 +687,7 @@ for i=0,nmtags-1 do begin
 endfor
 
 ; Get the average error
-;metags = ['x2err','y2err','xyerr','cxxerr','cyyerr','cxyerr','asemierr','bsemierr','thetaerr']
-metags = ['x2err','y2err','xyerr','asemierr','bsemierr','thetaerr']
+metags = ['asemierr','bsemierr','thetaerr']
 nmetags = n_elements(metags)
 for i=0,nmetags-1 do begin
   ind = where(tags eq strupcase(metags[i]),nind)
