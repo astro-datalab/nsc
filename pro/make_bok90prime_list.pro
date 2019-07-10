@@ -121,7 +121,6 @@ print,strtrim(ngdrelease,2),' exposures are PUBLIC'
 str = str[gdrelease]  ; impose the public data cut
 
 ;MWRFITS,str,dir+'instcal/'+version+'/lists/bok90prime_instcal_list.fits',/create
-;MWRFITS,str,dir+'bok90prime_instcal_list.fits',/create
 
 stop
 

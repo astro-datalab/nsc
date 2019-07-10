@@ -63,9 +63,9 @@ print, "Running SExtractor on the DECam/Mosaic3/Bok InstCal Images"
 
 ; Loading the lists
 ;str = MRDFITS(dir+'decam_instcal_list.fits',1)
-list1 = MRDFITS(dir+'/lists/decam_instcal_list.fits',1)
-list2 = MRDFITS(dir+'/lists/mosaic3_instcal_list.fits',1)
-list3 = MRDFITS(dir+'/lists/bok90prime_instcal_list.fits',1)
+list1 = MRDFITS(dir+'/lists/decam_instcal_list.fits.gz',1)
+list2 = MRDFITS(dir+'/lists/mosaic3_instcal_list.fits.gz',1)
+list3 = MRDFITS(dir+'/lists/bok90prime_instcal_list.fits.gz',1)
 str = [list1,list2,list3]
 undefine,list1,list2,list3
 nstr = n_elements(str)
@@ -175,11 +175,23 @@ for i=0,ngdexp-1 do begin
 endfor
 
 ; Compare to /dl1/users/dnidever/nsc/instcal/v3/lists/nsc_measure_expstr.fits
-sum = mrdfits('/dl1/users/dnidever/nsc/instcal/v3/lists/nsc_measure_expstr.fits',1)
-done = where(sum.done eq 1,ndone)
+;sum = mrdfits('/dl1/users/dnidever/nsc/instcal/v3/lists/nsc_measure_expstr.fits',1)
+;done = where(sum.done eq 1,ndone)
+;if ndone gt 0 then begin
+;  expstr[done].done = 1
+;  expstr[done].torun = 0
+;endif
+sum = mrdfits('/dl1/users/dnidever/nsc/instcal/v3/lists/nsc_measure_summary.fits',1)
+sum.base = strtrim(sum.base,2)
+done = where(sum.nsources gt 0,ndone)
 if ndone gt 0 then begin
-  expstr[done].done = 1
-  expstr[done].torun = 0
+  base_done = sum[done].base
+  base = file_basename(expstr.fluxfile,'.fits.fz')
+  MATCH,base,base_done,ind1,ind2,/sort,count=nmatch
+  if nmatch gt 0 then begin
+    expstr[ind1].done = 1
+    expstr[ind1].torun = 0
+  endif
 endif
 
 ; Have hulk help out gp09, ran last 10,000 of gp09's jobs
@@ -211,9 +223,11 @@ endif
 ;ntorun = n_elements(torun)
 
 ; 91945 exposures to run
+;stop
 
 ;; Parcel out the jobs
-hosts = ['gp06','gp07','gp08','gp09','hulk','thing']
+;hosts = ['gp06','gp07','gp08','gp09','hulk','thing']
+hosts = ['gp06','gp07','gp08']
 nhosts = n_elements(hosts)
 torun = where(expstr.torun eq 1,nalltorun)
 nperhost = nalltorun/nhosts
