@@ -1,15 +1,15 @@
-pro make_bok90prime_list,all
+pro make_bok90prime_list,all,file=file,version=version
 
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
 dir = dldir+'users/dnidever/nsc/'
 
-version = 'v3' ;'v2'
+if n_elements(version) eq 0 then version = 'v3' ;'v2'
+if n_elements(file) eq 0 then file = dir+'instcal/'+version+'/lists/bok90prime_archive_info.fits.gz'
 
 ; Load all of the instcal exposures
 if n_elements(all) eq 0 then begin
-  ;all = mrdfits(dir+"bok90prime_archive_data.fits.gz",1)
-  all = mrdfits(dir+'instcal/'+version+'/lists/bok90prime_archive_info.fits.gz',1)
+  all = mrdfits(file,1)
   all.dtnsanam = strtrim(all.dtnsanam,2)
   all.dtacqnam = strtrim(all.dtacqnam,2)
   all.proctype = strtrim(all.proctype,2)
