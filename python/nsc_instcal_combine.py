@@ -8,6 +8,7 @@ from astropy.io import fits
 from astropy.utils.exceptions import AstropyWarning
 from astropy.table import Table, vstack
 import healpy as hp
+import utils
 
 # Combine data for one NSC healpix region
 if __name__ == "__main__":
@@ -108,3 +109,21 @@ if __name__ == "__main__":
     #  to deal with edge cases
     vecbound = hp.boundaries(nside,pix,step=100)
     rabound, decbound = hp.vec2ang(np.transpose(vecbound),lonlat=True)
+
+    # Expand the boundary by the buffer size
+    cenra, cendec = hp.pix2ang(nside,pix,lonlat=True)
+    # reproject onto tangent plane
+    lonbound, latbound = utils.rotsphcen(rabound,decbound,cenra,cendec,gnomic=True)
+    # expand by a fraction, it's not an extact boundary but good enough
+    buffsize = 10.0/3600. ; in deg
+    radbound = sqrt(lonbound**2+latbound**2)
+    frac = 1.0 + 1.5*np.max(buffsize/radbound)
+    lonbuff = lonbound*frac
+    latbuff = latbound*frac
+    rabuff, decbuff = utils.rotsphcen(lonbuff,latbuff,cenra,cendec,gnomic=True,reverse=True)
+    if (np.max(rabuff)-np.min(rabuff))>100:  # deal with RA=0 wraparound
+        bd, = np.where(rabuff>180)
+        if len(bd)>0:rabuff[bd] -=360.0
+        buffer = {}
+        buffer = {'cenra':cenra,'cendec':cendec,'rar':utils.minmax(rabuff),'decr':utils.minmax(decbuff),'ra':rabuff,'dec':decbuff,\
+                      'lon':lonbuff,'lat':latbuff,'lr':utils.minmax(lonbuff),'br':utils.minmax(latbuff)}

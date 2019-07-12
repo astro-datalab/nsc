@@ -31,6 +31,9 @@ import numpy as np
 #warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 #warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
+def minmax(x):
+    return np.array([np.max(x),np.min(x)])
+
 def lt(x,limit):
     """Takes the lesser of x or limit"""
     if np.array(x).size>1:
