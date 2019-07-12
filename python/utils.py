@@ -439,12 +439,11 @@ def rotsphcen(lon,lat,clon,clat,polar=False,gnomic=False,reverse=False):
         else:
             nlon, nlat = rotsph(lon,lat,np_lon,np_lat,reverse=True,original=True)
 
-        print(nlon,nlat)
-        # need to flip them around by 180 deg b/c the zero-point
-        #  is set by the NP lon
-        if ((clat+90.0) > 90.0):
-            nlon = (nlon+180.0) % 360.0
-            nlat = -nlat
+            # need to flip them around by 180 deg b/c the zero-point
+            #  is set by the NP lon
+            if ((clat+90.0) > 90.0):
+                nlon = (nlon+180.0) % 360.0
+                nlat = -nlat
 
         # Make the longitudes continuous
         nlon = (nlon+180.0) % 360.0
