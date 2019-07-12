@@ -225,9 +225,22 @@ endif
 ; 91945 exposures to run
 ;stop
 
+; gp06-08 finished some jobs, call them done, 7/12/19
+torun = where(expstr.torun eq 1,nalltorun)
+;gp06  6882 / 25859
+expstr[torun[0:6881]].done = 1
+expstr[torun[0:6881]].torun = 0
+;gp07  7675 / 25859
+expstr[torun[25859L:25859L+7674]].done = 1
+expstr[torun[25859L:25859L+7674]].torun = 0
+;gp08  7511 / 25859
+expstr[torun[2*25859L:2*25859L+7510]].done = 1
+expstr[torun[2*25859L:2*25859L+7510]].torun = 0
+
+
 ;; Parcel out the jobs
-;hosts = ['gp06','gp07','gp08','gp09','hulk','thing']
-hosts = ['gp06','gp07','gp08']
+hosts = ['gp06','gp07','gp08','gp09','hulk','thing']
+;hosts = ['gp06','gp07','gp08']
 nhosts = n_elements(hosts)
 torun = where(expstr.torun eq 1,nalltorun)
 nperhost = nalltorun/nhosts
