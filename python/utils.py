@@ -522,4 +522,79 @@ def rotsphcen(lon,lat,clon,clat,polar=False,gnomic=False,reverse=False):
     return nlon, nlat
 
 
+def doPolygonsOverlap(xPolygon1, yPolygon1, xPolygon2, yPolygon2):
+    """Returns True if two polygons are overlapping."""
+
+    # How to determine if two polygons overlap.
+    # If a vertex of one of the polygons is inside the other polygon
+    # then they overlap.
+    
+    n1 = len(xPolygon1)
+    n2 = len(xPolygon2)
+    isin = False
+
+    # Loop through all vertices of second polygon
+    for i in range(n2):
+        # perform iterative boolean OR
+        # if any point is inside the polygon then they overlap   
+        isin = isin or isPointInPolygon(xPolygon1, yPolygon1, xPolygon2[i], yPolygon2[i])
+
+    # Need to do the reverse as well, not the same
+    for i in range(n1):
+        isin = isin or isPointInPolygon(xPolygon2, yPolygon2, xPolygon1[i], yPolygon1[i])
+
+    return isin
+
+def isPointInPolygon(xPolygon, yPolygon, xPt, yPt):
+    """Returns boolean if a point is inside a polygon of vertices."""
+    
+    # How to tell if a point is inside a polygon:
+    # Determine the change in angle made by the point and the vertices
+    # of the polygon.  Add up the delta(angle)'s from the first (include
+    # the first point again at the end).  If the point is inside the
+    # polygon, then the total angle will be +/-360 deg.  If the point is
+    # outside, then the total angle will be 0 deg.  Points on the edge will
+    # outside.
+    # This is called the Winding Algorithm
+    # http://geomalgorithms.com/a03-_inclusion.html
+
+    n = len(xPolygon)
+    # Array for the angles
+    angle = np.zeros(n)
+
+    # add first vertex to the end
+    xPolygon1 = np.append( xPolygon, xPolygon[0] )
+    yPolygon1 = np.append( yPolygon, yPolygon[0] )
+
+    wn = 0   # winding number counter
+
+    # Loop through the edges of the polygon
+    for i in range(n):
+        # if edge crosses upward (includes its starting endpoint, and excludes its final endpoint)
+        if yPolygon1[i] <= yPt and yPolygon1[i+1] > yPt:
+            # if (P is  strictly left of E[i])    // Rule #4
+            if isLeft(xPolygon1[i], yPolygon1[i], xPolygon1[i+1], yPolygon1[i+1], xPt, yPt) > 0: 
+                 wn += 1   # a valid up intersect right of P.x
+
+        # if edge crosses downward (excludes its starting endpoint, and includes its final endpoint)
+        if yPolygon1[i] > yPt and yPolygon1[i+1] <= yPt:
+            # if (P is  strictly right of E[i])    // Rule #4
+            if isLeft(xPolygon1[i], yPolygon1[i], xPolygon1[i+1], yPolygon1[i+1], xPt, yPt) < 0: 
+                 wn -= 1   # a valid up intersect right of P.x
+
+    # wn = 0 only when P is outside the polygon
+    if wn == 0:
+        return False
+    else:
+        return True
+
+def isLeft(x1, y1, x2, y2, x3, y3):
+    # isLeft(): test if a point is Left|On|Right of an infinite 2D line.
+    #   From http://geomalgorithms.com/a01-_area.html
+    # Input:  three points P1, P2, and P3
+    # Return: >0 for P3 left of the line through P1 to P2
+    # =0 for P3 on the line
+    # <0 for P3 right of the line
+    return ( (x2 - x1) * (y3 - y1) - (x3 - x1) * (y2 - y1) )
+
 
