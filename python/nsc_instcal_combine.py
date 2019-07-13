@@ -18,7 +18,11 @@ def loadmeas(metafile,buffdict=None):
         return np.array([])
     meta = fits.getdata(metafile,1)
     chmeta = fits.getdata(metafile,2)    
-    
+
+    fdir = os.path.dirname(metafile)
+    fbase, ext = os.path.splitext(os.path.basename(metafile))
+    fbase = fbase[:-5]   # remove _meta at end
+
     # Loop over the chip files
     cat = None
     for j in range(len(chmeta)):
@@ -40,12 +44,12 @@ def loadmeas(metafile,buffdict=None):
                 inside = False
 
         # Check if the chip-level file exists
-        chfile = file_dirname(list[i].file)+'/'+list[i].base+'_'+strtrim(chmeta[j].ccdnum,2)+'_meas.fits'
+        chfile = fdir+'/'+fbase+'_'+str(chmeta[j]['ccdnum'])+'_meas.fits'
         if os.path.exists(chfile) is False:
             print(chfile+' NOT FOUND')
 
         # Load this one
-        if (os.path.exists(chfile) is True) and (inside is True) and (chmeta[j]['ngaiamatch'] == 1):
+        if (os.path.exists(chfile) is True) and (inside is True) and (chmeta[j]['ngaiamatch']>1):
             # Load the chip-level catalog
             cat1 = fits.getdata(chfile,1)
             ncat1 = len(cat1)
@@ -66,12 +70,10 @@ def loadmeas(metafile,buffdict=None):
                 ind0, ind1 = utils.roi_cut(buffdict['lon'],buffdict['lat'],lon,lat)
                 nmatch = len(ind1)
                 # Only want source inside this pixel
-                if nmatch==0:
-                    print('  No sources inside this pixel')
-                    #goto,BOMB
-                print('  '+str(nmatch)+' sources are inside this pixel')
-                cat1 = cat1[ind1]
+                if nmatch>0:
+                    cat1 = cat1[ind1]
                 ncat1 = len(cat1)
+                print('  '+str(nmatch)+' sources are inside this pixel')
 
             # Combine the catalogs
             if ncat1 > 0:
@@ -194,7 +196,7 @@ if __name__ == "__main__":
     # reproject onto tangent plane
     lonbound, latbound = utils.rotsphcen(rabound,decbound,cenra,cendec,gnomic=True)
     # expand by a fraction, it's not an extact boundary but good enough
-    buffsize = 10.0/3600. ; in deg
+    buffsize = 10.0/3600. # in deg
     radbound = sqrt(lonbound**2+latbound**2)
     frac = 1.0 + 1.5*np.max(buffsize/radbound)
     lonbuff = lonbound*frac
@@ -254,7 +256,7 @@ if __name__ == "__main__":
         t = Time(times, format='isot', scale='utc')
         meta['mjd'] = t.mjd                    # recompute because some MJD are bad
         chmeta = fits.getdata(metafile,2)      # chip-level meta-data structure
-        print('  FILTER='+meta['filter']+'  EXPTIME='+str(meta['exptime'])+' sec'
+        print('  FILTER='+meta['filter']+'  EXPTIME='+str(meta['exptime'])+' sec')
 
         # Loop over the chip files
         cat = None
@@ -269,14 +271,14 @@ if __name__ == "__main__":
               vra = chmeta[j]['vra']
               vdec = chmeta[j]['vdec']
               if (np.max(vra)-np.min(vra)) > 100:    # deal with RA=0 wrapround
-                  bd, = np.where(vra gt 180)
+                  bd, = np.where(vra>180)
                   if len(bd)>0: vra[bd] -= 360
               if dopolygonsoverlap(buffdict['ra'],buffdict['dec'],vra,vdec):
-                  #print,'This chip does NOT overlap the HEALPix region+buffer'
+                  print('This chip does NOT overlap the HEALPix region+buffer')
                   #goto,BOMB1
 
               # Load the chip-level catalog
-              chfile = file_dirname(list[i].file)+'/'+list[i].base+'_'+strtrim(chmeta[j].ccdnum,2)+'_meas.fits'
+              chfile = os.path.dirname(list[i]['file'])+'/'+list[i]['base']+'_'+str(chmeta[j]['ccdnum'])+'_meas.fits'
               if os.path.exists(chfile) is False:
                   print(chfile+' NOT FOUND')
                   #goto,BOMB1
