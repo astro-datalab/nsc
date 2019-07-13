@@ -9,7 +9,85 @@ from astropy.utils.exceptions import AstropyWarning
 from astropy.table import Table, vstack
 from astropy.time import Time
 import healpy as hp
-from dlnpyutils import dlnpyutils as utils
+from dlnpyutils import utils
+
+def loadmeas(metafile,buffdict=None):
+
+    if os.path.exists(metafile) is False:
+        print(metafile+' NOT FOUND')
+        return np.array([])
+    meta = fits.getdata(metafile,1)
+    chmeta = fits.getdata(metafile,2)    
+    
+    # Loop over the chip files
+    cat = None
+    for j in range(len(chmeta)):
+        # Check that this chip was astrometrically calibrated
+        #   and falls in to HEALPix region
+        if chmeta[j]['ngaiamatch'] == 0:
+            print('This chip was not astrometrically calibrate')
+
+        # Check that this overlaps the healpix region
+        inside = True
+        if buffdict is not None:
+            vra = chmeta[j]['vra']
+            vdec = chmeta[j]['vdec']
+            if (np.max(vra)-np.min(vra)) > 100:    # deal with RA=0 wrapround
+                bd, = np.where(vra gt 180)
+                if len(bd)>0: vra[bd] -= 360
+            if dopolygonsoverlap(buffdict['ra'],buffdict['dec'],vra,vdec):
+                print('This chip does NOT overlap the HEALPix region+buffer')
+                inside = False
+
+        # Check if the chip-level file exists
+        chfile = file_dirname(list[i].file)+'/'+list[i].base+'_'+strtrim(chmeta[j].ccdnum,2)+'_meas.fits'
+        if os.path.exists(chfile) is False:
+            print(chfile+' NOT FOUND')
+
+        # Load this one
+        if (os.path.exists(chfile) is True) and (inside is True) and (chmeta[j]['ngaiamatch'] == 1):
+            # Load the chip-level catalog
+            cat1 = fits.getdata(chfile,1)
+            ncat1 = len(cat1)
+            print('  '+str(ncat1)+' sources')
+
+            # Make sure it's in the right format
+            if len(cat1.dtype.fields) != 32:
+                print('  This catalog does not have the right format. Skipping')
+                del(cat1)
+                ncat1 = 0
+
+            # Only include sources inside Boundary+Buffer zone
+            #  -use ROI_CUT
+            #  -reproject to tangent plane first so we don't have to deal
+            #     with RA=0 wrapping or pol issues
+            if buffdict is not None:
+                lon, lat = rotsphcen(cat1['ra'],cat1['dec'],buffdict['cenra'],buffdict['cendec'],gnomic=True)
+                ind0, ind1 = utils.roi_cut(buffdict['lon'],buffdict['lat'],lon,lat)
+                nmatch = len(ind1)
+                # Only want source inside this pixel
+                if nmatch==0:
+                    print('  No sources inside this pixel')
+                    #goto,BOMB
+                print('  '+str(nmatch)+' sources are inside this pixel')
+                cat1 = cat1[ind1]
+                ncat1 = len(cat1)
+
+            # Combine the catalogs
+            if ncat1 > 0:
+                if cat is None:
+                    dtype_cat = cat1.dtype
+                    cat = np.zeros(np.sum(chmeta['nsources']),dtype=dtype_cat)
+                    catcount = 0L
+                cat[catcount:catcount+ncat1] = cat1
+                catcount += ncat1
+
+              #BOMB1:
+    if cat is not None: cat=cat[0:catcount]  # trim excess
+    if cat is None: cat=np.array([])         # empty cat
+
+    return cat
+    
 
 # Combine data for one NSC healpix region
 if __name__ == "__main__":
