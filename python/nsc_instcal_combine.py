@@ -9,7 +9,7 @@ from astropy.utils.exceptions import AstropyWarning
 from astropy.table import Table, vstack
 from astropy.time import Time
 import healpy as hp
-import utils
+from dlnpyutils import dlnpyutils as utils
 
 # Combine data for one NSC healpix region
 if __name__ == "__main__":
@@ -179,6 +179,7 @@ if __name__ == "__main__":
         print('  FILTER='+meta['filter']+'  EXPTIME='+str(meta['exptime'])+' sec'
 
         # Loop over the chip files
+        cat = None
         catcount = 0L
         for j in range(len(chmeta)):
               # Check that this chip was astrometrically calibrated
@@ -215,49 +216,37 @@ if __name__ == "__main__":
               #  -reproject to tangent plane first so we don't have to deal
               #     with RA=0 wrapping or pol issues
               lon, lat = rotsphcen(cat1['ra'],cat1['dec'],buffdict['cenra'],buffdict['cendec'],gnomic=True)
-#GOT TO HERE
-              if running_gdl() eq 0 then begin
-                  ROI_CUT,buffer.lon,buffer.lat,lon,lat,ind0,ind1,fac=1000,/silent
-                  nmatch = n_elements(ind1)
-              endif else begin
-                  ; first use WHERE with X/Y limits
-                  in1 = where(lon ge buffer.lr[0] and lon le buffer.lr[1] and $
-                              lat ge buffer.br[0] and lat le buffer.br[1],nin1)
-                  if nin1 gt 0 then begin
-                      inmask = INSIDE(lon[in1],lat[in1],buffer.lon,buffer.lat)
-                      in2 = where(inmask eq 1,nin2)
-                      if nin2 gt 0 then ind1=in1[in2] else undefine,ind1
-                      nmatch = nin2
-                  endif else begin
-                      undefine,ind1
-                      nmatch = 0
+              ind0, ind1 = utils.roi_cut(buffdict['lon'],buffdict['lat'],lon,lat)
+              nmatch = len(ind1)
               # Only want source inside this pixel
-              if nmatch eq 0:
-                  print,'  No sources inside this pixel'
-                  goto,BOMB
-              print,'  ',strtrim(nmatch,2),' sources are inside this pixel'
+              if nmatch==0:
+                  print('  No sources inside this pixel')
+                  #goto,BOMB
+              print('  '+str(nmatch)+' sources are inside this pixel')
               cat1 = cat1[ind1]
               ncat1 = nmatch
 
               # Combine the catalogs
-              if n_elements(cat) eq 0:
-                  cat_schema = cat1[0]
-                  struct_assign,{dum:''},cat_schema
-                  cat = replicate(cat_schema,total(chmeta.nsources))
-              cat[catcount:catcount+ncat1-1] = cat1
+              if cat is None:
+                  dtype_cat = cat1.dtype
+                  cat = np.zeros(np.sum(chmeta['nsources']),dtype=dtype_cat)
+              cat[catcount:catcount+ncat1] = cat1
               catcount += ncat1
 
-              BOMB1:
-        if n_elements(cat) gt 0 then cat = cat[0:catcount-1]  ; trim excess
-        ncat = n_elements(cat)
-        if ncat eq 0:
-              print,'This exposure does NOT cover the HEALPix'
-              goto,BOMB
+              #BOMB1:
+        if cat is not None: cat=cat[0:catcount]  # trim excess
+        ncat = utils.size(cat)
+        if ncat==0:
+              print('This exposure does NOT cover the HEALPix')
+              #goto,BOMB
 
         # Add metadata to ALLMETA
         #  Make sure it's in the right format
-        newmeta = {file:'',base:'',expnum:0L,ra:0.0d0,dec:0.0d0,dateobs:'',mjd:0.0d0,filter:'',exptime:0.0,$
-             airmass:0.0,nsources:0L,fwhm:0.0,nchips:0L,badchip31:0B,rarms:0.0,decrms:0.0,ebv:0.0,gaianmatch:0L,$
-             zpterm:0.0,zptermerr:0.0,zptermsig:0.0,nrefmatch:0L}
-        STRUCT_ASSIGN,meta,newmeta
-        PUSH,allmeta,newmeta
+        dtype_meta = np.dtype([('file',np.str),('base',np.str),('expnum',long),('ra',np.float64),
+                               ('dec',np.float64),('dateobs',np.str),('mjd',np.float64),('filter',np.str),
+                               ('exptime',float),('airmass',float),('nsources',long),('fwhm',float),
+                               ('nchips',long),('badchip31',bool),('rarms',float),('decrms',float),
+                               ('ebv',float),('gaianmatch',long),('zpterm',float),('zptermerr',float),
+                               ('refmatch',long)])
+        #STRUCT_ASSIGN,meta,newmeta
+        #PUSH,allmeta,newmeta
