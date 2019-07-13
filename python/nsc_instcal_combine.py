@@ -33,7 +33,7 @@ def loadmeas(metafile,buffdict=None):
             vra = chmeta[j]['vra']
             vdec = chmeta[j]['vdec']
             if (np.max(vra)-np.min(vra)) > 100:    # deal with RA=0 wrapround
-                bd, = np.where(vra gt 180)
+                bd, = np.where(vra>180)
                 if len(bd)>0: vra[bd] -= 360
             if dopolygonsoverlap(buffdict['ra'],buffdict['dec'],vra,vdec):
                 print('This chip does NOT overlap the HEALPix region+buffer')
