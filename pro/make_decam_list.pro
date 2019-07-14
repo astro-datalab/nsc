@@ -5,7 +5,7 @@ NSC_ROOTDIRS,dldir,mssdir,localdir
 dir = dldir+'users/dnidever/nsc/'
 
 if n_elements(version) eq 0 then version = 'v3'
-if n_elements(file) eq 0 then file=dir+'instcal/'+version+'decam_archive_info.fits.gz'
+if n_elements(file) eq 0 then file=dir+'instcal/'+version+'/decam_archive_info.fits.gz'
 
 ; Load all of the instcal exposures
 if n_elements(all) eq 0 then begin
@@ -31,6 +31,12 @@ imstr = all[gdim]
 ; Get unique IDs
 ;  DTACQNAM        STRING    '/data_local/images/DTS/2013A-0609/DECam_00178042.fits.fz'
 rawname = file_basename(imstr.dtacqnam)
+;; ~2000 don't have DECam_XX names but c4d_XXX_XXX_ ones instead, fix them
+bd = where(strmid(rawname,0,5) ne 'DECam',nbd)
+if nbd gt 0 then begin
+  ;; remove the version number at the end
+  rawname[bd] = strmid(rawname[bd],0,24)
+endif
 uirname = uniq(rawname,sort(rawname))
 urname = rawname[uirname]
 nrname = n_elements(urname)
@@ -44,8 +50,12 @@ alldbl = doubles(rawname,/all)
 dbl = doubles(rawname)
 ndbl = n_elements(dbl)
 undefine,torem
+indx = create_index(rawname(alldbl))
+print,strtrim(ndbl,2),' duplicates to deal with'
 for i=0,ndbl-1 do begin
-  MATCH,rawname[alldbl],rawname[dbl[i]],ind1,ind2,/sort,count=nmatch
+  if i mod 5000 eq 0 then print,i
+  ind1 = indx.index[indx.lo[i]:indx.hi[i]]
+  ;MATCH,rawname[alldbl],rawname[dbl[i]],ind1,ind2,/sort,count=nmatch
   dblind1 = alldbl[ind1]
   plver = imstr[dblind1].plver
   bestind = first_el(maxloc(plver))
@@ -125,9 +135,23 @@ gdrelease = where(release_mjd le release_cutoff_mjd,ngdrelease,comp=bdrelease,nc
 print,strtrim(ngdrelease,2),' exposures are PUBLIC'
 str = str[gdrelease]  ; impose the public data cut
 
+; Remove duplicate in DATE_OBS
+indx = create_index(str.date_obs)
+bd = where(indx.num gt 1,nbd)
+undefine,torem
+for i=0,nbd-1 do begin
+  ind = indx.index[indx.lo[bd[i]]:indx.hi[bd[i]]]
+  plver = str[ind].plver
+  bestind = first_el(maxloc(plver))
+  left = ind
+  remove,bestind,left
+  push,torem,left
+endfor
+print,'Removing ',strtrim(n_elements(torem),2),' duplicates'
+;REMOVE,torem,str
 
 ;MWRFITS,str,dir+'instcal/'+version+'/lists/decam_instcal_list.fits',/create
-;MWRFITS,str,dir+'decam_instcal_list.fits',/create
+
 
 stop
 
