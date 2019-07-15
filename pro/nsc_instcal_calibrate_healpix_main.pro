@@ -6,7 +6,8 @@ if n_elements(nside) eq 0 then nside=64
 radeg = 180.0d0 / !dpi
 
 ; Main NOAO DECam source catalog
-NSC_ROOTDIRS,dldir,mssdir,localdir
+NSC_ROOTDIRS,dldir,mssdir,localdir,host
+hostname = first_el(strsplit(host,'.',/extract))
 if n_elements(version) eq 0 then version='v3'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
@@ -31,10 +32,11 @@ sminute = strtrim(minute,2)
 if minute lt 10 then sminute='0'+sminute
 ssecond = strtrim(round(second),2)
 if second lt 10 then ssecond='0'+ssecond
-logfile = dir+'logs/nsc_instcal_calibrate_healpix_main.'+smonth+sday+syear+shour+sminute+ssecond+'.log'
+logtime = smonth+sday+syear+shour+sminute+ssecond
+logfile = dir+'logs/nsc_instcal_calibrate_healpix_main.'+logtime+'.log'
 JOURNAL,logfile
 
-if n_elements(nmulti) eq 0 then nmulti = 20
+if n_elements(nmulti) eq 0 then nmulti = 10
 wait = 1
 
 print, "Calibrating DECam/Mosiac3/Bok InstCal SExtractor catalogs"
@@ -42,9 +44,9 @@ print, "Calibrating DECam/Mosiac3/Bok InstCal SExtractor catalogs"
 ; ---- Create the list ----
 
 ; Load the list of exposures
-list1 = MRDFITS(dir+'/lists/decam_instcal_list.fits',1)
-list2 = MRDFITS(dir+'/lists/mosaic3_instcal_list.fits',1)
-list3 = MRDFITS(dir+'/lists/bok90prime_instcal_list.fits',1)
+list1 = MRDFITS(dir+'/lists/decam_instcal_list.fits.gz',1)
+list2 = MRDFITS(dir+'/lists/mosaic3_instcal_list.fits.gz',1)
+list3 = MRDFITS(dir+'/lists/bok90prime_instcal_list.fits.gz',1)
 str = [list1,list2,list3]
 undefine,list1,list2,list3
 nstr = n_elements(str)
@@ -61,9 +63,26 @@ MATCH,str.fluxfile,'/net'+coords.file,ind1,ind2,/sort
 dist=sphdist(str[ind1].ra,str[ind1].dec,coords[ind2].ra,coords[ind2].dec,/deg)
 str[ind1].ra = coords[ind2].ra
 str[ind1].dec = coords[ind2].dec
-; 13 didn't match b/c the fluxfiles aren't found, trim them out
-str = str[ind1]
-nstr = n_elements(str)
+;; 13 didn't match b/c the fluxfiles aren't found, trim them out
+;str = str[ind1]
+;nstr = n_elements(str)
+
+; Get good RA/DEC
+bd = where(finite(str.ra) eq 0 or finite(str.dec) eq 0,nbd)
+print,'Getting RA/DEC for ',strtrim(nbd,2),' exposures'
+for i=0,nbd-1 do begin
+  if i mod 50 eq 0 then print,i
+  file = strtrim(str[bd[i]].fluxfile)
+  if strmid(file,0,4) eq '/net' then file=strmid(file,4)
+  head = headfits(file,exten=1,errmsg=errmsg)
+  if errmsg eq '' then begin
+    ra = sxpar(head,'crval1',count=nra)
+    if nra gt 0 then str[bd[i]].ra = ra
+    dec = sxpar(head,'crval2',count=ndec)
+    if ndec gt 0 then str[bd[i]].dec = dec
+  endif
+endfor
+
 
 ; Reruning exposures that had coordinates problems but finished
 ; successfully originally
@@ -136,9 +155,10 @@ upix = list[uipix].pix
 npix = n_elements(upix)
 print,strtrim(npix,2),' healpix to run'
 ; Create the commands
-cmd = 'nsc_instcal_calibrate_healpix,'+strtrim(upix,2)
-if keyword_set(redo) then cmd+=',/redo'
-dirs = strarr(npix)+tmpdir
+allcmd = 'nsc_instcal_calibrate_healpix,'+strtrim(upix,2)
+if keyword_set(redo) then allcmd+=',/redo'
+alldirs = strarr(npix)+tmpdir
+allupix = upix
 
 ;; Only run healpix with DEC>-29
 ;g = where(str.dec gt -29,ng)
@@ -153,19 +173,50 @@ dirs = strarr(npix)+tmpdir
 
 ; RANDOMIZE
 rnd = sort(randomu(0,npix))
-cmd = cmd[rnd]
-dirs = dirs[rnd]
+allcmd = allcmd[rnd]
+alldirs = alldirs[rnd]
+allupix = allupix[rnd]
+
+;; Parcel out the jobs
+hosts = ['gp09','hulk','thing']
+nhosts = n_elements(hosts)
+torun = lindgen(npix)
+nperhost = npix/nhosts
+for i=0,nhosts-1 do $
+  if stregex(host,hosts[i],/boolean) eq 1 then torun=torun[i*nperhost:(i+1)*nperhost-1]
+ntorun = n_elements(torun)
+cmd = allcmd[torun]
+dirs = alldirs[torun]
+upix = allupix[torun]
+print,'Running ',strtrim(n_elements(torun),2),' on ',hostname
+
+; Saving the structure of jobs to run
+runfile = dir+'lists/nsc_instcal_calibrate_healpix_main.'+hostname+'.'+logtime+'_run.fits'
+print,'Writing running information to ',runfile
+runstr = replicate({pix:0L,cmd:'',dir:''},n_elements(cmd))
+runstr.pix = upix
+runstr.cmd = cmd
+runstr.dir = dirs
+MWRFITS,runstr,runfile,/create
+
 
 ; 29,495 healpix, 14748 each
 
 ; ALL HEALPIX
 ; gp09, run 1st batch, 14748
-cmd = cmd[0:14747]
-dirs = dirs[0:14747]
+;cmd = cmd[0:14747]
+;dirs = dirs[0:14747]
 
 ; Thing, run 2nd batch, 14747
 ;cmd = cmd[14748:*]
 ;dirs = dirs[14748:*]
+
+;; Hulk, run the gp09/thing failed jobs
+;readline,dir+'/lists/nsccalibhpix_failed_gp09_hpix.txt',failed_hpix1
+;readline,dir+'/lists/nsccalibhpix_failed_thing_hpix.txt',failed_hpix2
+;failed_hpix = [failed_hpix1,failed_hpix2]
+;cmd = 'nsc_instcal_calibrate_healpix,'+strtrim(failed_hpix,2)
+;dirs = strarr(n_elements(cmd))+tmpdir
 
 ; rerun exposures that had coordinate problems and finished
 ; successfully the first time
