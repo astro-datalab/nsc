@@ -425,36 +425,37 @@ if __name__ == "__main__":
     totobj['ramjd'] /= obj['raerr']     # wt_ra mean MJD
     totobj['decmjd'] /= obj['decerr']   # wt_dec mean MJD
 
-
     gdet, = np.where(obj['ndet']>1)
-    ngdet = len(gdet)    
-    if ngdet>0:
-        pmra = (obj['pmra'][gdet]/obj['raerr'][gdet]-totobj['ramjd'][gdet]*totobj['ra'][gdet]) / (totobj['ramjd2'][gdet]/obj['raerr'][gdet]-totobj['ramjd'][gdet]**2)   # deg[ra]/day
-        pmra *= (3600*1e3)*365.2425     # mas/year
-        pmra *= np.cos(obj['dec'][gdet]/radeg)      # mas/year, true angle
-        pmdec = (obj['pmdec'][gdet]/obj['decerr'][gdet]-totobj['decmjd'][gdet]*totobj['dec'][gdet])/(totobj['decmjd2'][gdet]/obj['decerr'][gdet]-totobj['decmjd'][gdet]**2)  # deg/day
-        pmdec *= (3600*1e3)*365.2425    # mas/year
+    if len(gdet)>0:
+        pmra = np.zeros(nobj,np.float64) + 999999.
+        pmdec = np.zeros(nobj,np.float64) + 999999.
+        pmraerr = np.zeros(nobj,np.float64) + 999999.
+        pmdecerr = np.zeros(nobj,np.float64) + 999999.
+        pmra[gdet] = (obj['pmra'][gdet]/obj['raerr'][gdet]-totobj['ramjd'][gdet]*totobj['ra'][gdet]) / (totobj['ramjd2'][gdet]/obj['raerr'][gdet]-totobj['ramjd'][gdet]**2)   # deg[ra]/day
+        pmra[gdet] *= (3600*1e3)*365.2425     # mas/year
+        pmra[gdet] *= np.cos(obj['dec'][gdet]/radeg)      # mas/year, true angle
+        pmdec[gdet] = (obj['pmdec'][gdet]/obj['decerr'][gdet]-totobj['decmjd'][gdet]*totobj['dec'][gdet])/(totobj['decmjd2'][gdet]/obj['decerr'][gdet]-totobj['decmjd'][gdet]**2)  # deg/day
+        pmdec[gdet] *= (3600*1e3)*365.2425    # mas/year
         # Proper motion errors
         # pmerr = 1/sqrt( sum(wt*mjd^2) - <mjd>^2 * sum(wt) )
         #   if wt=1/err^2 with err in degrees, but we are using arcsec
         #   Need to divide by 3600 for PMDECERR and 3600*cos(dec) for PMRAERR
-        pmraerr = 1.0/np.sqrt( totobj['ramjd2'][gdet] - totobj['ramjd'][gdet]**2 * obj['raerr'][gdet] )
-        pmraerr /= (3600*np.cos(totobj['dec'][gdet]/radeg))    # correction for raerr in arcsec
-        pmraerr *= (3600*1e3)*365.2425     # mas/year
-        pmraerr *= np.cos(obj['dec'][gdet]/radeg)      # mas/year, true angle
-        pmdecerr = 1.0/np.sqrt( totobj['decmjd2'][gdet] - totobj['decmjd'][gdet]**2 * obj['decerr'][gdet] )
-        pmdecerr /= 3600                   # correction for decerr in arcsec
-        pmdecerr *= (3600*1e3)*365.2425    # mas/year
-        obj[gdet]['pmra'] = pmra
-        obj[gdet]['pmdec'] = pmdec
-        obj[gdet]['pmraerr'] = pmraerr
-        obj[gdet]['pmdecerr'] = pmdecerr
-    bdet, = np.where((obj['ndet']<2) | ~np.isfinite(obj['pmra']))
-    nbdet = len(bdet)
+        pmraerr[gdet] = 1.0/np.sqrt( totobj['ramjd2'][gdet] - totobj['ramjd'][gdet]**2 * obj['raerr'][gdet] )
+        pmraerr[gdet] /= (3600*np.cos(totobj['dec'][gdet]/radeg))    # correction for raerr in arcsec
+        pmraerr[gdet] *= (3600*1e3)*365.2425     # mas/year
+        pmraerr[gdet] *= np.cos(obj['dec'][gdet]/radeg)      # mas/year, true angle
+        pmdecerr[gdet] = 1.0/np.sqrt( totobj['decmjd2'][gdet] - totobj['decmjd'][gdet]**2 * obj['decerr'][gdet] )
+        pmdecerr[gdet] /= 3600                   # correction for decerr in arcsec
+        pmdecerr[gdet] *= (3600*1e3)*365.2425    # mas/year
+        obj[gdet]['pmra'] = pmra[gdet]
+        obj[gdet]['pmdec'] = pmdec[gdet]
+        obj[gdet]['pmraerr'] = pmraerr[gdet]
+        obj[gdet]['pmdecerr'] = pmdecerr[gdet]
     # sometimes it happens that the denominator is 0.0 
     #  when there are few closely spaced points
     #  nothing we can do, just mark as bad
-    if nbdet>0:
+    bdet, = np.where((obj['ndet']<2) | ~np.isfinite(obj['pmra']))
+    if len(bdet)>0:
         obj[bdet]['pmra'] = 999999.0
         obj[bdet]['pmdec'] = 999999.0
         obj[bdet]['pmraerr'] = 999999.0
@@ -510,9 +511,9 @@ if __name__ == "__main__":
             obj[f+'bsemi'][gdet] /= obj['ndet'+f][gdet]
             obj[f+'theta'][gdet] /= obj['ndet'+f][gdet]
         if nbdet>0:
-            obj[f+'asemi'][bdet] = 99.99
-            obj[f+'bsemi'][bdet] = 99.99
-            obj[f+'theta'][bdet] = 99.99
+            obj[f+'asemi'][bdet] = 999999.
+            obj[f+'bsemi'][bdet] = 999999.
+            obj[f+'theta'][bdet] = 999999.
 
     # Average the morphology parameters, Need a separate counter for that maybe?
     mtags = ['asemi','bsemi','theta','fwhm','class_star']
@@ -523,14 +524,14 @@ if __name__ == "__main__":
     for m in mtags:
         # Divide by the number of detections
         if ngdet>0: obj[m][gdet] /= obj['ndet'][gdet]
-        if nbdet>0: obj[m][bdet] = 99.99   # no good detections
+        if nbdet>0: obj[m][bdet] = 999999.   # no good detections
 
     # Get the average error
     metags = ['asemierr','bsemierr','thetaerr']
     for m in metags:
         # Just take the sqrt to complete the addition in quadrature
         if ngdet>0: obj[m][gdet] = np.sqrt(obj[m][gdet])
-        if nbdet>0: obj[m][bdet] = 99.99
+        if nbdet>0: obj[m][bdet] = 999999.  # no good detections
 
     # Add E(B-V)
     print('Getting E(B-V)')
@@ -614,11 +615,7 @@ if __name__ == "__main__":
     hdulist.append(hdu)    
     hdulist.writeto(outfile,overwrite=True)
     hdulist.close()
-    #MWRFITS,sumstr,outfile,/create      # first, summary table
-    #MWRFITS,obj,outfile,/silent         # second, catalog
-    #MWRFITS,idstr,outfile,/silent       # third, ID table
-    if os.path.exists(outfile+'.gz'): os.delete(outfile)    
-
+    if os.path.exists(outfile+'.gz'): os.remove(outfile+'.gz')
     ret = subprocess.call(['gzip',outfile])    # compress final catalog
 
     dt = time.time()-t0
