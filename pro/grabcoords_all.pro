@@ -9,9 +9,9 @@ if file_test(dir,/directory) eq 0 then file_mkdir,dir+'logs/'
 if file_test(tmpdir,/directory) eq 0 then file_mkdir,tmpdir
   
 ; Load the list of exposures
-list1 = MRDFITS(dir+'/lists/decam_instcal_list.fits',1)
-list2 = MRDFITS(dir+'/lists/mosaic3_instcal_list.fits',1)
-list3 = MRDFITS(dir+'/lists/bok90prime_instcal_list.fits',1)
+list1 = MRDFITS(dir+'/lists/decam_instcal_list.fits.gz',1)
+list2 = MRDFITS(dir+'/lists/mosaic3_instcal_list.fits.gz',1)
+list3 = MRDFITS(dir+'/lists/bok90prime_instcal_list.fits.gz',1)
 str = [list1,list2,list3]
 undefine,list1,list2,list3
 nstr = n_elements(str)
@@ -25,7 +25,7 @@ fluxfiles = strmid(str.fluxfile,4)
 nbin = 100
 nbatch = ceil(nstr/float(nbin))
 cmd = strarr(nbatch)
-dir = strarr(nbatch)+'/data0/dnidever/nsc/instcal/'+version+'/tmp/coords/'
+dir = strarr(nbatch)+localdir+'dnidever/nsc/instcal/'+version+'/tmp/coords/'
 for i=0L,nbatch-1 do begin
   lo = i*nbin
   hi = (lo+nbin-1) < (nstr-1)
