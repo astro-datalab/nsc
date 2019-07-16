@@ -9,9 +9,11 @@ from astropy.utils.exceptions import AstropyWarning
 from astropy.table import Table, vstack, Column
 from astropy.time import Time
 import healpy as hp
-from dlnpyutils import utils
+from dlnpyutils import utils, coords
 import subprocess
-time
+import time
+from argparse import ArgumentParser
+import socket
 
 def add_elements(cat,nnew=300000L):
     """ Add more elements to a catalog"""
@@ -23,69 +25,69 @@ def add_elements(cat,nnew=300000L):
     del(old)
     return cat
     
-def add_cat(obj,totobj,idstr,cnt,idcnt,ind1,cat,meta):
+def add_cat(obj,totobj,idstr,idcnt,ind1,cat,meta):
     """ Add object information from a new meas catalog of matched objects"""
 
-    f = meta['filter'].lower()
+    ncat = len(cat)
+    f = meta['filter'].lower().strip()[0]
     # Copy to final structure
-    obj[ind1]['ra'] += cat['ra']
-    obj[ind1]['dec'] += cat['dec']
-    obj[ind1]['raerr'] += 1.0/cat['raerr']**2                           # total(ra_wt)
-    obj[ind1]['decerr'] += 1.0/cat['decerr']**2                         # total(dec_wt)
-    obj[ind1]['pmra'] += (1.0/cat['raerr']**2) * meta.mjd*cat['ra']     # total(wt*mjd*ra)
-    obj[ind1]['pmdec'] += (1.0/cat['decerr']**2) * meta.mjd*cat['dec']  # total(wt*mjd*dec)
-    obj[ind1]['mjd'] += meta['mjd']                                 # total(mjd)
-    obj[ind1]['ndet'] += 1
+    obj['ra'][ind1] = cat['RA']
+    obj['dec'][ind1] = cat['DEC']
+    obj['raerr'][ind1] += 1.0/cat['RAERR']**2                           # total(ra_wt)
+    obj['decerr'][ind1] += 1.0/cat['DECERR']**2                         # total(dec_wt)
+    obj['pmra'][ind1] += (1.0/cat['RAERR']**2) * meta['mjd']*cat['RA']     # total(wt*mjd*ra)
+    obj['pmdec'][ind1] += (1.0/cat['DECERR']**2) * meta['mjd']*cat['DEC']  # total(wt*mjd*dec)
+    obj['mjd'][ind1] += meta['mjd']                                 # total(mjd)
+    obj['ndet'][ind1] += 1
     # Detection and morphology parameters for this FILTER
-    obj[obj]['ndet'+f] += 1
-    obj[obj][f+'asemi'] += cat['asemi']
-    obj[obj][f+'bsemi'] += cat['bsemi']
-    obj[obj][f+'theta'] += cat['theta']
+    obj['ndet'+f][ind1] += 1
+    obj[f+'asemi'][ind1] += cat['ASEMI']
+    obj[f+'bsemi'][ind1] += cat['BSEMI']
+    obj[f+'theta'][ind1] += cat['THETA']
     # Good photometry for this FILTER
-    gdmag, = np.where(cat['mag_auto']<50)
+    gdmag, = np.where(cat['MAG_AUTO']<50)
     if len(gdmag)>0:
-      obj[ind1[gdmag]][f+'mag'] += 2.5118864d**cat[gdmag]['mag_auto'] * (1.0/cat[gdmag]['magerr_auto']**2)
-      obj[ind1[gdmag]][f+'err'] += 1.0/cat[gdmag]['magerr_auto']**2
-      obj[ind1[gdmag]]['nphot'+f] += 1
-    obj[ind1]['asemi'] += cat['asemi']
-    obj[ind1]['asemierr'] += cat['asemierr']**2
-    obj[ind1]['bsemi'] += cat['bsemi']
-    obj[ind1]['bsemierr'] += cat['bsemierr']**2
-    obj[ind1]['theta'] += cat['theta']
-    obj[ind1]['thetaerr'] += cat['thetaerr']**2
-    obj[ind1]['fwhm'] += cat['fwhm']  # in arcsec
-    obj[ind1]['flags'] += cat['flags']
-    obj[ind1]['class_star'] += cat['class_star']
-    totobj[ind1]['ra'] += cat['ra'] * (1.0/cat['raerr']**2)             # total(ra*wt)
-    totobj[ind1]['dec'] += cat['dec'] * (1.0/cat['decerr']**2)          # total(dec*wt)
-    totobj[ind1]['ramjd'] += (1.0/cat['raerr']**2) * meta['mjd']        # total(wt_ra*mjd)
-    totobj[ind1]['decmjd'] += (1.0/cat['decerr']**2) * meta['mjd']      # total(wt_dec*mjd)
-    totobj[ind1]['ramjd2'] += (1.0/cat['raerr']**2) * meta['mjd']**2    # total(wt_ra*mjd**2)
-    totobj[ind1]['decmjd2'] += (1.0/cat['decerr']**2) * meta['mjd*']**2  # total(wt_dec*mjd**2)
-    totobj[ind1]['minmjd'] = utils.lt( meta['mjd'], totobj[ind1]['minmjd'] )
-    totobj[ind1]['maxmjd'] = utils.gt( meta['mjd'], totobj[ind1]['maxmjd'] )
+      obj[f+'mag'][ind1[gdmag]] += 2.5118864**cat['MAG_AUTO'][gdmag] * (1.0/cat['MAGERR_AUTO'][gdmag]**2)
+      obj[f+'err'][ind1[gdmag]] += 1.0/cat['MAGERR_AUTO'][gdmag]**2
+      obj['nphot'+f][ind1[gdmag]] += 1
+    obj['asemi'][ind1] += cat['ASEMI']
+    obj['asemierr'][ind1] += cat['ASEMIERR']**2
+    obj['bsemi'][ind1] += cat['BSEMI']
+    obj['bsemierr'][ind1] += cat['BSEMIERR']**2
+    obj['theta'][ind1] += cat['THETA']
+    obj['thetaerr'][ind1] += cat['THETAERR']**2
+    obj['fwhm'][ind1] += cat['FWHM']  # in arcsec
+    obj['flags'][ind1] += cat['FLAGS']
+    obj['class_star'][ind1] += cat['CLASS_STAR']
+    totobj['ra'][ind1] += cat['RA'] * (1.0/cat['RAERR']**2)             # total(ra*wt)
+    totobj['dec'][ind1] += cat['DEC'] * (1.0/cat['DECERR']**2)          # total(dec*wt)
+    totobj['ramjd'][ind1] += (1.0/cat['RAERR']**2) * meta['mjd']        # total(wt_ra*mjd)
+    totobj['decmjd'][ind1] += (1.0/cat['DECERR']**2) * meta['mjd']      # total(wt_dec*mjd)
+    totobj['ramjd2'][ind1] += (1.0/cat['RAERR']**2) * meta['mjd']**2    # total(wt_ra*mjd**2)
+    totobj['decmjd2'][ind1] += (1.0/cat['DECERR']**2) * meta['mjd']**2  # total(wt_dec*mjd**2)
+    totobj['minmjd'][ind1] = np.minimum( meta['mjd'][0], totobj['minmjd'][ind1] )
+    totobj['maxmjd'][ind1] = np.maximum( meta['mjd'][0], totobj['maxmjd'][ind1] )
     if len(gdmag)>0:
-        totobj[ind1[gdmag]][f+'tot'] += cat[gdmag]['mag_auto']       # sum(mag)
-        totobj[ind1[gdmag]][f+'mag2'] += np.float64(cat[gdmag]['mag_auto'])**2   # sum(mag**2), need dbl to precent underflow
-    cnt += ncat
+        totobj[f+'tot'][ind1[gdmag]] += cat['MAG_AUTO'][gdmag]       # sum(mag)
+        totobj[f+'mag2'][ind1[gdmag]] += np.float64(cat['MAG_AUTO'][gdmag])**2   # sum(mag**2), need dbl to precent underflow
 
     # Add new elements to IDSTR
-    if idcnt+ncat gt nidstr:
+    if idcnt+ncat > len(idstr):
         idstr = add_elements(idstr)
         nidstr = len(idstr)
 
     # Add to IDSTR
-    idstr[idcnt:idcnt+ncat]['measid'] = cat['measid']
-    idstr[idcnt:idcnt+ncat]['exposure'] = meta['base']
-    idstr[idcnt:idcnt+ncat]['expnum'] = meta['expnum']
-    idstr[idcnt:idcnt+ncat]['objectid'] = newexp['objectid']
-    idstr[idcnt:idcnt+ncat]['objectindex'] = ind1
+    idstr['measid'][idcnt:idcnt+ncat] = cat['MEASID']
+    idstr['exposure'][idcnt:idcnt+ncat] = meta['base']
+    idstr['expnum'][idcnt:idcnt+ncat] = meta['expnum']
+    idstr['objectid'][idcnt:idcnt+ncat] = obj[ind1]['objectid']
+    idstr['objectindex'][idcnt:idcnt+ncat] = ind1
     idcnt += ncat
 
-    return obj,totobj,idstr,cnt,idcnt
+    return obj,totobj,idstr,idcnt
     
 
-def loadmeas(metafile,buffdict=None):
+def loadmeas(metafile,buffdict=None,verbose=False):
 
     if os.path.exists(metafile) is False:
         print(metafile+' NOT FOUND')
@@ -103,7 +105,7 @@ def loadmeas(metafile,buffdict=None):
         # Check that this chip was astrometrically calibrated
         #   and falls in to HEALPix region
         if chmeta[j]['ngaiamatch'] == 0:
-            print('This chip was not astrometrically calibrate')
+            if verbose: print('This chip was not astrometrically calibrate')
 
         # Check that this overlaps the healpix region
         inside = True
@@ -113,8 +115,8 @@ def loadmeas(metafile,buffdict=None):
             if (np.max(vra)-np.min(vra)) > 100:    # deal with RA=0 wrapround
                 bd, = np.where(vra>180)
                 if len(bd)>0: vra[bd] -= 360
-            if dopolygonsoverlap(buffdict['ra'],buffdict['dec'],vra,vdec):
-                print('This chip does NOT overlap the HEALPix region+buffer')
+            if coords.doPolygonsOverlap(buffdict['ra'],buffdict['dec'],vra,vdec) is False:
+                if verbose: print('This chip does NOT overlap the HEALPix region+buffer')
                 inside = False
 
         # Check if the chip-level file exists
@@ -131,7 +133,7 @@ def loadmeas(metafile,buffdict=None):
 
             # Make sure it's in the right format
             if len(cat1.dtype.fields) != 32:
-                print('  This catalog does not have the right format. Skipping')
+                if verbose: print('  This catalog does not have the right format. Skipping')
                 del(cat1)
                 ncat1 = 0
 
@@ -140,14 +142,14 @@ def loadmeas(metafile,buffdict=None):
             #  -reproject to tangent plane first so we don't have to deal
             #     with RA=0 wrapping or pol issues
             if buffdict is not None:
-                lon, lat = rotsphcen(cat1['ra'],cat1['dec'],buffdict['cenra'],buffdict['cendec'],gnomic=True)
+                lon, lat = coords.rotsphcen(cat1['ra'],cat1['dec'],buffdict['cenra'],buffdict['cendec'],gnomic=True)
                 ind0, ind1 = utils.roi_cut(buffdict['lon'],buffdict['lat'],lon,lat)
                 nmatch = len(ind1)
                 # Only want source inside this pixel
                 if nmatch>0:
                     cat1 = cat1[ind1]
                 ncat1 = len(cat1)
-                print('  '+str(nmatch)+' sources are inside this pixel')
+                if verbose: print('  '+str(nmatch)+' sources are inside this pixel')
 
             # Combine the catalogs
             if ncat1 > 0:
@@ -180,9 +182,10 @@ if __name__ == "__main__":
     t0 = time.time()
     hostname = socket.gethostname()
     host = hostname.split('.')[0]
+    radeg = np.float64(180.00) / np.pi
 
     # Inputs
-    pix = args.pix
+    pix = int(args.pix[0])
     version = args.version
     nside = args.nside
     redo = args.redo
@@ -221,11 +224,11 @@ if __name__ == "__main__":
         print(outfile+' EXISTS already and REDO not set')
         sys.exit()
 
-    print("Combining InstCal SExtractor catalogs for Healpix pixel = "+str(pix,2))
+    print("Combining InstCal SExtractor catalogs for Healpix pixel = "+str(pix))
 
     # Load the list
     listfile = localdir+'dnidever/nsc/instcal/'+version+'/nsc_healpix_list.fits'
-    if os.path.exists(list) is False:
+    if os.path.exists(listfile) is False:
         print(listfile+" NOT FOUND")
         sys.exist()
     healstr = Table(fits.getdata(listfile,1))
@@ -269,14 +272,14 @@ if __name__ == "__main__":
     # Expand the boundary by the buffer size
     cenra, cendec = hp.pix2ang(nside,pix,lonlat=True)
     # reproject onto tangent plane
-    lonbound, latbound = utils.rotsphcen(rabound,decbound,cenra,cendec,gnomic=True)
+    lonbound, latbound = coords.rotsphcen(rabound,decbound,cenra,cendec,gnomic=True)
     # expand by a fraction, it's not an extact boundary but good enough
     buffsize = 10.0/3600. # in deg
-    radbound = sqrt(lonbound**2+latbound**2)
+    radbound = np.sqrt(lonbound**2+latbound**2)
     frac = 1.0 + 1.5*np.max(buffsize/radbound)
     lonbuff = lonbound*frac
     latbuff = latbound*frac
-    rabuff, decbuff = utils.rotsphcen(lonbuff,latbuff,cenra,cendec,gnomic=True,reverse=True)
+    rabuff, decbuff = coords.rotsphcen(lonbuff,latbuff,cenra,cendec,gnomic=True,reverse=True)
     if (np.max(rabuff)-np.min(rabuff))>100:  # deal with RA=0 wraparound
         bd, = np.where(rabuff>180)
         if len(bd)>0:rabuff[bd] -=360.0
@@ -286,13 +289,13 @@ if __name__ == "__main__":
     
     # Initialize the ID structure
     # this will contain the MeasID, Exposure name, ObjectID
-    dtype_idstr = np.dtype([('measid',np.str),('exposure',np.str),('expnum',np.str),('objectid',np.str),('objectindex',long)])
+    dtype_idstr = np.dtype([('measid',np.str,200),('exposure',np.str,200),('expnum',np.str,200),('objectid',np.str,200),('objectindex',long)])
     idstr = np.zeros(1000000,dtype=dtype_idstr)
     nidstr = len(idstr)
     idcnt = 0L
 
     # Initialize the object structure
-    dtype_obj = np.dtype([('objectid',np.str),('pix',long),('ra',np.float64),('dec',np.float64),('raerr',float),('decerr',float),
+    dtype_obj = np.dtype([('objectid',np.str,100),('pix',long),('ra',np.float64),('dec',np.float64),('raerr',float),('decerr',float),
                           ('pmra',float),('pmdec',float),('pmraerr',float),('pmdecerr',float),('mjd',np.float64),
                           ('deltamjd',float),('ndet',long),('nphot',long),
                           ('ndetu',int),('nphotu',int),('umag',float),('urms',float),('uerr',float),('uasemi',float),('ubsemi',float),('utheta',float),
@@ -319,115 +322,66 @@ if __name__ == "__main__":
     totobj['maxmjd'] = -999999.0    
     cnt = 0L
 
+    # New meta-data format
+    dtype_meta = np.dtype([('file',np.str,500),('base',np.str,200),('expnum',long),('ra',np.float64),
+                           ('dec',np.float64),('dateobs',np.str,100),('mjd',np.float64),('filter',np.str,50),
+                           ('exptime',float),('airmass',float),('nsources',long),('fwhm',float),
+                           ('nchips',long),('badchip31',bool),('rarms',float),('decrms',float),
+                           ('ebv',float),('gaianmatch',long),('zpterm',float),('zptermerr',float),
+                           ('refmatch',long)])
+
     # Loop over the exposures
-    allmeta = []
-    for i in range(nlist):
-        print(str(i+1)+' Loading '+list[i]['FILE'])
+    allmeta = None
+    for i in range(nhlist):
+        print(str(i+1)+' Loading '+hlist[i]['FILE'])
 
         # Load meta data file first
-        metafile = repstr(list[i]['FILE'],'_cat','_meta')
+        metafile = hlist[i]['FILE'].replace('_cat','_meta').strip()
         if os.path.exists(metafile) is False:
             print(metafile+' NOT FOUND')
             #goto,BOMB
         meta = fits.getdata(metafile,1)
-        t = Time(times, format='isot', scale='utc')
+        t = Time(meta['dateobs'], format='isot', scale='utc')
         meta['mjd'] = t.mjd                    # recompute because some MJD are bad
         chmeta = fits.getdata(metafile,2)      # chip-level meta-data structure
         print('  FILTER='+meta['filter']+'  EXPTIME='+str(meta['exptime'])+' sec')
 
-        # Loop over the chip files
-        cat = None
-        catcount = 0L
-        for j in range(len(chmeta)):
-              # Check that this chip was astrometrically calibrated
-              if chmeta[j]['ngaiamatch'] == 0:
-                  print('This chip was not astrometrically calibrate')
-                  #goto,BOMB1
-
-              # Check that this overlaps the healpix region
-              vra = chmeta[j]['vra']
-              vdec = chmeta[j]['vdec']
-              if (np.max(vra)-np.min(vra)) > 100:    # deal with RA=0 wrapround
-                  bd, = np.where(vra>180)
-                  if len(bd)>0: vra[bd] -= 360
-              if dopolygonsoverlap(buffdict['ra'],buffdict['dec'],vra,vdec):
-                  print('This chip does NOT overlap the HEALPix region+buffer')
-                  #goto,BOMB1
-
-              # Load the chip-level catalog
-              chfile = os.path.dirname(list[i]['file'])+'/'+list[i]['base']+'_'+str(chmeta[j]['ccdnum'])+'_meas.fits'
-              if os.path.exists(chfile) is False:
-                  print(chfile+' NOT FOUND')
-                  #goto,BOMB1
-              cat1 = fits.getdata(chfile,1)
-              ncat1 = len(cat1)
-              print('  '+str(ncat1)+' sources')
-
-              # Make sure it's in the right format
-              if len(cat1.dtype.fields) != 32:
-                  print('  This catalog does not have the right format. Skipping')
-                  #goto,BOMB1
-
-              # Only include sources inside Boundary+Buffer zone
-              #  -use ROI_CUT
-              #  -reproject to tangent plane first so we don't have to deal
-              #     with RA=0 wrapping or pol issues
-              lon, lat = rotsphcen(cat1['ra'],cat1['dec'],buffdict['cenra'],buffdict['cendec'],gnomic=True)
-              ind0, ind1 = utils.roi_cut(buffdict['lon'],buffdict['lat'],lon,lat)
-              nmatch = len(ind1)
-              # Only want source inside this pixel
-              if nmatch==0:
-                  print('  No sources inside this pixel')
-                  #goto,BOMB
-              print('  '+str(nmatch)+' sources are inside this pixel')
-              cat1 = cat1[ind1]
-              ncat1 = nmatch
-
-              # Combine the catalogs
-              if cat is None:
-                  dtype_cat = cat1.dtype
-                  cat = np.zeros(np.sum(chmeta['nsources']),dtype=dtype_cat)
-              cat[catcount:catcount+ncat1] = cat1
-              catcount += ncat1
-
-              #BOMB1:
-        if cat is not None: cat=cat[0:catcount]  # trim excess
+        # Load the measurement catalog
+        cat = loadmeas(metafile,buffdict)
         ncat = utils.size(cat)
         if ncat==0:
-              print('This exposure does NOT cover the HEALPix')
-              #goto,BOMB
+            print('This exposure does NOT cover the HEALPix')
+            continue      # go to next exposure
 
         # Add metadata to ALLMETA
         #  Make sure it's in the right format
-        dtype_meta = np.dtype([('file',np.str),('base',np.str),('expnum',long),('ra',np.float64),
-                               ('dec',np.float64),('dateobs',np.str),('mjd',np.float64),('filter',np.str),
-                               ('exptime',float),('airmass',float),('nsources',long),('fwhm',float),
-                               ('nchips',long),('badchip31',bool),('rarms',float),('decrms',float),
-                               ('ebv',float),('gaianmatch',long),('zpterm',float),('zptermerr',float),
-                               ('refmatch',long)])
-        newmeta = np.zero(1,dtype=dtype_meta)
+        newmeta = np.zeros(1,dtype=dtype_meta)
         # Copy over the meta information
-        for n in newmeta.names:
-            if n in meta.names: newmeta[n]=meta[n]
-        allmeta.append(newmeta)
+        for n in newmeta.dtype.names:
+            if n.upper() in meta.dtype.names: newmeta[n]=meta[n]
+        if allmeta is None:
+            allmeta = newmeta
+        else:
+            allmeta = np.hstack((allmeta,newmeta))
 
         # Combine the data
         #-----------------
         # First catalog
         if cnt==0:
             ind1 = np.arange(len(cat))
-            obj,totobj,idstr,cnt,idcnt = add_cat(obj,totobj,idstr,cnt,idcnt,ind1,cat,meta)
-            obj[ind1]['objectid'] = str(pix)+'.'+str(np.arange(ncat)+1)
-
+            obj,totobj,idstr,idcnt = add_cat(obj,totobj,idstr,idcnt,ind1,cat,meta)
+            obj['objectid'][ind1] = utils.strjoin( str(pix)+'.', ((np.arange(ncat)+1).astype(np.str)) )
+            cnt += ncat
 
         # Second and up
         else:
             #  Match new sources to the objects
-            ind1,ind2,dist = utils.xmatch(obj[0:cnt]['ra'],obj[0:cnt]['dec'],cat['ra'],cat['dec'],0.5)
+            ind1,ind2,dist = coords.xmatch(obj[0:cnt]['ra'],obj[0:cnt]['dec'],cat['RA'],cat['DEC'],0.5)
             nmatch = len(ind1)
+            print('  '+str(nmatch)+' matched sources')
             #  Some matches, add data to existing record for these sources
             if nmatch>0:
-                obj,totobj,idstr,cnt,idcnt = add_cat(obj,totobj,idstr,cnt,idcnt,ind1,cat[ind2],meta)
+                obj,totobj,idstr,idcnt = add_cat(obj,totobj,idstr,idcnt,ind1,cat[ind2],meta)
                 if nmatch<ncat:
                     cat = np.delete(cat,ind2)
                     ncat = len(cat)
@@ -442,9 +396,10 @@ if __name__ == "__main__":
                 if (cnt+ncat)>nobj:
                     obj = add_elements(obj)
                     nobj = len(obj)
-                ind1 = np.arange(ncat)
-                obj,totobj,idstr,cnt,idcnt = add_cat(obj,totobj,idstr,cnt,idcnt,ind1,cat,meta)
-                obj[ind1]['objectid'] = str(pix)+'.'+str(cnt+np.arange(ncat)+1)
+                ind1 = np.arange(ncat)+cnt
+                obj,totobj,idstr,idcnt = add_cat(obj,totobj,idstr,idcnt,ind1,cat,meta)
+                obj['objectid'][ind1] = utils.strjoin( str(pix)+'.', ((np.arange(ncat)+1+cnt).astype(np.str)) )
+                cnt += ncat
 
     # No sources
     if cnt==0:
@@ -469,30 +424,32 @@ if __name__ == "__main__":
     obj['mjd'] /= obj['ndet']           # mean MJD
     totobj['ramjd'] /= obj['raerr']     # wt_ra mean MJD
     totobj['decmjd'] /= obj['decerr']   # wt_dec mean MJD
-    pmra = (obj['pmra']/obj['raerr']-totobj['ramjd']*totobj['ra'])/(totobj['ramjd2']/obj['raerr']-totobj['ramjd']**2)   # deg[ra]/day
-    pmra *= (3600*1e3)*365.2425     # mas/year
-    pmra *= np.cos(obj['dec']/radeg)      # mas/year, true angle
-    pmdec = (obj['pmdec']/obj['decerr']-totobj['decmjd']*totobj['dec'])/(totobj['decmjd2']/obj['decerr']-totobj['decmjd']**2)  # deg/day
-    pmdec *= (3600*1e3)*365.2425    # mas/year
-    # Proper motion errors
-    # pmerr = 1/sqrt( sum(wt*mjd^2) - <mjd>^2 * sum(wt) )
-    #   if wt=1/err^2 with err in degrees, but we are using arcsec
-    #   Need to divide by 3600 for PMDECERR and 3600*cos(dec) for PMRAERR
-    pmraerr = 1.0/np.sqrt( totobj['ramjd2'] - totobj['ramjd']**2 * obj['raerr'] )
-    pmraerr /= (3600*np.cos(totobj['dec']/radeg))    # correction for raerr in arcsec
-    pmraerr *= (3600*1e3)*365.2425     # mas/year
-    pmraerr *= np.cos(obj['dec']/radeg)      # mas/year, true angle
-    pmdecerr = 1.0/np.sqrt( totobj['decmjd2'] - totobj['decmjd']**2 * obj['decerr'] )
-    pmdecerr /= 3600                   # correction for decerr in arcsec
-    pmdecerr *= (3600*1e3)*365.2425    # mas/year
+
+
     gdet, = np.where(obj['ndet']>1)
-    ngdet = len(gdet)
+    ngdet = len(gdet)    
     if ngdet>0:
-        obj[gdet]['pmra'] = pmra[gdet]
-        obj[gdet]['pmdec'] = pmdec[gdet]
-        obj[gdet]['pmraerr'] = pmraerr[gdet]
-        obj[gdet]['pmdecerr'] = pmdecerr[gdet]
-    bdet, = np.where((obj['ndet']<2) | ~np.isfinite(pmra))
+        pmra = (obj['pmra'][gdet]/obj['raerr'][gdet]-totobj['ramjd'][gdet]*totobj['ra'][gdet]) / (totobj['ramjd2'][gdet]/obj['raerr'][gdet]-totobj['ramjd'][gdet]**2)   # deg[ra]/day
+        pmra *= (3600*1e3)*365.2425     # mas/year
+        pmra *= np.cos(obj['dec'][gdet]/radeg)      # mas/year, true angle
+        pmdec = (obj['pmdec'][gdet]/obj['decerr'][gdet]-totobj['decmjd'][gdet]*totobj['dec'][gdet])/(totobj['decmjd2'][gdet]/obj['decerr'][gdet]-totobj['decmjd'][gdet]**2)  # deg/day
+        pmdec *= (3600*1e3)*365.2425    # mas/year
+        # Proper motion errors
+        # pmerr = 1/sqrt( sum(wt*mjd^2) - <mjd>^2 * sum(wt) )
+        #   if wt=1/err^2 with err in degrees, but we are using arcsec
+        #   Need to divide by 3600 for PMDECERR and 3600*cos(dec) for PMRAERR
+        pmraerr = 1.0/np.sqrt( totobj['ramjd2'][gdet] - totobj['ramjd'][gdet]**2 * obj['raerr'][gdet] )
+        pmraerr /= (3600*np.cos(totobj['dec'][gdet]/radeg))    # correction for raerr in arcsec
+        pmraerr *= (3600*1e3)*365.2425     # mas/year
+        pmraerr *= np.cos(obj['dec'][gdet]/radeg)      # mas/year, true angle
+        pmdecerr = 1.0/np.sqrt( totobj['decmjd2'][gdet] - totobj['decmjd'][gdet]**2 * obj['decerr'][gdet] )
+        pmdecerr /= 3600                   # correction for decerr in arcsec
+        pmdecerr *= (3600*1e3)*365.2425    # mas/year
+        obj[gdet]['pmra'] = pmra
+        obj[gdet]['pmdec'] = pmdec
+        obj[gdet]['pmraerr'] = pmraerr
+        obj[gdet]['pmdecerr'] = pmdecerr
+    bdet, = np.where((obj['ndet']<2) | ~np.isfinite(obj['pmra']))
     nbdet = len(bdet)
     # sometimes it happens that the denominator is 0.0 
     #  when there are few closely spaced points
@@ -514,16 +471,18 @@ if __name__ == "__main__":
     #  and average the morphology parameters PER FILTER
     filters = ['u','g','r','i','z','y','vr']
     for f in filters:
-        newflux = obj[f+'mag'] / obj[f+'err']
-        newmag = 2.50*np.log10(newflux)
-        newerr = np.sqrt(1.0/obj[f+'err'])
-        obj[f+'mag'] = newmag
-        obj[f+'err'] = newerr
-        bdmag, = np.where(~np.isfinite(newmag))
-        nbdmag = len(bdmag)
-        if nbdmag>0:
-            obj[bdmag][f+'mag'] = 99.99
-            obj[bdmag][f+'err'] = 9.99
+        # Get average photometry for objects with photometry in this band
+        gph, = np.where(obj['nphot'+f]>0)
+        if len(gph)>0:
+            newflux = obj[f+'mag'][gph] / obj[f+'err'][gph]
+            newmag = 2.50*np.log10(newflux)
+            newerr = np.sqrt(1.0/obj[f+'err'][gph])
+            obj[f+'mag'][gph] = newmag
+            obj[f+'err'][gph] = newerr
+        bdmag, = np.where((obj['nphot'+f]==0) | ~np.isfinite(obj[f+'mag']))
+        if len(bdmag)>0:
+            obj[f+'mag'][bdmag] = 99.99
+            obj[f+'err'][bdmag] = 9.99
 
         # Calculate RMS scatter
         #  RMS^2 * N = sum(mag^2) - 2*<mag>*sum(mag) + N*<mag>^2
@@ -536,8 +495,8 @@ if __name__ == "__main__":
         bdrms, = np.where(obj['nphot'+f]<=1)
         nbdrms = len(bdrms)
         if ngdrms>0:
-           rms[gdrms] = np.sqrt( totobj[gdrms][f+'mag2']/obj[gdrms]['nphot'+f] - $
-                                 2*obj[gdrms][f+'mag']*totobj[gdrms][f+'tot']/obj[gdrms]['nphot'+f] + obj[gdrms][f+'mag'])**2 )
+           rms[gdrms] = np.sqrt( totobj[f+'mag2'][gdrms]/obj['nphot'+f][gdrms] - 
+                                 2*obj[f+'mag'][gdrms]*totobj[f+'tot'][gdrms]/obj['nphot'+f][gdrms] + np.float64(obj[f+'mag'][gdrms])**2 )
         if nbdrms>0: rms[bdrms] = 999999.
         obj[f+'rms'] = rms
 
@@ -547,13 +506,13 @@ if __name__ == "__main__":
         bdet, = np.where(obj['ndet'+f]==0)
         nbdet = len(bdet)        
         if ngdet>0:
-            obj[gdet][f+'asemi'] /= obj[gdet]['ndet'+f]
-            obj[gdet][f+'bsemi'] /= obj[gdet]['ndet'+f]
-            obj[gdet][f+'theta'] /= obj[gdet]['ndet'+f]
+            obj[f+'asemi'][gdet] /= obj['ndet'+f][gdet]
+            obj[f+'bsemi'][gdet] /= obj['ndet'+f][gdet]
+            obj[f+'theta'][gdet] /= obj['ndet'+f][gdet]
         if nbdet>0:
-            obj[bdet][f+'asemi'] = 99.99
-            obj[bdet][f+'bsemi'] = 99.99
-            obj[bdet][f+'theta'] = 99.99
+            obj[f+'asemi'][bdet] = 99.99
+            obj[f+'bsemi'][bdet] = 99.99
+            obj[f+'theta'][bdet] = 99.99
 
     # Average the morphology parameters, Need a separate counter for that maybe?
     mtags = ['asemi','bsemi','theta','fwhm','class_star']
@@ -563,15 +522,15 @@ if __name__ == "__main__":
     nbdet = len(bdet)    
     for m in mtags:
         # Divide by the number of detections
-        if ngdet>0: obj[gdet][m] /= obj[gdet]['ndet']
-        if nbdet>0: obj[bdet][m] = 99.99   # no good detections
+        if ngdet>0: obj[m][gdet] /= obj['ndet'][gdet]
+        if nbdet>0: obj[m][bdet] = 99.99   # no good detections
 
     # Get the average error
     metags = ['asemierr','bsemierr','thetaerr']
     for m in metags:
         # Just take the sqrt to complete the addition in quadrature
-        if ngdet>0: obj[gdet][m] = np.sqrt(obj[gdet][m])
-        if nbdet>0: obj[bdet][m] = 99.99
+        if ngdet>0: obj[m][gdet] = np.sqrt(obj[m][gdet])
+        if nbdet>0: obj[m][bdet] = 99.99
 
     # Add E(B-V)
     print('Getting E(B-V)')
@@ -601,8 +560,8 @@ if __name__ == "__main__":
     print(str(nmatch)+' final objects fall inside the pixel')
 
     # Remove trimmed objects from IDSTR
-    totrim, = np.where(objtokeep[idstr.objectindex] eq 0,ntotrim)  #using old index
-    if ntotrim>0:
+    totrim, = np.where(objtokeep[idstr['objectindex']]==0)  #using old index
+    if len(totrim)>0:
         # Trim objects
         idstr = np.delete(idstr,totrim)
         #idstr = utils.remove_indices(idstr,totrim)
@@ -614,43 +573,44 @@ if __name__ == "__main__":
     #  get exposures that are in IDSTR
     #  sometimes EXPNUM numbers have the leading 0s removed
     #  and sometimes not, so turn to LONG to match
-    dum, uiexpnum = np.unique(np.long(idstr['expnum']),return_index=True)
-    uexpnum = np.long(idstr[uiexpnum]['expnum'])
+    dum, uiexpnum = np.unique(idstr['expnum'].astype(long),return_index=True)
+    uexpnum = idstr[uiexpnum]['expnum'].astype(long)
     nuexpnum = len(uexpnum)
-    ind1,ind2 = utils.match(np.long(allmeta.expnum),uexpnum)
+    ind1,ind2 = utils.match(allmeta['expnum'].astype(long),uexpnum)
     nmatch = len(ind1)
     sumstr = Table(allmeta[ind1])
-    col_nobj = Column(name='nobjects', dtype=np.long)
-    col_healpix = Column(name='healpix', dtype=np.long)
-    sumstr.add_columns([col_nobj col_healpix])
-    sumstr['nobjects'] =
+    col_nobj = Column(name='nobjects', dtype=np.long, length=len(sumstr))
+    col_healpix = Column(name='healpix', dtype=np.long, length=len(sumstr))
+    sumstr.add_columns([col_nobj, col_healpix])
+    sumstr['nobjects'] = 0
     sumstr['healpix'] = pix
     # get number of objects per exposure
-    expnum = np.long(idstr.expnum)
-    siexp = np.sort(expnum)
+    expnum = idstr['expnum'].astype(long)
+    siexp = np.argsort(expnum)
     expnum = expnum[siexp]
     if nuexpnum>1:
         brklo, = np.where(expnum != np.roll(expnum,1))
         nbrk = len(brklo)
-        brkhi = np.hstack((brklo[1:nbrk-1],len(expnum)))
+        brkhi = np.hstack((brklo[1:nbrk],len(expnum)))
         numobjexp = brkhi-brklo+1
     else:
         numobjexp=len(expnum)
-    ind1,ind2 = utils.match(np.long(sumstr.expnum),uexpnum)
+    ind1,ind2 = utils.match(sumstr['expnum'].astype(long),uexpnum)
     nmatch = len(ind1)
-    sumstr[ind1]['nobjects'] = numobjexp
+    sumstr['nobjects'][ind1] = numobjexp
 
     # Write the output file
+    outfile = 'test.fits'
     print('Writing combined catalog to '+outfile)
     if os.path.exists(outdir) is False: os.mkdir(outdir)
     if os.path.exists(outdir+'/'+subdir) is False: os.mkdir(outdir+'/'+subdir)
-    if os.path.exists(outfile): os.delete(outfile)
+    if os.path.exists(outfile): os.remove(outfile)
     sumstr.write(outfile)               # first, summary table
     #  append other fits binary tables
     hdulist = fits.open(outfile)
-    hdu = fits.table_to_hdu(obj)        # second, catalog
+    hdu = fits.table_to_hdu(Table(obj))        # second, catalog
     hdulist.append(hdu)
-    hdu = fits.table_to_hdu(idstr)      # third, ID table
+    hdu = fits.table_to_hdu(Table(idstr))      # third, ID table
     hdulist.append(hdu)    
     hdulist.writeto(outfile,overwrite=True)
     hdulist.close()
