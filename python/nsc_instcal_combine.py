@@ -423,7 +423,7 @@ if __name__ == "__main__":
         # Second and up
         else:
             #  Match new sources to the objects
-            ind1,ind2 = xmatch(obj[0:cnt]['ra'],obj[0:cnt]['dec'],cat['ra'],cat['dec'],0.5)
+            ind1,ind2,dist = utils.xmatch(obj[0:cnt]['ra'],obj[0:cnt]['dec'],cat['ra'],cat['dec'],0.5)
             nmatch = len(ind1)
             #  Some matches, add data to existing record for these sources
             if nmatch>0:
