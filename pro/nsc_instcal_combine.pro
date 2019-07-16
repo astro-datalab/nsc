@@ -669,9 +669,9 @@ for i=0,nfilters-1 do begin
     obj[gdet].(thetaind) /= obj[gdet].(detind)
   endif
   if nbdet gt 0 then begin
-    obj[bdet].(asemiind) = 99.99
-    obj[bdet].(bsemiind) = 99.99
-    obj[bdet].(thetaind) = 99.99
+    obj[bdet].(asemiind) = 999999.
+    obj[bdet].(bsemiind) = 999999.
+    obj[bdet].(thetaind) = 999999.
   endif
 endfor
 
@@ -683,7 +683,7 @@ for i=0,nmtags-1 do begin
   ind = where(tags eq strupcase(mtags[i]),nind)
   ; Divide by the number of detections
   if ngdet gt 0 then obj[gdet].(ind) /= obj[gdet].ndet
-  if nbdet gt 0 then obj[bdet].(ind) = 99.99   ; no good detections
+  if nbdet gt 0 then obj[bdet].(ind) = 999999.   ; no good detections
 endfor
 
 ; Get the average error
@@ -693,7 +693,7 @@ for i=0,nmetags-1 do begin
   ind = where(tags eq strupcase(metags[i]),nind)
   ; Just take the sqrt to complete the addition in quadrature
   if ngdet gt 0 then obj[gdet].(ind) = sqrt(obj[gdet].(ind))
-  if nbdet gt 0 then obj[bdet].(ind) = 99.99
+  if nbdet gt 0 then obj[bdet].(ind) = 999999.  ; no good detection
 endfor
 
 ; Add E(B-V)
@@ -759,6 +759,7 @@ MATCH,long(sumstr.expnum),uexpnum,ind1,ind2,/sort,count=nmatch
 sumstr[ind1].nobjects = numobjexp
 
 ; Write the output file
+outfile = 'idltest.fits'
 print,'Writing combined catalog to ',outfile
 if file_test(outdir,/directory) eq 0 then file_mkdir,outdir
 if file_test(outdir+'/'+subdir,/directory) eq 0 then file_mkdir,outdir+'/'+subdir
