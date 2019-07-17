@@ -15,7 +15,7 @@ import time
 from argparse import ArgumentParser
 import socket
 
-def add_elements(cat,nnew=300000L):
+def add_elements(cat,nnew=300000):
     """ Add more elements to a catalog"""
     ncat = len(cat)
     old = cat.copy()
@@ -156,7 +156,7 @@ def loadmeas(metafile,buffdict=None,verbose=False):
                 if cat is None:
                     dtype_cat = cat1.dtype
                     cat = np.zeros(np.sum(chmeta['nsources']),dtype=dtype_cat)
-                    catcount = 0L
+                    catcount = 0
                 cat[catcount:catcount+ncat1] = cat1
                 catcount += ncat1
 
@@ -209,12 +209,6 @@ if __name__ == "__main__":
         tmproot = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
 
     t0 = time.time()
-
-    # Not enough inputs
-    n = len(sys.argv)
-    if n < 1:
-        print "Syntax - nsc_instcal_combine pix --version v# --nside ### --redo YES/NO --outdir OUTDIR"
-        sys.exit()
 
     # Check if output file already exists
     if outdir == '': outdir=dir+'combine/'
@@ -292,7 +286,7 @@ if __name__ == "__main__":
     dtype_idstr = np.dtype([('measid',np.str,200),('exposure',np.str,200),('expnum',np.str,200),('objectid',np.str,200),('objectindex',long)])
     idstr = np.zeros(1000000,dtype=dtype_idstr)
     nidstr = len(idstr)
-    idcnt = 0L
+    idcnt = 0
 
     # Initialize the object structure
     dtype_obj = np.dtype([('objectid',np.str,100),('pix',long),('ra',np.float64),('dec',np.float64),('raerr',float),('decerr',float),
@@ -320,7 +314,7 @@ if __name__ == "__main__":
     totobj = np.zeros(nobj,dtype=dtype_totobj)
     totobj['minmjd'] = 999999.0
     totobj['maxmjd'] = -999999.0    
-    cnt = 0L
+    cnt = 0
 
     # New meta-data format
     dtype_meta = np.dtype([('file',np.str,500),('base',np.str,200),('expnum',long),('ra',np.float64),
