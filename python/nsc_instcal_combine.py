@@ -14,6 +14,8 @@ import subprocess
 import time
 from argparse import ArgumentParser
 import socket
+from dustmaps.sfd import SFDQuery
+from astropy.coordinates import SkyCoord
 
 def add_elements(cat,nnew=300000):
     """ Add more elements to a catalog"""
@@ -212,7 +214,7 @@ if __name__ == "__main__":
 
     # Check if output file already exists
     if outdir == '': outdir=dir+'combine/'
-    subdir = str(int(pix)/1000)    # use the thousands to create subdirectory grouping
+    subdir = str(int(pix)//1000)    # use the thousands to create subdirectory grouping
     outfile = outdir+'/'+subdir+'/'+str(pix)+'.fits'
     if (os.path.exists(outfile) or os.path.exists(outfile+'.gz')) and ~redo:
         print(outfile+' EXISTS already and REDO not set')
@@ -224,7 +226,7 @@ if __name__ == "__main__":
     listfile = localdir+'dnidever/nsc/instcal/'+version+'/nsc_healpix_list.fits'
     if os.path.exists(listfile) is False:
         print(listfile+" NOT FOUND")
-        sys.exist()
+        sys.exit()
     healstr = Table(fits.getdata(listfile,1))
     index = Table(fits.getdata(listfile,2))
     # Find our pixel
@@ -283,15 +285,15 @@ if __name__ == "__main__":
     
     # Initialize the ID structure
     # this will contain the MeasID, Exposure name, ObjectID
-    dtype_idstr = np.dtype([('measid',np.str,200),('exposure',np.str,200),('expnum',np.str,200),('objectid',np.str,200),('objectindex',long)])
+    dtype_idstr = np.dtype([('measid',np.str,200),('exposure',np.str,200),('expnum',np.str,200),('objectid',np.str,200),('objectindex',int)])
     idstr = np.zeros(1000000,dtype=dtype_idstr)
     nidstr = len(idstr)
     idcnt = 0
 
     # Initialize the object structure
-    dtype_obj = np.dtype([('objectid',np.str,100),('pix',long),('ra',np.float64),('dec',np.float64),('raerr',float),('decerr',float),
+    dtype_obj = np.dtype([('objectid',np.str,100),('pix',int),('ra',np.float64),('dec',np.float64),('raerr',float),('decerr',float),
                           ('pmra',float),('pmdec',float),('pmraerr',float),('pmdecerr',float),('mjd',np.float64),
-                          ('deltamjd',float),('ndet',long),('nphot',long),
+                          ('deltamjd',float),('ndet',int),('nphot',int),
                           ('ndetu',int),('nphotu',int),('umag',float),('urms',float),('uerr',float),('uasemi',float),('ubsemi',float),('utheta',float),
                           ('ndetg',int),('nphotg',int),('gmag',float),('grms',float),('gerr',float),('gasemi',float),('gbsemi',float),('gtheta',float),
                           ('ndetr',int),('nphotr',int),('rmag',float),('rrms',float),('rerr',float),('rasemi',float),('rbsemi',float),('rtheta',float),
@@ -317,12 +319,12 @@ if __name__ == "__main__":
     cnt = 0
 
     # New meta-data format
-    dtype_meta = np.dtype([('file',np.str,500),('base',np.str,200),('expnum',long),('ra',np.float64),
+    dtype_meta = np.dtype([('file',np.str,500),('base',np.str,200),('expnum',int),('ra',np.float64),
                            ('dec',np.float64),('dateobs',np.str,100),('mjd',np.float64),('filter',np.str,50),
-                           ('exptime',float),('airmass',float),('nsources',long),('fwhm',float),
-                           ('nchips',long),('badchip31',bool),('rarms',float),('decrms',float),
-                           ('ebv',float),('gaianmatch',long),('zpterm',float),('zptermerr',float),
-                           ('refmatch',long)])
+                           ('exptime',float),('airmass',float),('nsources',int),('fwhm',float),
+                           ('nchips',int),('badchip31',bool),('rarms',float),('decrms',float),
+                           ('ebv',float),('gaianmatch',int),('zpterm',float),('zptermerr',float),
+                           ('refmatch',int)])
 
     # Loop over the exposures
     allmeta = None
@@ -528,9 +530,12 @@ if __name__ == "__main__":
     #glactc,obj.ra,obj.dec,2000.0,glon,glat,1,/deg
     #obj['ebv'] = DUST_GETVAL(glon,glat,/noloop,/interp)
     # Use dustmaps package for this
-    #sfd = SFDQuery()
+    import pdb; pdb.set_trace()
+    sfd = SFDQuery()
+    c = SkyCoord(obj['ra'],obj['dec'],frame='icrs',unit='deg')
     #c = SkyCoord('05h00m00.00000s','+30d00m00.0000s', frame='icrs') 
-    #ebv = sfd(c)
+    ebv = sfd(c)
+    obj['ebv'] = ebv
 
     # ONLY INCLUDE OBJECTS WITH AVERAGE RA/DEC
     # WITHIN THE BOUNDARY OF THE HEALPIX PIXEL!!!
@@ -548,7 +553,7 @@ if __name__ == "__main__":
         trimind = np.delete(trimind,ind1)
         #trimind = utils.remove_indices(trimind,ind1)
         trimobj = obj[trimind]          # trimmed objects
-    newobjindex = np.zeros(nobj,long)-1    # new indices
+    newobjindex = np.zeros(nobj,int)-1    # new indices
     newobjindex[ind1] = np.arange(nmatch)
     # Keep the objects inside the Healpix
     obj = obj[ind1]
@@ -568,19 +573,19 @@ if __name__ == "__main__":
     #  get exposures that are in IDSTR
     #  sometimes EXPNUM numbers have the leading 0s removed
     #  and sometimes not, so turn to LONG to match
-    dum, uiexpnum = np.unique(idstr['expnum'].astype(long),return_index=True)
-    uexpnum = idstr[uiexpnum]['expnum'].astype(long)
+    dum, uiexpnum = np.unique(idstr['expnum'].astype(int),return_index=True)
+    uexpnum = idstr[uiexpnum]['expnum'].astype(int)
     nuexpnum = len(uexpnum)
-    ind1,ind2 = utils.match(allmeta['expnum'].astype(long),uexpnum)
+    ind1,ind2 = utils.match(allmeta['expnum'].astype(int),uexpnum)
     nmatch = len(ind1)
     sumstr = Table(allmeta[ind1])
-    col_nobj = Column(name='nobjects', dtype=np.long, length=len(sumstr))
-    col_healpix = Column(name='healpix', dtype=np.long, length=len(sumstr))
+    col_nobj = Column(name='nobjects', dtype=np.int, length=len(sumstr))
+    col_healpix = Column(name='healpix', dtype=np.int, length=len(sumstr))
     sumstr.add_columns([col_nobj, col_healpix])
     sumstr['nobjects'] = 0
     sumstr['healpix'] = pix
     # get number of objects per exposure
-    expnum = idstr['expnum'].astype(long)
+    expnum = idstr['expnum'].astype(int)
     siexp = np.argsort(expnum)
     expnum = expnum[siexp]
     if nuexpnum>1:
@@ -590,7 +595,7 @@ if __name__ == "__main__":
         numobjexp = brkhi-brklo+1
     else:
         numobjexp=len(expnum)
-    ind1,ind2 = utils.match(sumstr['expnum'].astype(long),uexpnum)
+    ind1,ind2 = utils.match(sumstr['expnum'].astype(int),uexpnum)
     nmatch = len(ind1)
     sumstr['nobjects'][ind1] = numobjexp
 
