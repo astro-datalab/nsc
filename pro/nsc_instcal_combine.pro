@@ -759,7 +759,6 @@ MATCH,long(sumstr.expnum),uexpnum,ind1,ind2,/sort,count=nmatch
 sumstr[ind1].nobjects = numobjexp
 
 ; Write the output file
-outfile = 'idltest.fits'
 print,'Writing combined catalog to ',outfile
 if file_test(outdir,/directory) eq 0 then file_mkdir,outdir
 if file_test(outdir+'/'+subdir,/directory) eq 0 then file_mkdir,outdir+'/'+subdir

@@ -344,7 +344,7 @@ if __name__ == "__main__":
         t = Time(meta['dateobs'], format='isot', scale='utc')
         meta['mjd'] = t.mjd                    # recompute because some MJD are bad
         chmeta = fits.getdata(metafile,2)      # chip-level meta-data structure
-        print('  FILTER='+meta['filter']+'  EXPTIME='+str(meta['exptime'])+' sec')
+        print('  FILTER='+meta['filter'][0]+'  EXPTIME='+str(meta['exptime'][0])+' sec')
 
         # Load the measurement catalog
         cat = loadmeas(metafile,buffdict)
@@ -427,39 +427,35 @@ if __name__ == "__main__":
 
     gdet, = np.where(obj['ndet']>1)
     if len(gdet)>0:
-        pmra = np.zeros(nobj,np.float64) + 999999.
-        pmdec = np.zeros(nobj,np.float64) + 999999.
-        pmraerr = np.zeros(nobj,np.float64) + 999999.
-        pmdecerr = np.zeros(nobj,np.float64) + 999999.
-        pmra[gdet] = (obj['pmra'][gdet]/obj['raerr'][gdet]-totobj['ramjd'][gdet]*totobj['ra'][gdet]) / (totobj['ramjd2'][gdet]/obj['raerr'][gdet]-totobj['ramjd'][gdet]**2)   # deg[ra]/day
-        pmra[gdet] *= (3600*1e3)*365.2425     # mas/year
-        pmra[gdet] *= np.cos(obj['dec'][gdet]/radeg)      # mas/year, true angle
-        pmdec[gdet] = (obj['pmdec'][gdet]/obj['decerr'][gdet]-totobj['decmjd'][gdet]*totobj['dec'][gdet])/(totobj['decmjd2'][gdet]/obj['decerr'][gdet]-totobj['decmjd'][gdet]**2)  # deg/day
-        pmdec[gdet] *= (3600*1e3)*365.2425    # mas/year
+        pmra = (obj['pmra'][gdet]/obj['raerr'][gdet]-totobj['ramjd'][gdet]*totobj['ra'][gdet]) / (totobj['ramjd2'][gdet]/obj['raerr'][gdet]-totobj['ramjd'][gdet]**2)   # deg[ra]/day
+        pmra *= (3600*1e3)*365.2425     # mas/year
+        pmra *= np.cos(obj['dec'][gdet]/radeg)      # mas/year, true angle
+        pmdec = (obj['pmdec'][gdet]/obj['decerr'][gdet]-totobj['decmjd'][gdet]*totobj['dec'][gdet])/(totobj['decmjd2'][gdet]/obj['decerr'][gdet]-totobj['decmjd'][gdet]**2)  # deg/day
+        pmdec *= (3600*1e3)*365.2425    # mas/year
         # Proper motion errors
         # pmerr = 1/sqrt( sum(wt*mjd^2) - <mjd>^2 * sum(wt) )
         #   if wt=1/err^2 with err in degrees, but we are using arcsec
         #   Need to divide by 3600 for PMDECERR and 3600*cos(dec) for PMRAERR
-        pmraerr[gdet] = 1.0/np.sqrt( totobj['ramjd2'][gdet] - totobj['ramjd'][gdet]**2 * obj['raerr'][gdet] )
-        pmraerr[gdet] /= (3600*np.cos(totobj['dec'][gdet]/radeg))    # correction for raerr in arcsec
-        pmraerr[gdet] *= (3600*1e3)*365.2425     # mas/year
-        pmraerr[gdet] *= np.cos(obj['dec'][gdet]/radeg)      # mas/year, true angle
-        pmdecerr[gdet] = 1.0/np.sqrt( totobj['decmjd2'][gdet] - totobj['decmjd'][gdet]**2 * obj['decerr'][gdet] )
-        pmdecerr[gdet] /= 3600                   # correction for decerr in arcsec
-        pmdecerr[gdet] *= (3600*1e3)*365.2425    # mas/year
-        obj[gdet]['pmra'] = pmra[gdet]
-        obj[gdet]['pmdec'] = pmdec[gdet]
-        obj[gdet]['pmraerr'] = pmraerr[gdet]
-        obj[gdet]['pmdecerr'] = pmdecerr[gdet]
+        pmraerr = 1.0/np.sqrt( totobj['ramjd2'][gdet] - totobj['ramjd'][gdet]**2 * obj['raerr'][gdet] )
+        pmraerr /= (3600*np.cos(totobj['dec'][gdet]/radeg))    # correction for raerr in arcsec
+        pmraerr *= (3600*1e3)*365.2425     # mas/year
+        pmraerr *= np.cos(obj['dec'][gdet]/radeg)      # mas/year, true angle
+        pmdecerr = 1.0/np.sqrt( totobj['decmjd2'][gdet] - totobj['decmjd'][gdet]**2 * obj['decerr'][gdet] )
+        pmdecerr /= 3600                   # correction for decerr in arcsec
+        pmdecerr *= (3600*1e3)*365.2425    # mas/year
+        obj['pmra'][gdet] = pmra
+        obj['pmdec'][gdet] = pmdec
+        obj['pmraerr'][gdet] = pmraerr
+        obj['pmdecerr'][gdet] = pmdecerr
     # sometimes it happens that the denominator is 0.0 
     #  when there are few closely spaced points
     #  nothing we can do, just mark as bad
     bdet, = np.where((obj['ndet']<2) | ~np.isfinite(obj['pmra']))
     if len(bdet)>0:
-        obj[bdet]['pmra'] = 999999.0
-        obj[bdet]['pmdec'] = 999999.0
-        obj[bdet]['pmraerr'] = 999999.0
-        obj[bdet]['pmdecerr'] = 999999.0
+        obj['pmra'][bdet] = 999999.0
+        obj['pmdec'][bdet] = 999999.0
+        obj['pmraerr'][bdet] = 999999.0
+        obj['pmdecerr'][bdet] = 999999.0
     obj['deltamjd'] = totobj['maxmjd']-totobj['minmjd']
     # Average coordinates
     obj['ra'] = totobj['ra']   # now stuff in the average coordinates
@@ -537,6 +533,10 @@ if __name__ == "__main__":
     print('Getting E(B-V)')
     #glactc,obj.ra,obj.dec,2000.0,glon,glat,1,/deg
     #obj['ebv'] = DUST_GETVAL(glon,glat,/noloop,/interp)
+    # Use dustmaps package for this
+    #sfd = SFDQuery()
+    #c = SkyCoord('05h00m00.00000s','+30d00m00.0000s', frame='icrs') 
+    #ebv = sfd(c)
 
     # ONLY INCLUDE OBJECTS WITH AVERAGE RA/DEC
     # WITHIN THE BOUNDARY OF THE HEALPIX PIXEL!!!
@@ -601,7 +601,6 @@ if __name__ == "__main__":
     sumstr['nobjects'][ind1] = numobjexp
 
     # Write the output file
-    outfile = 'test.fits'
     print('Writing combined catalog to '+outfile)
     if os.path.exists(outdir) is False: os.mkdir(outdir)
     if os.path.exists(outdir+'/'+subdir) is False: os.mkdir(outdir+'/'+subdir)
