@@ -59,7 +59,7 @@ def add_cat(obj,totobj,idstr,idcnt,ind1,cat,meta):
     obj['theta'][ind1] += cat['THETA']
     obj['thetaerr'][ind1] += cat['THETAERR']**2
     obj['fwhm'][ind1] += cat['FWHM']  # in arcsec
-    obj['flags'][ind1] += cat['FLAGS']
+    obj['flags'][ind1] |= cat['FLAGS']    # OR combine
     obj['class_star'][ind1] += cat['CLASS_STAR']
     totobj['ra'][ind1] += cat['RA'] * (1.0/cat['RAERR']**2)             # total(ra*wt)
     totobj['dec'][ind1] += cat['DEC'] * (1.0/cat['DECERR']**2)          # total(dec*wt)
