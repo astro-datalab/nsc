@@ -16,6 +16,7 @@ from argparse import ArgumentParser
 import socket
 from dustmaps.sfd import SFDQuery
 from astropy.coordinates import SkyCoord
+from sklearn.cluster import DBSCAN
 
 def add_elements(cat,nnew=300000):
     """ Add more elements to a catalog"""
@@ -89,84 +90,126 @@ def add_cat(obj,totobj,idstr,idcnt,ind1,cat,meta):
     return obj,totobj,idstr,idcnt
     
 
-def loadmeas(metafile,buffdict=None,verbose=False):
+def loadmeas(metafile=None,buffdict=None,verbose=False):
 
-    if os.path.exists(metafile) is False:
-        print(metafile+' NOT FOUND')
-        return np.array([])
-    meta = fits.getdata(metafile,1)
-    chmeta = fits.getdata(metafile,2)    
+    if metafile is None:
+        print('Need metafile')
+        return np.array([]), np.array([])
 
-    fdir = os.path.dirname(metafile)
-    fbase, ext = os.path.splitext(os.path.basename(metafile))
-    fbase = fbase[:-5]   # remove _meta at end
+    # New meta-data format
+    dtype_meta = np.dtype([('file',np.str,500),('base',np.str,200),('expnum',int),('ra',np.float64),
+                           ('dec',np.float64),('dateobs',np.str,100),('mjd',np.float64),('filter',np.str,50),
+                           ('exptime',float),('airmass',float),('nsources',int),('fwhm',float),
+                           ('nchips',int),('badchip31',bool),('rarms',float),('decrms',float),
+                           ('ebv',float),('gaianmatch',int),('zpterm',float),('zptermerr',float),
+                           ('zptermsig',float),('refmatch',int),('nmeas',int),('catindex',int)])
 
-    # Loop over the chip files
+    #  Loop over exposures
     cat = None
-    for j in range(len(chmeta)):
-        # Check that this chip was astrometrically calibrated
-        #   and falls in to HEALPix region
-        if chmeta[j]['ngaiamatch'] == 0:
-            if verbose: print('This chip was not astrometrically calibrate')
+    allmeta = None
+    catcount = 0
+    metafile = np.atleast_1d(metafile)
+    for m,mfile in enumerate(metafile):
+        expcatcount = 0
+        if os.path.exists(mfile) is False:
+            print(mfile+' NOT FOUND')
+            continue
+        meta = fits.getdata(mfile,1)
+        print(str(m+1)+' Loading '+mfile)
+        t = Time(meta['dateobs'], format='isot', scale='utc')
+        meta['mjd'] = t.mjd                    # recompute because some MJD are bad
+        chmeta = fits.getdata(mfile,2)      # chip-level meta-data structure
+        print('  FILTER='+meta['filter'][0]+'  EXPTIME='+str(meta['exptime'][0])+' sec')
 
-        # Check that this overlaps the healpix region
-        inside = True
-        if buffdict is not None:
-            vra = chmeta[j]['vra']
-            vdec = chmeta[j]['vdec']
-            if (np.max(vra)-np.min(vra)) > 100:    # deal with RA=0 wrapround
-                bd, = np.where(vra>180)
-                if len(bd)>0: vra[bd] -= 360
-            if coords.doPolygonsOverlap(buffdict['ra'],buffdict['dec'],vra,vdec) is False:
-                if verbose: print('This chip does NOT overlap the HEALPix region+buffer')
-                inside = False
+        # Convert META to new format
+        newmeta = np.zeros(1,dtype=dtype_meta)
+        # Copy over the meta information
+        for n in newmeta.dtype.names:
+            if n.upper() in meta.dtype.names: newmeta[n]=meta[n]
+        # Add index in CAT
+        newmeta['catindex'] = catcount
 
-        # Check if the chip-level file exists
-        chfile = fdir+'/'+fbase+'_'+str(chmeta[j]['ccdnum'])+'_meas.fits'
-        if os.path.exists(chfile) is False:
-            print(chfile+' NOT FOUND')
+        # Get the name
+        fdir = os.path.dirname(mfile)
+        fbase, ext = os.path.splitext(os.path.basename(mfile))
+        fbase = fbase[:-5]   # remove _meta at end
+        
+        # Loop over the chip files
+        for j in range(len(chmeta)):
+            # Check that this chip was astrometrically calibrated
+            #   and falls in to HEALPix region
+            if chmeta[j]['ngaiamatch'] == 0:
+                if verbose: print('This chip was not astrometrically calibrate')
 
-        # Load this one
-        if (os.path.exists(chfile) is True) and (inside is True) and (chmeta[j]['ngaiamatch']>1):
-            # Load the chip-level catalog
-            cat1 = fits.getdata(chfile,1)
-            ncat1 = len(cat1)
-            print('  '+str(ncat1)+' sources')
-
-            # Make sure it's in the right format
-            if len(cat1.dtype.fields) != 32:
-                if verbose: print('  This catalog does not have the right format. Skipping')
-                del(cat1)
-                ncat1 = 0
-
-            # Only include sources inside Boundary+Buffer zone
-            #  -use ROI_CUT
-            #  -reproject to tangent plane first so we don't have to deal
-            #     with RA=0 wrapping or pol issues
+            # Check that this overlaps the healpix region
+            inside = True
             if buffdict is not None:
-                lon, lat = coords.rotsphcen(cat1['ra'],cat1['dec'],buffdict['cenra'],buffdict['cendec'],gnomic=True)
-                ind0, ind1 = utils.roi_cut(buffdict['lon'],buffdict['lat'],lon,lat)
-                nmatch = len(ind1)
-                # Only want source inside this pixel
-                if nmatch>0:
-                    cat1 = cat1[ind1]
+                vra = chmeta[j]['vra']
+                vdec = chmeta[j]['vdec']
+                if (np.max(vra)-np.min(vra)) > 100:    # deal with RA=0 wrapround
+                    bd, = np.where(vra>180)
+                    if len(bd)>0: vra[bd] -= 360
+                if coords.doPolygonsOverlap(buffdict['ra'],buffdict['dec'],vra,vdec) is False:
+                    if verbose: print('This chip does NOT overlap the HEALPix region+buffer')
+                    inside = False
+
+            # Check if the chip-level file exists
+            chfile = fdir+'/'+fbase+'_'+str(chmeta[j]['ccdnum'])+'_meas.fits'
+            if os.path.exists(chfile) is False:
+                print(chfile+' NOT FOUND')
+
+            # Load this one
+            if (os.path.exists(chfile) is True) and (inside is True) and (chmeta[j]['ngaiamatch']>1):
+                # Load the chip-level catalog
+                cat1 = fits.getdata(chfile,1)
                 ncat1 = len(cat1)
-                if verbose: print('  '+str(nmatch)+' sources are inside this pixel')
+                print('  '+str(ncat1)+' sources')
 
-            # Combine the catalogs
-            if ncat1 > 0:
-                if cat is None:
-                    dtype_cat = cat1.dtype
-                    cat = np.zeros(np.sum(chmeta['nsources']),dtype=dtype_cat)
-                    catcount = 0
-                cat[catcount:catcount+ncat1] = cat1
-                catcount += ncat1
+                # Make sure it's in the right format
+                if len(cat1.dtype.fields) != 32:
+                    if verbose: print('  This catalog does not have the right format. Skipping')
+                    del(cat1)
+                    ncat1 = 0
 
-              #BOMB1:
+                # Only include sources inside Boundary+Buffer zone
+                #  -use ROI_CUT
+                #  -reproject to tangent plane first so we don't have to deal
+                #     with RA=0 wrapping or pol issues
+                if buffdict is not None:
+                    lon, lat = coords.rotsphcen(cat1['ra'],cat1['dec'],buffdict['cenra'],buffdict['cendec'],gnomic=True)
+                    ind0, ind1 = utils.roi_cut(buffdict['lon'],buffdict['lat'],lon,lat)
+                    nmatch = len(ind1)
+                    # Only want source inside this pixel
+                    if nmatch>0:
+                        cat1 = cat1[ind1]
+                    ncat1 = len(cat1)
+                    if verbose: print('  '+str(nmatch)+' sources are inside this pixel')
+
+                # Combine the catalogs
+                if ncat1 > 0:
+                    if cat is None:
+                        dtype_cat = cat1.dtype
+                        cat = np.zeros(np.sum(chmeta['nsources']),dtype=dtype_cat)
+                        catcount = 0
+                    cat[catcount:catcount+ncat1] = cat1
+                    catcount += ncat1
+                    expcatcount += ncat1
+
+        # Add total number of measurements for this exposure
+        newmeta['nmeas'] = expcatcount
+        # Add metadata to ALLMETA, only if some measurements overlap
+        if expcatcount>0:
+            if allmeta is None:
+                allmeta = newmeta
+            else:
+                allmeta = np.hstack((allmeta,newmeta))
+            
+
     if cat is not None: cat=cat[0:catcount]  # trim excess
     if cat is None: cat=np.array([])         # empty cat
+    if allmeta is None: allmeta=np.array([])
 
-    return cat
+    return cat, allmeta
     
 
 # Combine data for one NSC healpix region
@@ -314,95 +357,96 @@ if __name__ == "__main__":
     totobj['maxmjd'] = -999999.0    
     cnt = 0
 
-    # New meta-data format
-    dtype_meta = np.dtype([('file',np.str,500),('base',np.str,200),('expnum',int),('ra',np.float64),
-                           ('dec',np.float64),('dateobs',np.str,100),('mjd',np.float64),('filter',np.str,50),
-                           ('exptime',float),('airmass',float),('nsources',int),('fwhm',float),
-                           ('nchips',int),('badchip31',bool),('rarms',float),('decrms',float),
-                           ('ebv',float),('gaianmatch',int),('zpterm',float),('zptermerr',float),
-                           ('zptermsig',float),('refmatch',int)])
 
-    # Loop over the exposures
-    allmeta = None
-    for i in range(nhlist):
-        print(str(i+1)+' Loading '+hlist[i]['FILE'])
+    # Load the measurement catalog
+    metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
+    cat, allmeta = loadmeas(metafiles,buffdict)
+    ncat = utils.size(cat)
+    # currently ALLMETA includes exposures with no measurements in this healpix!!!
 
-        # Load meta data file first
-        metafile = hlist[i]['FILE'].replace('_cat','_meta').strip()
-        if os.path.exists(metafile) is False:
-            print(metafile+' NOT FOUND')
-            #goto,BOMB
-        meta = fits.getdata(metafile,1)
-        t = Time(meta['dateobs'], format='isot', scale='utc')
-        meta['mjd'] = t.mjd                    # recompute because some MJD are bad
-        chmeta = fits.getdata(metafile,2)      # chip-level meta-data structure
-        print('  FILTER='+meta['filter'][0]+'  EXPTIME='+str(meta['exptime'][0])+' sec')
+    # coordinates of measurement
+    X = np.column_stack((np.array(cat['RA']),np.array(cat['DEC'])))
+    # Compute DBSCAN on all measurements
+    db = DBSCAN(eps=0.5/3600, min_samples=1).fit(X)
+    labelindex = utils.create_index(db.labels_)
+    nobj = len(labelindex['value'])
+    print(str(nobj)+' unique objects clustered within 0.5 arcsec')
 
-        # Load the measurement catalog
-        cat = loadmeas(metafile,buffdict)
-        ncat = utils.size(cat)
-        if ncat==0:
-            print('This exposure does NOT cover the HEALPix')
-            continue      # go to next exposure
+    # Loop over the objects
+    obj = np.zeros(nobj,dtype=dtype_obj)
+    obj['objectid'] = utils.strjoin( str(pix)+'.', ((np.arange(nobj)+1).astype(np.str)) )
+    obj['pix'] = pix
+    for i,lab in enumerate(labelindex['value']):
+        oindx = labelindex['index'][labelindex['lo'][i]:labelindex['hi'][i]+1]
+        cat1 = cat[oindx]
+        ncat1 = len(cat1)
 
-        # Add metadata to ALLMETA
-        #  Make sure it's in the right format
-        newmeta = np.zeros(1,dtype=dtype_meta)
-        # Copy over the meta information
-        for n in newmeta.dtype.names:
-            if n.upper() in meta.dtype.names: newmeta[n]=meta[n]
-        if allmeta is None:
-            allmeta = newmeta
+        import pdb; pdb.set_trace()
+    
+        # Computing quantities
+        # Mean RA/DEC, RAERR/DECERR
+        if ncat1>1:
+            obj['ra'][i] = meanra
+            obj['raerr'][i] = meanra_err
+            obj['dec'][i] = meandec
+            obj['raerr'][i] = meandec_err
         else:
-            allmeta = np.hstack((allmeta,newmeta))
+            obj['ra'][i] = cat1['RA']
+            obj['dec'][i] = cat1['DEC']
+            obj['raerr'][i] = cat1['RAERR']
+            obj['decerr'][i] = cat1['DECERR']
 
-        # Combine the data
-        #-----------------
-        # First catalog
-        if cnt==0:
-            ind1 = np.arange(len(cat))
-            obj['objectid'][ind1] = utils.strjoin( str(pix)+'.', ((np.arange(ncat)+1).astype(np.str)) )
-            obj,totobj,idstr,idcnt = add_cat(obj,totobj,idstr,idcnt,ind1,cat,meta)
-            cnt += ncat
+        # Mean proper motion and errors
+        # fit robust line to RA values vs. time
 
-        # Second and up
-        else:
-            #  Match new sources to the objects
-            ind1,ind2,dist = coords.xmatch(obj[0:cnt]['ra'],obj[0:cnt]['dec'],cat['RA'],cat['DEC'],0.5)
-            nmatch = len(ind1)
-            print('  '+str(nmatch)+' matched sources')
-            #  Some matches, add data to existing record for these sources
-            if nmatch>0:
-                obj,totobj,idstr,idcnt = add_cat(obj,totobj,idstr,idcnt,ind1,cat[ind2],meta)
-                if nmatch<ncat:
-                    cat = np.delete(cat,ind2)
-                    ncat = len(cat)
-                else:
-                    cat = np.array([])
-                    ncat = 0
+        # Mean magnitudes
+        # Convert totalwt and totalfluxwt to MAG and ERR
+        #  and average the morphology parameters PER FILTER
+        filtindex = utils.create_index(cat1['FILTER'])
+        nfilters = len(filtindex['value'])
+        #filters = np.unique(cat1['FILTER'])
+        #filters = ['u','g','r','i','z','y','vr']
+        for f in arange(nfilters):
+            filt = filtindex['value'][f].lower()
+            findx = filtindex['index'][filtindex['lo'][f]:filtindex['hi'][f]+1]
+            obj['ndet'+filt][i] = filtindex['num'][f]
+            gph, = np.where(cat['MAG_AUTO'][findx]<50)
+            ngph = len(gph)
+            obj['nphot'+filt][i] = ngph
+            if ngph>0:
+                wt = 1.0/cat1['MAGERR_AUTO'][findx[gph]]**2
+                newflux = np.sum( 2.5118864**cat1['MAG_AUTO'][findx[gph]] * wt) / np.sum(wt)
+                newmag = 2.50*np.log10(newflux)
+                newerr = np.sqrt(1.0/np.sum(wt))
+                obj[filt+'mag'][i] = newmag
+                obj[filt+'err'][i] = newerr
+                # Calculate RMS
+                if ngph>1: obj[filt+'rms'][i] = np.sqrt(np.mean((cat1['MAG_AUTO'][findx[gph]]-newmag)**2))
+            else:
+                obj[filt+'mag'][i] = 99.99
+                obj[filt+'err'][i] = 9.99
+            # Calculate mean morphology parameters
+            obj[filt+'asemi'][i] = np.mean(cat1['ASEMI'][findx])
+            obj[filt+'bsemi'][i] = np.mean(cat1['BSEMI'][findx])
+            obj[filt+'theta'][i] = np.mean(cat1['THETA'][findx])
+            
+        # Make NPHOT from NPHOTX
+        obj['nphot'][i] = obj['nphotu'][i]+obj['nphotg'][i]+obj['nphotr'][i]+obj['nphoti'][i]+obj['nphotz'][i]+obj['nphoty'][i]+obj['nphotvr'][i]
 
-            # Some left, add records for these sources
-            if ncat>0:
-                print('  '+str(ncat)+' sources left to add')
-                # Add new elements
-                if (cnt+ncat)>nobj:
-                    obj = add_elements(obj)
-                    nobj = len(obj)
-                ind1 = np.arange(ncat)+cnt
-                obj['objectid'][ind1] = utils.strjoin( str(pix)+'.', ((np.arange(ncat)+1+cnt).astype(np.str)) )
-                obj,totobj,idstr,idcnt = add_cat(obj,totobj,idstr,idcnt,ind1,cat,meta)
-                cnt += ncat
+        # Mean morphology parameters
+        obj['asemi'][i] = np.mean(cat1['ASEMI'])
+        obj['bsemi'][i] = np.mean(cat1['BSEMI'])
+        obj['theta'][i] = np.mean(cat1['THETA'])
+        obj['asemierr'][i] = np.sqrt(np.sum(cat1['ASEMIERR']**2)) / ncat1
+        obj['bsemierr'][i] = np.sqrt(np.sum(cat1['BSEMIERR']**2)) / ncat1
+        obj['thetaerr'][i] = np.sqrt(np.sum(cat1['THETAERR']**2)) / ncat1
+        obj['fwhm'][i] = np.mean(cat1['FWHM'])
+        obj['class_star'][i] = np.mean(cat['CLASS_STAR'])
 
-    # No sources
-    if cnt==0:
-        print('No sources in this pixel')
-        sys.exit()
-    # Trim off the excess elements
-    obj = obj[0:cnt]
-    totobj = totobj[0:cnt]
-    nobj = len(obj)
-    print(str(nobj)+' final objects')
-    idstr = idstr[0:idcnt]
+        # Stuff information into IDSTR
+
+    import pdb; pdb.set_trace()
+
 
     # Make NPHOT from NPHOTX
     obj['nphot'] = obj['nphotu']+obj['nphotg']+obj['nphotr']+obj['nphoti']+obj['nphotz']+obj['nphoty']+obj['nphotvr']
