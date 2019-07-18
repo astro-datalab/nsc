@@ -175,7 +175,7 @@ if __name__ == "__main__":
     parser.add_argument('pix', type=str, nargs=1, help='HEALPix pixel number')
     parser.add_argument('--version', type=str, default='v3', help='Version number')
     parser.add_argument('--nside', type=int, default=128, help='HEALPix Nside')
-    parser.add_argument('--redo', type=str, default='No', help='Redo this HEALPIX')
+    parser.add_argument('-r','--redo', action='store_true', help='Redo this HEALPIX')
     parser.add_argument('--outdir', type=str, default='', help='Output directory')
     #parser.add_argument('--filesexist', type=float, default=0.2, help='Time to wait between checking the status of running jobs')
     #parser.add_argument('--pixfiles', type=str, default=False, help='IDL program')
@@ -191,10 +191,6 @@ if __name__ == "__main__":
     version = args.version
     nside = args.nside
     redo = args.redo
-    if ((redo=='True') or (redo=='TRUE') or (redo=='Yes') or (redo=='YES') or (redo=='Y') or (redo=='y')):
-        redo = True
-    else:
-        redo = False
     outdir = args.outdir
 
     # on thing/hulk use
@@ -216,7 +212,7 @@ if __name__ == "__main__":
     if outdir == '': outdir=dir+'combine/'
     subdir = str(int(pix)//1000)    # use the thousands to create subdirectory grouping
     outfile = outdir+'/'+subdir+'/'+str(pix)+'.fits'
-    if (os.path.exists(outfile) or os.path.exists(outfile+'.gz')) and ~redo:
+    if (os.path.exists(outfile) or os.path.exists(outfile+'.gz')) & ~redo:
         print(outfile+' EXISTS already and REDO not set')
         sys.exit()
 
@@ -527,10 +523,6 @@ if __name__ == "__main__":
 
     # Add E(B-V)
     print('Getting E(B-V)')
-    #glactc,obj.ra,obj.dec,2000.0,glon,glat,1,/deg
-    #obj['ebv'] = DUST_GETVAL(glon,glat,/noloop,/interp)
-    # Use dustmaps package for this
-    import pdb; pdb.set_trace()
     sfd = SFDQuery()
     c = SkyCoord(obj['ra'],obj['dec'],frame='icrs',unit='deg')
     #c = SkyCoord('05h00m00.00000s','+30d00m00.0000s', frame='icrs') 
