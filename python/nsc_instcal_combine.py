@@ -201,7 +201,7 @@ if __name__ == "__main__":
         tmproot = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
     # on gp09 use
     if (host == "gp09") or (host == "gp08") or (host == "gp07") or (host == "gp06") or (host == "gp05"):
-        dir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"?"
+        dir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"/"
         mssdir = "/net/mss1/"
         localdir = "/data0/"
         tmproot = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
@@ -320,7 +320,7 @@ if __name__ == "__main__":
                            ('exptime',float),('airmass',float),('nsources',int),('fwhm',float),
                            ('nchips',int),('badchip31',bool),('rarms',float),('decrms',float),
                            ('ebv',float),('gaianmatch',int),('zpterm',float),('zptermerr',float),
-                           ('refmatch',int)])
+                           ('zptermsig',float),('refmatch',int)])
 
     # Loop over the exposures
     allmeta = None
@@ -361,8 +361,8 @@ if __name__ == "__main__":
         # First catalog
         if cnt==0:
             ind1 = np.arange(len(cat))
-            obj,totobj,idstr,idcnt = add_cat(obj,totobj,idstr,idcnt,ind1,cat,meta)
             obj['objectid'][ind1] = utils.strjoin( str(pix)+'.', ((np.arange(ncat)+1).astype(np.str)) )
+            obj,totobj,idstr,idcnt = add_cat(obj,totobj,idstr,idcnt,ind1,cat,meta)
             cnt += ncat
 
         # Second and up
@@ -389,8 +389,8 @@ if __name__ == "__main__":
                     obj = add_elements(obj)
                     nobj = len(obj)
                 ind1 = np.arange(ncat)+cnt
-                obj,totobj,idstr,idcnt = add_cat(obj,totobj,idstr,idcnt,ind1,cat,meta)
                 obj['objectid'][ind1] = utils.strjoin( str(pix)+'.', ((np.arange(ncat)+1+cnt).astype(np.str)) )
+                obj,totobj,idstr,idcnt = add_cat(obj,totobj,idstr,idcnt,ind1,cat,meta)
                 cnt += ncat
 
     # No sources
