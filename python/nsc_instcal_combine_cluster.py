@@ -41,7 +41,7 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
                            ('exptime',float),('airmass',float),('nsources',int),('fwhm',float),
                            ('nchips',int),('badchip31',bool),('rarms',float),('decrms',float),
                            ('ebv',float),('gaianmatch',int),('zpterm',float),('zptermerr',float),
-                           ('zptermsig',float),('refmatch',int),('nmeas',int),('catindex',int)])
+                           ('zptermsig',float),('refmatch',int)])
 
     #  Loop over exposures
     cat = None
@@ -65,8 +65,6 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
         # Copy over the meta information
         for n in newmeta.dtype.names:
             if n.upper() in meta.dtype.names: newmeta[n]=meta[n]
-        # Add index in CAT
-        newmeta['catindex'] = catcount
 
         # Get the name
         fdir = os.path.dirname(mfile)
@@ -134,8 +132,6 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
                     catcount += ncat1
                     expcatcount += ncat1
 
-        # Add total number of measurements for this exposure
-        newmeta['nmeas'] = expcatcount
         # Add metadata to ALLMETA, only if some measurements overlap
         if expcatcount>0:
             if allmeta is None:
