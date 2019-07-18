@@ -27,69 +27,7 @@ def add_elements(cat,nnew=300000):
     cat = np.zeros(ncat+nnew,dtype=old.dtype)
     cat[0:ncat] = old
     del(old)
-    return cat
-    
-def add_cat(obj,totobj,idstr,idcnt,ind1,cat,meta):
-    """ Add object information from a new meas catalog of matched objects"""
-
-    ncat = len(cat)
-    f = meta['filter'].lower().strip()[0]
-    # Copy to final structure
-    obj['ra'][ind1] = cat['RA']
-    obj['dec'][ind1] = cat['DEC']
-    obj['raerr'][ind1] += 1.0/cat['RAERR']**2                           # total(ra_wt)
-    obj['decerr'][ind1] += 1.0/cat['DECERR']**2                         # total(dec_wt)
-    obj['pmra'][ind1] += (1.0/cat['RAERR']**2) * meta['mjd']*cat['RA']     # total(wt*mjd*ra)
-    obj['pmdec'][ind1] += (1.0/cat['DECERR']**2) * meta['mjd']*cat['DEC']  # total(wt*mjd*dec)
-    obj['mjd'][ind1] += meta['mjd']                                 # total(mjd)
-    obj['ndet'][ind1] += 1
-    # Detection and morphology parameters for this FILTER
-    obj['ndet'+f][ind1] += 1
-    obj[f+'asemi'][ind1] += cat['ASEMI']
-    obj[f+'bsemi'][ind1] += cat['BSEMI']
-    obj[f+'theta'][ind1] += cat['THETA']
-    # Good photometry for this FILTER
-    gdmag, = np.where(cat['MAG_AUTO']<50)
-    if len(gdmag)>0:
-      obj[f+'mag'][ind1[gdmag]] += 2.5118864**cat['MAG_AUTO'][gdmag] * (1.0/cat['MAGERR_AUTO'][gdmag]**2)
-      obj[f+'err'][ind1[gdmag]] += 1.0/cat['MAGERR_AUTO'][gdmag]**2
-      obj['nphot'+f][ind1[gdmag]] += 1
-    obj['asemi'][ind1] += cat['ASEMI']
-    obj['asemierr'][ind1] += cat['ASEMIERR']**2
-    obj['bsemi'][ind1] += cat['BSEMI']
-    obj['bsemierr'][ind1] += cat['BSEMIERR']**2
-    obj['theta'][ind1] += cat['THETA']
-    obj['thetaerr'][ind1] += cat['THETAERR']**2
-    obj['fwhm'][ind1] += cat['FWHM']  # in arcsec
-    obj['flags'][ind1] += cat['FLAGS']
-    obj['class_star'][ind1] += cat['CLASS_STAR']
-    totobj['ra'][ind1] += cat['RA'] * (1.0/cat['RAERR']**2)             # total(ra*wt)
-    totobj['dec'][ind1] += cat['DEC'] * (1.0/cat['DECERR']**2)          # total(dec*wt)
-    totobj['ramjd'][ind1] += (1.0/cat['RAERR']**2) * meta['mjd']        # total(wt_ra*mjd)
-    totobj['decmjd'][ind1] += (1.0/cat['DECERR']**2) * meta['mjd']      # total(wt_dec*mjd)
-    totobj['ramjd2'][ind1] += (1.0/cat['RAERR']**2) * meta['mjd']**2    # total(wt_ra*mjd**2)
-    totobj['decmjd2'][ind1] += (1.0/cat['DECERR']**2) * meta['mjd']**2  # total(wt_dec*mjd**2)
-    totobj['minmjd'][ind1] = np.minimum( meta['mjd'][0], totobj['minmjd'][ind1] )
-    totobj['maxmjd'][ind1] = np.maximum( meta['mjd'][0], totobj['maxmjd'][ind1] )
-    if len(gdmag)>0:
-        totobj[f+'tot'][ind1[gdmag]] += cat['MAG_AUTO'][gdmag]       # sum(mag)
-        totobj[f+'mag2'][ind1[gdmag]] += np.float64(cat['MAG_AUTO'][gdmag])**2   # sum(mag**2), need dbl to precent underflow
-
-    # Add new elements to IDSTR
-    if idcnt+ncat > len(idstr):
-        idstr = add_elements(idstr)
-        nidstr = len(idstr)
-
-    # Add to IDSTR
-    idstr['measid'][idcnt:idcnt+ncat] = cat['MEASID']
-    idstr['exposure'][idcnt:idcnt+ncat] = meta['base']
-    idstr['expnum'][idcnt:idcnt+ncat] = meta['expnum']
-    idstr['objectid'][idcnt:idcnt+ncat] = obj[ind1]['objectid']
-    idstr['objectindex'][idcnt:idcnt+ncat] = ind1
-    idcnt += ncat
-
-    return obj,totobj,idstr,idcnt
-    
+    return cat    
 
 def loadmeas(metafile=None,buffdict=None,verbose=False):
 
@@ -190,7 +128,7 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
                 if ncat1 > 0:
                     if cat is None:
                         dtype_cat = cat1.dtype
-                        cat = np.zeros(np.sum(chmeta['nsources']),dtype=dtype_cat)
+                        cat = np.zeros(np.sum(chmeta['nsources'])*utils.size(metafile),dtype=dtype_cat)
                         catcount = 0
                     cat[catcount:catcount+ncat1] = cat1
                     catcount += ncat1
@@ -323,14 +261,10 @@ if __name__ == "__main__":
                 'lon':lonbuff,'lat':latbuff,'lr':utils.minmax(lonbuff),'br':utils.minmax(latbuff)}
 
     
-    # Initialize the ID structure
-    # this will contain the MeasID, Exposure name, ObjectID
-    dtype_idstr = np.dtype([('measid',np.str,200),('exposure',np.str,200),('expnum',np.str,200),('objectid',np.str,200),('objectindex',int)])
-    idstr = np.zeros(1000000,dtype=dtype_idstr)
-    nidstr = len(idstr)
-    idcnt = 0
+    # IDSTR schema
+    dtype_idstr = np.dtype([('measid',np.str,200),('exposure',np.str,200),('objectid',np.str,200),('objectindex',int)])
 
-    # Initialize the object structure
+    # OBJ schema
     dtype_obj = np.dtype([('objectid',np.str,100),('pix',int),('ra',np.float64),('dec',np.float64),('raerr',float),('decerr',float),
                           ('pmra',float),('pmdec',float),('pmraerr',float),('pmdecerr',float),('mjd',np.float64),
                           ('deltamjd',float),('ndet',int),('nphot',int),
@@ -343,27 +277,12 @@ if __name__ == "__main__":
                           ('ndetvr',int),('nphotvr',int),('vrmag',float),('vrrms',float),('vrerr',float),('vrasemi',float),('vrbsemi',float),('vrtheta',float),
                           ('asemi',float),('asemierr',float),('bsemi',float),('bsemierr',float),('theta',float),('thetaerr',float),
                           ('fwhm',float),('flags',int),('class_star',float),('ebv',float)])
-    tags = dtype_obj.names
-    obj = np.zeros(500000,dtype=dtype_obj)
-    obj['pix'] = pix
-    nobj = len(obj)
-    dtype_totobj = np.dtype([('ra',np.float64),('dec',np.float64),('ramjd',np.float64),('decmjd',np.float64),('ramjd2',np.float64),
-                             ('decmjd2',np.float64),('minmjd',np.float64),('maxmjd',np.float64),('umag2',np.float64),('gmag2',np.float64),
-                             ('rmag2',np.float64),('imag2',np.float64),('zmag2',np.float64),('ymag2',np.float64),('vrmag2',np.float64),
-                             ('utot',np.float64),('gtot',np.float64),('rtot',np.float64),('itot',np.float64),('ztot',np.float64),
-                             ('ytot',np.float64),('vrtot',np.float64)])
-    totags = dtype_totobj.names
-    totobj = np.zeros(nobj,dtype=dtype_totobj)
-    totobj['minmjd'] = 999999.0
-    totobj['maxmjd'] = -999999.0    
-    cnt = 0
-
 
     # Load the measurement catalog
     metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
     cat, allmeta = loadmeas(metafiles,buffdict)
     ncat = utils.size(cat)
-    # currently ALLMETA includes exposures with no measurements in this healpix!!!
+
 
     # coordinates of measurement
     X = np.column_stack((np.array(cat['RA']),np.array(cat['DEC'])))
@@ -386,6 +305,7 @@ if __name__ == "__main__":
         obj[f+'asemi'] = np.nan
         obj[f+'bsemi'] = np.nan
         obj[f+'theta'] = np.nan
+    idstr = np.zeros(ncat,dtype=dtype_idstr)
 
     # Loop over the objects
     for i,lab in enumerate(labelindex['value']):
@@ -395,15 +315,21 @@ if __name__ == "__main__":
         ncat1 = len(cat1)
         obj['ndet'][i] = ncat1
 
+        # Add in IDSTR information
+        idstr['measid'][oindx] = cat1['MEASID']
+        idstr['exposure'][oindx] = cat1['EXPOSURE']
+        idstr['objectid'][oindx] = obj['objectid'][i]
+        idstr['objectindex'][oindx] = i
+
         # Computing quantities
         # Mean RA/DEC, RAERR/DECERR
         if ncat1>1:
             wt_ra = 1.0/cat1['RAERR']**2
             wt_dec = 1.0/cat1['DECERR']**2
             obj['ra'][i] = np.sum(cat1['RA']*wt_ra)/np.sum(wt_ra)
-            obj['raerr'][i] = np.sum(1.0/np.sum(wt_ra))
+            obj['raerr'][i] = np.sqrt(1.0/np.sum(wt_ra))
             obj['dec'][i] = np.sum(cat1['DEC']*wt_dec)/np.sum(wt_dec)
-            obj['raerr'][i] = np.sum(1.0/np.sum(wt_dec))
+            obj['decerr'][i] = np.sqrt(1.0/np.sum(wt_dec))
             obj['mjd'][i] = np.mean(cat1['MJD'])
             obj['deltamjd'][i] = np.max(cat1['MJD'])-np.min(cat1['MJD'])
         else:
@@ -420,7 +346,6 @@ if __name__ == "__main__":
         # Mean proper motion and errors
         # fit robust line to RA values vs. time
         if ncat1>1:
-            #raerr = cat1['RAERR'] / (3600*np.cos(obj['dec'][i]/radeg))   # convert to arcsec (true angle) to RA deg
             raerr = np.array(cat1['RAERR']*1e3,np.float64)    # milli arcsec
             ra = np.array(cat1['RA'],np.float64)
             ra -= np.mean(ra)
@@ -430,16 +355,8 @@ if __name__ == "__main__":
             ra_coef, ra_coeferr = utils.poly_fit(t,ra,1,sigma=raerr,robust=True)
             pmra = ra_coef[0] * 365.2425           # mas/year
             pmraerr = ra_coeferr[0] * 365.2425     # mas/yr
-            #ra_coef, ra_coeferr = utils.poly_fit(cat1['MJD'],cat1['RA'],1,sigma=raerr,robust=True)
-            #pmra = ra_coef[0]                      # deg[ra]/day
-            #pmra *= (3600*1e3)*365.2425            # mas/year
-            #pmra *= np.cos(obj['dec'][i]/radeg)    # mas/year, true angle
-            #pmraerr = ra_coeferr[0]                # deg[ra]/day
-            #pmraerr *= (3600*1e3)*365.2425         # mas/year
-            #pmraerr *= np.cos(obj['dec'][i]/radeg) # mas/year, true angle
             obj['pmra'][i] = pmra
             obj['pmraerr'][i] = pmraerr
-
             decerr = np.array(cat1['DECERR']*1e3,np.float64)   # milli arcsec
             dec = np.array(cat1['DEC'],np.float64)
             dec -= np.mean(dec)
@@ -447,12 +364,6 @@ if __name__ == "__main__":
             dec_coef, dec_coeferr = utils.poly_fit(t,dec,1,sigma=decerr,robust=True)
             pmdec = dec_coef[0] * 365.2425          # mas/year
             pmdecerr = dec_coeferr[0] * 365.2425    # mas/year
-            #decerr = cat1['DECERR'] / 3600.0       # convert from arcsec to deg
-            #dec_coef, dec_coeferr = utils.poly_fit(cat1['MJD'],cat1['DEC'],1,sigma=decerr,robust=True)
-            #pmdec = dec_coef[0]                    # deg[dec]/day
-            #pmdec *= (3600*1e3)*365.2425           # mas/year
-            #pmdecerr = dec_coeferr[0]             # deg[dec]/day
-            #pmdecerr *= (3600*1e3)*365.2425        # mas/year
             obj['pmdec'][i] = pmdec
             obj['pmdecerr'][i] = pmdecerr
 
@@ -478,16 +389,10 @@ if __name__ == "__main__":
                 # Calculate RMS
                 if ngph>1: obj[filt+'rms'][i] = np.sqrt(np.mean((cat1['MAG_AUTO'][findx[gph]]-newmag)**2))
 
-            #import pdb; pdb.set_trace()
-
             # Calculate mean morphology parameters
             obj[filt+'asemi'][i] = np.mean(cat1['ASEMI'][findx])
             obj[filt+'bsemi'][i] = np.mean(cat1['BSEMI'][findx])
             obj[filt+'theta'][i] = np.mean(cat1['THETA'][findx])
-            
-            #import pdb; pdb.set_trace()
-
-        #import pdb; pdb.set_trace()
 
         # Make NPHOT from NPHOTX
         obj['nphot'][i] = obj['nphotu'][i]+obj['nphotg'][i]+obj['nphotr'][i]+obj['nphoti'][i]+obj['nphotz'][i]+obj['nphoty'][i]+obj['nphotvr'][i]
@@ -500,9 +405,8 @@ if __name__ == "__main__":
         obj['bsemierr'][i] = np.sqrt(np.sum(cat1['BSEMIERR']**2)) / ncat1
         obj['thetaerr'][i] = np.sqrt(np.sum(cat1['THETAERR']**2)) / ncat1
         obj['fwhm'][i] = np.mean(cat1['FWHM'])
-        obj['class_star'][i] = np.mean(cat['CLASS_STAR'])
-
-        # Stuff information into IDSTR
+        obj['class_star'][i] = np.mean(cat1['CLASS_STAR'])
+        obj['flags'][i] = np.bitwise_or.reduce(cat1['FLAGS'])  # OR combine
 
 
     # Add E(B-V)
@@ -513,7 +417,7 @@ if __name__ == "__main__":
     ebv = sfd(c)
     obj['ebv'] = ebv
 
-    import pdb; pdb.set_trace()
+    #import pdb; pdb.set_trace()
 
     # ONLY INCLUDE OBJECTS WITH AVERAGE RA/DEC
     # WITHIN THE BOUNDARY OF THE HEALPIX PIXEL!!!
@@ -551,10 +455,10 @@ if __name__ == "__main__":
     #  get exposures that are in IDSTR
     #  sometimes EXPNUM numbers have the leading 0s removed
     #  and sometimes not, so turn to LONG to match
-    dum, uiexpnum = np.unique(idstr['expnum'].astype(int),return_index=True)
-    uexpnum = idstr[uiexpnum]['expnum'].astype(int)
-    nuexpnum = len(uexpnum)
-    ind1,ind2 = utils.match(allmeta['expnum'].astype(int),uexpnum)
+    dum, uiexposure = np.unique(idstr['exposure'],return_index=True)
+    uexposure = idstr['exposure'][uiexposure]
+    nuexposure = len(uexposure)
+    ind1,ind2 = utils.match(allmeta['base'],uexposure)
     nmatch = len(ind1)
     sumstr = Table(allmeta[ind1])
     col_nobj = Column(name='nobjects', dtype=np.int, length=len(sumstr))
@@ -563,17 +467,17 @@ if __name__ == "__main__":
     sumstr['nobjects'] = 0
     sumstr['healpix'] = pix
     # get number of objects per exposure
-    expnum = idstr['expnum'].astype(int)
-    siexp = np.argsort(expnum)
-    expnum = expnum[siexp]
-    if nuexpnum>1:
-        brklo, = np.where(expnum != np.roll(expnum,1))
+    exposure = idstr['exposure']
+    siexp = np.argsort(exposure)
+    exposure = exposure[siexp]
+    if nuexposure>1:
+        brklo, = np.where(exposure != np.roll(exposure,1))
         nbrk = len(brklo)
-        brkhi = np.hstack((brklo[1:nbrk],len(expnum)))
+        brkhi = np.hstack((brklo[1:nbrk],len(exposure)))
         numobjexp = brkhi-brklo+1
     else:
-        numobjexp=len(expnum)
-    ind1,ind2 = utils.match(sumstr['expnum'].astype(int),uexpnum)
+        numobjexp=len(exposure)
+    ind1,ind2 = utils.match(sumstr['base'],uexposure)
     nmatch = len(ind1)
     sumstr['nobjects'][ind1] = numobjexp
 
