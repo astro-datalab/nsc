@@ -373,15 +373,28 @@ if __name__ == "__main__":
     nobj = len(labelindex['value'])
     print(str(nobj)+' unique objects clustered within 0.5 arcsec')
 
-    # Loop over the objects
+    # Initialize the OBJ structured arra
     obj = np.zeros(nobj,dtype=dtype_obj)
     obj['objectid'] = utils.strjoin( str(pix)+'.', ((np.arange(nobj)+1).astype(np.str)) )
     obj['pix'] = pix
+    # all bad to start
+    for f in ['pmra','pmraerr','pmdec','pmdecerr','asemi','bsemi','theta','asemierr','bsemierr','thetaerr','fwhm','class_star']: obj[f]=np.nan
+    for f in ['u','g','r','i','z','y','vr']:
+        obj[f+'mag'] = 99.99
+        obj[f+'err'] = 9.99
+        obj[f+'rms'] = np.nan
+        obj[f+'asemi'] = np.nan
+        obj[f+'bsemi'] = np.nan
+        obj[f+'theta'] = np.nan
+
+    # Loop over the objects
     for i,lab in enumerate(labelindex['value']):
+        if (i % 100)==0: print(i)
         oindx = labelindex['index'][labelindex['lo'][i]:labelindex['hi'][i]+1]
         cat1 = cat[oindx]
         ncat1 = len(cat1)
-    
+        obj['ndet'][i] = ncat1
+
         # Computing quantities
         # Mean RA/DEC, RAERR/DECERR
         if ncat1>1:
@@ -391,32 +404,63 @@ if __name__ == "__main__":
             obj['raerr'][i] = np.sum(1.0/np.sum(wt_ra))
             obj['dec'][i] = np.sum(cat1['DEC']*wt_dec)/np.sum(wt_dec)
             obj['raerr'][i] = np.sum(1.0/np.sum(wt_dec))
-            obj['ramjd'][i] = np.sum(wt_ra*cat1['MJD'])/np.sum(wt_ra)
-            obj['decmjd'][i] = np.sum(wt_dec*cat1['MJD'])/np.sum(wt_dec)
+            obj['mjd'][i] = np.mean(cat1['MJD'])
             obj['deltamjd'][i] = np.max(cat1['MJD'])-np.min(cat1['MJD'])
         else:
             obj['ra'][i] = cat1['RA']
             obj['dec'][i] = cat1['DEC']
             obj['raerr'][i] = cat1['RAERR']
             obj['decerr'][i] = cat1['DECERR']
-            obj['ramjd'][i] = cat1['MJD']
-            obj['decmjd'][i] = cat1['MJD']
+            obj['mjd'][i] = cat1['MJD']
             obj['deltamjd'][i] = 0
+
+        #if ncat1>4:
+        #    import pdb; pdb.set_trace()            
 
         # Mean proper motion and errors
         # fit robust line to RA values vs. time
         if ncat1>1:
-            ra_coef = utils.poly_fit(cat1['MJD'],cat1['RA'],1,sigma=cat1['RAERR'])
-            dec_coef = utils.poly_fit(cat1['MJD'],cat1['DEC'],1,sigma=cat1['DECERR'])
-            # need pm errors
+            #raerr = cat1['RAERR'] / (3600*np.cos(obj['dec'][i]/radeg))   # convert to arcsec (true angle) to RA deg
+            raerr = np.array(cat1['RAERR']*1e3,np.float64)    # milli arcsec
+            ra = np.array(cat1['RA'],np.float64)
+            ra -= np.mean(ra)
+            ra *= 3600*1e3 * np.cos(obj['dec'][i]/radeg)     # convert to true angle, milli arcsec
+            t = cat1['MJD']
+            t -= np.mean(t)
+            ra_coef, ra_coeferr = utils.poly_fit(t,ra,1,sigma=raerr,robust=True)
+            pmra = ra_coef[0] * 365.2425           # mas/year
+            pmraerr = ra_coeferr[0] * 365.2425     # mas/yr
+            #ra_coef, ra_coeferr = utils.poly_fit(cat1['MJD'],cat1['RA'],1,sigma=raerr,robust=True)
+            #pmra = ra_coef[0]                      # deg[ra]/day
+            #pmra *= (3600*1e3)*365.2425            # mas/year
+            #pmra *= np.cos(obj['dec'][i]/radeg)    # mas/year, true angle
+            #pmraerr = ra_coeferr[0]                # deg[ra]/day
+            #pmraerr *= (3600*1e3)*365.2425         # mas/year
+            #pmraerr *= np.cos(obj['dec'][i]/radeg) # mas/year, true angle
+            obj['pmra'][i] = pmra
+            obj['pmraerr'][i] = pmraerr
+
+            decerr = np.array(cat1['DECERR']*1e3,np.float64)   # milli arcsec
+            dec = np.array(cat1['DEC'],np.float64)
+            dec -= np.mean(dec)
+            dec *= 3600*1e3                         # convert to milli arcsec
+            dec_coef, dec_coeferr = utils.poly_fit(t,dec,1,sigma=decerr,robust=True)
+            pmdec = dec_coef[0] * 365.2425          # mas/year
+            pmdecerr = dec_coeferr[0] * 365.2425    # mas/year
+            #decerr = cat1['DECERR'] / 3600.0       # convert from arcsec to deg
+            #dec_coef, dec_coeferr = utils.poly_fit(cat1['MJD'],cat1['DEC'],1,sigma=decerr,robust=True)
+            #pmdec = dec_coef[0]                    # deg[dec]/day
+            #pmdec *= (3600*1e3)*365.2425           # mas/year
+            #pmdecerr = dec_coeferr[0]             # deg[dec]/day
+            #pmdecerr *= (3600*1e3)*365.2425        # mas/year
+            obj['pmdec'][i] = pmdec
+            obj['pmdecerr'][i] = pmdecerr
 
         # Mean magnitudes
         # Convert totalwt and totalfluxwt to MAG and ERR
         #  and average the morphology parameters PER FILTER
         filtindex = utils.create_index(cat1['FILTER'].astype(np.str))
         nfilters = len(filtindex['value'])
-        #filters = np.unique(cat1['FILTER'])
-        #filters = ['u','g','r','i','z','y','vr']
         for f in range(nfilters):
             filt = filtindex['value'][f].lower()
             findx = filtindex['index'][filtindex['lo'][f]:filtindex['hi'][f]+1]
@@ -433,20 +477,17 @@ if __name__ == "__main__":
                 obj[filt+'err'][i] = newerr
                 # Calculate RMS
                 if ngph>1: obj[filt+'rms'][i] = np.sqrt(np.mean((cat1['MAG_AUTO'][findx[gph]]-newmag)**2))
-            else:
-                obj[filt+'mag'][i] = 99.99
-                obj[filt+'err'][i] = 9.99
 
-            import pdb; pdb.set_trace()
+            #import pdb; pdb.set_trace()
 
             # Calculate mean morphology parameters
             obj[filt+'asemi'][i] = np.mean(cat1['ASEMI'][findx])
             obj[filt+'bsemi'][i] = np.mean(cat1['BSEMI'][findx])
             obj[filt+'theta'][i] = np.mean(cat1['THETA'][findx])
             
-            import pdb; pdb.set_trace()
+            #import pdb; pdb.set_trace()
 
-        import pdb; pdb.set_trace()
+        #import pdb; pdb.set_trace()
 
         # Make NPHOT from NPHOTX
         obj['nphot'][i] = obj['nphotu'][i]+obj['nphotg'][i]+obj['nphotr'][i]+obj['nphoti'][i]+obj['nphotz'][i]+obj['nphoty'][i]+obj['nphotvr'][i]
@@ -463,36 +504,6 @@ if __name__ == "__main__":
 
         # Stuff information into IDSTR
 
-    import pdb; pdb.set_trace()
-
-
-    # Make NPHOT from NPHOTX
-    obj['nphot'] = obj['nphotu']+obj['nphotg']+obj['nphotr']+obj['nphoti']+obj['nphotz']+obj['nphoty']+obj['nphotvr']
-
-    # Convert total(mjd*ra) to true proper motion values
-    #  the slope of RA vs. MJD is
-    #  pmra=(total(wt*mjd*ra)/total(wt)-<mjd>*<ra>)/(total(wt*mjd^2)/total(wt)-<mjd>^2)
-    #  we are creating the totals cumulatively as we go
-
-    gdet, = np.where(obj['ndet']>1)
-    if len(gdet)>0:
-        pmra = (obj['pmra'][gdet]/obj['raerr'][gdet]-totobj['ramjd'][gdet]*totobj['ra'][gdet]) / (totobj['ramjd2'][gdet]/obj['raerr'][gdet]-totobj['ramjd'][gdet]**2)   # deg[ra]/day
-        pmra *= (3600*1e3)*365.2425     # mas/year
-        pmra *= np.cos(obj['dec'][gdet]/radeg)      # mas/year, true angle
-        pmdec = (obj['pmdec'][gdet]/obj['decerr'][gdet]-totobj['decmjd'][gdet]*totobj['dec'][gdet])/(totobj['decmjd2'][gdet]/obj['decerr'][gdet]-totobj['decmjd'][gdet]**2)  # deg/day
-        pmdec *= (3600*1e3)*365.2425    # mas/year
-        # Proper motion errors
-        # pmerr = 1/sqrt( sum(wt*mjd^2) - <mjd>^2 * sum(wt) )
-        #   if wt=1/err^2 with err in degrees, but we are using arcsec
-        #   Need to divide by 3600 for PMDECERR and 3600*cos(dec) for PMRAERR
-        pmraerr = 1.0/np.sqrt( totobj['ramjd2'][gdet] - totobj['ramjd'][gdet]**2 * obj['raerr'][gdet] )
-        pmraerr /= (3600*np.cos(totobj['dec'][gdet]/radeg))    # correction for raerr in arcsec
-        pmraerr *= (3600*1e3)*365.2425     # mas/year
-        pmraerr *= np.cos(obj['dec'][gdet]/radeg)      # mas/year, true angle
-        pmdecerr = 1.0/np.sqrt( totobj['decmjd2'][gdet] - totobj['decmjd'][gdet]**2 * obj['decerr'][gdet] )
-        pmdecerr /= 3600                   # correction for decerr in arcsec
-        pmdecerr *= (3600*1e3)*365.2425    # mas/year
-
 
     # Add E(B-V)
     print('Getting E(B-V)')
@@ -501,6 +512,8 @@ if __name__ == "__main__":
     #c = SkyCoord('05h00m00.00000s','+30d00m00.0000s', frame='icrs') 
     ebv = sfd(c)
     obj['ebv'] = ebv
+
+    import pdb; pdb.set_trace()
 
     # ONLY INCLUDE OBJECTS WITH AVERAGE RA/DEC
     # WITHIN THE BOUNDARY OF THE HEALPIX PIXEL!!!
