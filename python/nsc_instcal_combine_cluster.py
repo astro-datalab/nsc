@@ -17,6 +17,7 @@ import socket
 from dustmaps.sfd import SFDQuery
 from astropy.coordinates import SkyCoord
 from sklearn.cluster import DBSCAN
+from scipy.optimize import least_squares
 
 def add_elements(cat,nnew=300000):
     """ Add more elements to a catalog"""
@@ -380,33 +381,43 @@ if __name__ == "__main__":
         oindx = labelindex['index'][labelindex['lo'][i]:labelindex['hi'][i]+1]
         cat1 = cat[oindx]
         ncat1 = len(cat1)
-
-        import pdb; pdb.set_trace()
     
         # Computing quantities
         # Mean RA/DEC, RAERR/DECERR
         if ncat1>1:
-            obj['ra'][i] = meanra
-            obj['raerr'][i] = meanra_err
-            obj['dec'][i] = meandec
-            obj['raerr'][i] = meandec_err
+            wt_ra = 1.0/cat1['RAERR']**2
+            wt_dec = 1.0/cat1['DECERR']**2
+            obj['ra'][i] = np.sum(cat1['RA']*wt_ra)/np.sum(wt_ra)
+            obj['raerr'][i] = np.sum(1.0/np.sum(wt_ra))
+            obj['dec'][i] = np.sum(cat1['DEC']*wt_dec)/np.sum(wt_dec)
+            obj['raerr'][i] = np.sum(1.0/np.sum(wt_dec))
+            obj['ramjd'][i] = np.sum(wt_ra*cat1['MJD'])/np.sum(wt_ra)
+            obj['decmjd'][i] = np.sum(wt_dec*cat1['MJD'])/np.sum(wt_dec)
+            obj['deltamjd'][i] = np.max(cat1['MJD'])-np.min(cat1['MJD'])
         else:
             obj['ra'][i] = cat1['RA']
             obj['dec'][i] = cat1['DEC']
             obj['raerr'][i] = cat1['RAERR']
             obj['decerr'][i] = cat1['DECERR']
+            obj['ramjd'][i] = cat1['MJD']
+            obj['decmjd'][i] = cat1['MJD']
+            obj['deltamjd'][i] = 0
 
         # Mean proper motion and errors
         # fit robust line to RA values vs. time
+        if ncat1>1:
+            ra_coef = utils.poly_fit(cat1['MJD'],cat1['RA'],1,sigma=cat1['RAERR'])
+            dec_coef = utils.poly_fit(cat1['MJD'],cat1['DEC'],1,sigma=cat1['DECERR'])
+            # need pm errors
 
         # Mean magnitudes
         # Convert totalwt and totalfluxwt to MAG and ERR
         #  and average the morphology parameters PER FILTER
-        filtindex = utils.create_index(cat1['FILTER'])
+        filtindex = utils.create_index(cat1['FILTER'].astype(np.str))
         nfilters = len(filtindex['value'])
         #filters = np.unique(cat1['FILTER'])
         #filters = ['u','g','r','i','z','y','vr']
-        for f in arange(nfilters):
+        for f in range(nfilters):
             filt = filtindex['value'][f].lower()
             findx = filtindex['index'][filtindex['lo'][f]:filtindex['hi'][f]+1]
             obj['ndet'+filt][i] = filtindex['num'][f]
@@ -425,11 +436,18 @@ if __name__ == "__main__":
             else:
                 obj[filt+'mag'][i] = 99.99
                 obj[filt+'err'][i] = 9.99
+
+            import pdb; pdb.set_trace()
+
             # Calculate mean morphology parameters
             obj[filt+'asemi'][i] = np.mean(cat1['ASEMI'][findx])
             obj[filt+'bsemi'][i] = np.mean(cat1['BSEMI'][findx])
             obj[filt+'theta'][i] = np.mean(cat1['THETA'][findx])
             
+            import pdb; pdb.set_trace()
+
+        import pdb; pdb.set_trace()
+
         # Make NPHOT from NPHOTX
         obj['nphot'][i] = obj['nphotu'][i]+obj['nphotg'][i]+obj['nphotr'][i]+obj['nphoti'][i]+obj['nphotz'][i]+obj['nphoty'][i]+obj['nphotvr'][i]
 
@@ -455,11 +473,6 @@ if __name__ == "__main__":
     #  the slope of RA vs. MJD is
     #  pmra=(total(wt*mjd*ra)/total(wt)-<mjd>*<ra>)/(total(wt*mjd^2)/total(wt)-<mjd>^2)
     #  we are creating the totals cumulatively as we go
-    totobj['ra'] /= obj['raerr']        # wt mean RA (totalrawt/totalwt)
-    totobj['dec'] /= obj['decerr']      # wt mean DEC (totaldecwt/totalwt)
-    obj['mjd'] /= obj['ndet']           # mean MJD
-    totobj['ramjd'] /= obj['raerr']     # wt_ra mean MJD
-    totobj['decmjd'] /= obj['decerr']   # wt_dec mean MJD
 
     gdet, = np.where(obj['ndet']>1)
     if len(gdet)>0:
@@ -479,91 +492,7 @@ if __name__ == "__main__":
         pmdecerr = 1.0/np.sqrt( totobj['decmjd2'][gdet] - totobj['decmjd'][gdet]**2 * obj['decerr'][gdet] )
         pmdecerr /= 3600                   # correction for decerr in arcsec
         pmdecerr *= (3600*1e3)*365.2425    # mas/year
-        obj['pmra'][gdet] = pmra
-        obj['pmdec'][gdet] = pmdec
-        obj['pmraerr'][gdet] = pmraerr
-        obj['pmdecerr'][gdet] = pmdecerr
-    # sometimes it happens that the denominator is 0.0 
-    #  when there are few closely spaced points
-    #  nothing we can do, just mark as bad
-    bdet, = np.where((obj['ndet']<2) | ~np.isfinite(obj['pmra']))
-    if len(bdet)>0:
-        obj['pmra'][bdet] = 999999.0
-        obj['pmdec'][bdet] = 999999.0
-        obj['pmraerr'][bdet] = 999999.0
-        obj['pmdecerr'][bdet] = 999999.0
-    obj['deltamjd'] = totobj['maxmjd']-totobj['minmjd']
-    # Average coordinates
-    obj['ra'] = totobj['ra']   # now stuff in the average coordinates
-    obj['dec'] = totobj['dec']
-    obj['raerr'] = np.sqrt(1.0/obj['raerr'])    # err in wt mean RA, arcsec
-    obj['decerr'] = np.sqrt(1.0/obj['decerr'])  # err in wt mean DEC, arcsec
 
-
-    # Convert totalwt and totalfluxwt to MAG and ERR
-    #  and average the morphology parameters PER FILTER
-    filters = ['u','g','r','i','z','y','vr']
-    for f in filters:
-        # Get average photometry for objects with photometry in this band
-        gph, = np.where(obj['nphot'+f]>0)
-        if len(gph)>0:
-            newflux = obj[f+'mag'][gph] / obj[f+'err'][gph]
-            newmag = 2.50*np.log10(newflux)
-            newerr = np.sqrt(1.0/obj[f+'err'][gph])
-            obj[f+'mag'][gph] = newmag
-            obj[f+'err'][gph] = newerr
-        bdmag, = np.where((obj['nphot'+f]==0) | ~np.isfinite(obj[f+'mag']))
-        if len(bdmag)>0:
-            obj[f+'mag'][bdmag] = 99.99
-            obj[f+'err'][bdmag] = 9.99
-
-        # Calculate RMS scatter
-        #  RMS^2 * N = sum(mag^2) - 2*<mag>*sum(mag) + N*<mag>^2
-        #   where <mag> is a weighted average
-        #  RMS = sqrt( sum(mag^2)/N - 2*<mag>*sum(mag)/N + <mag>^2 )
-        #  sum(mag^2) is in the MAG2 column and sum(mag) is in TOT
-        rms = np.zeros(nobj,float)
-        gdrms, = np.where(obj['nphot'+f]>1)
-        ngdrms = len(gdrms)
-        bdrms, = np.where(obj['nphot'+f]<=1)
-        nbdrms = len(bdrms)
-        if ngdrms>0:
-           rms[gdrms] = np.sqrt( totobj[f+'mag2'][gdrms]/obj['nphot'+f][gdrms] - 
-                                 2*obj[f+'mag'][gdrms]*totobj[f+'tot'][gdrms]/obj['nphot'+f][gdrms] + np.float64(obj[f+'mag'][gdrms])**2 )
-        if nbdrms>0: rms[bdrms] = 999999.
-        obj[f+'rms'] = rms
-
-        # Average the morphology parameters PER FILTER
-        gdet, = np.where(obj['ndet'+f]>0)
-        ngdet = len(gdet)
-        bdet, = np.where(obj['ndet'+f]==0)
-        nbdet = len(bdet)        
-        if ngdet>0:
-            obj[f+'asemi'][gdet] /= obj['ndet'+f][gdet]
-            obj[f+'bsemi'][gdet] /= obj['ndet'+f][gdet]
-            obj[f+'theta'][gdet] /= obj['ndet'+f][gdet]
-        if nbdet>0:
-            obj[f+'asemi'][bdet] = 999999.
-            obj[f+'bsemi'][bdet] = 999999.
-            obj[f+'theta'][bdet] = 999999.
-
-    # Average the morphology parameters, Need a separate counter for that maybe?
-    mtags = ['asemi','bsemi','theta','fwhm','class_star']
-    gdet, = np.where(obj['ndet']>0)
-    ngdet = len(gdet)
-    bdet, = np.where(obj['ndet']==0)
-    nbdet = len(bdet)    
-    for m in mtags:
-        # Divide by the number of detections
-        if ngdet>0: obj[m][gdet] /= obj['ndet'][gdet]
-        if nbdet>0: obj[m][bdet] = 999999.   # no good detections
-
-    # Get the average error
-    metags = ['asemierr','bsemierr','thetaerr']
-    for m in metags:
-        # Just take the sqrt to complete the addition in quadrature
-        if ngdet>0: obj[m][gdet] = np.sqrt(obj[m][gdet])
-        if nbdet>0: obj[m][bdet] = 999999.  # no good detections
 
     # Add E(B-V)
     print('Getting E(B-V)')
