@@ -106,6 +106,7 @@ print,strtrim(ngd,2),' exposure successfully calibrated'
 print,'Writing summary file to ',dir+'lists/nsc_instcal_calibrate.fits'
 MWRFITS,expstr,dir+'lists/nsc_instcal_calibrate.fits',/create
 MWRFITS,chstr,dir+'lists/nsc_instcal_calibrate.fits',/silent
+if file_test(dir+'lists/nsc_instcal_calibrate.fits.gz') eq 1 then file_delete,dir+'lists/nsc_instcal_calibrate.fits.gz',/allow
 spawn,['gzip',dir+'lists/nsc_instcal_calibrate.fits'],/noshell
 
 print,'dt=',stringize(systime(1)-t0,ndec=2),' sec'
