@@ -18,6 +18,7 @@ from dustmaps.sfd import SFDQuery
 from astropy.coordinates import SkyCoord
 from sklearn.cluster import DBSCAN
 from scipy.optimize import least_squares
+from scipy.interpolate import interp1d
 
 def add_elements(cat,nnew=300000):
     """ Add more elements to a catalog"""
@@ -272,12 +273,18 @@ if __name__ == "__main__":
                           ('ndety',int),('nphoty',int),('ymag',float),('yrms',float),('yerr',float),('yasemi',float),('ybsemi',float),('ytheta',float),
                           ('ndetvr',int),('nphotvr',int),('vrmag',float),('vrrms',float),('vrerr',float),('vrasemi',float),('vrbsemi',float),('vrtheta',float),
                           ('asemi',float),('asemierr',float),('bsemi',float),('bsemierr',float),('theta',float),('thetaerr',float),
-                          ('fwhm',float),('flags',int),('class_star',float),('ebv',float)])
+                          ('fwhm',float),('flags',int),('class_star',float),('ebv',float),('jvar',float),('kvar',float),('avgvar',float),('chivar',float)])
 
     # Load the measurement catalog
     metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
     cat, allmeta = loadmeas(metafiles,buffdict)
+    # KLUDGE
+    #cat = np.array(fits.getdata('60025_cat.fits',1))
+    #allmeta = np.array(fits.getdata('60025_allmeta.fits',1))
     ncat = utils.size(cat)
+
+    t1 = time.time()
+
 
 
     # coordinates of measurement
@@ -293,7 +300,8 @@ if __name__ == "__main__":
     obj['objectid'] = utils.strjoin( str(pix)+'.', ((np.arange(nobj)+1).astype(np.str)) )
     obj['pix'] = pix
     # all bad to start
-    for f in ['pmra','pmraerr','pmdec','pmdecerr','asemi','bsemi','theta','asemierr','bsemierr','thetaerr','fwhm','class_star']: obj[f]=np.nan
+    for f in ['pmra','pmraerr','pmdec','pmdecerr','asemi','bsemi','theta','asemierr',
+              'bsemierr','thetaerr','fwhm','class_star','jvar','kvar','avgvar','chivar']: obj[f]=np.nan
     for f in ['u','g','r','i','z','y','vr']:
         obj[f+'mag'] = 99.99
         obj[f+'err'] = 9.99
@@ -305,7 +313,7 @@ if __name__ == "__main__":
 
     # Loop over the objects
     for i,lab in enumerate(labelindex['value']):
-        if (i % 100)==0: print(i)
+        if (i % 1000)==0: print(i)
         oindx = labelindex['index'][labelindex['lo'][i]:labelindex['hi'][i]+1]
         cat1 = cat[oindx]
         ncat1 = len(cat1)
@@ -336,11 +344,7 @@ if __name__ == "__main__":
             obj['mjd'][i] = cat1['MJD']
             obj['deltamjd'][i] = 0
 
-        #if ncat1>4:
-        #    import pdb; pdb.set_trace()            
-
         # Mean proper motion and errors
-        # fit robust line to RA values vs. time
         if ncat1>1:
             raerr = np.array(cat1['RAERR']*1e3,np.float64)    # milli arcsec
             ra = np.array(cat1['RA'],np.float64)
@@ -348,26 +352,27 @@ if __name__ == "__main__":
             ra *= 3600*1e3 * np.cos(obj['dec'][i]/radeg)     # convert to true angle, milli arcsec
             t = cat1['MJD']
             t -= np.mean(t)
-            ra_coef, ra_coeferr = utils.poly_fit(t,ra,1,sigma=raerr,robust=True)
-            pmra = ra_coef[0] * 365.2425           # mas/year
-            pmraerr = ra_coeferr[0] * 365.2425     # mas/yr
-            obj['pmra'][i] = pmra
-            obj['pmraerr'][i] = pmraerr
+            t /= 365.2425                          # convert to year
+            # Calculate robust slope
+            pmra, pmraerr = utils.robust_slope(t,ra,raerr,reweight=True)
+            obj['pmra'][i] = pmra                 # mas/yr
+            obj['pmraerr'][i] = pmraerr           # mas/yr
+
             decerr = np.array(cat1['DECERR']*1e3,np.float64)   # milli arcsec
             dec = np.array(cat1['DEC'],np.float64)
             dec -= np.mean(dec)
             dec *= 3600*1e3                         # convert to milli arcsec
-            dec_coef, dec_coeferr = utils.poly_fit(t,dec,1,sigma=decerr,robust=True)
-            pmdec = dec_coef[0] * 365.2425          # mas/year
-            pmdecerr = dec_coeferr[0] * 365.2425    # mas/year
-            obj['pmdec'][i] = pmdec
-            obj['pmdecerr'][i] = pmdecerr
+            # Calculate robust slope
+            pmdec, pmdecerr = utils.robust_slope(t,dec,decerr,reweight=True)
+            obj['pmdec'][i] = pmdec               # mas/yr
+            obj['pmdecerr'][i] = pmdecerr         # mas/yr
 
         # Mean magnitudes
         # Convert totalwt and totalfluxwt to MAG and ERR
         #  and average the morphology parameters PER FILTER
         filtindex = utils.create_index(cat1['FILTER'].astype(np.str))
         nfilters = len(filtindex['value'])
+        relresid = np.zeros(ncat1)+np.nan  # residual mag relative to the uncertainty
         for f in range(nfilters):
             filt = filtindex['value'][f].lower()
             findx = filtindex['index'][filtindex['lo'][f]:filtindex['hi'][f]+1]
@@ -375,20 +380,41 @@ if __name__ == "__main__":
             gph, = np.where(cat['MAG_AUTO'][findx]<50)
             ngph = len(gph)
             obj['nphot'+filt][i] = ngph
-            if ngph>0:
-                wt = 1.0/cat1['MAGERR_AUTO'][findx[gph]]**2
-                newflux = np.sum( 2.5118864**cat1['MAG_AUTO'][findx[gph]] * wt) / np.sum(wt)
-                newmag = 2.50*np.log10(newflux)
-                newerr = np.sqrt(1.0/np.sum(wt))
+            if ngph==1:
+                obj[filt+'mag'][i] = cat1['MAG_AUTO'][findx[gph]]
+                obj[filt+'err'][i] = cat1['MAGERR_AUTO'][findx[gph]]
+            if ngph>1:
+                newmag, newerr = utils.wtmean(cat1['MAG_AUTO'][findx[gph]], cat1['MAGERR_AUTO'][findx[gph]],magnitude=True,reweight=True,error=True)
                 obj[filt+'mag'][i] = newmag
                 obj[filt+'err'][i] = newerr
                 # Calculate RMS
-                if ngph>1: obj[filt+'rms'][i] = np.sqrt(np.mean((cat1['MAG_AUTO'][findx[gph]]-newmag)**2))
+                obj[filt+'rms'][i] = np.sqrt(np.mean((cat1['MAG_AUTO'][findx[gph]]-newmag)**2))
+                # Residual mag relative to the uncertainty
+                relresid[findx[gph]] = np.sqrt(ngph/(ngph-1)) * (cat1['MAG_AUTO'][findx[gph]]-newmag)/cat1['MAGERR_AUTO'][findx[gph]]
 
             # Calculate mean morphology parameters
             obj[filt+'asemi'][i] = np.mean(cat1['ASEMI'][findx])
             obj[filt+'bsemi'][i] = np.mean(cat1['BSEMI'][findx])
             obj[filt+'theta'][i] = np.mean(cat1['THETA'][findx])
+
+        # Calculate variability indices
+        gdrelresid = np.isfinite(relresid)
+        ngdrelresid = np.sum(gdrelresid)
+        if ngdrelresid>0:
+            relresid2 = relresid[gdrelresid]
+            pk = relresid2**2-1
+            jvar = np.sum( np.sign(pk)*np.sqrt(np.abs(pk)) )/ngdrelresid
+            avgvar = np.mean(relresid2)    # average of relative residuals
+            chivar = np.sqrt(np.sum(relresid2**2))/ngdrelresid
+            kdenom = np.sqrt(np.sum(relresid2**2)/ngdrelresid)
+            if kdenom!=0:
+                kvar = (np.sum(np.abs(relresid2))/ngdrelresid) / kdenom
+            else:
+                kvar = 0.0
+            obj['jvar'][i] = jvar
+            obj['kvar'][i] = kvar
+            obj['avgvar'][i] = avgvar
+            obj['chivar'][i] = chivar
 
         # Make NPHOT from NPHOTX
         obj['nphot'][i] = obj['nphotu'][i]+obj['nphotg'][i]+obj['nphotr'][i]+obj['nphoti'][i]+obj['nphotz'][i]+obj['nphoty'][i]+obj['nphotvr'][i]
@@ -496,3 +522,4 @@ if __name__ == "__main__":
 
     dt = time.time()-t0
     print('dt = '+str(dt)+' sec.')
+    print('dt = ',str(time.time()-t1)+' sec. after loading the catalogs')
