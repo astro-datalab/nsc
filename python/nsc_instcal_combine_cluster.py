@@ -287,7 +287,8 @@ if __name__ == "__main__":
                           ('ndety',int),('nphoty',int),('ymag',float),('yrms',float),('yerr',float),('yasemi',float),('ybsemi',float),('ytheta',float),
                           ('ndetvr',int),('nphotvr',int),('vrmag',float),('vrrms',float),('vrerr',float),('vrasemi',float),('vrbsemi',float),('vrtheta',float),
                           ('asemi',float),('asemierr',float),('bsemi',float),('bsemierr',float),('theta',float),('thetaerr',float),
-                          ('fwhm',float),('flags',int),('class_star',float),('ebv',float),('jvar',float),('kvar',float),('avgvar',float),('chivar',float)])
+                          ('fwhm',float),('flags',int),('class_star',float),('ebv',float),('jvar',float),('kvar',float),('avgvar',float),
+                          ('chivar',float),('phrms',float)])
 
     # Load the measurement catalog
     metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
@@ -389,6 +390,7 @@ if __name__ == "__main__":
         #  and average the morphology parameters PER FILTER
         filtindex = utils.create_index(cat1['FILTER'].astype(np.str))
         nfilters = len(filtindex['value'])
+        resid = np.zeros(ncat1)+np.nan     # residual mag
         relresid = np.zeros(ncat1)+np.nan  # residual mag relative to the uncertainty
         for f in range(nfilters):
             filt = filtindex['value'][f].lower()
@@ -406,14 +408,26 @@ if __name__ == "__main__":
                 obj[filt+'err'][i] = newerr
                 # Calculate RMS
                 obj[filt+'rms'][i] = np.sqrt(np.mean((cat1['MAG_AUTO'][findx[gph]]-newmag)**2))
+                # Residual mag
+                resid[findx[gph]] = cat1['MAG_AUTO'][findx[gph]]-newmag
                 # Residual mag relative to the uncertainty
                 #  set a lower threshold of 0.02 in the uncertainty
                 relresid[findx[gph]] = np.sqrt(ngph/(ngph-1)) * (cat1['MAG_AUTO'][findx[gph]]-newmag)/np.sqrt(cat1['MAGERR_AUTO'][findx[gph]]**2+0.02**2)
+
 
             # Calculate mean morphology parameters
             obj[filt+'asemi'][i] = np.mean(cat1['ASEMI'][findx])
             obj[filt+'bsemi'][i] = np.mean(cat1['BSEMI'][findx])
             obj[filt+'theta'][i] = np.mean(cat1['THETA'][findx])
+
+        # Calculate photometric RMS across all bands
+        gdresid = np.isfinite(resid)
+        ngdresid = np.sum(gdresid)
+        if ngdresid>0:
+            resid2 = resid[gdresid]
+            rms = np.sqrt(np.mean(resid2**2))
+            obj['phrms'][i] = rms
+                       
 
         # Calculate variability indices
         gdrelresid = np.isfinite(relresid)
