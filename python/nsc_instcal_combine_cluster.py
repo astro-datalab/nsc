@@ -308,11 +308,12 @@ if __name__ == "__main__":
     #cat = np.array(fits.getdata('148487_cat.fits',1))
     #allmeta = np.array(fits.getdata('148487_allmeta.fits',1))
     ncat = utils.size(cat)
+    print(str(ncat)+' measurements loaded')
 
     t1 = time.time()
 
 
-
+    # Spatially cluster the measurements with DBSCAN
     # coordinates of measurement
     X = np.column_stack((np.array(cat['RA']),np.array(cat['DEC'])))
     # Compute DBSCAN on all measurements
