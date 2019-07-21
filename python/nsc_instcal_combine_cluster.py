@@ -288,7 +288,7 @@ if __name__ == "__main__":
                           ('ndetvr',int),('nphotvr',int),('vrmag',float),('vrrms',float),('vrerr',float),('vrasemi',float),('vrbsemi',float),('vrtheta',float),
                           ('asemi',float),('asemierr',float),('bsemi',float),('bsemierr',float),('theta',float),('thetaerr',float),
                           ('fwhm',float),('flags',int),('class_star',float),('ebv',float),('jvar',float),('kvar',float),('avgvar',float),
-                          ('chivar',float),('phrms',float)])
+                          ('chivar',float),('rmsvar',float)])
 
     # Load the measurement catalog
     metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
@@ -426,7 +426,7 @@ if __name__ == "__main__":
         if ngdresid>0:
             resid2 = resid[gdresid]
             rms = np.sqrt(np.mean(resid2**2))
-            obj['phrms'][i] = rms
+            obj['rmsvar'][i] = rms
                        
 
         # Calculate variability indices
