@@ -44,12 +44,18 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
                            ('ebv',float),('gaianmatch',int),('zpterm',float),('zptermerr',float),
                            ('zptermsig',float),('refmatch',int)])
 
-    dtype_cat = np.dtype([('MEASID',np.str,200),('OBJECTID',np.str,200),('EXPOSURE',np.str,200),('CCDNUM',int),('FILTER',np.str,10),
-                          ('MJD',float),('X',float),('Y',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
-                          ('MAG_AUTO',float),('MAGERR_AUTO',float),('MAG_APER1',float),('MAGERR_APER1',float),('MAG_APER2',float),
-                          ('MAGERR_APER2',float),('MAG_APER4',float),('MAGERR_APER4',float),('MAG_APER8',float),('MAGERR_APER8',float),
-                          ('KRON_RADIUS',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),('THETA',float),
-                          ('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
+    # All columns in MEAS catalogs (32)
+    #dtype_cat = np.dtype([('MEASID',np.str,200),('OBJECTID',np.str,200),('EXPOSURE',np.str,200),('CCDNUM',int),('FILTER',np.str,10),
+    #                      ('MJD',float),('X',float),('Y',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
+    #                      ('MAG_AUTO',float),('MAGERR_AUTO',float),('MAG_APER1',float),('MAGERR_APER1',float),('MAG_APER2',float),
+    #                      ('MAGERR_APER2',float),('MAG_APER4',float),('MAGERR_APER4',float),('MAG_APER8',float),('MAGERR_APER8',float),
+    #                      ('KRON_RADIUS',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),('THETA',float),
+    #                      ('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
+    # All the columns that we need (19)
+    dtype_cat = np.dtype([('MEASID',np.str,50),('EXPOSURE',np.str,100),('CCDNUM',int),('FILTER',np.str,10),
+                          ('MJD',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
+                          ('MAG_AUTO',float),('MAGERR_AUTO',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),
+                          ('THETA',float),('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
 
     #  Loop over exposures
     cat = None
@@ -139,11 +145,13 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
                         ncat_init = np.maximum(100000,ncat1)
                         cat = np.zeros(ncat_init,dtype=dtype_cat)
                         catcount = 0
-                    # Add more elements
+                    # Add more elements if necessary
                     if (catcount+ncat1)>ncat:
                         cat = add_elements(cat,np.maximum(100000,ncat1))
                         ncat = len(cat)
-                    cat[catcount:catcount+ncat1] = cat1
+
+                    # Add it to the main CAT catalog
+                    for n in dtype_cat.names: cat[n][catcount:catcount+ncat1] = cat1[n.upper()]
                     catcount += ncat1
                     expcatcount += ncat1
 
