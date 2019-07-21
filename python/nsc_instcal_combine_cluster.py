@@ -44,8 +44,16 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
                            ('ebv',float),('gaianmatch',int),('zpterm',float),('zptermerr',float),
                            ('zptermsig',float),('refmatch',int)])
 
+    dtype_cat = np.dtype([('MEASID',np.str,200),('OBJECTID',np.str,200),('EXPOSURE',np.str,200),('CCDNUM',int),('FILTER',np.str,10),
+                          ('MJD',float),('X',float),('Y',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
+                          ('MAG_AUTO',float),('MAGERR_AUTO',float),('MAG_APER1',float),('MAGERR_APER1',float),('MAG_APER2',float),
+                          ('MAGERR_APER2',float),('MAG_APER4',float),('MAGERR_APER4',float),('MAG_APER8',float),('MAGERR_APER8',float),
+                          ('KRON_RADIUS',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),('THETA',float),
+                          ('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
+
     #  Loop over exposures
     cat = None
+    ncat = 0
     allmeta = None
     catcount = 0
     metafile = np.atleast_1d(metafile)
@@ -101,7 +109,7 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
                 # Load the chip-level catalog
                 cat1 = fits.getdata(chfile,1)
                 ncat1 = len(cat1)
-                print('  '+str(ncat1)+' sources')
+                print('  chip '+str(chmeta[j]['ccdnum'])+'  '+str(ncat1)+' sources')
 
                 # Make sure it's in the right format
                 if len(cat1.dtype.fields) != 32:
@@ -126,9 +134,15 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
                 # Combine the catalogs
                 if ncat1 > 0:
                     if cat is None:
-                        dtype_cat = cat1.dtype
-                        cat = np.zeros(np.sum(chmeta['nsources'])*utils.size(metafile),dtype=dtype_cat)
+                        #dtype_cat = cat1.dtype
+                        #ncat_init = np.sum(chmeta['nsources'])*utils.size(metafile)
+                        ncat_init = np.maximum(100000,ncat1)
+                        cat = np.zeros(ncat_init,dtype=dtype_cat)
                         catcount = 0
+                    # Add more elements
+                    if (catcount+ncat1)>ncat:
+                        cat = add_elements(cat,np.maximum(100000,ncat1))
+                        ncat = len(cat)
                     cat[catcount:catcount+ncat1] = cat1
                     catcount += ncat1
                     expcatcount += ncat1
@@ -278,9 +292,12 @@ if __name__ == "__main__":
     # Load the measurement catalog
     metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
     cat, allmeta = loadmeas(metafiles,buffdict)
+    #import pdb; pdb.set_trace()
     # KLUDGE
     #cat = np.array(fits.getdata('60025_cat.fits',1))
     #allmeta = np.array(fits.getdata('60025_allmeta.fits',1))
+    #cat = np.array(fits.getdata('148487_cat.fits',1))
+    #allmeta = np.array(fits.getdata('148487_allmeta.fits',1))
     ncat = utils.size(cat)
 
     t1 = time.time()
@@ -390,7 +407,8 @@ if __name__ == "__main__":
                 # Calculate RMS
                 obj[filt+'rms'][i] = np.sqrt(np.mean((cat1['MAG_AUTO'][findx[gph]]-newmag)**2))
                 # Residual mag relative to the uncertainty
-                relresid[findx[gph]] = np.sqrt(ngph/(ngph-1)) * (cat1['MAG_AUTO'][findx[gph]]-newmag)/cat1['MAGERR_AUTO'][findx[gph]]
+                #  set a lower threshold of 0.02 in the uncertainty
+                relresid[findx[gph]] = np.sqrt(ngph/(ngph-1)) * (cat1['MAG_AUTO'][findx[gph]]-newmag)/np.sqrt(cat1['MAGERR_AUTO'][findx[gph]]**2+0.02**2)
 
             # Calculate mean morphology parameters
             obj[filt+'asemi'][i] = np.mean(cat1['ASEMI'][findx])
@@ -415,6 +433,7 @@ if __name__ == "__main__":
             obj['kvar'][i] = kvar
             obj['avgvar'][i] = avgvar
             obj['chivar'][i] = chivar
+            #if chivar>50: import pdb; pdb.set_trace()
 
         # Make NPHOT from NPHOTX
         obj['nphot'][i] = obj['nphotu'][i]+obj['nphotg'][i]+obj['nphotr'][i]+obj['nphoti'][i]+obj['nphotz'][i]+obj['nphoty'][i]+obj['nphotvr'][i]
@@ -439,7 +458,6 @@ if __name__ == "__main__":
     ebv = sfd(c)
     obj['ebv'] = ebv
 
-    #import pdb; pdb.set_trace()
 
     # ONLY INCLUDE OBJECTS WITH AVERAGE RA/DEC
     # WITHIN THE BOUNDARY OF THE HEALPIX PIXEL!!!
@@ -464,7 +482,7 @@ if __name__ == "__main__":
     print(str(nmatch)+' final objects fall inside the pixel')
 
     # Remove trimmed objects from IDSTR
-    totrim, = np.where(objtokeep[idstr['objectindex']]==0)  #using old index
+    totrim, = np.where(~objtokeep[idstr['objectindex']])  #using old index
     if len(totrim)>0:
         # Trim objects
         idstr = np.delete(idstr,totrim)
