@@ -1,8 +1,9 @@
 pro nsc_instcal_calibrate_main,version,nmulti=nmulti,redo=redo
 
 ; Main NOAO DECam source catalog
-NSC_ROOTDIRS,dldir,mssdir,localdir
-if n_elements(version) eq 0 then version='v3'  ; v2
+NSC_ROOTDIRS,dldir,mssdir,localdir,host
+hostname = first_el(strsplit(host,'.',/extract))
+if n_elements(version) eq 0 then version='v3'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 if file_test(dir,/directory) eq 0 then file_mkdir,dir+'logs/'
@@ -24,10 +25,11 @@ sminute = strtrim(minute,2)
 if minute lt 10 then sminute='0'+sminute
 ssecond = strtrim(round(second),2)
 if second lt 10 then ssecond='0'+ssecond
-logfile = dir+'logs/nsc_instcal_calibrate_main.'+smonth+sday+syear+shour+sminute+ssecond+'.log'
+logtime = smonth+sday+syear+shour+sminute+ssecond
+logfile = dir+'logs/nsc_instcal_calibrate_main.'+logtime+'.log'
 JOURNAL,logfile
 
-if n_elements(nmulti) eq 0 then nmulti = 20
+if n_elements(nmulti) eq 0 then nmulti = 15
 wait = 1
 
 print, "Calibrating DECam/Mosiac3/Bok InstCal SExtractor catalogs"
@@ -40,6 +42,15 @@ k4m_expdirs = file_search(dir+'k4m/20??????/*',/test_directory,count=nk4m_expdir
 if nk4m_expdirs gt 0 then push,expdirs,k4m_expdirs
 ksb_expdirs = file_search(dir+'ksb/20??????/*',/test_directory,count=nksb_expdirs)
 if nksb_expdirs gt 0 then push,expdirs,ksb_expdirs
+expdirs = trailingslash(expdirs)
+; Match these to our lists
+list1 = MRDFITS(dir+'lists/decam_instcal_list.fits.gz',1)
+list2 = MRDFITS(dir+'lists/mosaic3_instcal_list.fits.gz',1)
+list3 = MRDFITS(dir+'lists/bok90prime_instcal_list.fits.gz',1)
+list = [list1,list2,list3]
+lbase = file_basename(strtrim(list.fluxfile,2),'.fits.fz')
+MATCH,file_basename(expdirs),lbase,ind1,ind2,/sort,count=nmatch
+expdirs = expdirs[ind1]
 ; GDL file_search doesn't have /test_directory
 ;expdirs = file_search(dir+'instcal/20??????/*',count=nexpdirs)
 ;gddirs = where(file_test(expdirs,/directory) eq 1,ngddirs)
@@ -47,10 +58,59 @@ if nksb_expdirs gt 0 then push,expdirs,ksb_expdirs
 nexpdirs = n_elements(expdirs)
 print,strtrim(nexpdirs,2),' exposure directories'
 
-cmd = 'nsc_instcal_calibrate,"'+expdirs+'"'
-if keyword_set(redo) then cmd+=',/redo'
-dirs = strarr(nexpdirs)+tmpdir
+allcmd = 'nsc_instcal_calibrate,"'+expdirs+'"'
+if keyword_set(redo) then allcmd+=',/redo'
+alldirs = strarr(nexpdirs)+tmpdir
 ;dirs = strarr(nexpdirs)+'/data0/dnidever/decamcatalog/instcal/tmp/'
+nallcmd = n_elements(allcmd)
+
+; RANDOMIZE
+rnd = sort(randomu(0,nexpdirs))
+allcmd = allcmd[rnd]
+alldirs = alldirs[rnd]
+expdirs = expdirs[rnd]
+
+;; Only run failed exposures
+sumstr = mrdfits(dir+'lists/nsc_instcal_calibrate.fits.gz',1)
+bd = where(sumstr.success eq 0,nbd)
+failed_expdirs = strtrim(sumstr[bd].expdir,2)
+failed_expdirs = trailingslash(repstr(failed_expdirs,'/net/dl1/','/dl1'))
+MATCH,expdirs,failed_expdirs,ind1,ind2,/sort,count=nmatch_failed
+print,strtrim(nmatch_failed,2),' failed exposures to run'
+allcmd = allcmd[ind1]
+alldirs = alldirs[ind1]
+expdirs = expdirs[ind1]
+nallcmd = n_elements(allcmd)
+
+
+;; Parcel out the jobs
+hosts = ['gp09','hulk','thing']
+nhosts = n_elements(hosts)
+torun = lindgen(nallcmd)
+nperhost = nallcmd/nhosts
+for i=0,nhosts-1 do $
+  if stregex(host,hosts[i],/boolean) eq 1 then torun=torun[i*nperhost:(i+1)*nperhost-1]
+ntorun = n_elements(torun)
+cmd = allcmd[torun]
+dirs = alldirs[torun]
+expdirs = expdirs[torun]
+print,'Running ',strtrim(n_elements(torun),2),' on ',hostname
+
+; Saving the structure of jobs to run
+runfile = dir+'lists/nsc_instcal_calibrate_main.'+hostname+'.'+logtime+'_run.fits'
+print,'Writing running information to ',runfile
+runstr = replicate({expdir:'',cmd:'',dir:''},n_elements(cmd))
+runstr.expdir = expdirs
+runstr.cmd = cmd
+runstr.dir = dirs
+MWRFITS,runstr,runfile,/create
+
+stop
+
+a = '' & read,a,prompt='Press RETURN to start'
+PBS_DAEMON,cmd,dirs,jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
+
+
 
 ; ----- Run the LAF and Stripe82 exposures ----
 ;str = MRDFITS(dir+'decam_instcal_list.fits',1)
@@ -149,7 +209,7 @@ dirs = strarr(nexpdirs)+tmpdir
 ;dirs = strarr(ng)+tmpdir
 ;PBS_DAEMON,cmd,dirs,jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti 
 
-stop
+;stop
 
 ; hulk
 ;PBS_DAEMON,cmd[0:3383],dirs[0:3383],jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
@@ -200,7 +260,7 @@ stop
 ; gp09
 ;PBS_DAEMON,cmd[2288:*],dirs[2288:*],jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
 
-stop
+;stop
 
 ; Run PBS_DAEMON
 ;PBS_DAEMON,cmd,dirs,lockfiles=lockfiles,donefiles=donefiles,jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
