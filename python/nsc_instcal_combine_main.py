@@ -69,20 +69,21 @@ if __name__ == "__main__":
     # Log file
     #------------------
     # format is nsc_combine_main.DATETIME.log
-    jd = systime(/julian)
-    caldat,jd,month,day,year,hour,minute,second
-    smonth = strtrim(month,2)
-    if month lt 10 then smonth = '0'+smonth
-    sday = strtrim(day,2)
-    if day lt 10 then sday = '0'+sday
-    syear = strmid(strtrim(year,2),2,2)
-    shour = strtrim(hour,2)
-    if hour lt 10 then shour='0'+shour
-    sminute = strtrim(minute,2)
-    if minute lt 10 then sminute='0'+sminute
-    ssecond = strtrim(round(second),2)
-    if second lt 10 then ssecond='0'+ssecond
-    logfile = dir+'combine/logs/nsc_instcal_combine_main.'+smonth+sday+syear+shour+sminute+ssecond+'.log'
+    ltime = time.localtime()
+    # time.struct_time(tm_year=2019, tm_mon=7, tm_mday=22, tm_hour=0, tm_min=30, tm_sec=20, tm_wday=0, tm_yday=203, tm_isdst=1)
+    smonth = str(ltime[1])
+    if ltime[1]<10: smonth = '0'+smonth
+    sday = str(ltime[2])
+    if ltime[2]<10: sday = '0'+sday
+    syear = str(ltime[0])[2:]
+    shour = str(ltime[3])
+    if ltime[3]<10: shour='0'+shour
+    sminute = str(ltime[4])
+    if ltime[4]<10: sminute='0'+sminute
+    ssecond = str(int(ltime[5]))
+    if ltime[5]<10: ssecond='0'+ssecond
+    logtime = smonth+sday+syear+shour+sminute+ssecond
+    logfile = basedir+'combine/logs/nsc_instcal_combine_main.'+logtime+'.log'
     #JOURNAL,logfile
 
     print("Combining NOAO InstCal catalogs")
@@ -91,26 +92,27 @@ if __name__ == "__main__":
 
     # Restore the calibration summary file
     temp = fits.getdata(basedir+'lists/nsc_instcal_calibrate.fits',1)
-    schema = temp[0]
-    struct_assign,{dum:''},schema
-    schema = create_struct(schema,'chipindx',-1LL,'NGOODCHIPWCS',0)
-    calstr = replicate(schema,n_elements(temp))
-    struct_assign,temp,calstr,/nozero
+    schema = dict(temp.dtype.fields)
+    schema['chipindx'] = (int,0)
+    schema['ngoodchipwcs'] = (int,0)
+    schema['wcscal'] = (np.str,50)
+    schema['telstat'] = (np.str,50)
+    dt = np.dtype(schema)
+    calstr = np.zeros(len(temp),dtype=dt)
+    calstr['chipindx'] = -1
+    for n in temp.dtype.names: calstr[n]=temp[n]
     # Add WCSCAL and TELSTAT information
-    add_tag,calstr,'wcscal','',calstr
-    add_tag,calstr,'telstat','',calstr
     coords = fits.getdata(basedir+'lists/allcoords.fits',1)
     fluxfile = calstr['file']
-    g, = np.where(strmid(fluxfile,0,4) eq '/net',ng)
-    if ng>0: fluxfile[g]=strmid(fluxfile[g],4)
-    MATCH,fluxfile,coords.file,ind1,ind2,/sort
+    fluxfile = fluxfile.replace('/net','')
+    ind1,ind2 = utils.match(fluxfile,coords['file'])
     calstr['wcscal'][ind1] = coords['wcscal'][ind2]    # Failed (3153), Poor (14), Successful (308190)
     calstr['telstat'][ind1] = coords['telstat'][ind2]  # NAN (68188), Not (1222), Track (241826), UNKNOWN (116), Unknown (5)
     # the 2054 failed exposures did not match b/c no fluxfile info
     # Only want exposures with successful SE processing
     gd, = np.where(calstr['success']==1)
-    ncalstr = len(gd)
     calstr = calstr[gd]
+    ncalstr = len(calstr)
     si = np.argsort(calstr['expdir'])
     calstr = calstr[si]
     chstr = fits.getdata(basedir+'lists/nsc_instcal_calibrate.fits',2)
@@ -121,22 +123,18 @@ if __name__ == "__main__":
     expdir = chstr['expdir']
     brklo, = np.where(expdir != np.roll(expdir,1))
     nbrk = len(brklo)
-    brkhi = [brklo[1:nbrk-1]-1,len(expdir)-1]
+    brkhi = [brklo[1:nbrk]-1,len(expdir)-1]
     nchexp = brkhi-brklo+1
     if ncalstr==len(brklo):
         Exception('number of exposures in CALSTR and CHSTR do not match')
     calstr['chipindx'] = brklo
     calstr['nchips'] = nchexp
     # Getting number of good chip WCS for each exposures
-    for i in range(len(calstr): calstr[i].ngoodchipwcs = total(chstr[brklo[i]:brkhi[i]].ngaiamatch gt 0)
+    for i in range(len(calstr): calstr['ngoodchipwcs'][i] = np.sum(chstr['ngaiamatch']][brklo[i]:brkhi[i]+1]>0)
     # Fixing absolute paths of flux filename
-    file = calstr['file']
-    g1, = np.where(stregex(file,'/net/mss1/',/boolean)==1)
-    ng1 = len(g1)
-    if ng1>0: file[g1] = strmid(file[g1],10)
-    g2, = np.where(stregex(file,'/mss1/',/boolean)==1)
-    ng2 = len(g2)
-    if ng2>0: file[g2] = strmid(file[g2],6)
+    cfile = calstr['file']
+    cfile = cfile.replace('/net/mss1/','')
+    cfile = cfile.replace('/mss1/','')
     # Fixing very negative RAs
     print('FIXING NEGATIVE RAs in CALSTR and CHSTR')
     #bdra, = np.where(chstr.cenra lt -180,nbdra)
@@ -148,8 +146,9 @@ if __name__ == "__main__":
     for i in range(nmatch):
         ind3,ind4 = utils.match(chstr['expdir'][bdra],calstr['expdir'][ind1[i]])
         # Fix CALSTR RA
-        chra = chstr[bdra[ind3]].cenra
-        bd1, = np.where(chra lt -180,nbd1)
+        chra = chstr['cenra'][bdra[ind3]]
+        bd1, = np.where(chra < -180)
+        nbd1 = len(bd1)
         if nbd1>0: chra[bd1]+=360
         cenra = np.mean(utils.minmax(chra))
         if cenra<0: cenra+=360
@@ -198,46 +197,50 @@ if __name__ == "__main__":
     list2 = fits.getdata(basedir+'lists/mosaic3_instcal_list.fits',1)
     list3 = fits.getdata(basedir+'lists/bok90prime_instcal_list.fits',1)
     elist = np.hstack((list1,list2,list3))
-    fluxfile = strmid(elist['fluxfile'],10)
-    ind1,ind2 = utils.match(fluxfile,fil
-    MATCH,fluxfile,file,ind1,ind2,/sort,count=nmatch
+    fluxfile = [f[10:] for f in elist['fluxfile']]
+    ind1,ind2 = utils.match(fluxfile,cfile)
     # some don't match because they were from a previous version
     #  of the input list
-    release_date = strarr(len(calstr))+'2020-01-01 00:00:00'
-    release_date[ind2] = list[ind1].release_date
-    release_year = int(strmid(release_date,0,4))
-    release_month = int(strmid(release_date,5,2))
-    release_day = int(strmid(release_date,8,2))
-    release_mjd = JULDAY(release_month,release_day,release_year)-2400000.5d0
+    release_date = np.zeros(len(calstr),dtype=(np.str,100))+'2020-01-01 00:00:00'
+    release_date[ind2] = elist['release_date'][ind1]
+    release_date = release_date.strip().replace(' ','T')
+    trelease = Time(release_date, format='isot', scale='utc')
     #release_cutoff = [2017,4,24]  # v1 - April 24, 2017
-    release_cutoff = [2017,10,11]  # v2 - Oct 11, 2017
-    release_cutoff_mjd = JULDAY(release_cutoff[1],release_cutoff[2],release_cutoff[0])-2400000.5d0
-    gdrelease, = np.where(release_mjd le release_cutoff_mjd,ngdrelease,comp=bdrelease,ncomp=nbdrelease)
+    #release_cutoff = [2017,10,11]  # v2 - Oct 11, 2017
+    release_cutoff = [2019,7,9]  # v3 - July 9, 2019
+    release_date_cutoff = ('%04d-%02d-%02d' % (release_cutoff[0],release_cutoff[1],release_cutoff[2]))+'T00:00:00'
+    tcutoff = Time(release_date_cutoff, format='isot', scale='utc')
+    gdrelease, = np.where(trelease.mjd <= tcutoff.mjd)
+    ngdrelease = len(gdrelease)
+    bdrelease, = np.where(trelease.mjd > tcutoff.mjd)
+    nbdrelease = len(bdrelease)
     print(str(ngdrelease)+' exposures are PUBLIC')
     calstr = calstr[gdrelease]  # impose the public data cut
 
     # Zero-point structure
-    zpstr = replicate({instrument:'',filter:'',amcoef:fltarr(2),thresh:0.5},10)
-    zpstr[0:6].instrument = 'c4d'
-    zpstr[0:6].filter = ['u','g','r','i','z','Y','VR']
-    zpstr[0].amcoef = [-1.60273, -0.375253]   # c4d-u
-    zpstr[1].amcoef = [0.277124, -0.198037]   # c4d-g
-    zpstr[2].amcoef = [0.516382, -0.115443]   # c4d-r
-    zpstr[3].amcoef = [0.380338, -0.067439]   # c4d-i
-    zpstr[4].amcoef = [0.123924, -0.096877]   # c4d-z
-    zpstr[5].amcoef = [-1.06529, -0.051967]   # c4d-Y
-    zpstr[6].amcoef = [1.004357, -0.081105]   # c4d-VR
+    dt_zpstr = np.dtype([('instrument',np.str,10),('filter',np.str,10),('amcoef',float,2),('thresh',0)])
+    zpstr = np.zeros(10,dtype=dtype_zpstr)
+    zpstr['thresh'] = 0.5
+    zpstr['instrument'][0:7] = 'c4d'
+    zpstr['filter'][0:7] = ['u','g','r','i','z','Y','VR']
+    zpstr['amcoef'][0] = [-1.60273, -0.375253]   # c4d-u
+    zpstr['amcoef'][1] = [0.277124, -0.198037]   # c4d-g
+    zpstr['amcoef'][2] = [0.516382, -0.115443]   # c4d-r
+    zpstr['amcoef'][3] = [0.380338, -0.067439]   # c4d-i
+    zpstr['amcoef'][4] = [0.123924, -0.096877]   # c4d-z
+    zpstr['amcoef'][5] = [-1.06529, -0.051967]   # c4d-Y
+    zpstr['amcoef'][6] = [1.004357, -0.081105]   # c4d-VR
     # Mosiac3 z-band
-    zpstr[7].instrument = 'k4m'
-    zpstr[7].filter = 'z'
-    zpstr[7].amcoef = [-2.687201, -0.73573]   # k4m-z
+    zpstr['instrument'][7] = 'k4m'
+    zpstr['filter'][7] = 'z'
+    zpstr['amcoef'][7] = [-2.687201, -0.73573]   # k4m-z
     # Bok 90Prime, g and r
-    zpstr[8].instrument = 'ksb'
-    zpstr[8].filter = 'g'
-    zpstr[8].amcoef = [-2.859646, -1.40837]   # ksb-g
-    zpstr[9].instrument = 'ksb'
-    zpstr[9].filter = 'r'
-    zpstr[9].amcoef = [-4.008771, -0.25718]   # ksb-r
+    zpstr['instrument'][8] = 'ksb'
+    zpstr['filter'][8] = 'g'
+    zpstr['amcoef'][8] = [-2.859646, -1.40837]   # ksb-g
+    zpstr['instrument'][9] = 'ksb'
+    zpstr['filter'][9] = 'r'
+    zpstr['amcoef'][9] = [-4.008771, -0.25718]   # ksb-r
     nzpstr = len(zpstr)
 
     #STOP,'DOUBLE-CHECK THESE ZERO-POINTS!!!'
@@ -251,29 +254,35 @@ if __name__ == "__main__":
         #nfilters = len(filters)
         #zpthresh = [2.0,2.0,2.0,2.0,2.0,2.0,2.0]
         #zpthresh = [0.5,0.5,0.5,0.5,0.5,0.5,0.5]
-        badzpmask = bytarr(len(calstr)) + 1
-
+        badzpmask = np.zeros(len(calstr),bool)+True
+        
         for i in range(nzpstr):
-            ind, = np.where(calstr.instrument eq zpstr[i].instrument and calstr.filter eq zpstr[i].filter and calstr.success eq 1,nind)
+            ind, = np.where((calstr['instrument']==zpstr['instrument']][i]) & (calstr['filter']==zpstr['filter'][i]) & (calstr['success']==1))
+            nind = len(ind)
             print(zpstr['instrument'][i]+'-'+zpstr['filter'][i]+' '+str(nind)+' exposures')
             if nind>0:
                 calstr1 = calstr[ind]
-                zpterm = calstr1.zpterm
-                bdzp, = np.where(finite(zpterm) eq 0,nbdzp)  # fix Infinity/NAN
-                if nbdzp gt 0 then zpterm[bdzp] = 999999.9
-                am = calstr1.airmass
-                mjd = calstr1.mjd
-                bdam, = np.where(am lt 0.9,nbdam)
-                if nbdam gt 0 then am[bdam] = median(am)
+                zpterm = calstr1['zpterm']
+                bdzp, = np.where(~np.isfinite(zpterm))  # fix Infinity/NAN
+                nbdzp = len(bdzp)
+                if nbdzp>0:zpterm[bdzp] = 999999.9
+                am = calstr1['airmass']
+                mjd = calstr1['mjd']
+                bdam, = np.where(am < 0.9)
+                nbdam = len(bdam)
+                if nbdam>0: am[bdam] = np.median(am)
+# I GOT TO HERE IN THE TRANSLATING!!!
                 glactc,calstr1.ra,calstr1.dec,2000.0,glon,glat,1,/deg
 
                 # Measure airmass dependence
-                gg0, = np.where(abs(zpterm) lt 50 and am lt 2.0,ngg0)
-                coef0 = robust_poly_fitq(am[gg0],zpterm[gg0],1)
-                zpf = poly(am,coef0)
-                sig0 = mad(zpterm[gg0]-zpf[gg0])
-                gg, = np.where(abs(zpterm-zpf) lt (3.5*sig0 > 0.2),ngg)
-                coef = robust_poly_fitq(am[gg],zpterm[gg],1)
+                gg0, = np.where((np.abs(zpterm)<50) & (am<2.0))
+                ngg0 = len(gg0)
+                coef0 = utils.poly_fit(am[gg0],zpterm[gg0],1,robust=True)
+                zpf = utils.poly(am,coef0)
+                sig0 = np.mad(zpterm[gg0]-zpf[gg0])
+                gg, = np.where(np.abs(zpterm-zpf) < (np.maximum(3.5*sig0,0.2)))
+                ngg = len(gg)
+                coef = utils.poly_fit(am[gg],zpterm[gg],1,robust=True)
                 print(zpstr['instrument'][i]+'-'+zpstr['filter'][i]+' '+str(coef))
                 # Trim out bad exposures to determine the correlations and make figures
                 gg, = np.where(np.abs(zpterm-zpf) lt (3.5*sig0 > 0.2) and calstr1.airmass lt 2.0 and calstr1.fwhm lt 2.0 and calstr1.rarms lt 0.15 and $
@@ -308,32 +317,32 @@ if __name__ == "__main__":
 
                 # Make some figures
                 # ZPterm vs. airmass
-                file = plotsdir+zpstr[i].instrument+'-'+zpstr[i].filter+'_zpterm_airmass'
-                ps_open,file,/color,thick=4,/encap
+                pfile = plotsdir+zpstr[i].instrument+'-'+zpstr[i].filter+'_zpterm_airmass'
+                ps_open,pfile,/color,thick=4,/encap
                 hess,am[gg],relzpterm[gg],dx=0.01,dy=0.02,xr=[0.9,2.5],yr=[-0.5,0.5]+median(relzpterm[gg]),xtit='Airmass',ytit='Zero-point',$
                      tit=zpstr[i].instrument+'-'+zpstr[i].filter
                 x = scale_vector(findgen(100),0.5,2.0)
                 oplot,x,poly(x,coef),co=250
                 ps_close
-                ps2png,file+'.eps',/eps
+                ps2png,pfile+'.eps',/eps
                 # ZPterm vs. time (density)
-                file = plotsdir+zpstr[i].instrument+'-'+zpstr[i].filter+'_zpterm_time_density'
-                ps_open,file,/color,thick=4,/encap
+                pfile = plotsdir+zpstr[i].instrument+'-'+zpstr[i].filter+'_zpterm_time_density'
+                ps_open,pfile,/color,thick=4,/encap
                 hess,calstr1[gg].mjd-mjd0,relzpterm[gg],dx=2,dy=0.02,yr=[-0.5,0.5]+median(relzpterm[gg]),xtit='Time (days)',ytit='Zero-point',$
                      tit=zpstr[i].instrument+'-'+zpstr[i].filter
                 oplot,calstr1[gg].mjd-mjd0,allzpfit[gg],ps=1,sym=0.3,co=250
-                xyouts,50,-0.45+median(relzpterm[gg]),'MJD!d0!n = '+strtrim(mjd0,2),align=0,charsize=1.2
+                xyouts,50,-0.45+median(relzpterm[gg]),'MJD!d0!n = '+str(mjd0,2),align=0,charsize=1.2
                 ps_close
-                ps2png,file+'.eps',/eps
+                ps2png,pfile+'.eps',/eps
                 # ZPterm vs. time (points)
-                file = plotsdir+zpstr[i].instrument+'-'+zpstr[i].filter+'_zpterm_time'
-                ps_open,file,/color,thick=4,/encap
+                pfile = plotsdir+zpstr[i].instrument+'-'+zpstr[i].filter+'_zpterm_time'
+                ps_open,pfile,/color,thick=4,/encap
                 plot,calstr1[gg].mjd-mjd0,relzpterm[gg],ps=1,sym=0.5,yr=[-0.5,0.5]+median(relzpterm[gg]),xs=1,ys=1,xtit='Time (days)',ytit='Zero-point',$
                      tit=zpstr[i].instrument+'-'+zpstr[i].filter,thick=1
                 oplot,calstr1[gg].mjd-mjd0,allzpfit[gg],ps=1,sym=0.3,co=250
-                xyouts,50,-0.45+median(relzpterm[gg]),'MJD!d0!n = '+strtrim(mjd0,2),align=0,charsize=1.2
+                xyouts,50,-0.45+median(relzpterm[gg]),'MJD!d0!n = '+str(mjd0,2),align=0,charsize=1.2
                 ps_close
-                ps2png,file+'.eps',/eps
+                ps2png,pfile+'.eps',/eps
 
                 # Remove temporal variations to get residual values
                 relzpterm -= allzpfit
@@ -345,42 +354,47 @@ if __name__ == "__main__":
                 # if there are clouds then instmag is larger/fainter
                 #  and zpterm is smaller (more negative)
                 #bdind, = np.where(calstr[ind].zpterm-medzp lt -zpthresh[i],nbdind)
-                gdind, = np.where(relzpterm ge -zpstr[i].thresh and relzpterm le zpstr[i].thresh,ngdind,comp=bdind,ncomp=nbdind)
+                gdmask = (relzpterm >= -zpstr['thresh'][i]) & (relzpterm <= zpstr['thresh'][i])
+                gdind, = np.where(gdmask)
+                ngdind = len(gdind)
+                bdind, = np.where(~gdmask)
+                nbdind = len(bdind)
                 print('  '+str(nbdind)+' exposures with ZPTERM below the threshold')
                 if ngdind>0: badzpmask[ind[gdind]] = 0
 
         # Get bad DECaLS and SMASH exposures
-        badexp = bytarr(len(calstr))
+        badexp = np.zeros(len(calstr),bool)+False
         READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/smash_badexposures.txt',smashexpnum,format='A',comment='#',/silent
         MATCH,int(calstr.expnum),int(smashexpnum),ind1,ind2,/sort,count=nmatch
         if nmatch>0:
             badexp[ind1] = 1
-            badexp[ind1] = badexp[ind1] AND (calstr[ind1].instrument eq 'c4d')   # make sure they are DECam exposures
+            badexp[ind1] = badexp[ind1] & (calstr['instrument'][ind1]=='c4d')   # make sure they are DECam exposures
         READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/decals_bad_expid.txt',decalsexpnum,format='A',comment='#',/silent
         MATCH,int(calstr.expnum),int(decalsexpnum),ind1,ind2,/sort,count=nmatch
         if nmatch>0:
             badexp[ind1] = 1
-            badexp[ind1] = badexp[ind1] AND (calstr[ind1].instrument eq 'c4d')   # make sure they are DECam exposures
+            badexp[ind1] = badexp[ind1] & (calstr['instrument'][ind1]=='c4d')   # make sure they are DECam exposures
         READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/mzls_bad_expid.txt',mzlsexpnum,format='A',comment='#',/silent
         MATCH,int(calstr.expnum),int(mzlsexpnum),ind1,ind2,/sort,count=nmatch
         if nmatch>0:
             badexp[ind1] = 1
-            badexp[ind1] = badexp[ind1] AND (calstr[ind1].instrument eq 'k4m')   # make sure they are Mosaic3 exposures
+            badexp[ind1] = badexp[ind1] & (calstr['instrument'][ind1]=='k4m')   # make sure they are Mosaic3 exposures
 
         # Final QA cuts
         #  Many of the short u-band exposures have weird ZPTERMs, not sure why
         #  There are a few exposures with BAD WCS, RA>360!
-        bdexp, = np.where(calstr.success eq 0 or $                              # SE failure
-                      calstr.wcscal ne 'Successful' or $                    # CP WCS failure
-                      calstr.fwhm gt fwhmthresh or $                        # bad seeing
-                      calstr.ra gt 360 or $                                 # bad WCS/coords
-                      calstr.rarms gt 0.15 or calstr.decrms gt 0.15 or $       # bad WCS
-                      badzpmask eq 1 or $                                # bad ZPTERM
-                      calstr.zptermerr gt 0.05 or $                         # bad ZPTERMERR
-                      calstr.nrefmatch lt 5 or $                            # few phot ref match
-                      badexp eq 1 or $                                   # bad SMASH/LS exposure
-                      #calstr.ngoodchipwcs lt calstr.nchips or $                # not all chips astrom calibrated
-                      (calstr.instrument eq 'c4d' and calstr.zpspatialvar_nccd gt 5 and calstr.zpspatialvar_rms gt 0.1),nbdexp)  # bad spatial zpterm
+        bdexp, = np.where((calstr['success']==0) |                              # SE failure
+                      (calstr['wcscal']!='Successful') |                    # CP WCS failure
+                      (calstr['fwhm']>fwhmthresh) |                        # bad seeing
+                      (calstr['ra']>360) |                                 # bad WCS/coords
+                      (calstr['rarms']>0.15) | (calstr['decrms']>0.15) |       # bad WCS
+                      (badzpmask==1) |                                # bad ZPTERM
+                      (calstr['zptermerr']>0.05) |                         # bad ZPTERMERR
+                      (calstr['nrefmatch']<5) |                            # few phot ref match
+                      (badexp==1) |                                   # bad SMASH/LS exposure
+                      #(calstr['ngoodchipwcs']<calstr['nchips'] |                # not all chips astrom calibrated
+                      ((calstr['instrument']=='c4d') & (calstr['zpspatialvar_nccd']>5) & (calstr['zpspatialvar_rms']>0.1))))  # bad spatial zpterm
+        nbdexp = len(bdexp)
         # rarms/decrms, nrefmatch
         print('QA cuts remove '+str(nbdexp)+' exposures')
         # Remove
@@ -411,12 +425,13 @@ if __name__ == "__main__":
     # CREATE LIST OF HEALPIX AND OVERLAPPING EXPOSURES
     # Which healpix pixels have data
     listfile = basedir+'lists/nsc_healpix_list.fits'
-    if keyword_set(makelist) or file_test(listfile) eq 0:
+    if makelist | ~os.path.exists(listfile):
         print('Finding the Healpix pixels with data')
         radius = 1.1
-        healstr = replicate({file:'',base:'',pix:0L},1e5)
+        dtype_healstr = np.dtype([('file',np.str,200),('base',np.str,200),('pix',int)])
+        healstr = np.zers(100000,dtype=dtype_healstr)
         nhealstr = len(healstr)
-        cnt = 0LL
+        cnt = 0
         for i in range(ncalstr):
             if i mod 1e3 eq 0 then print(str(i))
             theta = (90-calstr[i].dec)/radeg
@@ -451,15 +466,15 @@ if __name__ == "__main__":
             # Add new elements to array
             if (cnt+nlistpix)>nhealstr:
                 old = healstr
-                healstr = replicate({file:'',base:'',pix:0L},nhealstr+1e4)
-                healstr[0:nhealstr-1] = old
+                healstr = np.zeros(nhealstr+10000,dtype=dtype_healstr)
+                healstr[0:nhealstr] = old
                 nhealstr += 1e4
-                undefine,old
+                del(old)
 
             # Add to the structure
-            healstr[cnt:cnt+nlistpix-1].file = calstr[i].expdir+'/'+calstr[i].base+'_cat.fits'
-            healstr[cnt:cnt+nlistpix-1].base = calstr[i].base
-            healstr[cnt:cnt+nlistpix-1].pix = listpix
+            healstr['file'][cnt:cnt+nlistpix] = calstr['expdir'][i]+'/'+calstr['base'][i]+'_cat.fits'
+            healstr['base'][cnt:cnt+nlistpix] = calstr['base'][i]
+            healstr['pix'][cnt:cnt+nlistpix] = listpix
             cnt += nlistpix
 
         # Trim extra elements
@@ -515,7 +530,7 @@ if __name__ == "__main__":
     rnd = sort(randomu(1,npixlist))   # RANDOMIZE!!
     pixlist = int(pixlist[rnd])
     print('Running '+str(npixlist)+' jobs on '+host+' with nmult='+str(nmulti))
-    cmd = "nsc_instcal_combine,"+strtrim(pixlist,2)+",nside="+strtrim(nside,2)+",version='"+version+"',/local,/filesexist"
+    cmd = "nsc_instcal_combine,"+str(pixlist,2)+",nside="+str(nside,2)+",version='"+version+"',/local,/filesexist"
     if keyword_set(redo) then cmd+=',/redo'
     cmddir = strarr(npixlist)+localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 
@@ -525,23 +540,23 @@ if __name__ == "__main__":
 
 
     ## Make the commands
-    #cmd = "nsc_instcal_combine,"+strtrim(index.pix,2)+",nside="+strtrim(nside,2)+",version='"+version+"'"
+    #cmd = "nsc_instcal_combine,"+str(index.pix,2)+",nside="+str(nside,2)+",version='"+version+"'"
     #if keyword_set(redo) then cmd+=',/redo'
     #cmddir = strarr(npix)+localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 
     ## Check if the output file exists
     #if not keyword_set(redo) then begin
-    #  outfiles = dir+'combine/'+strtrim(upix/1000,2)+'/'+strtrim(upix,2)+'.fits.gz'
+    #  outfiles = dir+'combine/'+str(upix/1000,2)+'/'+str(upix,2)+'.fits.gz'
     #  test = file_test(outfiles)
     #  gd, = np.where(test eq 0,ngd,comp=bd,ncomp=nbd)
     #  if nbd gt 0 then begin
-    #    print,strtrim(nbd,2),' files already exist and /redo not set.'
+    #    print,str(nbd,2),' files already exist and /redo not set.'
     #  endif 
     #  if ngd eq 0 then begin
     #    print,'No files to process'
     #    return
     #  endif
-    #  print,strtrim(ngd,2),' files left to process'
+    #  print,str(ngd,2),' files left to process'
     #  cmd = cmd[gd]
     #  cmddir = cmddir[gd]
     #endif
@@ -671,7 +686,7 @@ if __name__ == "__main__":
     #cel2smc,pixra,pixdec,rasmc,radsmc
     #gdpix, = np.where(index.nexp lt 50 and np.abs(pixgb) gt 10 and radlmc gt 5 and radsmc gt 5,ngdpix)
     #
-    #outfile = dldir+'users/dnidever/nsc/instcal/combine/'+strtrim(index.pix,2)+'.fits'
+    #outfile = dldir+'users/dnidever/nsc/instcal/combine/'+str(index.pix,2)+'.fits'
 
     # Now run the combination program on each healpix pixel
     PBS_DAEMON,cmd,cmddir,jobs=jobs,/hyperthread,/idle,prefix='nsccmb',nmulti=nmulti,wait=1
@@ -684,7 +699,7 @@ if __name__ == "__main__":
     #sumstr.pix = upix
     #for i=0,nupix-1 do begin
     #  if (i+1) mod 5000 eq 0 then print,i+1
-    #  file = dir+'combine/'+strtrim(upix[i],2)+'.fits'
+    #  file = dir+'combine/'+str(upix[i],2)+'.fits'
     #  if file_test(file) eq 1 then begin
     #    meta = MRDFITS(file,1,/silent)
     #    sumstr[i].nexposures = len(meta)
@@ -696,7 +711,7 @@ if __name__ == "__main__":
     #  endelse
     #endfor
     #gd, = np.where(sumstr.success eq 1,ngd)
-    #print,strtrim(ngd,2),' Healpix successfully processed'
+    #print,str(ngd,2),' Healpix successfully processed'
     #print,'Writing summary file to ',dir+'combine/nsc_instcal_combine.fits'
     #MWRFITS,sumstr,dir+'combine/nsc_instcal_combine.fits',/create
 
