@@ -9,7 +9,7 @@ from astropy.utils.exceptions import AstropyWarning
 from astropy.table import Table, vstack, Column
 from astropy.time import Time
 import healpy as hp
-from dlnpyutils import utils, coords
+from dlnpyutils import utils as dln, coords
 #import subprocess
 import time
 from argparse import ArgumentParser
@@ -105,14 +105,13 @@ if __name__ == "__main__":
     coords = fits.getdata(basedir+'lists/allcoords.fits',1)
     fluxfile = calstr['file']
     fluxfile = fluxfile.replace('/net','')
-    ind1,ind2 = utils.match(fluxfile,coords['file'])
+    ind1,ind2 = dln.match(fluxfile,coords['file'])
     calstr['wcscal'][ind1] = coords['wcscal'][ind2]    # Failed (3153), Poor (14), Successful (308190)
     calstr['telstat'][ind1] = coords['telstat'][ind2]  # NAN (68188), Not (1222), Track (241826), UNKNOWN (116), Unknown (5)
     # the 2054 failed exposures did not match b/c no fluxfile info
     # Only want exposures with successful SE processing
-    gd, = np.where(calstr['success']==1)
+    gd,ncalstr = dln.where(calstr['success']==1)
     calstr = calstr[gd]
-    ncalstr = len(calstr)
     si = np.argsort(calstr['expdir'])
     calstr = calstr[si]
     chstr = fits.getdata(basedir+'lists/nsc_instcal_calibrate.fits',2)
@@ -121,8 +120,7 @@ if __name__ == "__main__":
     siexp = np.argsort(chstr['expdir'])
     chstr = chstr[siexp]
     expdir = chstr['expdir']
-    brklo, = np.where(expdir != np.roll(expdir,1))
-    nbrk = len(brklo)
+    brklo,nbrk = dln.where(expdir != np.roll(expdir,1))
     brkhi = [brklo[1:nbrk]-1,len(expdir)-1]
     nchexp = brkhi-brklo+1
     if ncalstr==len(brklo):
@@ -138,30 +136,26 @@ if __name__ == "__main__":
     # Fixing very negative RAs
     print('FIXING NEGATIVE RAs in CALSTR and CHSTR')
     #bdra, = np.where(chstr.cenra lt -180,nbdra)
-    bdra, = np.where(chstr['cenra']<0)
-    nbdra = len(bdra)
+    bdra,nbdra = dln.where(chstr['cenra']<0)
     dum,uibd = np.unique(chstr['expdir'][bdra],return_indices=True)
-    ind1,ind2 = utils.match(calstr['expdir'],chstr['expdir'][bdra[uibd]])
+    ind1,ind2 = dln.match(calstr['expdir'],chstr['expdir'][bdra[uibd]])
     nmatch = len(ind1)
     for i in range(nmatch):
-        ind3,ind4 = utils.match(chstr['expdir'][bdra],calstr['expdir'][ind1[i]])
+        ind3,ind4 = dln.match(chstr['expdir'][bdra],calstr['expdir'][ind1[i]])
         # Fix CALSTR RA
         chra = chstr['cenra'][bdra[ind3]]
-        bd1, = np.where(chra < -180)
-        nbd1 = len(bd1)
+        bd1,nbd1 = dln.where(chra < -180)
         if nbd1>0: chra[bd1]+=360
-        cenra = np.mean(utils.minmax(chra))
+        cenra = np.mean(dln.minmax(chra))
         if cenra<0: cenra+=360
         calstr['ra'][ind1[i]] = cenra
         # Fix CHSTR CENRA
-        bd2, = np.where(chra<0)
-        nbd2 = len(bd2)
+        bd2,nbd2 = dln.where(chra<0)
         if nbd2>0: chra[bd2]+=360
         chstr['cenra']][bdra[ind3]] = chra
         # Fix CHSTR VRA
         vra = chstr['vra'][bdra[ind3]]
-        bd3, = np.where(vra<0)
-        nbd3 = len(bd3)
+        bd3,nbd3 = dln.where(vra<0)
         if nbd3>0: vra[bd3]+=360
         chstr['vra'][bdra[ind3]] = vra
 
@@ -169,10 +163,10 @@ if __name__ == "__main__":
     print('FIXING INSTRUMENT IN STR AND CHSTR')
     type = ['c4d','k4m','ksb']
     for i=0,len(type)-1:
-        gd, = np.where(stregex(calstr.expdir,'/'+type[i]+'/',/boolean) eq 1,ngd)
-        if ngd gt 0 then calstr[gd].instrument=type[i]
-        gd, = np.where(stregex(chstr.expdir,'/'+type[i]+'/',/boolean) eq 1,ngd)
-        if ngd gt 0 then chstr[gd].instrument=type[i]
+        gd,ngd = dln.where(stregex(calstr.expdir,'/'+type[i]+'/',/boolean)==1)
+        if ngd>0: calstr[gd].instrument=type[i]
+        gd,ngd = dln.where(stregex(chstr.expdir,'/'+type[i]+'/',/boolean)==1)
+        if ngd>0: chstr[gd].instrument=type[i]
 
     ## Fix missing AIRMASS
     #bdam, = np.where(str.airmass lt 0.9,nbdam)
@@ -198,7 +192,7 @@ if __name__ == "__main__":
     list3 = fits.getdata(basedir+'lists/bok90prime_instcal_list.fits',1)
     elist = np.hstack((list1,list2,list3))
     fluxfile = [f[10:] for f in elist['fluxfile']]
-    ind1,ind2 = utils.match(fluxfile,cfile)
+    ind1,ind2 = dln.match(fluxfile,cfile)
     # some don't match because they were from a previous version
     #  of the input list
     release_date = np.zeros(len(calstr),dtype=(np.str,100))+'2020-01-01 00:00:00'
@@ -210,10 +204,7 @@ if __name__ == "__main__":
     release_cutoff = [2019,7,9]  # v3 - July 9, 2019
     release_date_cutoff = ('%04d-%02d-%02d' % (release_cutoff[0],release_cutoff[1],release_cutoff[2]))+'T00:00:00'
     tcutoff = Time(release_date_cutoff, format='isot', scale='utc')
-    gdrelease, = np.where(trelease.mjd <= tcutoff.mjd)
-    ngdrelease = len(gdrelease)
-    bdrelease, = np.where(trelease.mjd > tcutoff.mjd)
-    nbdrelease = len(bdrelease)
+    gdrelease,ngdrelease,bdrelease,nbdrelease = dln.where(trelease.mjd <= tcutoff.mjd,comp=True)
     print(str(ngdrelease)+' exposures are PUBLIC')
     calstr = calstr[gdrelease]  # impose the public data cut
 
@@ -257,40 +248,34 @@ if __name__ == "__main__":
         badzpmask = np.zeros(len(calstr),bool)+True
         
         for i in range(nzpstr):
-            ind, = np.where((calstr['instrument']==zpstr['instrument']][i]) & (calstr['filter']==zpstr['filter'][i]) & (calstr['success']==1))
-            nind = len(ind)
+            ind,nind = dln.where((calstr['instrument']==zpstr['instrument']][i]) & (calstr['filter']==zpstr['filter'][i]) & (calstr['success']==1))
             print(zpstr['instrument'][i]+'-'+zpstr['filter'][i]+' '+str(nind)+' exposures')
             if nind>0:
                 calstr1 = calstr[ind]
                 zpterm = calstr1['zpterm']
-                bdzp, = np.where(~np.isfinite(zpterm))  # fix Infinity/NAN
-                nbdzp = len(bdzp)
+                bdzp,nbdzp = dln.where(~np.isfinite(zpterm))  # fix Infinity/NAN
                 if nbdzp>0:zpterm[bdzp] = 999999.9
                 am = calstr1['airmass']
                 mjd = calstr1['mjd']
-                bdam, = np.where(am < 0.9)
-                nbdam = len(bdam)
+                bdam,nbdam = dln.where(am < 0.9)
                 if nbdam>0: am[bdam] = np.median(am)
 # I GOT TO HERE IN THE TRANSLATING!!!
                 glactc,calstr1.ra,calstr1.dec,2000.0,glon,glat,1,/deg
 
                 # Measure airmass dependence
-                gg0, = np.where((np.abs(zpterm)<50) & (am<2.0))
-                ngg0 = len(gg0)
-                coef0 = utils.poly_fit(am[gg0],zpterm[gg0],1,robust=True)
-                zpf = utils.poly(am,coef0)
+                gg0,ngg0 = dln.where((np.abs(zpterm)<50) & (am<2.0))
+                coef0 = dln.poly_fit(am[gg0],zpterm[gg0],1,robust=True)
+                zpf = dln.poly(am,coef0)
                 sig0 = np.mad(zpterm[gg0]-zpf[gg0])
-                gg, = np.where(np.abs(zpterm-zpf) < (np.maximum(3.5*sig0,0.2)))
-                ngg = len(gg)
-                coef = utils.poly_fit(am[gg],zpterm[gg],1,robust=True)
+                gg,ngg = dln.where(np.abs(zpterm-zpf) < (np.maximum(3.5*sig0,0.2)))
+                coef = dln.poly_fit(am[gg],zpterm[gg],1,robust=True)
                 print(zpstr['instrument'][i]+'-'+zpstr['filter'][i]+' '+str(coef))
                 # Trim out bad exposures to determine the correlations and make figures
-                gg, = np.where(np.abs(zpterm-zpf) lt (3.5*sig0 > 0.2) and calstr1.airmass lt 2.0 and calstr1.fwhm lt 2.0 and calstr1.rarms lt 0.15 & 
+                gg,ngg = dln.where(np.abs(zpterm-zpf) lt (3.5*sig0 > 0.2) and calstr1.airmass lt 2.0 and calstr1.fwhm lt 2.0 and calstr1.rarms lt 0.15 & 
                            calstr1.decrms lt 0.15 and calstr1.success eq 1 and calstr1.wcscal eq 'Successful' and calstr1.zptermerr lt 0.05 & 
                            calstr1.zptermsig lt 0.08 and (calstr1.ngoodchipwcs eq calstr1.nchips) & 
                            (calstr1.instrument ne 'c4d' or calstr1.zpspatialvar_nccd le 5 or (calstr1.instrument eq 'c4d' and calstr1.zpspatialvar_nccd gt 5 and calstr1.zpspatialvar_rms lt 0.1)) and $
                            np.abs(glat) gt 10 and calstr1.nrefmatch gt 100 and calstr1.exptime ge 30)
-                ngg = len(gg)
 
                 # Zpterm with airmass dependence removed
                 relzpterm = zpterm + 25   # 25 to get "absolute" zpterm
@@ -310,8 +295,7 @@ if __name__ == "__main__":
                 bkspace = 200
                 sset1 = bspline_iterfit(xx,yy,invvar=invvar,nord=nord,bkspace=bkspace,yfit=yfit1)
                 sig1 = mad(yy-yfit1)
-                gd, = np.where(yy-yfit1 > -3*sig1)
-                ngd = len(gd)
+                gd,ngd = dln.where(yy-yfit1 > -3*sig1)
                 # refit
                 sset = bspline_iterfit(xx[gd],yy[gd],invvar=invvar[gd],nord=nord,bkspace=bkspace)
                 yfit = bspline_valu(xx,sset)
@@ -357,10 +341,7 @@ if __name__ == "__main__":
                 #  and zpterm is smaller (more negative)
                 #bdind, = np.where(calstr[ind].zpterm-medzp lt -zpthresh[i],nbdind)
                 gdmask = (relzpterm >= -zpstr['thresh'][i]) & (relzpterm <= zpstr['thresh'][i])
-                gdind, = np.where(gdmask)
-                ngdind = len(gdind)
-                bdind, = np.where(~gdmask)
-                nbdind = len(bdind)
+                gdind,ngdind,bdind,nbdind = dln.where(gdmask,comp=True)
                 print('  '+str(nbdind)+' exposures with ZPTERM below the threshold')
                 if ngdind>0: badzpmask[ind[gdind]] = 0
 
@@ -385,24 +366,23 @@ if __name__ == "__main__":
         # Final QA cuts
         #  Many of the short u-band exposures have weird ZPTERMs, not sure why
         #  There are a few exposures with BAD WCS, RA>360!
-        bdexp, = np.where((calstr['success']==0) |                              # SE failure
-                      (calstr['wcscal']!='Successful') |                    # CP WCS failure
-                      (calstr['fwhm']>fwhmthresh) |                        # bad seeing
-                      (calstr['ra']>360) |                                 # bad WCS/coords
-                      (calstr['rarms']>0.15) | (calstr['decrms']>0.15) |       # bad WCS
-                      (badzpmask==1) |                                # bad ZPTERM
-                      (calstr['zptermerr']>0.05) |                         # bad ZPTERMERR
-                      (calstr['nrefmatch']<5) |                            # few phot ref match
-                      (badexp==1) |                                   # bad SMASH/LS exposure
-                      #(calstr['ngoodchipwcs']<calstr['nchips'] |                # not all chips astrom calibrated
-                      ((calstr['instrument']=='c4d') & (calstr['zpspatialvar_nccd']>5) & (calstr['zpspatialvar_rms']>0.1))))  # bad spatial zpterm
-        nbdexp = len(bdexp)
+        bdexp,nbdexp = dln.where((calstr['success']==0) |                              # SE failure
+                                 (calstr['wcscal']!='Successful') |                    # CP WCS failure
+                                 (calstr['fwhm']>fwhmthresh) |                        # bad seeing
+                                 (calstr['ra']>360) |                                 # bad WCS/coords
+                                 (calstr['rarms']>0.15) | (calstr['decrms']>0.15) |       # bad WCS
+                                 (badzpmask==1) |                                # bad ZPTERM
+                                 (calstr['zptermerr']>0.05) |                         # bad ZPTERMERR
+                                 (calstr['nrefmatch']<5) |                            # few phot ref match
+                                 (badexp==1) |                                   # bad SMASH/LS exposure
+                                 #(calstr['ngoodchipwcs']<calstr['nchips'] |                # not all chips astrom calibrated
+                                 ((calstr['instrument']=='c4d') & (calstr['zpspatialvar_nccd']>5) & (calstr['zpspatialvar_rms']>0.1))))  # bad spatial zpterm
         # rarms/decrms, nrefmatch
         print('QA cuts remove '+str(nbdexp)+' exposures')
         # Remove
         torem = np.zeros(nchstr,bool)
         for i in range(nbdexp): torem[calstr[bdexp[i]].chipindx:calstr[bdexp[i]].chipindx+calstr[bdexp[i]].nchips-1]=1
-        bdchstr, = np.where(torem eq 1,nbdchstr)
+        bdchstr,nbdchstr = dln.where(torem==1)
         REMOVE,bdchstr,chstr
         REMOVE,bdexp,calstr
         # Get new CHIPINDEX values
@@ -456,8 +436,7 @@ if __name__ == "__main__":
                 for k in range(calstr['nchips'][i]):
                     overlap[j] >= coords.doPolygonsOverlap(hlon,hlat,vlon[*,k],vlat[*,k])
             # Only keep the healpix with real overlaps
-            gdlistpix, = np.where(overlap==1)
-            ngdlistpix = len(gdlistpix)
+            gdlistpix,ngdlistpix = dln.where(overlap==1)
             if ngdlistpix>0:
                 listpix = listpix[gdlistpix]
                 nlistpix = ngdlistpix
@@ -496,26 +475,33 @@ if __name__ == "__main__":
         idx = sort(healstr.pix)
         healstr = healstr[idx]
         q = healstr.pix
-        lo, = np.where(q ne shift(q,1),nlo)
+        lo,nlo = dln.where(q != np.roll(q,1))
         #hi, = np.where(q ne shift(q,-1))
         hi = [lo[1:nlo-1]-1,nhealstr-1]
         nexp = hi-lo+1
-        index = replicate({pix:0L,lo:0L,hi:0L,nexp:0L},nupix)
-        index.pix = upix
-        index.lo = lo
-        index.hi = hi
-        index.nexp = nexp
+        dtype_index = np.dtype([('pix',int),('lo',int),('hi',int),('nexp',int)])
+        index = np.zeros(nupix,dtype=dtype_index)
+        index['pix'] = upix
+        index['lo'] = lo
+        index['hi'] = hi
+        index['nexp'] = nexp
         npix = len(index)
 
         # Replace /net/dl1/ with /dl1/ so it will work on all machines
-        healstr.file = repstr(healstr.file,'/net/dl1/','/dl1/')
+        healstr['file'] = healstr['file'].replace('/net/dl1/','/dl1/')
 
         # Write the full list plus an index
         print('Writing list to '+listfile)
-        MWRFITS,healstr,listfile,/create
-        MWRFITS,index,listfile,/silent
+        Table(healstr).write(listfile)
+        #  append other fits binary tables
+        hdulist = fits.open(listfile)
+        hdu = fits.table_to_hdu(Table(indexj))        # second, catalog
+        hdulist.append(hdu)
+        hdulist.writeto(listfile,overwrite=True)
+        hdulist.close()
         # Copy to local directory for faster reading speed
-        file_copy,listfile,localdir+'dnidever/nsc/instcal/'+version+'/',/over
+        if os.path.exists(localdir+'dnidever/nsc/instcal/'+version+'/'): os.delete(localdir+'dnidever/nsc/instcal/'+version+'/')
+        os.copy(listfile,localdir+'dnidever/nsc/instcal/'+version+'/')
         # PUT NSIDE IN HEADER!!
 
     # Using existing list
