@@ -26,7 +26,7 @@ CPU, TPOOL_NTHREADS = ncpu
 base = file_basename(expdir)
 ;logf = expdir+'/'+base+'_calib.log'
 logf = -1
-outfile = expdir+'/'+base+'_cat.fits'
+outfile = expdir+'/'+base+'_meta.fits'
 ;; get version number
 lo = strpos(expdir,'nsc/instcal/')
 dum = strmid(expdir,lo+12)
