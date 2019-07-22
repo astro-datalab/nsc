@@ -151,6 +151,10 @@ magcolsind = where((stregex(cols,'mag$',/boolean,/fold_case) eq 1 and stregex(co
 goodmask = bytarr(ncat)+1
 for i=0,nmagcolsind-1 do begin
   magind = where(strupcase(tags) eq strupcase(cols[magcolsind[i]]),nmagind)
+  if nmagind eq 0 then begin
+    print,strupcase(cols[magcolsind[i]])+' column NOT found'
+    return,-999999.
+  endif
   goodmask AND= (cat.(magind[0]) lt 50 and cat.(magind[0]) gt 0 and finite(cat.(magind[0])) eq 1)
 endfor
 ;; input quality cuts

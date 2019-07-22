@@ -524,6 +524,10 @@ ref1 = ref[ind1]
 cat1 = cat[ind2]
 ;; Get the model magnitudes
 mmags = GETMODELMAG(ref1,instfilt,cendec,eqnfile)
+if n_elements(mmags) eq 1 and mmags[0] lt -1000 then begin
+   print,'No good model mags'
+   return
+endif
 ;; Get the good sources
 gdcat = where(cat1.imaflags_iso eq 0 and not ((cat1.flags and 8) eq 8) and not ((cat1.flags and 16) eq 16) and $
               cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and cat1.class_star gt 0.8 and $
