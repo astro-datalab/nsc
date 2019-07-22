@@ -285,31 +285,33 @@ if __name__ == "__main__":
                 coef = utils.poly_fit(am[gg],zpterm[gg],1,robust=True)
                 print(zpstr['instrument'][i]+'-'+zpstr['filter'][i]+' '+str(coef))
                 # Trim out bad exposures to determine the correlations and make figures
-                gg, = np.where(np.abs(zpterm-zpf) lt (3.5*sig0 > 0.2) and calstr1.airmass lt 2.0 and calstr1.fwhm lt 2.0 and calstr1.rarms lt 0.15 and $
-                           calstr1.decrms lt 0.15 and calstr1.success eq 1 and calstr1.wcscal eq 'Successful' and calstr1.zptermerr lt 0.05 and $
-                           calstr1.zptermsig lt 0.08 and (calstr1.ngoodchipwcs eq calstr1.nchips) and $
+                gg, = np.where(np.abs(zpterm-zpf) lt (3.5*sig0 > 0.2) and calstr1.airmass lt 2.0 and calstr1.fwhm lt 2.0 and calstr1.rarms lt 0.15 & 
+                           calstr1.decrms lt 0.15 and calstr1.success eq 1 and calstr1.wcscal eq 'Successful' and calstr1.zptermerr lt 0.05 & 
+                           calstr1.zptermsig lt 0.08 and (calstr1.ngoodchipwcs eq calstr1.nchips) & 
                            (calstr1.instrument ne 'c4d' or calstr1.zpspatialvar_nccd le 5 or (calstr1.instrument eq 'c4d' and calstr1.zpspatialvar_nccd gt 5 and calstr1.zpspatialvar_rms lt 0.1)) and $
-                           np.abs(glat) gt 10 and calstr1.nrefmatch gt 100 and calstr1.exptime ge 30,ngg)
+                           np.abs(glat) gt 10 and calstr1.nrefmatch gt 100 and calstr1.exptime ge 30)
+                ngg = len(gg)
 
                 # Zpterm with airmass dependence removed
                 relzpterm = zpterm + 25   # 25 to get "absolute" zpterm
-                relzpterm -= zpstr[i].amcoef[1]*(am-1)
+                relzpterm -= (zpstr['amcoef'][i])[1]*(am-1)
 
                 # CURRENTLY K4M/KSB HAVE EXPTIME-DEPENDENCE IN THE ZEROPOINTS!!
-                if zpstr[i].instrument eq 'k4m' or zpstr[i].instrument eq 'ksb':
+                if (zpstr['instrument'][i]=='k4m') | (zpstr['instrument'][i]=='ksb'):
                     print('REMOVING EXPTIME-DEPENDENCE IN K4M/KSB ZEROPOINTS!!!')
-                    relzpterm += 2.5*alog10(calstr1.exptime)
+                    relzpterm += 2.5*np.log10(calstr1['exptime'])
 
                 # Fit temporal variation in zpterm
-                mjd0 = 56200L
-                xx = calstr1[gg].mjd-mjd0
+                mjd0 = 56200
+                xx = calstr1['mjd'][gg]-mjd0
                 yy = relzpterm[gg]
-                invvar = 1.0/calstr1[gg].zptermerr^2
+                invvar = 1.0/calstr1['zptermerr'][gg]**2
                 nord = 3
-                bkspace = 200 #20
+                bkspace = 200
                 sset1 = bspline_iterfit(xx,yy,invvar=invvar,nord=nord,bkspace=bkspace,yfit=yfit1)
                 sig1 = mad(yy-yfit1)
-                gd, = np.where(yy-yfit1 gt -3*sig1,ngd)      
+                gd, = np.where(yy-yfit1 > -3*sig1)
+                ngd = len(gd)
                 # refit
                 sset = bspline_iterfit(xx[gd],yy[gd],invvar=invvar[gd],nord=nord,bkspace=bkspace)
                 yfit = bspline_valu(xx,sset)
@@ -363,7 +365,7 @@ if __name__ == "__main__":
                 if ngdind>0: badzpmask[ind[gdind]] = 0
 
         # Get bad DECaLS and SMASH exposures
-        badexp = np.zeros(len(calstr),bool)+False
+        badexp = np.zeros(len(calstr),bool)
         READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/smash_badexposures.txt',smashexpnum,format='A',comment='#',/silent
         MATCH,int(calstr.expnum),int(smashexpnum),ind1,ind2,/sort,count=nmatch
         if nmatch>0:
@@ -398,8 +400,8 @@ if __name__ == "__main__":
         # rarms/decrms, nrefmatch
         print('QA cuts remove '+str(nbdexp)+' exposures')
         # Remove
-        torem = bytarr(nchstr)
-        for i=0,nbdexp-1 do torem[calstr[bdexp[i]].chipindx:calstr[bdexp[i]].chipindx+calstr[bdexp[i]].nchips-1]=1
+        torem = np.zeros(nchstr,bool)
+        for i in range(nbdexp): torem[calstr[bdexp[i]].chipindx:calstr[bdexp[i]].chipindx+calstr[bdexp[i]].nchips-1]=1
         bdchstr, = np.where(torem eq 1,nbdchstr)
         REMOVE,bdchstr,chstr
         REMOVE,bdexp,calstr
@@ -429,31 +431,33 @@ if __name__ == "__main__":
         print('Finding the Healpix pixels with data')
         radius = 1.1
         dtype_healstr = np.dtype([('file',np.str,200),('base',np.str,200),('pix',int)])
-        healstr = np.zers(100000,dtype=dtype_healstr)
+        healstr = np.zeros(100000,dtype=dtype_healstr)
         nhealstr = len(healstr)
         cnt = 0
         for i in range(ncalstr):
-            if i mod 1e3 eq 0 then print(str(i))
+            if i % 1e3 == 0: print(str(i))
             theta = (90-calstr[i].dec)/radeg
             phi = calstr[i].ra/radeg
             ANG2VEC,theta,phi,vec
             QUERY_DISC,nside,vec,radius,listpix,nlistpix,/deg,/inclusive
 
             # Use the chip corners to figure out which ones actually overlap
-            chstr1 = chstr[calstr[i].chipindx:calstr[i].chipindx+calstr[i].nchips-1]
+            chstr1 = chstr[calstr['chipindx']][i]:calstr['chipindx'][i]+calstr['nchips'][i].nchips]
             #  rotate to tangent plane so it can handle RA=0/360 and poles properly
             ROTSPHCEN,chstr1.vra,chstr1.vdec,calstr[i].ra,calstr[i].dec,vlon,vlat,/gnomic
             #  loop over healpix
-            overlap = bytarr(nlistpix)
+            overlap = np.zeros(nlistpix,bool)
             for j in range(nlistpix):
                 PIX2VEC_RING,nside,listpix[j],vec,vertex
                 vertex = transpose(reform(vertex))  # [1,3,4] -> [4,3]
                 VEC2ANG,vertex,hdec,hra,/astro
                 ROTSPHCEN,hra,hdec,calstr[i].ra,calstr[i].dec,hlon,hlat,/gnomic
                 #  loop over chips
-                for k=0,calstr[i].nchips-1 do overlap[j] >= DOPOLYGONSOVERLAP(hlon,hlat,vlon[*,k],vlat[*,k])
+                for k in range(calstr['nchips'][i]):
+                    overlap[j] >= coords.doPolygonsOverlap(hlon,hlat,vlon[*,k],vlat[*,k])
             # Only keep the healpix with real overlaps
-            gdlistpix, = np.where(overlap eq 1,ngdlistpix)
+            gdlistpix, = np.where(overlap==1)
+            ngdlistpix = len(gdlistpix)
             if ngdlistpix>0:
                 listpix = listpix[gdlistpix]
                 nlistpix = ngdlistpix
@@ -461,7 +465,8 @@ if __name__ == "__main__":
                 del(listpix)
                 nlistpix = 0
 
-            if nlistpix eq 0 then stop,'No healpix for this exposure.  Something is wrong!'
+            if nlistpix==0:
+                Exception('No healpix for this exposure.  Something is wrong!')
 
             # Add new elements to array
             if (cnt+nlistpix)>nhealstr:
@@ -478,7 +483,7 @@ if __name__ == "__main__":
             cnt += nlistpix
 
         # Trim extra elements
-        healstr = healstr[0:cnt-1]
+        healstr = healstr[0:cnt]
         nhealstr = len(healstr)
 
         # Get uniq pixels
