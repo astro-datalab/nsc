@@ -125,6 +125,7 @@ endfor
 ; Only rerunning on failed exposures
 failed = mrdfits(dir+'lists/nsc_instcal_calibrate_failures.fits',1)
 failed.expdir = strtrim(failed.expdir,2)
+list.expdir = repstr(list.expdir,'/net/dl1/','/dl1/')
 MATCH,list.expdir,failed.expdir,ind1,ind2,/sort,count=nmatch
 print,'Only keeping ',strtrim(nmatch,2),' failed exposures'
 list = list[ind1]
