@@ -9,7 +9,7 @@ from astropy.utils.exceptions import AstropyWarning
 from astropy.table import Table, vstack, Column
 from astropy.time import Time
 import healpy as hp
-from dlnpyutils import utils, coords
+from dlnpyutils import utils as dln, coords
 import subprocess
 import time
 from argparse import ArgumentParser
@@ -24,7 +24,7 @@ def add_elements(cat,nnew=300000):
     """ Add more elements to a catalog"""
     ncat = len(cat)
     old = cat.copy()
-    nnew = utils.gt(nnew,ncat)
+    nnew = dln.gt(nnew,ncat)
     cat = np.zeros(ncat+nnew,dtype=old.dtype)
     cat[0:ncat] = old
     del(old)
@@ -99,8 +99,8 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
                 vra = chmeta[j]['vra']
                 vdec = chmeta[j]['vdec']
                 if (np.max(vra)-np.min(vra)) > 100:    # deal with RA=0 wrapround
-                    bd, = np.where(vra>180)
-                    if len(bd)>0: vra[bd] -= 360
+                    bd,nbd = dln.where(vra>180)
+                    if bbd>0: vra[bd] -= 360
                 if coords.doPolygonsOverlap(buffdict['ra'],buffdict['dec'],vra,vdec) is False:
                     if verbose: print('This chip does NOT overlap the HEALPix region+buffer')
                     inside = False
@@ -129,7 +129,7 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
                 #     with RA=0 wrapping or pol issues
                 if buffdict is not None:
                     lon, lat = coords.rotsphcen(cat1['ra'],cat1['dec'],buffdict['cenra'],buffdict['cendec'],gnomic=True)
-                    ind0, ind1 = utils.roi_cut(buffdict['lon'],buffdict['lat'],lon,lat)
+                    ind0, ind1 = dln.roi_cut(buffdict['lon'],buffdict['lat'],lon,lat)
                     nmatch = len(ind1)
                     # Only want source inside this pixel
                     if nmatch>0:
@@ -141,7 +141,7 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
                 if ncat1 > 0:
                     if cat is None:
                         #dtype_cat = cat1.dtype
-                        #ncat_init = np.sum(chmeta['nsources'])*utils.size(metafile)
+                        #ncat_init = np.sum(chmeta['nsources'])*dln.size(metafile)
                         ncat_init = np.maximum(100000,ncat1)
                         cat = np.zeros(ncat_init,dtype=dtype_cat)
                         catcount = 0
@@ -227,8 +227,7 @@ if __name__ == "__main__":
     healstr = Table(fits.getdata(listfile,1))
     index = Table(fits.getdata(listfile,2))
     # Find our pixel
-    ind, = np.where(index['PIX'] == pix)
-    nind = len(ind)
+    ind,nind = dln.where(index['PIX'] == pix)
     if nind == 0:
         print("No entries for Healpix pixel '"+str(pix)+"' in the list")
         sys.exit()
@@ -239,8 +238,7 @@ if __name__ == "__main__":
     #  so we can deal with the edge cases
     neipix = hp.get_all_neighbours(nside,pix)
     for neip in neipix:
-        ind1, = np.where(index['PIX'] == neip)
-        nind1 = len(ind1)
+        ind1,nind1 = dln.where(index['PIX'] == neip)
         if nind1>0:
             ind1 = ind1[0]
             hlist1 = healstr[index[ind1]['LO']:index[ind1]['HI']+1]
@@ -274,10 +272,10 @@ if __name__ == "__main__":
     latbuff = latbound*frac
     rabuff, decbuff = coords.rotsphcen(lonbuff,latbuff,cenra,cendec,gnomic=True,reverse=True)
     if (np.max(rabuff)-np.min(rabuff))>100:  # deal with RA=0 wraparound
-        bd, = np.where(rabuff>180)
-        if len(bd)>0:rabuff[bd] -=360.0
-    buffdict = {'cenra':cenra,'cendec':cendec,'rar':utils.minmax(rabuff),'decr':utils.minmax(decbuff),'ra':rabuff,'dec':decbuff,\
-                'lon':lonbuff,'lat':latbuff,'lr':utils.minmax(lonbuff),'br':utils.minmax(latbuff)}
+        bd,nbd = dln.where(rabuff>180)
+        if nbd>0:rabuff[bd] -=360.0
+    buffdict = {'cenra':cenra,'cendec':cendec,'rar':dln.minmax(rabuff),'decr':dln.minmax(decbuff),'ra':rabuff,'dec':decbuff,\
+                'lon':lonbuff,'lat':latbuff,'lr':dln.minmax(lonbuff),'br':dln.minmax(latbuff)}
 
     
     # IDSTR schema
@@ -307,7 +305,7 @@ if __name__ == "__main__":
     #allmeta = np.array(fits.getdata('60025_allmeta.fits',1))
     #cat = np.array(fits.getdata('148487_cat.fits',1))
     #allmeta = np.array(fits.getdata('148487_allmeta.fits',1))
-    ncat = utils.size(cat)
+    ncat = dln.size(cat)
     print(str(ncat)+' measurements loaded')
 
     t1 = time.time()
@@ -318,13 +316,13 @@ if __name__ == "__main__":
     X = np.column_stack((np.array(cat['RA']),np.array(cat['DEC'])))
     # Compute DBSCAN on all measurements
     db = DBSCAN(eps=0.5/3600, min_samples=1).fit(X)
-    labelindex = utils.create_index(db.labels_)
+    labelindex = dln.create_index(db.labels_)
     nobj = len(labelindex['value'])
     print(str(nobj)+' unique objects clustered within 0.5 arcsec')
 
     # Initialize the OBJ structured arra
     obj = np.zeros(nobj,dtype=dtype_obj)
-    obj['objectid'] = utils.strjoin( str(pix)+'.', ((np.arange(nobj)+1).astype(np.str)) )
+    obj['objectid'] = dln.strjoin( str(pix)+'.', ((np.arange(nobj)+1).astype(np.str)) )
     obj['pix'] = pix
     # all bad to start
     for f in ['pmra','pmraerr','pmdec','pmdecerr','asemi','bsemi','theta','asemierr',
@@ -381,7 +379,7 @@ if __name__ == "__main__":
             t -= np.mean(t)
             t /= 365.2425                          # convert to year
             # Calculate robust slope
-            pmra, pmraerr = utils.robust_slope(t,ra,raerr,reweight=True)
+            pmra, pmraerr = dln.robust_slope(t,ra,raerr,reweight=True)
             obj['pmra'][i] = pmra                 # mas/yr
             obj['pmraerr'][i] = pmraerr           # mas/yr
 
@@ -390,14 +388,14 @@ if __name__ == "__main__":
             dec -= np.mean(dec)
             dec *= 3600*1e3                         # convert to milli arcsec
             # Calculate robust slope
-            pmdec, pmdecerr = utils.robust_slope(t,dec,decerr,reweight=True)
+            pmdec, pmdecerr = dln.robust_slope(t,dec,decerr,reweight=True)
             obj['pmdec'][i] = pmdec               # mas/yr
             obj['pmdecerr'][i] = pmdecerr         # mas/yr
 
         # Mean magnitudes
         # Convert totalwt and totalfluxwt to MAG and ERR
         #  and average the morphology parameters PER FILTER
-        filtindex = utils.create_index(cat1['FILTER'].astype(np.str))
+        filtindex = dln.create_index(cat1['FILTER'].astype(np.str))
         nfilters = len(filtindex['value'])
         resid = np.zeros(ncat1)+np.nan     # residual mag
         relresid = np.zeros(ncat1)+np.nan  # residual mag relative to the uncertainty
@@ -405,14 +403,13 @@ if __name__ == "__main__":
             filt = filtindex['value'][f].lower()
             findx = filtindex['index'][filtindex['lo'][f]:filtindex['hi'][f]+1]
             obj['ndet'+filt][i] = filtindex['num'][f]
-            gph, = np.where(cat['MAG_AUTO'][findx]<50)
-            ngph = len(gph)
+            gph,ngph = dln.where(cat['MAG_AUTO'][findx]<50)
             obj['nphot'+filt][i] = ngph
             if ngph==1:
                 obj[filt+'mag'][i] = cat1['MAG_AUTO'][findx[gph]]
                 obj[filt+'err'][i] = cat1['MAGERR_AUTO'][findx[gph]]
             if ngph>1:
-                newmag, newerr = utils.wtmean(cat1['MAG_AUTO'][findx[gph]], cat1['MAGERR_AUTO'][findx[gph]],magnitude=True,reweight=True,error=True)
+                newmag, newerr = dln.wtmean(cat1['MAG_AUTO'][findx[gph]], cat1['MAGERR_AUTO'][findx[gph]],magnitude=True,reweight=True,error=True)
                 obj[filt+'mag'][i] = newmag
                 obj[filt+'err'][i] = newerr
                 # Calculate RMS
@@ -485,8 +482,7 @@ if __name__ == "__main__":
     # ONLY INCLUDE OBJECTS WITH AVERAGE RA/DEC
     # WITHIN THE BOUNDARY OF THE HEALPIX PIXEL!!!
     ipring = hp.pixelfunc.ang2pix(nside,obj['ra'],obj['dec'],lonlat=True)
-    ind1, = np.where(ipring == pix)
-    nmatch = len(ind1)
+    ind1,nmatch = dln.where(ipring == pix)
     if nmatch==0:
         print('None of the final objects fall inside the pixel')
         sys.exit()
@@ -496,7 +492,7 @@ if __name__ == "__main__":
     if nmatch<nobj:
         trimind = np.arange(nobj)
         trimind = np.delete(trimind,ind1)
-        #trimind = utils.remove_indices(trimind,ind1)
+        #trimind = dln.remove_indices(trimind,ind1)
         trimobj = obj[trimind]          # trimmed objects
     newobjindex = np.zeros(nobj,int)-1    # new indices
     newobjindex[ind1] = np.arange(nmatch)
@@ -505,11 +501,11 @@ if __name__ == "__main__":
     print(str(nmatch)+' final objects fall inside the pixel')
 
     # Remove trimmed objects from IDSTR
-    totrim, = np.where(~objtokeep[idstr['objectindex']])  #using old index
-    if len(totrim)>0:
+    totrim,ntotrim = dln.where(~objtokeep[idstr['objectindex']])  #using old index
+    if ntotrim>0:
         # Trim objects
         idstr = np.delete(idstr,totrim)
-        #idstr = utils.remove_indices(idstr,totrim)
+        #idstr = dln.remove_indices(idstr,totrim)
         # Update IDSTR.objectindex
         old_idstr_objectindex = idstr['objectindex']
         idstr['objectindex'] = newobjindex[old_idstr_objectindex]
@@ -521,7 +517,7 @@ if __name__ == "__main__":
     dum, uiexposure = np.unique(idstr['exposure'],return_index=True)
     uexposure = idstr['exposure'][uiexposure]
     nuexposure = len(uexposure)
-    ind1,ind2 = utils.match(allmeta['base'],uexposure)
+    ind1,ind2 = dln.match(allmeta['base'],uexposure)
     nmatch = len(ind1)
     sumstr = Table(allmeta[ind1])
     col_nobj = Column(name='nobjects', dtype=np.int, length=len(sumstr))
@@ -534,13 +530,12 @@ if __name__ == "__main__":
     siexp = np.argsort(exposure)
     exposure = exposure[siexp]
     if nuexposure>1:
-        brklo, = np.where(exposure != np.roll(exposure,1))
-        nbrk = len(brklo)
+        brklo,nbrk = dln.where(exposure != np.roll(exposure,1))
         brkhi = np.hstack((brklo[1:nbrk],len(exposure)))
         numobjexp = brkhi-brklo+1
     else:
         numobjexp=len(exposure)
-    ind1,ind2 = utils.match(sumstr['base'],uexposure)
+    ind1,ind2 = dln.match(sumstr['base'],uexposure)
     nmatch = len(ind1)
     sumstr['nobjects'][ind1] = numobjexp
 

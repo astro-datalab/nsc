@@ -42,7 +42,7 @@ k4m_expdirs = file_search(dir+'k4m/20??????/*',/test_directory,count=nk4m_expdir
 if nk4m_expdirs gt 0 then push,expdirs,k4m_expdirs
 ksb_expdirs = file_search(dir+'ksb/20??????/*',/test_directory,count=nksb_expdirs)
 if nksb_expdirs gt 0 then push,expdirs,ksb_expdirs
-expdirs = trailingslash(expdirs)
+expdirs = trailingslash(repstr(expdirs,'/net/dl1/','/dl1/'))
 ; Match these to our lists
 list1 = MRDFITS(dir+'lists/decam_instcal_list.fits.gz',1)
 list2 = MRDFITS(dir+'lists/mosaic3_instcal_list.fits.gz',1)
@@ -74,7 +74,7 @@ expdirs = expdirs[rnd]
 sumstr = mrdfits(dir+'lists/nsc_instcal_calibrate.fits.gz',1)
 bd = where(sumstr.success eq 0,nbd)
 failed_expdirs = strtrim(sumstr[bd].expdir,2)
-failed_expdirs = trailingslash(repstr(failed_expdirs,'/net/dl1/','/dl1'))
+failed_expdirs = trailingslash(repstr(failed_expdirs,'/net/dl1/','/dl1/'))
 MATCH,expdirs,failed_expdirs,ind1,ind2,/sort,count=nmatch_failed
 print,strtrim(nmatch_failed,2),' failed exposures to run'
 allcmd = allcmd[ind1]
