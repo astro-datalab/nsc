@@ -161,17 +161,17 @@ For i=0,n_elements(filter)-1 do begin
   ; Bok+90Prime g-band
   'ksb-g': begin
     ; Use PS1
-    push,refcat,'PS'
+    push,refcat,['2MASS-PSC','PS']
   end
   ; Bok+90Prime r-band
   'ksb-r': begin
     ; Use PS1
-    push,refcat,'PS'
+    push,refcat,['2MASS-PSC','PS']
   end
   ; Mosaic3 z-band
   'k4m-z': begin
     ; Use PS1
-    push,refcat,'PS'
+    push,refcat,['2MASS-PSC','PS']
   end
   else: begin
     printlog,logf,filter,' not currently supported'
