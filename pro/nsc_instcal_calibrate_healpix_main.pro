@@ -83,7 +83,6 @@ for i=0,nbd-1 do begin
   endif
 endfor
 
-
 ; Reruning exposures that had coordinates problems but finished
 ; successfully originally
 ;;test = file_test(outfile)
@@ -122,6 +121,14 @@ for i=0,nstr-1 do begin
   ;str[i].ra = sxpar(head,'crval1')
   ;str[i].dec = sxpar(head,'crval2')
 endfor
+
+; Only rerunning on failed exposures
+failed = mrdfits(dir+'lists/nsc_instcal_calibrate_failures.fits',1)
+failed.expdir = strtrim(failed.expdir,2)
+MATCH,list.expdir,failed.expdir,ind1,ind2,/sort,count=nmatch
+print,'Only keeping ',strtrim(nmatch,2),' failed exposures'
+list = list[ind1]
+str = str[ind1]
 
 ;; 318 exposures have RA=DEC=NAN
 ;;  get their coordinates from the fluxfile
