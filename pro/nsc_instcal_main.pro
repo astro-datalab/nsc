@@ -240,9 +240,11 @@ endif
 ; Only rerun failed exposures, SExtractor had a problem on hulk
 ;  9263 exposures with nchips=0
 sumstr = mrdfits(dir+'lists/nsc_measure_summary.fits',1)
+sumstr.dir = strtrim(sumstr.dir,2)
 bd = where(sumstr.nchips eq 0,nbd)
-MATCH,expstr.expdir,sumstr.expdir,ind1,ind2,/sort,count=nmatch
-stop
+MATCH,file_dirname(strtrim(expstr.outfile,2)),sumstr[bd].dir,ind1,ind2,/sort,count=nmatch
+print,'Only meeting ',strtrim(nmatch,2),' failed exposures'
+expstr = expstr[ind1]
 
 ;; Parcel out the jobs
 ;hosts = ['gp06','gp07','gp08','gp09','hulk','thing']
