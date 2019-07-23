@@ -242,7 +242,9 @@ endif
 sumstr = mrdfits(dir+'lists/nsc_measure_summary.fits',1)
 sumstr.dir = strtrim(sumstr.dir,2)
 bd = where(sumstr.nchips eq 0,nbd)
-MATCH,file_dirname(strtrim(expstr.outfile,2)),sumstr[bd].dir,ind1,ind2,/sort,count=nmatch
+expdir = file_dirname(strtrim(expstr.outfile,2))
+expdir = repstr(expdir,'/net/dl1/','/dl1/')
+MATCH,expdir,sumstr[bd].dir,ind1,ind2,/sort,count=nmatch
 print,'Only meeting ',strtrim(nmatch,2),' failed exposures'
 expstr = expstr[ind1]
 
