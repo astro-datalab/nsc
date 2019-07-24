@@ -188,6 +188,7 @@ allupix = allupix[rnd]
 ;; Hulk finished the first 3622 jobs (7/24/19)
 print,'Removing the first 3622 jobs that hulk already finished'
 remove,lindgen(3622),allcmd,alldirs,allupix
+npix = n_elements(allcmd)
 
 ;; Parcel out the jobs
 hosts = ['gp09','hulk','thing']
