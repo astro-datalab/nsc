@@ -57,11 +57,11 @@ for i=0,nexpdirs-1 do begin
     expstr[i].logdate = loginfo.mtime
   endif
   ;; Success, have logfile and chip files
-  if keyword_set(quick) then begin
+  if not keyword_set(quick) then begin
     if nchipfiles gt 0 and expstr[i].logfile_success eq 1 then expstr[i].success=1
   endif else begin
     ; just check if logfile and first fits catalog exist
-    if file_test(expstr[i].logfile) and file_test(dir1+'/'+base1+'_1.fits') then expstr[i].succes=1
+    if file_test(logfile) and file_test(dir1+'/'+base1+'_1.fits') then expstr[i].succes=1
   endelse
 
   ; dt, need chip files
