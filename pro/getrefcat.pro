@@ -211,6 +211,7 @@ Endif else begin
                 'import astropy.coordinates as coord;'+$
                 'Vizier.TIMEOUT = 600;'+$
                 'Vizier.ROW_LIMIT = -1;'+$
+                'Vizier.cache_location = None;'+$
                 'result = Vizier.query_region(coord.SkyCoord(ra='+strtrim(cenra,2)+', dec='+strtrim(cendec,2)+$
                 ",unit=(u.deg,u.deg),frame='icrs'),width='"+strtrim(radius*60,2)+"m',catalog='"+refname+"');"+$
                 "df=result[0];"+$
