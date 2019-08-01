@@ -92,13 +92,20 @@ endif
 
 ; Figure out the number of sources
 ncat = 0L
+ncatarr = lonarr(ncatfiles)
 for i=0,ncatfiles-1 do begin
   head = headfits(catfiles[i],exten=2)
-  ncat += sxpar(head,'NAXIS2')
+  ncatarr[i] = sxpar(head,'NAXIS2')
 endfor
+ncat = long(total(ncatarr))
 printlog,logf,strtrim(ncat,2),' total sources'
+if ncat eq 0 then begin
+  printlog,logf,'No sources'
+  return
+endif
 ; Create structure, exten=1 has header now
-cat1 = MRDFITS(catfiles[0],2,/silent)
+ind = where(ncatarr gt 0,nind)
+cat1 = MRDFITS(catfiles[ind[0]],2,/silent)
 if size(cat1,/type) ne 8 then begin
   printlog,logf,'Chip 1 catalog is empty.'
   return
