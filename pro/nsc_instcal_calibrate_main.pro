@@ -71,8 +71,8 @@ alldirs = alldirs[rnd]
 expdirs = expdirs[rnd]
 
 ;; Only run failed exposures
-sumstr = mrdfits(dir+'lists/nsc_instcal_calibrate.fits.gz',1)
-bd = where(sumstr.success eq 0,nbd)
+sumstr = mrdfits(dir+'lists/nsc_instcal_calibrate_failures.fits',1)
+bd = where(sumstr.nsources gt 100 and sumstr.fwhm le 2 and sumstr.exptime ge 30 and sumstr.meta_exists eq 0,nbd)
 failed_expdirs = strtrim(sumstr[bd].expdir,2)
 failed_expdirs = trailingslash(repstr(failed_expdirs,'/net/dl1/','/dl1/'))
 MATCH,expdirs,failed_expdirs,ind1,ind2,/sort,count=nmatch_failed
