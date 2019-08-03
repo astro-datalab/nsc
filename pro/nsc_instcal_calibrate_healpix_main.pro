@@ -50,6 +50,7 @@ list3 = MRDFITS(dir+'/lists/bok90prime_instcal_list.fits.gz',1)
 str = [list1,list2,list3]
 undefine,list1,list2,list3
 nstr = n_elements(str)
+str.filter = strtrim(str.filter,2)
 str.fluxfile = strtrim(str.fluxfile,2)
 str.maskfile = strtrim(str.maskfile,2)
 str.wtfile = strtrim(str.wtfile,2)
@@ -122,16 +123,21 @@ for i=0,nstr-1 do begin
   ;str[i].dec = sxpar(head,'crval2')
 endfor
 
-; Only rerunning on failed exposures
-sumstr = mrdfits(dir+'lists/nsc_instcal_calibrate_failures.fits',1)
-bd = where(sumstr.nsources gt 100 and sumstr.fwhm le 2 and sumstr.exptime ge 30 and sumstr.meta_exists eq 0,nbd)
-failed_expdirs = strtrim(sumstr[bd].expdir,2)
-failed_expdirs = trailingslash(repstr(failed_expdirs,'/net/dl1/','/dl1/'))
-list.expdir = repstr(list.expdir,'/net/dl1/','/dl1/')
-MATCH,list.expdir,failed_expdirs,ind1,ind2,/sort,count=nmatch
-print,'Only keeping ',strtrim(nmatch,2),' failed exposures'
-list = list[ind1]
-str = str[ind1]
+;; Rerun u-band exposures with dec<0 with Skymapper u-band for calibration
+bd = where(strmid(str.filter,0,1) eq 'u' and str.dec lt 0,nbd)
+list = list[bd]
+str = str[bd]
+
+;; Only rerunning on failed exposures
+;sumstr = mrdfits(dir+'lists/nsc_instcal_calibrate_failures.fits',1)
+;bd = where(sumstr.nsources gt 100 and sumstr.fwhm le 2 and sumstr.exptime ge 30 and sumstr.meta_exists eq 0,nbd)
+;failed_expdirs = strtrim(sumstr[bd].expdir,2)
+;failed_expdirs = trailingslash(repstr(failed_expdirs,'/net/dl1/','/dl1/'))
+;list.expdir = repstr(list.expdir,'/net/dl1/','/dl1/')
+;MATCH,list.expdir,failed_expdirs,ind1,ind2,/sort,count=nmatch
+;print,'Only keeping ',strtrim(nmatch,2),' failed exposures'
+;list = list[ind1]
+;str = str[ind1]
 
 ;failed = mrdfits(dir+'lists/nsc_instcal_calibrate_failures.fits',1)
 ;failed.expdir = strtrim(failed.expdir,2)
