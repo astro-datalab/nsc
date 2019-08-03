@@ -183,6 +183,11 @@ Endfor ; filter loop
 if ext_type ge 2 then push,refcat,'ALLWISE'
 if ext_type eq 3 then push,refcat,'GLIMPSE'
 if ext_type eq 4 then push,refcat,'SAGE'
+;; If near DEC=-30 then load BOTH PS and ATLAS
+if (cendec gt -34 and cendec lt -26) and $
+   ((where(refcat eq 'PS'))[0] ne -1 or (where(refcat eq 'ATLAS'))[0] ne -1) then begin
+  push,refcat,['PS','ATLAS']   ; code below removes duplicates
+endif
 ; Some catalogs
 if n_elements(refcat) gt 0 then begin
   ; Get the unique ones
