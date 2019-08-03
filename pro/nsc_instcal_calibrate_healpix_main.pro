@@ -88,7 +88,7 @@ endfor
 ;;test = file_test(outfile)
 ;oldsum = mrdfits(dir+'lists/nsc_instcal_calibrate.fits.bak111217',1)
 ;bad = where(dist gt 0.1 and oldsum.success eq 1,nbad)
-;
+
 ;cmd = 'nsc_instcal_calibrate,"'+strtrim(oldsum[bad].expdir,2)+'",/redo'
 ;dirs = strarr(nbad)+tmpdir
 ;stop
@@ -123,13 +123,23 @@ for i=0,nstr-1 do begin
 endfor
 
 ; Only rerunning on failed exposures
-failed = mrdfits(dir+'lists/nsc_instcal_calibrate_failures.fits',1)
-failed.expdir = strtrim(failed.expdir,2)
+sumstr = mrdfits(dir+'lists/nsc_instcal_calibrate_failures.fits',1)
+bd = where(sumstr.nsources gt 100 and sumstr.fwhm le 2 and sumstr.exptime ge 30 and sumstr.meta_exists eq 0,nbd)
+failed_expdirs = strtrim(sumstr[bd].expdir,2)
+failed_expdirs = trailingslash(repstr(failed_expdirs,'/net/dl1/','/dl1/'))
 list.expdir = repstr(list.expdir,'/net/dl1/','/dl1/')
-MATCH,list.expdir,failed.expdir,ind1,ind2,/sort,count=nmatch
+MATCH,list.expdir,failed_expdirs,ind1,ind2,/sort,count=nmatch
 print,'Only keeping ',strtrim(nmatch,2),' failed exposures'
 list = list[ind1]
 str = str[ind1]
+
+;failed = mrdfits(dir+'lists/nsc_instcal_calibrate_failures.fits',1)
+;failed.expdir = strtrim(failed.expdir,2)
+;list.expdir = repstr(list.expdir,'/net/dl1/','/dl1/')
+;MATCH,list.expdir,failed.expdir,ind1,ind2,/sort,count=nmatch
+;print,'Only keeping ',strtrim(nmatch,2),' failed exposures'
+;list = list[ind1]
+;str = str[ind1]
 
 ;; 318 exposures have RA=DEC=NAN
 ;;  get their coordinates from the fluxfile
@@ -186,9 +196,9 @@ alldirs = alldirs[rnd]
 allupix = allupix[rnd]
 
 ;; Hulk finished the first 3622 jobs (7/24/19)
-print,'Removing the first 3622 jobs that hulk already finished'
-remove,lindgen(3622),allcmd,alldirs,allupix
-npix = n_elements(allcmd)
+;print,'Removing the first 3622 jobs that hulk already finished'
+;remove,lindgen(3622),allcmd,alldirs,allupix
+;npix = n_elements(allcmd)
 
 ;; Parcel out the jobs
 hosts = ['gp09','hulk','thing']
