@@ -207,7 +207,8 @@ allupix = allupix[rnd]
 ;npix = n_elements(allcmd)
 
 ;; Parcel out the jobs
-hosts = ['gp09','hulk','thing']
+;hosts = ['gp09','hulk','thing']
+hosts = ['gp09','thing']
 nhosts = n_elements(hosts)
 torun = lindgen(npix)
 nperhost = npix/nhosts
