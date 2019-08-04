@@ -1,4 +1,4 @@
-pro nsc_instcal_calibrate,expdir,inpref,redo=redo,selfcal=selfcal,saveref=saveref,ncpu=ncpu,stp=stp
+pro nsc_instcal_calibrate,expdir,inpref,eqnfile=eqnfile,redo=redo,selfcal=selfcal,saveref=saveref,ncpu=ncpu,stp=stp
 
 ; Calibrate catalogs for one exposure
 
@@ -6,7 +6,7 @@ NSC_ROOTDIRS,dldir,mssdir,localdir
 
 ; Not enough inputs
 if n_elements(expdir) eq 0 then begin
-  print,'Syntax - nsc_instcal_calibrate,expdir,inpref,redo=redo,selfcal=selfcal,saveref=saveref,ncpu=ncpu,stp=stp'
+  print,'Syntax - nsc_instcal_calibrate,expdir,inpref,eqnfile=eqnfile,redo=redo,selfcal=selfcal,saveref=saveref,ncpu=ncpu,stp=stp'
   return
 endif
 
@@ -48,7 +48,8 @@ if stregex(expdir,'/ksb/',/boolean) eq 1 then instrument='ksb'
 printlog,logf,'This is a '+instrument+' exposure'
 
 ;; Model magnitude equation file
-eqnfile = dldir+'users/dnidever/nsc/instcal/'+version+'/config/modelmag_equations.txt'
+if n_elements(eqnfile) eq 0 then $
+  eqnfile = dldir+'users/dnidever/nsc/instcal/'+version+'/config/modelmag_equations.txt'
 printlog,logf,'Using model magnitude equation file ',eqnfile
 if file_test(eqnfile) eq 0 then begin
   printlog,logf,eqnfile+' NOT FOUND'
