@@ -71,10 +71,18 @@ alldirs = alldirs[rnd]
 expdirs = expdirs[rnd]
 
 ;; Only run failed exposures
-sumstr = mrdfits(dir+'lists/nsc_instcal_calibrate_failures.fits',1)
-bd = where(sumstr.nsources gt 100 and sumstr.fwhm le 2 and sumstr.exptime ge 30 and sumstr.meta_exists eq 0,nbd)
-failed_expdirs = strtrim(sumstr[bd].expdir,2)
-failed_expdirs = trailingslash(repstr(failed_expdirs,'/net/dl1/','/dl1/'))
+sumstr = mrdfits(dir+'lists/nsc_instcal_calibrate.fits.gz',1)
+sumstr.expdir = strtrim(sumstr.expdir,2)
+sumstr.base = strtrim(sumstr.base,2)
+sumstr.filter = strtrim(sumstr.filter,2)
+sumstr.instrument = strtrim(sumstr.instrument,2)
+bd = where(sumstr.success eq 0 and sumstr.fwhm le 2 and sumstr.exptime ge 30 and sumstr.nsources ge 1000 and $
+           sumstr.filter ne 'u' and sumstr.filter ne 'N9' and sumstr.filter ne 'N6',nbd)
+failed_expdirs = sumstr[bd].expdir
+;sumstr = mrdfits(dir+'lists/nsc_instcal_calibrate_failures.fits',1)
+;bd = where(sumstr.nsources gt 100 and sumstr.fwhm le 2 and sumstr.exptime ge 30 and sumstr.meta_exists eq 0,nbd)
+;failed_expdirs = strtrim(sumstr[bd].expdir,2)
+;failed_expdirs = trailingslash(repstr(failed_expdirs,'/net/dl1/','/dl1/'))
 MATCH,expdirs,failed_expdirs,ind1,ind2,/sort,count=nmatch_failed
 print,strtrim(nmatch_failed,2),' failed exposures to run'
 allcmd = allcmd[ind1]
