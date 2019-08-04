@@ -169,6 +169,11 @@ For i=0,n_elements(filter)-1 do begin
     ; Use PS1
     push,refcat,['2MASS-PSC','PS']
   end
+  ; Mosaic3 i-band
+  'k4m-i': begin
+    ; Use PS1
+    push,refcat,['2MASS-PSC','PS']
+  end
   ; Mosaic3 z-band
   'k4m-z': begin
     ; Use PS1
