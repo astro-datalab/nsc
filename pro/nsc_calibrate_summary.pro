@@ -21,6 +21,8 @@ list.expdir = strtrim(list.expdir,2)
 list.instrument = strtrim(list.instrument,2)
 list.filter = strtrim(list.filter,2)
 
+;; Chip offsets
+chipoff = mrdfits(dldir+'users/dnidever/nsc/instcal/decam_chip_xyoff.fits',1)
 
 ; Load all the summary/metadata files
 expstr = replicate({expdir:'',instrument:'',pix:0L,metafile:'',metadate:0LL,success:0,file:'',wtfile:'',maskfile:'',base:'',expnum:'',ra:0.0d0,dec:0.0d0,$
@@ -141,17 +143,19 @@ for i=0,nlist-1 do begin
     expstr[i].success = 0
 
     ;; Calculate FWHM using one chip catalog
-    chipfiles = expstr[i].expdir+expstr[i].base+'_'+strtrim([1,indgen(58)+3,62],2)+'.fits'
+    ;;  28 and 35 are at the center, use them to central position
+    chips = [28,35,1,indgen(58)+3,62]
     medfwhm = 999.0
     flag = 0
     ch = 0
     undefine,cat
     ncat = 0
     while (flag eq 0) do begin
-      if file_test(chipfiles[ch]) eq 1 then begin
-        hd = headfits(chipfiles[ch],exten=2)
+      chipfile = expstr[i].expdir+expstr[i].base+'_'+strtrim(chips[ch],2)+'.fits'
+      if file_test(chipfile) eq 1 then begin
+        hd = headfits(chipfile,exten=2)
         ncat = sxpar(hd,'naxis2')
-        if ncat gt 5 then cat=mrdfits(chipfiles[ch],2,/silent)
+        if ncat gt 5 then cat=mrdfits(chipfile,2,/silent)
       endif
       ch++
       if n_elements(cat) gt 0 or ch gt 59 then flag=1
@@ -162,6 +166,20 @@ for i=0,nlist-1 do begin
       if ngdcat gt 5 then begin
         medfwhm = median(cat[gdcat].fwhm_world*3600.)
         expstr[i].fwhm = medfwhm
+        raoff = 0.0
+        decoff = 0.0
+        MATCH,chipoff.chip,chips[ch],ind1,ind2,/sort,count=nmatch
+        if expstr[i].instrument eq 'c4d' and nmatch gt 0 then begin
+          raoff = chipoff[ind1].xoff
+          decoff = chipoff[ind1].yoff
+        endif 
+        cenra = median(cat[gdcat].alpha_j2000)+raoff
+        cendec = median(cat[gdcat].delta_j2000)+decoff
+        ;; only use if archive value seems off
+        if sphdist(expstr[i].ra,expstr[i].dec,cenra,cendec,/deg) gt 0.5 then begin
+          expstr[i].ra = cenra
+          expstr[i].dec = cendec
+        endif
       endif
     endif
   endelse  ; no metafile
