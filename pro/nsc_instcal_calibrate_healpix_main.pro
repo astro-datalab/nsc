@@ -122,16 +122,16 @@ for i=0,nstr-1 do begin
   ;str[i].dec = sxpar(head,'crval2')
 endfor
 
-; Only rerunning on failed exposures
-sumstr = mrdfits(dir+'lists/nsc_instcal_calibrate_failures.fits',1)
-bd = where(sumstr.nsources gt 100 and sumstr.fwhm le 2 and sumstr.exptime ge 30 and sumstr.meta_exists eq 0,nbd)
-failed_expdirs = strtrim(sumstr[bd].expdir,2)
-failed_expdirs = trailingslash(repstr(failed_expdirs,'/net/dl1/','/dl1/'))
-list.expdir = repstr(list.expdir,'/net/dl1/','/dl1/')
-MATCH,list.expdir,failed_expdirs,ind1,ind2,/sort,count=nmatch
-print,'Only keeping ',strtrim(nmatch,2),' failed exposures'
-list = list[ind1]
-str = str[ind1]
+;; Only rerunning on failed exposures
+;sumstr = mrdfits(dir+'lists/nsc_instcal_calibrate_failures.fits',1)
+;bd = where(sumstr.nsources gt 100 and sumstr.fwhm le 2 and sumstr.exptime ge 30 and sumstr.meta_exists eq 0,nbd)
+;failed_expdirs = strtrim(sumstr[bd].expdir,2)
+;failed_expdirs = trailingslash(repstr(failed_expdirs,'/net/dl1/','/dl1/'))
+;list.expdir = repstr(list.expdir,'/net/dl1/','/dl1/')
+;MATCH,list.expdir,failed_expdirs,ind1,ind2,/sort,count=nmatch
+;print,'Only keeping ',strtrim(nmatch,2),' failed exposures'
+;list = list[ind1]
+;str = str[ind1]
 
 ;failed = mrdfits(dir+'lists/nsc_instcal_calibrate_failures.fits',1)
 ;failed.expdir = strtrim(failed.expdir,2)
@@ -163,6 +163,7 @@ list.pix = ipring
 print,'Writing list to ',dir+'/lists/nsc_calibrate_healpix_list.fits'
 MWRFITS,list,dir+'/lists/nsc_calibrate_healpix_list.fits',/create
 
+stop
 
 ;================
 ; RUN THE JOBS
