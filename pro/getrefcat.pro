@@ -87,8 +87,9 @@ Endif else begin
     if refname eq 'TMASS' then begin
       tablename = 'twomass.psc'
       cols = 'designation,ra as raj2000,dec as dej2000,j_m as jmag,j_cmsig as e_jmag,h_m as hmag,h_cmsig as e_hmag,k_m as kmag,k_cmsig as e_kmag,ph_qual as qflg'
-      server = 'gp01.datalab.noao.edu'
-      ;server = 'dldb1.sdm.noao.edu'
+      server = 'gp04.datalab.noao.edu'
+      ;server = 'gp01.datalab.noao.edu'
+      ;;server = 'dldb1.sdm.noao.edu'
     endif
     racol = 'ra'
     deccol = 'dec'
@@ -96,15 +97,17 @@ Endif else begin
       tablename = 'gaia_dr1.gaia_source'
       cols = 'source_id as source,ra as ra_icrs,ra_error as e_ra_icrs,dec as de_icrs,dec_error as e_de_icrs,'+$
              'phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,phot_g_mean_mag as gmag'
-      server = 'gp01.datalab.noao.edu'
-      ;server = 'dldb1.sdm.noao.edu'
+      server = 'gp04.datalab.noao.edu'
+      ;server = 'gp01.datalab.noao.edu'
+      ;;server = 'dldb1.sdm.noao.edu'
     endif
     if refname eq 'GAIADR2' then begin
       tablename = 'gaia_dr2.gaia_source'
       cols = 'source_id as source,ra,ra_error,dec,dec_error,pmra,pmra_error,pmdec,pmdec_error,phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,'+$
              'phot_g_mean_mag as gmag,phot_bp_mean_mag as bp,phot_bp_mean_flux as fbp,phot_bp_mean_flux_error as e_fbp,'+$
              'phot_rp_mean_mag as rp,phot_rp_mean_flux as frp,phot_rp_mean_flux_error as e_frp'
-      server = 'gp01.datalab.noao.edu'
+      server = 'gp04.datalab.noao.edu'
+      ;server = 'gp01.datalab.noao.edu'
     endif
     if refname eq 'PS' then begin
       ;tablename = 'cp_calib.ps1'
@@ -114,16 +117,18 @@ Endif else begin
     endif
     if refname eq 'SKYMAPPER' then begin
       tablename = 'skymapper_dr1.master'
-      cols = 'raj2000, dej2000, g_psf as sm_gmag, e_g_psf as e_sm_gmag, r_psf as sm_rmag, e_r_psf as e_sm_rmag, i_psf as sm_imag, '+$
+      cols = 'raj2000, dej2000, u_psf as sm_umag, e_u_psf as e_sm_umag, g_psf as sm_gmag, e_g_psf as e_sm_gmag, r_psf as sm_rmag, e_r_psf as e_sm_rmag, i_psf as sm_imag, '+$
              'e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag'
-      server = 'gp01.datalab.noao.edu'
+      server = 'gp04.datalab.noao.edu'
+      ;server = 'gp01.datalab.noao.edu'
       racol = 'raj2000'
       deccol = 'dej2000'
     endif
     if refname eq 'ALLWISE' then begin
       tablename = 'allwise.source'
       cols = 'ra, dec, w1mpro as w1mag, w1sigmpro as e_w1mag, w2mpro as w2mag, w2sigmpro as e_w2mag'
-      server = 'gp01.datalab.noao.edu'
+      server = 'gp04.datalab.noao.edu'
+      ;server = 'gp01.datalab.noao.edu'
     endif
     if refname eq 'ATLAS' then begin
       tablename = 'atlasrefcat2'
@@ -211,6 +216,7 @@ Endif else begin
                 'import astropy.coordinates as coord;'+$
                 'Vizier.TIMEOUT = 600;'+$
                 'Vizier.ROW_LIMIT = -1;'+$
+                'Vizier.cache_location = None;'+$
                 'result = Vizier.query_region(coord.SkyCoord(ra='+strtrim(cenra,2)+', dec='+strtrim(cendec,2)+$
                 ",unit=(u.deg,u.deg),frame='icrs'),width='"+strtrim(radius*60,2)+"m',catalog='"+refname+"');"+$
                 "df=result[0];"+$

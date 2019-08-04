@@ -50,6 +50,7 @@ list3 = MRDFITS(dir+'/lists/bok90prime_instcal_list.fits.gz',1)
 str = [list1,list2,list3]
 undefine,list1,list2,list3
 nstr = n_elements(str)
+str.filter = strtrim(str.filter,2)
 str.fluxfile = strtrim(str.fluxfile,2)
 str.maskfile = strtrim(str.maskfile,2)
 str.wtfile = strtrim(str.wtfile,2)
@@ -83,13 +84,12 @@ for i=0,nbd-1 do begin
   endif
 endfor
 
-
 ; Reruning exposures that had coordinates problems but finished
 ; successfully originally
 ;;test = file_test(outfile)
 ;oldsum = mrdfits(dir+'lists/nsc_instcal_calibrate.fits.bak111217',1)
 ;bad = where(dist gt 0.1 and oldsum.success eq 1,nbad)
-;
+
 ;cmd = 'nsc_instcal_calibrate,"'+strtrim(oldsum[bad].expdir,2)+'",/redo'
 ;dirs = strarr(nbad)+tmpdir
 ;stop
@@ -123,6 +123,30 @@ for i=0,nstr-1 do begin
   ;str[i].dec = sxpar(head,'crval2')
 endfor
 
+;;; Rerun u-band exposures with dec<0 with Skymapper u-band for calibration
+;bd = where(strmid(str.filter,0,1) eq 'u' and str.dec lt 0,nbd)
+;list = list[bd]
+;str = str[bd]
+
+;; Only rerunning on failed exposures
+;sumstr = mrdfits(dir+'lists/nsc_instcal_calibrate_failures.fits',1)
+;bd = where(sumstr.nsources gt 100 and sumstr.fwhm le 2 and sumstr.exptime ge 30 and sumstr.meta_exists eq 0,nbd)
+;failed_expdirs = strtrim(sumstr[bd].expdir,2)
+;failed_expdirs = trailingslash(repstr(failed_expdirs,'/net/dl1/','/dl1/'))
+;list.expdir = repstr(list.expdir,'/net/dl1/','/dl1/')
+;MATCH,list.expdir,failed_expdirs,ind1,ind2,/sort,count=nmatch
+;print,'Only keeping ',strtrim(nmatch,2),' failed exposures'
+;list = list[ind1]
+;str = str[ind1]
+
+;failed = mrdfits(dir+'lists/nsc_instcal_calibrate_failures.fits',1)
+;failed.expdir = strtrim(failed.expdir,2)
+;list.expdir = repstr(list.expdir,'/net/dl1/','/dl1/')
+;MATCH,list.expdir,failed.expdir,ind1,ind2,/sort,count=nmatch
+;print,'Only keeping ',strtrim(nmatch,2),' failed exposures'
+;list = list[ind1]
+;str = str[ind1]
+
 ;; 318 exposures have RA=DEC=NAN
 ;;  get their coordinates from the fluxfile
 ;bdra = where(finite(str.ra) eq 0 or finite(str.dec) eq 0,nbdra)
@@ -144,7 +168,6 @@ list.pix = ipring
 ; Save the list
 print,'Writing list to ',dir+'/lists/nsc_calibrate_healpix_list.fits'
 MWRFITS,list,dir+'/lists/nsc_calibrate_healpix_list.fits',/create
-
 
 ;================
 ; RUN THE JOBS
@@ -177,8 +200,14 @@ allcmd = allcmd[rnd]
 alldirs = alldirs[rnd]
 allupix = allupix[rnd]
 
+;; Hulk finished the first 3622 jobs (7/24/19)
+;print,'Removing the first 3622 jobs that hulk already finished'
+;remove,lindgen(3622),allcmd,alldirs,allupix
+;npix = n_elements(allcmd)
+
 ;; Parcel out the jobs
-hosts = ['gp09','hulk','thing']
+;hosts = ['gp09','hulk','thing']
+hosts = ['gp09','thing']
 nhosts = n_elements(hosts)
 torun = lindgen(npix)
 nperhost = npix/nhosts

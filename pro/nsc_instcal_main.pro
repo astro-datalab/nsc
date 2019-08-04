@@ -225,22 +225,33 @@ endif
 ; 91945 exposures to run
 ;stop
 
-; gp06-08 finished some jobs, call them done, 7/12/19
-torun = where(expstr.torun eq 1,nalltorun)
-;gp06  6882 / 25859
-expstr[torun[0:6881]].done = 1
-expstr[torun[0:6881]].torun = 0
-;gp07  7675 / 25859
-expstr[torun[25859L:25859L+7674]].done = 1
-expstr[torun[25859L:25859L+7674]].torun = 0
-;gp08  7511 / 25859
-expstr[torun[2*25859L:2*25859L+7510]].done = 1
-expstr[torun[2*25859L:2*25859L+7510]].torun = 0
+;; gp06-08 finished some jobs, call them done, 7/12/19
+;torun = where(expstr.torun eq 1,nalltorun)
+;;gp06  6882 / 25859
+;expstr[torun[0:6881]].done = 1
+;expstr[torun[0:6881]].torun = 0
+;;gp07  7675 / 25859
+;expstr[torun[25859L:25859L+7674]].done = 1
+;expstr[torun[25859L:25859L+7674]].torun = 0
+;;gp08  7511 / 25859
+;expstr[torun[2*25859L:2*25859L+7510]].done = 1
+;expstr[torun[2*25859L:2*25859L+7510]].torun = 0
 
+; Only rerun failed exposures, SExtractor had a problem on hulk
+;  9263 exposures with nchips=0
+sumstr = mrdfits(dir+'lists/nsc_measure_summary.fits',1)
+sumstr.dir = strtrim(sumstr.dir,2)
+bd = where(sumstr.nchips eq 0,nbd)
+expdir = file_dirname(strtrim(expstr.outfile,2))
+expdir = repstr(expdir,'/net/dl1/','/dl1/')
+MATCH,expdir,sumstr[bd].dir,ind1,ind2,/sort,count=nmatch
+print,'Only meeting ',strtrim(nmatch,2),' failed exposures'
+expstr = expstr[ind1]
 
 ;; Parcel out the jobs
-hosts = ['gp06','gp07','gp08','gp09','hulk','thing']
+;hosts = ['gp06','gp07','gp08','gp09','hulk','thing']
 ;hosts = ['gp06','gp07','gp08']
+hosts = ['gp09','thing']
 nhosts = n_elements(hosts)
 torun = where(expstr.torun eq 1,nalltorun)
 nperhost = nalltorun/nhosts

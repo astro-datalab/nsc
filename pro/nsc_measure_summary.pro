@@ -1,10 +1,10 @@
-pro nsc_measure_summary,version,nosources=nosources
+pro nsc_measure_summary,version,nosources=nosources,quick=quick
 
 ; Make a summary file of all of the exposures that were Source Extracted
 
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
-if n_elements(version) eq 0 then version='v2'
+if n_elements(version) eq 0 then version='v3'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 
 ; Find all of the directories
@@ -20,7 +20,7 @@ nexpdirs = n_elements(expdirs)
 print,strtrim(nexpdirs,2),' exposure directories'
 
 ; Create structure
-expstr = replicate({dir:'',instrument:'',base:'',nchips:0L,nsources:0L,success:0,dt:0.0,chip1date:0LL,logdate:0LL},nexpdirs)
+expstr = replicate({dir:'',instrument:'',base:'',nchips:0L,nsources:0L,logfile_success:0,success:0,dt:0.0,chip1date:0LL,logdate:0LL},nexpdirs)
 expstr.dir = expdirs
 undefine,instrument
 if nc4d_expdirs gt 0 then push,instrument,strarr(nc4d_expdirs)+'c4d'
@@ -35,22 +35,37 @@ for i=0,nexpdirs-1 do begin
   dir1 = expdirs[i]
   base1 = expstr[i].base
   ; Get chip files
-  chipfiles = file_search(dir1+'/'+base1+'_*.fits',count=nchipfiles)
-  expstr[i].nchips = nchipfiles
+  if not keyword_set(quick) then begin
+    undefine,chipfiles
+    chipfiles1 = file_search(dir1+'/'+base1+'_[1-9].fits',count=nchipfiles1)
+    if nchipfiles1 gt 0 then push,chipfiles,chipfiles1
+    chipfiles2 = file_search(dir1+'/'+base1+'_[1-9][0-9].fits',count=nchipfiles2)
+    if nchipfiles2 gt 0 then push,chipfiles,chipfiles2
+    nchipfiles = n_elements(chipfiles)
+    expstr[i].nchips = nchipfiles
+  endif else nchipfiles=0
   ; First chip date
-  if nchipfiles gt 0 then begin
+  if nchipfiles gt 0 and not keyword_set(quick) then begin
     info1 = file_info(chipfiles[0])
     expstr[i].chip1date = info1.mtime
   endif
   ; It succeeded if the final log file exists
   logfile = dir1+'/'+base1+'.log'
-  expstr[i].success = file_test(logfile)
-  if expstr[i].success gt 0 then begin
+  expstr[i].logfile_success = file_test(logfile)
+  if expstr[i].logfile_success gt 0 and not keyword_set(quick) then begin
     loginfo = file_info(logfile)
     expstr[i].logdate = loginfo.mtime
   endif
+  ;; Success, have logfile and chip files
+  if not keyword_set(quick) then begin
+    if nchipfiles gt 0 and expstr[i].logfile_success eq 1 then expstr[i].success=1
+  endif else begin
+    ; just check if logfile and first fits catalog exist
+    if file_test(logfile) and file_test(dir1+'/'+base1+'_1.fits') then expstr[i].succes=1
+  endelse
+
   ; dt, need chip files
-  if nchipfiles gt 0 then begin
+  if nchipfiles gt 0 and not keyword_set(quick) then begin
     info1 = file_info(chipfiles[0])
     info2 = file_info(chipfiles[nchipfiles-1])
     dt = info2.mtime-info1.mtime
@@ -66,7 +81,7 @@ for i=0,nexpdirs-1 do begin
   ;    expstr[i].nsources += sxpar(hd,'naxis2')
   ;  endif
   ;endfor
-  if expstr[i].success eq 1 and not keyword_set(nosources) then begin
+  if expstr[i].success eq 1 and not keyword_set(nosources) and not keyword_set(quick) then begin
     READLINE,logfile,lines
     g = where(stregex(lines,'sextracted',/boolean) eq 1,ng)
     for j=0,ng-1 do begin

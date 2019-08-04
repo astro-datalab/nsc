@@ -1,4 +1,4 @@
-pro nsc_instcal_calibrate,expdir,inpref,redo=redo,selfcal=selfcal,saveref=saveref,ncpu=ncpu,stp=stp
+pro nsc_instcal_calibrate,expdir,inpref,eqnfile=eqnfile,redo=redo,selfcal=selfcal,saveref=saveref,ncpu=ncpu,stp=stp
 
 ; Calibrate catalogs for one exposure
 
@@ -6,7 +6,7 @@ NSC_ROOTDIRS,dldir,mssdir,localdir
 
 ; Not enough inputs
 if n_elements(expdir) eq 0 then begin
-  print,'Syntax - nsc_instcal_calibrate,expdir,inpref,redo=redo,selfcal=selfcal,saveref=saveref,ncpu=ncpu,stp=stp'
+  print,'Syntax - nsc_instcal_calibrate,expdir,inpref,eqnfile=eqnfile,redo=redo,selfcal=selfcal,saveref=saveref,ncpu=ncpu,stp=stp'
   return
 endif
 
@@ -48,7 +48,8 @@ if stregex(expdir,'/ksb/',/boolean) eq 1 then instrument='ksb'
 printlog,logf,'This is a '+instrument+' exposure'
 
 ;; Model magnitude equation file
-eqnfile = dldir+'users/dnidever/nsc/instcal/'+version+'/config/modelmag_equations.txt'
+if n_elements(eqnfile) eq 0 then $
+  eqnfile = dldir+'users/dnidever/nsc/instcal/'+version+'/config/modelmag_equations.txt'
 printlog,logf,'Using model magnitude equation file ',eqnfile
 if file_test(eqnfile) eq 0 then begin
   printlog,logf,eqnfile+' NOT FOUND'
@@ -92,13 +93,20 @@ endif
 
 ; Figure out the number of sources
 ncat = 0L
+ncatarr = lonarr(ncatfiles)
 for i=0,ncatfiles-1 do begin
   head = headfits(catfiles[i],exten=2)
-  ncat += sxpar(head,'NAXIS2')
+  ncatarr[i] = sxpar(head,'NAXIS2')
 endfor
+ncat = long(total(ncatarr))
 printlog,logf,strtrim(ncat,2),' total sources'
+if ncat eq 0 then begin
+  printlog,logf,'No sources'
+  return
+endif
 ; Create structure, exten=1 has header now
-cat1 = MRDFITS(catfiles[0],2,/silent)
+ind = where(ncatarr gt 0,nind)
+cat1 = MRDFITS(catfiles[ind[0]],2,/silent)
 if size(cat1,/type) ne 8 then begin
   printlog,logf,'Chip 1 catalog is empty.'
   return
