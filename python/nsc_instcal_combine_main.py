@@ -23,7 +23,7 @@ from astropy.coordinates import SkyCoord
 # Combine data for one NSC healpix region
 if __name__ == "__main__":
     parser = ArgumentParser(description='Combine NSC Instcal Catalogs.')
-    parser.add_argument('--version', type=str, default='v3', help='Version number')
+    parser.add_argument('version', type=str, nargs=1, help='Version number')
     parser.add_argument('--makelist', action='store_true', help='Make healpix list')
     parser.add_argument('-r','--redo', action='store_true', help='Redo this HEALPIX')
     parser.add_argument('--nmulti', type=int, default=20, help='Number of jobs to run')
@@ -406,7 +406,7 @@ if __name__ == "__main__":
 
     # CREATE LIST OF HEALPIX AND OVERLAPPING EXPOSURES
     # Which healpix pixels have data
-    listfile = basedir+'lists/nsc_healpix_list.fits'
+    listfile = basedir+'lists/nsc_instcal_combine_healpix_list.fits'
     if makelist | ~os.path.exists(listfile):
         print('Finding the Healpix pixels with data')
         radius = 1.1
@@ -499,10 +499,13 @@ if __name__ == "__main__":
         hdulist.append(hdu)
         hdulist.writeto(listfile,overwrite=True)
         hdulist.close()
+        if os.path.exists(listfile+'.gz'): os.remove(listfile+'.gz')
+        ret = subprocess.call(['gzip',listfile])    # compress final catalog
         # Copy to local directory for faster reading speed
         if os.path.exists(localdir+'dnidever/nsc/instcal/'+version+'/'): os.delete(localdir+'dnidever/nsc/instcal/'+version+'/')
-        os.copy(listfile,localdir+'dnidever/nsc/instcal/'+version+'/')
+        os.copy(listfile+'.gz',localdir+'dnidever/nsc/instcal/'+version+'/')
         # PUT NSIDE IN HEADER!!
+
 
     # Using existing list
     else:
