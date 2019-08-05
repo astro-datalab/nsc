@@ -3,7 +3,7 @@
 ; NSC_INSTCAL_MEASURE_MAIN
 ;
 ; This runs SExtractor on the DECam InstCal images.
-; This is a wrapper around nsc_instcal.py which runs
+; This is a wrapper around nsc_instcal_measure.py which runs
 ; on one individual exposure.
 ;
 ; INPUTS:
