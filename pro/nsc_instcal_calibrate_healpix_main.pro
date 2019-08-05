@@ -1,6 +1,11 @@
-pro nsc_instcal_calibrate_healpix_main,version=version,nmulti=nmulti,redo=redo
+pro nsc_instcal_calibrate_healpix_main,version,nmulti=nmulti,redo=redo
 
 ; Drive for NSC_INSTCAL_CALIBRATE_HEALPIX
+
+if n_elements(version) eq 0 then begin
+  print,'Syntax - nsc_instcal_calibrate_healpix_main,version,nmulti=nmulti,redo=redo'
+  return
+endif
 
 if n_elements(nside) eq 0 then nside=64
 radeg = 180.0d0 / !dpi
@@ -8,7 +13,6 @@ radeg = 180.0d0 / !dpi
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir,host
 hostname = first_el(strsplit(host,'.',/extract))
-if n_elements(version) eq 0 then version='v3'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 if file_test(dir,/directory) eq 0 then file_mkdir,dir+'logs/'
@@ -168,6 +172,8 @@ list.pix = ipring
 ; Save the list
 print,'Writing list to ',dir+'/lists/nsc_calibrate_healpix_list.fits'
 MWRFITS,list,dir+'/lists/nsc_calibrate_healpix_list.fits',/create
+
+;stop
 
 ;================
 ; RUN THE JOBS
