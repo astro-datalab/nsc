@@ -169,6 +169,16 @@ For i=0,n_elements(filter)-1 do begin
     ; Use PS1
     push,refcat,['2MASS-PSC','PS']
   end
+  ; Mosaic3 g-band
+  'k4m-g': begin
+    ; Use PS1
+    push,refcat,['2MASS-PSC','PS']
+  end
+  ; Mosaic3 r-band
+  'k4m-r': begin
+    ; Use PS1
+    push,refcat,['2MASS-PSC','PS']
+  end
   ; Mosaic3 i-band
   'k4m-i': begin
     ; Use PS1
@@ -178,6 +188,11 @@ For i=0,n_elements(filter)-1 do begin
   'k4m-z': begin
     ; Use PS1
     push,refcat,['2MASS-PSC','PS']
+  end
+  ; Mosaic3 VR-band
+  'k4m-VR': begin
+    ; Use GAIA G-band to calibrate
+    push,refcat,['2MASS-PSC']
   end
   else: begin
     printlog,logf,filter,' not currently supported'
