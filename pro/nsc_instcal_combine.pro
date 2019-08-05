@@ -35,7 +35,7 @@ endif
 print,'Combining InstCal SExtractor catalogs for Healpix pixel = ',strtrim(pix,2)
 
 ; Load the list
-listfile = localdir+'dnidever/nsc/instcal/'+version+'/nsc_healpix_list.fits'
+listfile = localdir+'dnidever/nsc/instcal/'+version+'/nsc_instcal_combine_healpix_list.fits.gz'
 if file_test(listfile) eq 0 then begin
   print,listfile,' NOT FOUND'
   return
