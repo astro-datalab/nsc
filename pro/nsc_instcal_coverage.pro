@@ -9,7 +9,7 @@ nside = 128
 radeg = 180.0d0 / !dpi
 
 ; Restore the calibration summary file
-temp = MRDFITS(dir+'nsc_instcal_calibrate.fits',1,/silent)
+temp = MRDFITS(dir+'nsc_calibrate_summary.fits.gz',1,/silent)
 schema = temp[0]
 struct_assign,{dum:''},schema
 schema = create_struct(schema,'chipindx',-1LL)
@@ -25,7 +25,7 @@ gd = where(str.success eq 1,nstr)
 str = str[gd]
 si = sort(str.expdir)
 str = str[si]
-chstr = mrdfits(dir+'nsc_instcal_calibrate.fits',2,/silent)
+chstr = mrdfits(dir+'nsc_calibrate_summary.fits.gz',2,/silent)
 chstr.expdir = strtrim(chstr.expdir,2)
 chstr.instrument = strtrim(chstr.instrument,2)
 nchstr = n_elements(chstr)
