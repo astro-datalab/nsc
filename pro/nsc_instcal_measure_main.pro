@@ -1,9 +1,9 @@
 ;+
 ;
-; NSC_INSTCAL_MAIN
+; NSC_INSTCAL_MEASURE_MAIN
 ;
 ; This runs SExtractor on the DECam InstCal images.
-; This is a wrapper around nsc_instcal.py which runs
+; This is a wrapper around nsc_instcal_measure.py which runs
 ; on one individual exposure.
 ;
 ; INPUTS:
@@ -20,19 +20,23 @@
 ;  The individual catalogs are put in ROOTDIR+users/dnidever/nsc/instcal/NIGHT/EXPOSURENAME/.
 ;
 ; USAGE:
-;  IDL>nsc_instcal_main
+;  IDL>nsc_instcal_main,'v3'
 ;
 ; By D.Nidever  Feb 2017
 ;-
 
-pro nsc_instcal_main,version,redo=redo,nmulti=nmulti,maxjobs=maxjobs,silent=silent,dolock=dolock,unlock=unlock
+pro nsc_instcal_measure_main,version,redo=redo,nmulti=nmulti,maxjobs=maxjobs,silent=silent,dolock=dolock,unlock=unlock
+
+if n_elements(version) eq 0 then begin
+  print,'Syntax - nsc_instcal_measure_main,version,redo=redo,nmulti=nmulti,maxjobs=maxjobs,silent=silent,dolock=dolock,unlock=unlock'
+  return
+endif
 
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir,host
 hostname = first_el(strsplit(host,'.',/extract))
 if n_elements(maxjobs) eq 0 then maxjobs=48300L
 if n_elements(nmulti) eq 0 then nmulti=30
-if n_elements(version) eq 0 then version='v3' ;v2
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 if file_test(tmpdir,/directory) eq 0 then file_mkdir,tmpdir
@@ -56,7 +60,7 @@ if minute lt 10 then sminute='0'+sminute
 ssecond = strtrim(round(second),2)
 if second lt 10 then ssecond='0'+ssecond
 logtime = smonth+sday+syear+shour+sminute+ssecond
-logfile = dir+'logs/nsc_instcal_main.'+logtime+'.log'
+logfile = dir+'logs/nsc_instcal_measure_main.'+logtime+'.log'
 JOURNAL,logfile
 
 print, "Running SExtractor on the DECam/Mosaic3/Bok InstCal Images"
@@ -73,6 +77,12 @@ str.fluxfile = strtrim(str.fluxfile,2)
 str.maskfile = strtrim(str.maskfile,2)
 str.wtfile = strtrim(str.wtfile,2)
 print,strtrim(nstr,2),' InstCal images'
+
+;; Only rerun exposures where the original MSS CP files does not exist anymore
+print,'Rerunning exposures where the original MSS CP files do not exist anymore'
+READLINE,dir+'/lists/meas_rerun_index.txt',bdind
+str = str[bdind]
+nstr = n_elements(str)
 
 ;; Putting them in RANDOM but REPEATABLE order
 seed = 1
@@ -162,7 +172,7 @@ for i=0,ngdexp-1 do begin
     ;dum = djs_lockfile(outfile)  ; this is slow
     ;if file_test(file_dirname(outfile),/directory) eq 0 then file_mkdir,file_dirname(outfile)  ; make directory
     ;if testlock eq 0 then touchzero,outfile+'.lock'  ; this is fast
-    expstr[i].cmd = '/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal.py '+fluxfile+' '+wtfile+' '+maskfile+' '+version
+    expstr[i].cmd = '/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal_measure.py '+fluxfile+' '+wtfile+' '+maskfile+' '+version
     expstr[i].cmddir = tmpdir
     expstr[i].torun = 1
   ; Lock file exists
@@ -181,18 +191,18 @@ endfor
 ;  expstr[done].done = 1
 ;  expstr[done].torun = 0
 ;endif
-sum = mrdfits('/dl1/users/dnidever/nsc/instcal/v3/lists/nsc_measure_summary.fits',1)
-sum.base = strtrim(sum.base,2)
-done = where(sum.nsources gt 0,ndone)
-if ndone gt 0 then begin
-  base_done = sum[done].base
-  base = file_basename(expstr.fluxfile,'.fits.fz')
-  MATCH,base,base_done,ind1,ind2,/sort,count=nmatch
-  if nmatch gt 0 then begin
-    expstr[ind1].done = 1
-    expstr[ind1].torun = 0
-  endif
-endif
+;sum = mrdfits('/dl1/users/dnidever/nsc/instcal/v3/lists/nsc_measure_summary.fits',1)
+;sum.base = strtrim(sum.base,2)
+;done = where(sum.nsources gt 0,ndone)
+;if ndone gt 0 then begin
+;  base_done = sum[done].base
+;  base = file_basename(expstr.fluxfile,'.fits.fz')
+;  MATCH,base,base_done,ind1,ind2,/sort,count=nmatch
+;  if nmatch gt 0 then begin
+;    expstr[ind1].done = 1
+;    expstr[ind1].torun = 0
+;  endif
+;endif
 
 ; Have hulk help out gp09, ran last 10,000 of gp09's jobs
 ;torun = lindgen(10000)-10000+41633
@@ -237,21 +247,22 @@ endif
 ;expstr[torun[2*25859L:2*25859L+7510]].done = 1
 ;expstr[torun[2*25859L:2*25859L+7510]].torun = 0
 
-; Only rerun failed exposures, SExtractor had a problem on hulk
-;  9263 exposures with nchips=0
-sumstr = mrdfits(dir+'lists/nsc_measure_summary.fits',1)
-sumstr.dir = strtrim(sumstr.dir,2)
-bd = where(sumstr.nchips eq 0,nbd)
-expdir = file_dirname(strtrim(expstr.outfile,2))
-expdir = repstr(expdir,'/net/dl1/','/dl1/')
-MATCH,expdir,sumstr[bd].dir,ind1,ind2,/sort,count=nmatch
-print,'Only meeting ',strtrim(nmatch,2),' failed exposures'
-expstr = expstr[ind1]
+;; Only rerun failed exposures, SExtractor had a problem on hulk
+;;  9263 exposures with nchips=0
+;sumstr = mrdfits(dir+'lists/nsc_measure_summary.fits',1)
+;sumstr.dir = strtrim(sumstr.dir,2)
+;bd = where(sumstr.nchips eq 0,nbd)
+;expdir = file_dirname(strtrim(expstr.outfile,2))
+;expdir = repstr(expdir,'/net/dl1/','/dl1/')
+;MATCH,expdir,sumstr[bd].dir,ind1,ind2,/sort,count=nmatch
+;print,'Only meeting ',strtrim(nmatch,2),' failed exposures'
+;expstr = expstr[ind1]
 
 ;; Parcel out the jobs
 ;hosts = ['gp06','gp07','gp08','gp09','hulk','thing']
 ;hosts = ['gp06','gp07','gp08']
-hosts = ['gp09','thing']
+;hosts = ['gp09','thing']
+hosts = ['hulk']
 nhosts = n_elements(hosts)
 torun = where(expstr.torun eq 1,nalltorun)
 nperhost = nalltorun/nhosts
@@ -298,14 +309,14 @@ if keyword_set(dolock) then begin
 endif ; /dolock
 
 ; Saving the structure of jobs to run
-runfile = dir+'lists/nsc_instcal_main.'+hostname+'.'+logtime+'_run.fits'
+runfile = dir+'lists/nsc_instcal_measure_main.'+hostname+'.'+logtime+'_run.fits'
 print,'Writing running information to ',runfile
 MWRFITS,expstr,runfile,/create
 
 ; Run PBS_DAEMON
 stop
 a = '' & read,a,prompt='Press RETURN to start'
-PBS_DAEMON,cmd,cmddir,jobs=jobs,/hyperthread,prefix='nsc',wait=5,nmulti=nmulti
+PBS_DAEMON,cmd,cmddir,jobs=jobs,/hyperthread,prefix='nscmeas',wait=5,nmulti=nmulti
 
 ; Unlocking files
 if keyword_set(dolock) then begin

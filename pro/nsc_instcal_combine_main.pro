@@ -1,9 +1,13 @@
 pro nsc_instcal_combine_main,version,redo=redo,makelist=makelist,nmulti=nmulti,nocuts=nocuts
 
+if n_elements(version) eq 0 then begin
+  print,'Syntax - nsc_instcal_combine_main,version,redo=redo,makelist=makelist,nmulti=nmulti,nocuts=nocuts'
+  return
+endif
+
 ; Combine all of the data
 NSC_ROOTDIRS,dldir,mssdir,localdir,longhost
 host = first_el(strsplit(longhost,'.',/extract))
-if n_elements(version) eq 0 then version='v2'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 if file_test(dir+'combine/',/directory) eq 0 then file_mkdir,dir+'combine/'
 if file_test(dir+'combine/logs/',/directory) eq 0 then file_mkdir,dir+'combine/logs/'
@@ -38,7 +42,7 @@ print, "Combining NOAO InstCal catalogs"
 goto,STARTRUNNING
 
 ; Restore the calibration summary file
-temp = MRDFITS(dir+'lists/nsc_instcal_calibrate.fits',1,/silent)
+temp = MRDFITS(dir+'lists/nsc_calibrate_summary.fits.gz',1,/silent)
 schema = temp[0]
 struct_assign,{dum:''},schema
 schema = create_struct(schema,'chipindx',-1LL,'NGOODCHIPWCS',0)
@@ -69,7 +73,7 @@ gd = where(str.success eq 1,nstr)
 str = str[gd]
 si = sort(str.expdir)
 str = str[si]
-chstr = mrdfits(dir+'lists/nsc_instcal_calibrate.fits',2,/silent)
+chstr = mrdfits(dir+'lists/nsc_calibrate_summary.fits.gz',2,/silent)
 chstr.expdir = strtrim(chstr.expdir,2)
 chstr.instrument = strtrim(chstr.instrument,2)
 nchstr = n_elements(chstr)

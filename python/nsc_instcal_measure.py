@@ -52,7 +52,7 @@ if __name__ == "__main__":
     # Not enough inputs
     n = len(sys.argv)
     if n < 4:
-        print "Syntax - nsc_instcal.py fluxfile wtfile maskfile version"
+        print "Syntax - nsc_instcal_measure.py fluxfile wtfile maskfile version"
         sys.exit()
 
     # File names
