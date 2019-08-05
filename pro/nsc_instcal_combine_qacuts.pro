@@ -436,8 +436,8 @@ if nlistpix eq 0 then stop,'No healpix for this exposure.  Something is wrong!'
   print,'Writing list to ',listfile
   MWRFITS,healstr,listfile,/create
   MWRFITS,index,listfile,/silent
-  ; Copy to local directory for faster reading speed
-  file_copy,listfile,localdir+'dnidever/nsc/instcal/'+version+'/',/over
+  if file_test(listfile+'.gz') eq 1 then file_delete,listfile+'.gz',/allow
+  spawn,['gzip',listfile],/noshell
   ; PUT NSIDE IN HEADER!!
 
 endif
