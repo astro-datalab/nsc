@@ -174,7 +174,7 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
 if __name__ == "__main__":
     parser = ArgumentParser(description='Combine NSC data for one healpix region.')
     parser.add_argument('pix', type=str, nargs=1, help='HEALPix pixel number')
-    parser.add_argument('--version', type=str, default='v3', help='Version number')
+    parser.add_argument('version', type=str, nargs=1, help='Version number')
     parser.add_argument('--nside', type=int, default=128, help='HEALPix Nside')
     parser.add_argument('-r','--redo', action='store_true', help='Redo this HEALPIX')
     parser.add_argument('--outdir', type=str, default='', help='Output directory')
@@ -220,7 +220,7 @@ if __name__ == "__main__":
     print("Combining InstCal SExtractor catalogs for Healpix pixel = "+str(pix))
 
     # Load the list
-    listfile = localdir+'dnidever/nsc/instcal/'+version+'/nsc_healpix_list.fits'
+    listfile = localdir+'dnidever/nsc/instcal/'+version+'/nsc_instcal_combine_healpix_list.fits.gz'
     if os.path.exists(listfile) is False:
         print(listfile+" NOT FOUND")
         sys.exit()
