@@ -19,7 +19,6 @@ dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 nside = 128
 radeg = 180.0d0 / !dpi
 
-
 ; Check if output file already exists
 base = file_basename(expdir)
 outfile = expdir+'/'+base+'_1_meas.fits'
@@ -37,7 +36,27 @@ meta.file = strtrim(meta.file,2)
 meta.base = strtrim(meta.base,2)
 meta.dateobs = strtrim(meta.dateobs,2)
 nmeta = n_elements(meta)
+chstr = MRDFITS(metafile,2,/silent)
+chstr.measfile = strtrim(chstr.measfile,2)
+nchips = n_elements(chstr)
 
+;; Load the catalogs
+undefine,meas,nmeas
+add_tag,chstr,'meas_index',0L,chstr
+count = 0LL
+for i=0,nchips-1 do begin
+  cat1 = MRDFITS(chstr[i].measfile,1,/silent)
+  ncat1 = n_elements(cat1)
+  if n_elements(meas) eq 0 then begin
+    schema = cat1[0]
+    struct_assign,{dum:''},schema
+    meas = replicate(schema,long(total(chstr.nmeas)))
+  endif
+  meas[count:count+ncat1-1] = cat1
+  chstr[i].meas_index = count
+  count += ncat1
+endfor
+meas.measid = strtrim(meas.measid,2)
 
 ;; Get the OBJECTID from the combined healpix file IDSTR structure
 ;;  remove any sources that weren't used
@@ -68,27 +87,38 @@ for i=0,npix-1 do begin
   objfile = dir+'combine/'+strtrim(long(upix[i])/1000,2)+'/'+strtrim(upix[i],2)+'.fits.gz'
   if file_test(objfile) eq 1 then begin
     idstr = MRDFITS(objfile,3,/silent)
-    idstr.sourceid = strtrim(idstr.sourceid,2)
+    idstr.measid = strtrim(idstr.measid,2)
     nidstr = n_elements(idstr)
-    MATCH,idstr.sourceid,meas.measid,ind1,ind2,/sort,count=nmatch
+    MATCH,idstr.measid,meas.measid,ind1,ind2,/sort,count=nmatch
     if nmatch gt 0 then meas[ind2].objectid=strtrim(idstr[ind1].objectid,2)
     print,i+1,upix[i],nmatch,format='(I5,I10,I7)'
   endif else print,objfile,' NOT FOUND'
 endfor
 
+
 ;; Only keep sources with an objectid
-ind = where(meas.objectid ne '',nind)
-if nind gt 0 then begin
-  print,'Keeping ',strtrim(nind,2),' of ',strtrim(ncat,2),' sources'
-  meas = meas[ind]
-endif else begin
-  print,'No sources to keep'
-  return
-endelse
+ind = where(meas.objectid eq '',nind)
+if nind gt 0 then STOP,'some objects are missing IDs'
+;if nind gt 0 then begin
+;  print,'Keeping ',strtrim(nind,2),' of ',strtrim(ncat,2),' sources'
+;  meas = meas[ind]
+;endif else begin
+;  print,'No sources to keep'
+;  return
+;endelse
 
 ;; Output
-print,'Writing measurement catalog to ',outfile
-MWRFITS,meas,outfile,/create
+print,'Updating measurement catalogs'
+for i=0,nchips-1 do begin
+  lo = chstr[i].meas_index
+  hi = lo+chstr[i].nmeas-1
+  meas1 = meas[lo:hi]
+  meta1 = MRDFITS(chstr[i].measfile,2,/silent)  ;; load the meta extensions
+  MWRFITS,meas1,chstr[i].measfile,/create
+  MWRFITS,meta1,chstr[i].measfile,/silent
+endfor
+
+print,'dt = ',strtrim(systime(1)-t0,2),' sec.'
 
 if keyword_set(stp) then stop
 
