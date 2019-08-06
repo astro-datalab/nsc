@@ -37,9 +37,10 @@ if file_test(dir+'combine/logs/',/directory) eq 0 then file_mkdir,dir+'combine/l
 if file_test(localdir+'dnidever/nsc/instcal/'+version+'/') eq 0 then file_mkdir,localdir+'dnidever/nsc/instcal/'+version+'/'
 plotsdir = dir+'plots/'
 if file_test(plotsdir,/directory) eq 0 then file_mkdir,plotsdir
+if file_test(dir+'logs/',/directory) eq0 then file_mkdir,dir+'logs/'
 ;; Hosts
 if n_elements(hosts) eq 0 then hosts = ['gp09','hulk','thing']
-if total(hosts eq host) eq 0 then begin
+if total(hosts eq hostname) eq 0 then begin
   print,'Current HOST='+host+' not in list of HOSTS = [ '+strjoin(hosts,', ')+' ] '
   return
 endif
