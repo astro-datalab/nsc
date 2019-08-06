@@ -17,9 +17,9 @@
 ;  /unlock   Ignore the lock files.
 ;
 ; OUTPUTS:
-;  A log "journal" file is put in ROOTDIR+users/dnidever/nsc/instcal/logs/
+;  A log "journal" file is put in ROOTDIR+users/dnidever/nsc/instcal/v#/logs/
 ;  as well as a structure with information on the jobs that were run.
-;  The individual catalogs are put in ROOTDIR+users/dnidever/nsc/instcal/NIGHT/EXPOSURENAME/.
+;  The individual catalogs are put in ROOTDIR+users/dnidever/nsc/instcal/v#/NIGHT/EXPOSURENAME/.
 ;
 ; USAGE:
 ;  IDL>nsc_instcal_measure_main,'v3'
@@ -44,8 +44,8 @@ tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 if file_test(tmpdir,/directory) eq 0 then file_mkdir,tmpdir
 ;; Hosts
 if n_elements(hosts) eq 0 then hosts = ['gp06','gp07','gp08','gp09','hulk','thing']
-if total(hosts eq host) eq 0 then begin
-  print,'Current HOST='+host+' not in list of HOSTS = [ '+strjoin(hosts,', ')+' ] '
+if total(hosts eq hostname) eq 0 then begin
+  print,'Current HOST='+hostname+' not in list of HOSTS = [ '+strjoin(hosts,', ')+' ] '
   return
 endif
 

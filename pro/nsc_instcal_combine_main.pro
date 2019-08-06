@@ -39,7 +39,7 @@ plotsdir = dir+'plots/'
 if file_test(plotsdir,/directory) eq 0 then file_mkdir,plotsdir
 ;; Hosts
 if n_elements(hosts) eq 0 then hosts = ['gp09','hulk','thing']
-if total(hosts eq host) eq 0 then begin
+if total(hosts eq hostname) eq 0 then begin
   print,'Current HOST='+host+' not in list of HOSTS = [ '+strjoin(hosts,', ')+' ] '
   return
 endif
