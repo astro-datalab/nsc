@@ -1,9 +1,32 @@
-pro nsc_instcal_calibrate_healpix_main,version,nmulti=nmulti,redo=redo
+;+
+;
+; NSC_INSTCAL_CALIBRATE_HEALPIX_MAIN
+;
+; This calibrates NSC exposures in one region of the sky.
+;
+; INPUTS:
+;  version   The version name, e.g. 'v3'.  
+;  =hosts    Array of hosts to run.  The default is gp09,hulk and thing. 
+;  =nmulti   The number of simultaneously jobs to run. Default is 10.
+;  /redo     Rerun on exposures that were previously processed.
+;
+; OUTPUTS:
+;  A log "journal" file is put in ROOTDIR+users/dnidever/nsc/instcal/logs/
+;  as well as a structure with information on the jobs that were run.
+;  The individual catalogs are put in ROOTDIR+users/dnidever/nsc/instcal/NIGHT/EXPOSURENAME/.  
+;
+; USAGE:
+;  IDL>nsc_instcal_calibrate_healpix_main,'v3'
+;
+; By D. Nidever  2017
+;-
+
+pro nsc_instcal_calibrate_healpix_main,version,hosts=hosts,nmulti=nmulti,redo=redo
 
 ; Drive for NSC_INSTCAL_CALIBRATE_HEALPIX
 
 if n_elements(version) eq 0 then begin
-  print,'Syntax - nsc_instcal_calibrate_healpix_main,version,nmulti=nmulti,redo=redo'
+  print,'Syntax - nsc_instcal_calibrate_healpix_main,version,hosts=hosts,nmulti=nmulti,redo=redo'
   return
 endif
 
@@ -17,6 +40,13 @@ dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 if file_test(dir,/directory) eq 0 then file_mkdir,dir+'logs/'
 if file_test(tmpdir,/directory) eq 0 then file_mkdir,tmpdir
+;; Hosts
+if n_elements(hosts) eq 0 then hosts = ['gp09','hulk','thing']
+if total(hosts eq host) eq 0 then begin
+  print,'Current HOST='+host+' not in list of HOSTS = [ '+strjoin(hosts,', ')+' ] '
+  return
+endif
+
 
 t0 = systime(1)
 
@@ -88,17 +118,6 @@ for i=0,nbd-1 do begin
   endif
 endfor
 
-; Reruning exposures that had coordinates problems but finished
-; successfully originally
-;;test = file_test(outfile)
-;oldsum = mrdfits(dir+'lists/nsc_instcal_calibrate.fits.bak111217',1)
-;bad = where(dist gt 0.1 and oldsum.success eq 1,nbad)
-
-;cmd = 'nsc_instcal_calibrate,"'+strtrim(oldsum[bad].expdir,2)+'",/redo'
-;dirs = strarr(nbad)+tmpdir
-;stop
-;PBS_DAEMON,cmd,dirs,jobs=jobs,/hyperthread,/idle,prefix='nsccalib',wait=wait,nmulti=nmulti
-
 ; Start output file
 list = replicate({expdir:'',pix:-1L,instrument:'',filter:''},nstr)
 list.instrument = strtrim(str.instrument,2)
@@ -127,42 +146,6 @@ for i=0,nstr-1 do begin
   ;str[i].dec = sxpar(head,'crval2')
 endfor
 
-;;; Rerun u-band exposures with dec<0 with Skymapper u-band for calibration
-;bd = where(strmid(str.filter,0,1) eq 'u' and str.dec lt 0,nbd)
-;list = list[bd]
-;str = str[bd]
-
-;; Only rerunning on failed exposures
-;sumstr = mrdfits(dir+'lists/nsc_instcal_calibrate_failures.fits',1)
-;bd = where(sumstr.nsources gt 100 and sumstr.fwhm le 2 and sumstr.exptime ge 30 and sumstr.meta_exists eq 0,nbd)
-;failed_expdirs = strtrim(sumstr[bd].expdir,2)
-;failed_expdirs = trailingslash(repstr(failed_expdirs,'/net/dl1/','/dl1/'))
-;list.expdir = repstr(list.expdir,'/net/dl1/','/dl1/')
-;MATCH,list.expdir,failed_expdirs,ind1,ind2,/sort,count=nmatch
-;print,'Only keeping ',strtrim(nmatch,2),' failed exposures'
-;list = list[ind1]
-;str = str[ind1]
-
-;failed = mrdfits(dir+'lists/nsc_instcal_calibrate_failures.fits',1)
-;failed.expdir = strtrim(failed.expdir,2)
-;list.expdir = repstr(list.expdir,'/net/dl1/','/dl1/')
-;MATCH,list.expdir,failed.expdir,ind1,ind2,/sort,count=nmatch
-;print,'Only keeping ',strtrim(nmatch,2),' failed exposures'
-;list = list[ind1]
-;str = str[ind1]
-
-;; 318 exposures have RA=DEC=NAN
-;;  get their coordinates from the fluxfile
-;bdra = where(finite(str.ra) eq 0 or finite(str.dec) eq 0,nbdra)
-;for i=0,nbdra-1 do begin
-;  fluxfile = str[bdra[i]].fluxfile
-;  lo = strpos(fluxfile,'/mss1')
-;  fluxfile = mssdir+strmid(fluxfile,lo+6)
-;  head = headfits(fluxfile,exten=0)
-;  str[bdra[i]].ra = sxpar(head,'ra')
-;  str[bdra[i]].dec = sxpar(head,'dec')
-;endfor
-
 ; Calculate the healpix
 theta = (90-str.dec)/radeg
 phi = str.ra/radeg
@@ -173,7 +156,6 @@ list.pix = ipring
 print,'Writing list to ',dir+'/lists/nsc_calibrate_healpix_list.fits'
 MWRFITS,list,dir+'/lists/nsc_calibrate_healpix_list.fits',/create
 
-;stop
 
 ;================
 ; RUN THE JOBS
@@ -189,31 +171,13 @@ if keyword_set(redo) then allcmd+=',/redo'
 alldirs = strarr(npix)+tmpdir
 allupix = upix
 
-;; Only run healpix with DEC>-29
-;g = where(str.dec gt -29,ng)
-;uipix = uniq(list[g].pix,sort(list[g].pix))
-;upix = list[g[uipix]].pix
-;npix = n_elements(upix)
-;print,strtrim(npix,2),' healpix to run'
-;; Create the commands
-;cmd = 'nsc_instcal_calibrate_healpix,'+strtrim(upix,2)
-;if keyword_set(redo) then cmd+=',/redo'
-;dirs = strarr(npix)+tmpdir
-
 ; RANDOMIZE
 rnd = sort(randomu(0,npix))
 allcmd = allcmd[rnd]
 alldirs = alldirs[rnd]
 allupix = allupix[rnd]
 
-;; Hulk finished the first 3622 jobs (7/24/19)
-;print,'Removing the first 3622 jobs that hulk already finished'
-;remove,lindgen(3622),allcmd,alldirs,allupix
-;npix = n_elements(allcmd)
-
 ;; Parcel out the jobs
-;hosts = ['gp09','hulk','thing']
-hosts = ['gp09','thing']
 nhosts = n_elements(hosts)
 torun = lindgen(npix)
 nperhost = npix/nhosts
@@ -234,55 +198,11 @@ runstr.cmd = cmd
 runstr.dir = dirs
 MWRFITS,runstr,runfile,/create
 
-
-; 29,495 healpix, 14748 each
-
-; ALL HEALPIX
-; gp09, run 1st batch, 14748
-;cmd = cmd[0:14747]
-;dirs = dirs[0:14747]
-
-; Thing, run 2nd batch, 14747
-;cmd = cmd[14748:*]
-;dirs = dirs[14748:*]
-
-;; Hulk, run the gp09/thing failed jobs
-;readline,dir+'/lists/nsccalibhpix_failed_gp09_hpix.txt',failed_hpix1
-;readline,dir+'/lists/nsccalibhpix_failed_thing_hpix.txt',failed_hpix2
-;failed_hpix = [failed_hpix1,failed_hpix2]
-;cmd = 'nsc_instcal_calibrate_healpix,'+strtrim(failed_hpix,2)
-;dirs = strarr(n_elements(cmd))+tmpdir
-
-; rerun exposures that had coordinate problems and finished
-; successfully the first time
-
-; Run healpix with failures
-;sum = mrdfits(dir+'lists/nsc_instcal_calibrate.fits',1)
-;bad = where(sum.success eq 0,nbad)
-;ui = uniq(sum[bad].pix,sort(sum[bad].pix))
-;upix = sum[bad[ui]].pix
-;npix = n_elements(upix)
-;; Create the commands
-;cmd = 'nsc_instcal_calibrate_healpix,'+strtrim(upix,2)
-;;if keyword_set(redo) then cmd+=',/redo'
-;dirs = strarr(npix)+tmpdir
-
-; Thing, run first half
-;cmd = cmd[0:317]
-;dirs = dirs[0:317]
-
-; Hulk, run second half
-;cmd = cmd[318:*]
-;dirs = dirs[318:*]
-
-
 stop
-
 
 a = '' & read,a,prompt='Press RETURN to start'
 PBS_DAEMON,cmd,dirs,jobs=jobs,/hyperthread,/idle,prefix='nsccalibhpix',wait=wait,nmulti=nmulti 
 
-stop
 
 ; Make the summary file with nsc_calibrate_summary.pro
 

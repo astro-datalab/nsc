@@ -7,6 +7,8 @@
 ; on one individual exposure.
 ;
 ; INPUTS:
+;  version   The version name, e.g. 'v3'.
+;  =hosts    Array of hosts to run.  The default is gp06-gp09,hulk and thing.
 ;  =redo     Rerun on exposures that were previously processed.
 ;  =nmulti   The number of simultaneously jobs to run. Default is 30.
 ;  =maxjobs  The maximum number of exposures to attempt to process.
@@ -20,15 +22,15 @@
 ;  The individual catalogs are put in ROOTDIR+users/dnidever/nsc/instcal/NIGHT/EXPOSURENAME/.
 ;
 ; USAGE:
-;  IDL>nsc_instcal_main,'v3'
+;  IDL>nsc_instcal_measure_main,'v3'
 ;
 ; By D.Nidever  Feb 2017
 ;-
 
-pro nsc_instcal_measure_main,version,redo=redo,nmulti=nmulti,maxjobs=maxjobs,silent=silent,dolock=dolock,unlock=unlock
+pro nsc_instcal_measure_main,version,hosts=hosts,redo=redo,nmulti=nmulti,maxjobs=maxjobs,silent=silent,dolock=dolock,unlock=unlock
 
 if n_elements(version) eq 0 then begin
-  print,'Syntax - nsc_instcal_measure_main,version,redo=redo,nmulti=nmulti,maxjobs=maxjobs,silent=silent,dolock=dolock,unlock=unlock'
+  print,'Syntax - nsc_instcal_measure_main,version,hosts=hosts,redo=redo,nmulti=nmulti,maxjobs=maxjobs,silent=silent,dolock=dolock,unlock=unlock'
   return
 endif
 
@@ -40,6 +42,12 @@ if n_elements(nmulti) eq 0 then nmulti=30
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 if file_test(tmpdir,/directory) eq 0 then file_mkdir,tmpdir
+;; Hosts
+if n_elements(hosts) eq 0 then hosts = ['gp06','gp07','gp08','gp09','hulk','thing']
+if total(hosts eq host) eq 0 then begin
+  print,'Current HOST='+host+' not in list of HOSTS = [ '+strjoin(hosts,', ')+' ] '
+  return
+endif
 
 t0 = systime(1)
 
@@ -259,10 +267,6 @@ endfor
 ;expstr = expstr[ind1]
 
 ;; Parcel out the jobs
-;hosts = ['gp06','gp07','gp08','gp09','hulk','thing']
-;hosts = ['gp06','gp07','gp08']
-;hosts = ['gp09','thing']
-hosts = ['hulk']
 nhosts = n_elements(hosts)
 torun = where(expstr.torun eq 1,nalltorun)
 nperhost = nalltorun/nhosts
