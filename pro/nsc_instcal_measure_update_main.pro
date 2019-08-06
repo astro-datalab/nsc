@@ -77,22 +77,22 @@ list.base = strtrim(list.base,2)
 expdir = file_dirname(list.file)
 ui = uniq(expdir,sort(expdir))  ;; get unique exposures
 expdir = expdir[ui]
-nexpdir = n_elements(expstr)
+nexpdir = n_elements(expdir)
 
 ;; Putting them in RANDOM but REPEATABLE order
 seed = 1
 print,'RANDOMIZING WITH SEED=1'
-si = sort(randomu(seed,nexpstr))
+si = sort(randomu(seed,nexpdir))
 expdir = expdir[si]
 
 ;; Make the jobs
 allcmd = 'nsc_instcal_measure_update,"'+expdir+'"'
-alldir = strarr(nexpstr)+tmpdir
+alldir = strarr(nexpdir)+tmpdir
 
 ;; Parcel out the jobs
 nhosts = n_elements(hosts)
-torun = where(expstr.torun eq 1,nexpdir)
-nperhost = nalltorun/nhosts
+nperhost = nexpdir/nhosts
+torun = lindgen(nexpdir)
 for i=0,nhosts-1 do $
   if stregex(host,hosts[i],/boolean) eq 1 then torun=torun[i*nperhost:(i+1)*nperhost-1]
 ntorun = n_elements(torun)
@@ -103,7 +103,7 @@ if ntorun eq 0 then begin
 endif
 
 cmd = allcmd[torun]
-dir = alldir[torun]
+cmddir = alldir[torun]
 expdir = expdir[torun]
 
 ; Saving the structure of jobs to run
@@ -117,7 +117,7 @@ MWRFITS,expstr,runfile,/create
 ; Run PBS_DAEMON
 stop
 a = '' & read,a,prompt='Press RETURN to start'
-PBS_DAEMON,cmd,cmddir,jobs=jobs,/hyperthread,prefix='nscmeasup',wait=5,nmulti=nmulti
+PBS_DAEMON,cmd,cmddir,jobs=jobs,/idle,/hyperthread,prefix='nscmeasup',wait=5,nmulti=nmulti
 
 
 print,'dt=',stringize(systime(1)-t0,ndec=2),' sec'
