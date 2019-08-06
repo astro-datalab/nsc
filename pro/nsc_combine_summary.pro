@@ -1,13 +1,19 @@
-pro nsc_combine_summary,version=version
+pro nsc_combine_summary,version
 
 ; Create a summary file of all the Healpix combined files
 
+if n_elements(version) eq 0 then begin
+  print,'Syntax - nsc_combine_summary,version'
+  return
+endif
+
 ; Combine all of the data
 NSC_ROOTDIRS,dldir,mssdir,localdir
-if n_elements(version) eq 0 then version='v2'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 nside = 128
 radeg = 180.0d0 / !dpi
+
+t0 = systime(1)
 
 index = mrdfits(dir+'lists/nsc_healpix_list.fits',2,/silent)
 npix = n_elements(index)
@@ -95,8 +101,13 @@ for i=0,npix-1 do begin
 endfor
 gd = where(sumstr.success eq 1,ngd)
 print,strtrim(ngd,2),' Healpix successfully processed'
-print,'Writing summary file to ',dir+'lists/nsc_instcal_combine.fits'
-MWRFITS,sumstr,dir+'lists/nsc_instcal_combine.fits',/create
+outfile = dir+'lists/nsc_combine_summary.fits'
+print,'Writing summary file to ',outfile
+MWRFITS,sumstr,outfile,/create
+if file_test(outfile+'.gz') eq 1 then file_delete,outfile+'.gz',/allow
+spawn,['gzip',outfile],/noshell
+
+print,'dt=',stringize(systime(1)-t0,ndec=2),' sec'
 
 stop
 

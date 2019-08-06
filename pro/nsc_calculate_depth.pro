@@ -1,13 +1,18 @@
-pro nsc_calculate_depth
+pro nsc_calculate_depth,version
 
 ; Calculcate the 5 sigma depth for each exposure
 
+if n_elements(version) eq 0 then begin
+  print,'Syntax - pro nsc_calculate_depth,version'
+  return
+endif
+
 NSC_ROOTDIRS,dldir,mssdir,localdir
-dir = dldir+'users/dnidever/nsc/instcal/'
+dir = dldir+'users/dnidever/nsc/instcal/'+version
   
 ; Restore the calibration summary file
 print,'Loading nsc_instcal_calibrate.fits'
-str = MRDFITS(dir+'nsc_instcal_calibrate.fits',1,/silent)
+str = MRDFITS(dir+'nsc_calibrate_summary.fits.gz',1,/silent)
 str.expdir = strtrim(str.expdir,2)
 str.instrument = strtrim(str.instrument,2)
 str.metafile = strtrim(str.metafile,2)

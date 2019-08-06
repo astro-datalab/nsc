@@ -1,10 +1,14 @@
-pro nsc_instcal_combine_coverage,pix,redo=redo,version=version
+pro nsc_instcal_combine_coverage,pix,version,redo=redo
 
 ; Make the coverage map for a single nside=128 NSC healpix
 
+if n_elements(version) eq 0 then begin
+  print,'Syntax - nsc_instcal_combine_coverage,pix,version,redo=redo'
+  return
+endif
+
 ; Combine all of the data
 NSC_ROOTDIRS,dldir,mssdir,localdir
-if n_elements(version) eq 0 then version='v2'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 nside = 128
 nside2 = 4096

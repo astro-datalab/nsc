@@ -188,11 +188,12 @@ endfor
 chstr = chstr[0:chcnt-1]
 gd = where(expstr.success eq 1,ngd)
 print,strtrim(ngd,2),' exposure successfully calibrated'
-print,'Writing summary file to ',dir+'lists/nsc_instcal_calibrate.fits'
-MWRFITS,expstr,dir+'lists/nsc_instcal_calibrate.fits',/create
-MWRFITS,chstr,dir+'lists/nsc_instcal_calibrate.fits',/silent
-if file_test(dir+'lists/nsc_instcal_calibrate.fits.gz') eq 1 then file_delete,dir+'lists/nsc_instcal_calibrate.fits.gz',/allow
-spawn,['gzip',dir+'lists/nsc_instcal_calibrate.fits'],/noshell
+outfile = dir+'lists/nsc_calibrate_summary.fits'
+print,'Writing summary file to ',outfile
+MWRFITS,expstr,outfile,/create
+MWRFITS,chstr,outfile,/silent
+if file_test(outfile+'.gz') eq 1 then file_delete,outfile+'.gz',/allow
+spawn,['gzip',outfile],/noshell
 
 print,'dt=',stringize(systime(1)-t0,ndec=2),' sec'
 

@@ -2,10 +2,16 @@ pro nsc_measure_summary,version,nosources=nosources,quick=quick
 
 ; Make a summary file of all of the exposures that were Source Extracted
 
+if n_elements(version) eq 0 then begin
+  print,'Syntax - nsc_measure_summary,version,nosources=nosources,quick=quick'
+  return
+endif
+
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
-if n_elements(version) eq 0 then version='v3'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
+
+t0 = systime(1)
 
 ; Find all of the directories
 print,'Getting the exposure directories'
@@ -103,6 +109,8 @@ endfor
 outfile = dir+'lists/nsc_measure_summary.fits'
 print,'Writing summary file to ',outfile
 MWRFITS,expstr,outfile,/create
+
+print,'dt = ',strtrim(systime(1)-t0,2),' sec.'
 
 stop
 
