@@ -1,7 +1,6 @@
 pro nsc_instcal_calibrate,expdir,inpref,eqnfile=eqnfile,redo=redo,selfcal=selfcal,saveref=saveref,ncpu=ncpu,stp=stp
 
 ; Calibrate catalogs for one exposure
-
 NSC_ROOTDIRS,dldir,mssdir,localdir
 
 ; Not enough inputs
@@ -296,9 +295,9 @@ cat.sourceid = instrument+'.'+strtrim(expnum,2)+'.'+strtrim(cat.ccdnum,2)+'.'+st
 
 ; Start the exposure-level structure
 expstr = {file:fluxfile,wtfile:wtfile,maskfile:maskfile,instrument:'',base:base,expnum:long(expnum),ra:0.0d0,dec:0.0d0,dateobs:string(dateobs),$
-          mjd:0.0d,filter:filter,exptime:float(exptime),airmass:0.0,nsources:long(ncat),ngoodsources:0L,fwhm:0.0,nchips:0L,rarms:0.0,decrms:0.0,ebv:0.0,ngaiamatch:0L,$
-          ngoodgaiamatch:0L,zptype:0,zpterm:999999.0,zptermerr:99999.0,zptermsig:999999.0,zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,$
-          zpspatialvar_nccd:0,nrefmatch:0L,ngoodrefmatch:0L,depth95:99.99,depth10sig:99.99}
+          mjd:0.0d,filter:filter,exptime:float(exptime),airmass:0.0,wcscal:'',nsources:long(ncat),ngoodsources:0L,fwhm:0.0,nchips:0L,$
+          rarms:0.0,decrms:0.0,ebv:0.0,ngaiamatch:0L,ngoodgaiamatch:0L,zptype:0,zpterm:999999.0,zptermerr:99999.0,zptermsig:999999.0,$
+          zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L,ngoodrefmatch:0L,depth95:99.99,depth10sig:99.99}
 expstr.instrument = instrument
 expstr.ra = cenra
 expstr.dec = cendec
@@ -308,6 +307,9 @@ expstr.nchips = nchips
 expstr.airmass = airmass
 expstr.fwhm = medfwhm
 expstr.ngoodsources = ngoodsources
+wcscal = sxpar(head,'wcscal',count=nwcscal)
+if nwcscal eq 0 then wcscal='NAN'
+expstr.wcscal = wcscal
 
 ; Step 2. Load the reference catalogs
 ;------------------------------------
