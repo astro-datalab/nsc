@@ -14,6 +14,7 @@ plotsdir = dir+'plots/'
 if file_test(plotsdir,/directory) eq 0 then file_mkdir,plotsdir
 radeg = 180.0d0 / !dpi
 nside = 128
+t0 = systime(1)
 
 ; Restore the calibration summary file
 temp = MRDFITS(dir+'lists/nsc_calibrate_summary.fits.gz',1,/silent)
@@ -59,7 +60,7 @@ if nstr ne n_elements(brklo) then stop,'number of exposures in STR and CHSTR do 
 str.chipindx = brklo
 str.nchips = nchexp
 ; Getting number of good chip WCS for each exposures
-for i=0,n_elements(str)-1 do str[i].ngoodchipwcs = total(chstr[brklo[i]:brkhi[i]].gaianmatch gt 0)
+for i=0,n_elements(str)-1 do str[i].ngoodchipwcs = total(chstr[brklo[i]:brkhi[i]].ngaiamatch gt 0)
 ; Fixing absolute paths of flux filename
 file = str.file
 g1 = where(stregex(file,'/net/mss1/',/boolean) eq 1,ng1)
@@ -125,22 +126,22 @@ zpstr[0:6].instrument = 'c4d'
 zpstr[0:6].filter = ['u','g','r','i','z','Y','VR']
 zpstr[0].amcoef = [-1.60273, -0.375253]   ; c4d-u
 zpstr[1].amcoef = [0.277124, -0.198037]   ; c4d-g
-zpstr[2].amcoef = [0.516382, -0.115443]   ; c4d-r
+zpstr[2].amcoef = [0.516382, -0.115443]   ; c4d-r  changed a bit, fine
 zpstr[3].amcoef = [0.380338, -0.067439]   ; c4d-i
-zpstr[4].amcoef = [0.123924, -0.096877]   ; c4d-z
-zpstr[5].amcoef = [-1.06529, -0.051967]   ; c4d-Y
+zpstr[4].amcoef = [0.074517, -0.067031]   ; c4d-z
+zpstr[5].amcoef = [-1.07800, -0.060014]   ; c4d-Y  
 zpstr[6].amcoef = [1.004357, -0.081105]   ; c4d-VR
 ; Mosiac3 z-band
 zpstr[7].instrument = 'k4m'
 zpstr[7].filter = 'z'
-zpstr[7].amcoef = [-2.687201, -0.73573]   ; k4m-z
+zpstr[7].amcoef = [-2.687201, -0.73573]   ; k4m-z  changed a bit
 ; Bok 90Prime, g and r
 zpstr[8].instrument = 'ksb'
 zpstr[8].filter = 'g'
-zpstr[8].amcoef = [-2.859646, -1.40837]   ; ksb-g
+zpstr[8].amcoef = [-2.859646, -1.40837]   ; ksb-g  changed a bit
 zpstr[9].instrument = 'ksb'
 zpstr[9].filter = 'r'
-zpstr[9].amcoef = [-4.008771, -0.25718]   ; ksb-r
+zpstr[9].amcoef = [-4.008771, -0.25718]   ; ksb-r  changed A LOT!!!
 nzpstr = n_elements(zpstr)
 
 ;STOP,'DOUBLE-CHECK THESE ZERO-POINTS!!!'
@@ -181,7 +182,7 @@ If not keyword_set(nocuts) then begin
       ; Trim out bad exposures to determine the correlations and make figures
       gg = where(abs(zpterm-zpf) lt (3.5*sig0 > 0.2) and str1.airmass lt 2.0 and str1.fwhm lt 2.0 and str1.rarms lt 0.15 and $
                  str1.decrms lt 0.15 and str1.success eq 1 and str1.wcscal eq 'Successful' and str1.zptermerr lt 0.05 and $
-                 str1.zptermsig lt 0.10 and (str1.ngoodchipwcs eq str1.nchips) and $
+                 str1.zptermsig lt 0.08 and $
                  ;str1.zptermsig lt 0.08 and (str1.ngoodchipwcs eq str1.nchips) and $
                  (str1.instrument ne 'c4d' or str1.zpspatialvar_nccd le 5 or (str1.instrument eq 'c4d' and str1.zpspatialvar_nccd gt 5 and str1.zpspatialvar_rms lt 0.1)) and $
                  abs(glat) gt 10 and str1.nrefmatch gt 100 and str1.exptime ge 30,ngg)
@@ -217,17 +218,19 @@ If not keyword_set(nocuts) then begin
       ; ZPterm vs. airmass
       file = plotsdir+zpstr[i].instrument+'-'+zpstr[i].filter+'_zpterm_airmass'
       ps_open,file,/color,thick=4,/encap
-      hess,am[gg],relzpterm[gg],dx=0.01,dy=0.02,xr=[0.9,2.5],yr=[-0.5,0.5]+median(relzpterm[gg]),xtit='Airmass',ytit='Zero-point',$
+      ;hess,am[gg],relzpterm[gg],dx=0.01,dy=0.02,xr=[0.9,2.5],yr=[-0.5,0.5]+median(relzpterm[gg]),xtit='Airmass',ytit='Zero-point',$
+      hess,am[gg],zpterm[gg]+25.0,dx=0.01,dy=0.02,xr=[0.9,2.5],yr=[-0.5,0.5]+median(relzpterm[gg]),xtit='Airmass',ytit='Zero-point',$
            tit=zpstr[i].instrument+'-'+zpstr[i].filter
       x = scale_vector(findgen(100),0.5,2.0)
-      oplot,x,poly(x,coef),co=250
+      oplot,x,poly(x,coef)+25.0,co=250
+      oplot,x,poly(x,zpstr[i].amcoef)+25.0,co=150
       ps_close
       ps2png,file+'.eps',/eps
       ; ZPterm vs. time (density)
       file = plotsdir+zpstr[i].instrument+'-'+zpstr[i].filter+'_zpterm_time_density'
       ps_open,file,/color,thick=4,/encap
-      hess,str1[gg].mjd-mjd0,relzpterm[gg],dx=2,dy=0.02,yr=[-0.5,0.5]+median(relzpterm[gg]),xtit='Time (days)',ytit='Zero-point',$
-           tit=zpstr[i].instrument+'-'+zpstr[i].filter
+      hess,str1[gg].mjd-mjd0,relzpterm[gg],dx=5,dy=0.01,yr=[-0.5,0.5]+median(relzpterm[gg]),xtit='Time (days)',ytit='Zero-point',$
+           tit=zpstr[i].instrument+'-'+zpstr[i].filter,/log
       oplot,str1[gg].mjd-mjd0,allzpfit[gg],ps=1,sym=0.3,co=250
       xyouts,50,-0.45+median(relzpterm[gg]),'MJD!d0!n = '+strtrim(mjd0,2),align=0,charsize=1.2
       ps_close
@@ -417,7 +420,11 @@ if nlistpix eq 0 then stop,'No healpix for this exposure.  Something is wrong!'
   if file_test(listfile+'.gz') eq 1 then file_delete,listfile+'.gz',/allow
   spawn,['gzip',listfile],/noshell
 
-endif
+endif else begin
+  print,listfile,' EXISTS and /redo NOT set'
+endelse
+
+print,'dt = ',strtrim(systime(1)-t0,2),' sec.'
 
 stop
 
