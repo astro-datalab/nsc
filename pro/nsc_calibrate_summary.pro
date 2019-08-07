@@ -2,12 +2,15 @@ pro nsc_calibrate_summary,version
 
 ; Create calibration summary file
 
-radeg = 180.0d0 / !dpi
+if n_elements(version) eq 0 then begin
+  print,'nsc_calibrate_summary,version'
+  return
+endif
 
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
-if n_elements(version) eq 0 then version='v3'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
+radeg = 180.0d0 / !dpi
 
 t0 = systime(1)
 

@@ -37,7 +37,7 @@ dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 if file_test(dir,/directory) eq 0 then file_mkdir,dir+'logs/'
 if file_test(tmpdir,/directory) eq 0 then file_mkdir,tmpdir
-if file_test(dir+'logs/',/directory) eq0 then file_mkdir,dir+'logs/'
+if file_test(dir+'logs/',/directory) eq 0 then file_mkdir,dir+'logs/'
 ;; Hosts
 if n_elements(hosts) eq 0 then hosts = ['gp09','hulk','thing']
 if total(hosts eq hostname) eq 0 then begin

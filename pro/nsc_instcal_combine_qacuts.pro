@@ -1,7 +1,7 @@
-pro nsc_instcal_combine_qacuts,version,redo=redo
+pro nsc_instcal_combine_qacuts,version,redo=redo,nocuts=nocuts
 
 if n_elements(version) eq 0 then begin
-  print,'Syntax - nsc_instcal_combine_qacuts,version,redo=redo'
+  print,'Syntax - nsc_instcal_combine_qacuts,version,redo=redo,nocuts=nocuts'
   return
 endif
 
@@ -13,7 +13,7 @@ if file_test(localdir+'dnidever/nsc/instcal/'+version+'/') eq 0 then file_mkdir,
 plotsdir = dir+'plots/'
 if file_test(plotsdir,/directory) eq 0 then file_mkdir,plotsdir
 radeg = 180.0d0 / !dpi
-
+nside = 128
 
 ; Restore the calibration summary file
 temp = MRDFITS(dir+'lists/nsc_calibrate_summary.fits.gz',1,/silent)
@@ -31,16 +31,16 @@ str.filter = strtrim(str.filter,2)
 ; Add WCSCAL and TELSTAT information
 add_tag,str,'wcscal','',str
 add_tag,str,'telstat','',str
-coords = MRDFITS(dir+'lists/allcoords.fits',1)
-coords.file = strtrim(coords.file,2)
-coords.wcscal = strtrim(coords.wcscal,2)
-coords.telstat = strtrim(coords.telstat,2)
-fluxfile = str.file
-g = where(strmid(fluxfile,0,4) eq '/net',ng)
-if ng gt 0 then fluxfile[g]=strmid(fluxfile[g],4)
-MATCH,fluxfile,coords.file,ind1,ind2,/sort
-str[ind1].wcscal = coords[ind2].wcscal    ; Failed (3153), Poor (14), Successful (308190)
-str[ind1].telstat = coords[ind2].telstat  ; NAN (68188), Not (1222), Track (241826), UNKNOWN (116), Unknown (5)
+;coords = MRDFITS(dir+'lists/allcoords.fits',1)
+;coords.file = strtrim(coords.file,2)
+;coords.wcscal = strtrim(coords.wcscal,2)
+;coords.telstat = strtrim(coords.telstat,2)
+;fluxfile = str.file
+;g = where(strmid(fluxfile,0,4) eq '/net',ng)
+;if ng gt 0 then fluxfile[g]=strmid(fluxfile[g],4)
+;MATCH,fluxfile,coords.file,ind1,ind2,/sort
+;str[ind1].wcscal = coords[ind2].wcscal    ; Failed (3153), Poor (14), Successful (308190)
+;str[ind1].telstat = coords[ind2].telstat  ; NAN (68188), Not (1222), Track (241826), UNKNOWN (116), Unknown (5)
 ; the 2054 failed exposures did not match b/c no fluxfile info
 ; Only want exposures with successful SE processing
 gd = where(str.success eq 1,nstr)
@@ -62,7 +62,7 @@ if nstr ne n_elements(brklo) then stop,'number of exposures in STR and CHSTR do 
 str.chipindx = brklo
 str.nchips = nchexp
 ; Getting number of good chip WCS for each exposures
-for i=0,n_elements(str)-1 do str[i].ngoodchipwcs = total(chstr[brklo[i]:brkhi[i]].ngaiamatch gt 0)
+for i=0,n_elements(str)-1 do str[i].ngoodchipwcs = total(chstr[brklo[i]:brkhi[i]].gaianmatch gt 0)
 ; Fixing absolute paths of flux filename
 file = str.file
 g1 = where(stregex(file,'/net/mss1/',/boolean) eq 1,ng1)
@@ -170,7 +170,7 @@ zpstr[9].filter = 'r'
 zpstr[9].amcoef = [-4.008771, -0.25718]   ; ksb-r
 nzpstr = n_elements(zpstr)
 
-STOP,'DOUBLE-CHECK THESE ZERO-POINTS!!!'
+;STOP,'DOUBLE-CHECK THESE ZERO-POINTS!!!'
 
 ; APPLY QA CUTS IN ZEROPOINT AND SEEING
 If not keyword_set(nocuts) then begin
@@ -435,10 +435,13 @@ if nlistpix eq 0 then stop,'No healpix for this exposure.  Something is wrong!'
   ; Write the full list plus an index
   print,'Writing list to ',listfile
   MWRFITS,healstr,listfile,/create
+  ;; Add NSIDE to header
+  hd0 = headfits(listfile,exten=0)
+  sxaddpar,hd0,'nside',nside
+  modfits,listfile,0,hd0,exten_no=0
   MWRFITS,index,listfile,/silent
   if file_test(listfile+'.gz') eq 1 then file_delete,listfile+'.gz',/allow
   spawn,['gzip',listfile],/noshell
-  ; PUT NSIDE IN HEADER!!
 
 endif
 

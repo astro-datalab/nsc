@@ -15,7 +15,12 @@ radeg = 180.0d0 / !dpi
 
 t0 = systime(1)
 
-index = mrdfits(dir+'lists/nsc_healpix_list.fits',2,/silent)
+hpixlist = dir+'lists/nsc_instcal_combine_healpix_list.fits.gz'
+if file_test(hpixlist) eq 0 then begin
+  print,hpixlist,' NOT FOUND'
+  return
+endif
+index = mrdfits(hpixlist,2,/silent)
 npix = n_elements(index)
 
 ; Load all the summary/metadata files
