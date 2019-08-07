@@ -2003,7 +2003,7 @@
 111755 out of focus
 111756 out of focus
 111757 mirror covers were closed
-anything before-111792 Due to a cloudy weather, the dome is closed (no useful data tonight)
+#anything before-111792 Due to a cloudy weather, the dome is closed (no useful data tonight)
 113282 counts > 50k
 113283 counts > 50k
 113284 counts > 50k
@@ -3276,7 +3276,12 @@ anything before-111792 Due to a cloudy weather, the dome is closed (no useful da
 142831 expfactor
 142892 timeout
 142894 dome drive tripped
-142904-142908 dome drive tripped
+#142904-142908 dome drive tripped
+142904
+142905
+142906
+142907
+142908
 
 # 2017-10-08
 143017 dome not tracking
