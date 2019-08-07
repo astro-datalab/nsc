@@ -19,7 +19,7 @@ nside = 128
 temp = MRDFITS(dir+'lists/nsc_calibrate_summary.fits.gz',1,/silent)
 schema = temp[0]
 struct_assign,{dum:''},schema
-schema = create_struct(schema,'chipindx',-1LL,'NGOODCHIPWCS',0)
+schema = create_struct(schema,'chipindx',-1LL,'NGOODCHIPWCS',0,'wcscal','')
 str = replicate(schema,n_elements(temp))
 struct_assign,temp,str,/nozero
 str.expdir = strtrim(str.expdir,2)
@@ -29,21 +29,18 @@ str.file = strtrim(str.file,2)
 str.base = strtrim(str.base,2)
 str.filter = strtrim(str.filter,2)
 ; Add WCSCAL and TELSTAT information
-add_tag,str,'wcscal','',str
-add_tag,str,'telstat','',str
-;coords = MRDFITS(dir+'lists/allcoords.fits',1)
-;coords.file = strtrim(coords.file,2)
-;coords.wcscal = strtrim(coords.wcscal,2)
-;coords.telstat = strtrim(coords.telstat,2)
-;fluxfile = str.file
-;g = where(strmid(fluxfile,0,4) eq '/net',ng)
-;if ng gt 0 then fluxfile[g]=strmid(fluxfile[g],4)
-;MATCH,fluxfile,coords.file,ind1,ind2,/sort
-;str[ind1].wcscal = coords[ind2].wcscal    ; Failed (3153), Poor (14), Successful (308190)
-;str[ind1].telstat = coords[ind2].telstat  ; NAN (68188), Not (1222), Track (241826), UNKNOWN (116), Unknown (5)
-; the 2054 failed exposures did not match b/c no fluxfile info
+coords = MRDFITS(dir+'lists/allcoords.fits',1)
+coords.file = strtrim(coords.file,2)
+coords.wcscal = strtrim(coords.wcscal,2)
+coords.telstat = strtrim(coords.telstat,2)
+fluxfile = str.file
+g = where(strmid(fluxfile,0,4) eq '/net',ng)
+if ng gt 0 then fluxfile[g]=strmid(fluxfile[g],4)
+MATCH,fluxfile,coords.file,ind1,ind2,/sort
+str[ind1].wcscal = coords[ind2].wcscal    ; Failed (3153), Poor (14), Successful (308190)
 ; Only want exposures with successful SE processing
 gd = where(str.success eq 1,nstr)
+print,strtrim(nstr,2),' successful exposures'
 str = str[gd]
 si = sort(str.expdir)
 str = str[si]
@@ -72,7 +69,7 @@ if ng2 gt 0 then file[g2] = strmid(file[g2],6)
 ; Fixing very negative RAs
 print,'FIXING NEGATIVE RAs in STR and CHSTR'
 ;bdra = where(chstr.cenra lt -180,nbdra)
-bdra = where(chstr.cenra lt -0,nbdra)
+bdra = where(chstr.cenra lt 0,nbdra)
 uibd = uniq(chstr[bdra].expdir,sort(chstr[bdra].expdir))
 MATCH,str.expdir,chstr[bdra[uibd]].expdir,ind1,ind2,/sort,count=nmatch
 for i=0,nmatch-1 do begin
@@ -96,14 +93,14 @@ for i=0,nmatch-1 do begin
 endfor
 
 ; Fix instrument in STR and CHSTR
-print,'FIXING INSTRUMENT IN STR AND CHSTR'
-type = ['c4d','k4m','ksb']
-for i=0,n_elements(type)-1 do begin
-  gd = where(stregex(str.expdir,'/'+type[i]+'/',/boolean) eq 1,ngd)
-  if ngd gt 0 then str[gd].instrument=type[i]
-  gd = where(stregex(chstr.expdir,'/'+type[i]+'/',/boolean) eq 1,ngd)
-  if ngd gt 0 then chstr[gd].instrument=type[i]
-endfor
+;print,'FIXING INSTRUMENT IN STR AND CHSTR'
+;type = ['c4d','k4m','ksb']
+;for i=0,n_elements(type)-1 do begin
+;  gd = where(stregex(str.expdir,'/'+type[i]+'/',/boolean) eq 1,ngd)
+;  if ngd gt 0 then str[gd].instrument=type[i]
+;  gd = where(stregex(chstr.expdir,'/'+type[i]+'/',/boolean) eq 1,ngd)
+;  if ngd gt 0 then chstr[gd].instrument=type[i]
+;endfor
 
 ;; Fix missing AIRMASS                                                                                                                                                           
 ;bdam = where(str.airmass lt 0.9,nbdam)
@@ -121,30 +118,6 @@ endfor
 ;  str[bdam[i]].airmass = AIRMASS(jd,ra,dec,lat,lon)
 ;endfor
 ; THIS IS STILL RETURNING -1, IS ONE OF THE VALUES WRONG??
-
-; This is now done at the beginning when the lists are created
-;; APPLY RELEASE-DATE CUTS
-;list1 = MRDFITS(dir+'lists/decam_instcal_list.fits',1)
-;list2 = MRDFITS(dir+'lists/mosaic3_instcal_list.fits',1)
-;list3 = MRDFITS(dir+'lists/bok90prime_instcal_list.fits',1)
-;list = [list1,list2,list3]
-;list.fluxfile = strtrim(list.fluxfile,2)
-;fluxfile = strmid(list.fluxfile,10)
-;MATCH,fluxfile,file,ind1,ind2,/sort,count=nmatch
-;; some don't match because they were from a previous version
-;;  of the input list
-;release_date = strarr(n_elements(str))+'2020-01-01 00:00:00'
-;release_date[ind2] = list[ind1].release_date
-;release_year = long(strmid(release_date,0,4))
-;release_month = long(strmid(release_date,5,2))
-;release_day = long(strmid(release_date,8,2))
-;release_mjd = JULDAY(release_month,release_day,release_year)-2400000.5d0
-;;release_cutoff = [2017,4,24]  ; v1 - April 24, 2017
-;release_cutoff = [2017,10,11]  ; v2 - Oct 11, 2017
-;release_cutoff_mjd = JULDAY(release_cutoff[1],release_cutoff[2],release_cutoff[0])-2400000.5d0
-;gdrelease = where(release_mjd le release_cutoff_mjd,ngdrelease,comp=bdrelease,ncomp=nbdrelease)
-;print,strtrim(ngdrelease,2),' exposures are PUBLIC'
-;str = str[gdrelease]  ; impose the public data cut
 
 ; Zero-point structure
 zpstr = replicate({instrument:'',filter:'',amcoef:fltarr(2),thresh:0.5},10)
@@ -208,7 +181,8 @@ If not keyword_set(nocuts) then begin
       ; Trim out bad exposures to determine the correlations and make figures
       gg = where(abs(zpterm-zpf) lt (3.5*sig0 > 0.2) and str1.airmass lt 2.0 and str1.fwhm lt 2.0 and str1.rarms lt 0.15 and $
                  str1.decrms lt 0.15 and str1.success eq 1 and str1.wcscal eq 'Successful' and str1.zptermerr lt 0.05 and $
-                 str1.zptermsig lt 0.08 and (str1.ngoodchipwcs eq str1.nchips) and $
+                 str1.zptermsig lt 0.10 and (str1.ngoodchipwcs eq str1.nchips) and $
+                 ;str1.zptermsig lt 0.08 and (str1.ngoodchipwcs eq str1.nchips) and $
                  (str1.instrument ne 'c4d' or str1.zpspatialvar_nccd le 5 or (str1.instrument eq 'c4d' and str1.zpspatialvar_nccd gt 5 and str1.zpspatialvar_rms lt 0.1)) and $
                  abs(glat) gt 10 and str1.nrefmatch gt 100 and str1.exptime ge 30,ngg)
 
@@ -282,7 +256,7 @@ If not keyword_set(nocuts) then begin
       gdind = where(relzpterm ge -zpstr[i].thresh and relzpterm le zpstr[i].thresh,ngdind,comp=bdind,ncomp=nbdind)
       print,'  ',strtrim(nbdind,2),' exposures with ZPTERM below the threshold'    
       if ngdind gt 0 then badzpmask[ind[gdind]] = 0
-
+stop
     endif
   endfor
   ; Get bad DECaLS and SMASH exposures
