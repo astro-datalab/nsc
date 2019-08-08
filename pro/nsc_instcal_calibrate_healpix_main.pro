@@ -174,7 +174,7 @@ upix = list[uipix].pix
 npix = n_elements(upix)
 print,strtrim(npix,2),' healpix to run'
 ; Create the commands
-allcmd = 'nsc_instcal_calibrate_healpix,'+strtrim(upix,2)+'"'+version+'",nside='+strtrim(nside,2)
+allcmd = 'nsc_instcal_calibrate_healpix,'+strtrim(upix,2)+',"'+version+'",nside='+strtrim(nside,2)
 if keyword_set(redo) then allcmd+=',/redo'
 alldirs = strarr(npix)+tmpdir
 allupix = upix
