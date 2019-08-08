@@ -148,6 +148,12 @@ for i=0,nstr-1 do begin
   ;str[i].dec = sxpar(head,'crval2')
 endfor
 
+;; Only rerun c4d-VR exposures
+g = where(str.instrument eq 'c4d' and strmid(str.filter,0,2) eq 'VR',ng)
+print,'Rerunning ',strtrim(ng,2),' VR exposures'
+str = str[g]
+list = list[g]
+
 ; Calculate the healpix
 theta = (90-str.dec)/radeg
 phi = str.ra/radeg
@@ -168,7 +174,7 @@ upix = list[uipix].pix
 npix = n_elements(upix)
 print,strtrim(npix,2),' healpix to run'
 ; Create the commands
-allcmd = 'nsc_instcal_calibrate_healpix,'+strtrim(upix,2),'"'+version+'",nside='+strtrim(nside,2)
+allcmd = 'nsc_instcal_calibrate_healpix,'+strtrim(upix,2)+'"'+version+'",nside='+strtrim(nside,2)
 if keyword_set(redo) then allcmd+=',/redo'
 alldirs = strarr(npix)+tmpdir
 allupix = upix

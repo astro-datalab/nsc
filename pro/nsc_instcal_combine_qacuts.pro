@@ -292,6 +292,13 @@ If not keyword_set(nocuts) then begin
     badexp[ind1] = badexp[ind1] AND (str[ind1].instrument eq 'k4m')   ; make sure they are Mosaic3 exposures
   endif
 
+  ;; Zero-point spatial variability threshold
+  ;;  varies with galactic latitude
+  ;;  |b|>10   0.15
+  ;;  |b|<=10  0.55
+  glactc,str.ra,str.dec,2000.0,glon,glat,1,/deg
+  zpspvarthresh = (abs(glat) gt 10)*0.15 + (abs(glat) le 10)*0.55
+
   ; Final QA cuts
   ;  Many of the short u-band exposures have weird ZPTERMs, not sure why
   ;  There are a few exposures with BAD WCS, RA>360!
@@ -305,9 +312,10 @@ If not keyword_set(nocuts) then begin
                 str.nrefmatch lt 5 or $                            ; few phot ref match
                 badexp eq 1 or $                                   ; bad SMASH/LS exposure
                 ;str.ngoodchipwcs lt str.nchips or $                ; not all chips astrom calibrated
-                (str.instrument eq 'c4d' and str.zpspatialvar_nccd gt 5 and str.zpspatialvar_rms gt 0.1),nbdexp)  ; bad spatial zpterm
+                (str.instrument eq 'c4d' and str.zpspatialvar_nccd gt 5 and str.zpspatialvar_rms gt zpspvarthresh),nbdexp)  ; bad spatial zpterm
   ; rarms/decrms, nrefmatch
   print,'QA cuts remove ',strtrim(nbdexp,2),' exposures'
+;stop
   ; Remove
   torem = bytarr(nchstr)
   for i=0,nbdexp-1 do torem[str[bdexp[i]].chipindx:str[bdexp[i]].chipindx+str[bdexp[i]].nchips-1]=1
