@@ -1,15 +1,37 @@
-pro nsc_instcal_calibrate_healpix,pix,nside=nside,version=version,redo=redo
-
+;+
+;
+; NSC_INSTCAL_CALIBRATE_HEALPIX
+;
 ; This program is a wrapper around NSC_INSTCAL_CALIBRATE
 ; for all exposures in the same region of the sky.
 ; It retrieves the reference catalogs ONCE which saves time.
+;
+; INPUTS:
+;  pix       The HEALPix pixel number.
+;  version   The version name, e.g. 'v3'. 
+;  =nside    The HEALPix nside to use.  Default is 64.
+;  /redo     Rerun on exposures that were previously processed.
+;
+; OUTPUTS:
+;
+; USAGE:
+;  IDL>nsc_instcal_calibrate_healpix,1045,'v3'
+;
+; By D. Nidever 2017
+;-
+
+pro nsc_instcal_calibrate_healpix,pix,version,nside=nside,redo=redo
+
+if n_elements(pix) eq 0 or n_elements(version) eq 0 then begin
+  print,'Syntax - nsc_instcal_calibrate_healpix,pix,version,nside=nside,redo=redo'
+  return
+endif
 
 if n_elements(nside) eq 0 then nside=64
 radeg = 180.0d0 / !dpi
 
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
-if n_elements(version) eq 0 then version='v3'
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 if file_test(dir,/directory) eq 0 then file_mkdir,dir+'logs/'

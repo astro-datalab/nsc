@@ -17,9 +17,9 @@
 ;  /unlock   Ignore the lock files.
 ;
 ; OUTPUTS:
-;  A log "journal" file is put in ROOTDIR+users/dnidever/nsc/instcal/logs/
+;  A log "journal" file is put in ROOTDIR+users/dnidever/nsc/instcal/v#/logs/
 ;  as well as a structure with information on the jobs that were run.
-;  The individual catalogs are put in ROOTDIR+users/dnidever/nsc/instcal/NIGHT/EXPOSURENAME/.
+;  The individual catalogs are put in ROOTDIR+users/dnidever/nsc/instcal/v#/NIGHT/EXPOSURENAME/.
 ;
 ; USAGE:
 ;  IDL>nsc_instcal_measure_main,'v3'
@@ -42,10 +42,12 @@ if n_elements(nmulti) eq 0 then nmulti=30
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 if file_test(tmpdir,/directory) eq 0 then file_mkdir,tmpdir
+subdirs = ['logs','c4d','k4m','ksb']
+for i=0,n_elements(subdirs)-1 do if file_test(dir+subdirs[i],/directory) eq 0 then file_mkdir,dir+subdirs[i]
 ;; Hosts
 if n_elements(hosts) eq 0 then hosts = ['gp06','gp07','gp08','gp09','hulk','thing']
-if total(hosts eq host) eq 0 then begin
-  print,'Current HOST='+host+' not in list of HOSTS = [ '+strjoin(hosts,', ')+' ] '
+if total(hosts eq hostname) eq 0 then begin
+  print,'Current HOST='+hostname+' not in list of HOSTS = [ '+strjoin(hosts,', ')+' ] '
   return
 endif
 
@@ -86,34 +88,11 @@ str.maskfile = strtrim(str.maskfile,2)
 str.wtfile = strtrim(str.wtfile,2)
 print,strtrim(nstr,2),' InstCal images'
 
-;; Only rerun exposures where the original MSS CP files does not exist anymore
-print,'Rerunning exposures where the original MSS CP files do not exist anymore'
-READLINE,dir+'/lists/meas_rerun_index.txt',bdind
-str = str[bdind]
-nstr = n_elements(str)
-
 ;; Putting them in RANDOM but REPEATABLE order
 seed = 1
 print,'RANDOMIZING WITH SEED=1'
 si = sort(randomu(seed,n_elements(str)))
 str = str[si]
-
-;; Only run exposures for our 6 test fields
-;healpix = [37391, 64471, 153437, 153728, 190278, 194240]
-;undefine,base
-;for i=0,n_elements(healpix)-1 do begin
-;  expstr = mrdfits(dldir+'users/dnidever/nsc/qa/v1/'+strtrim(healpix[i],2)+'.fits.gz',1,/silent)
-;  push,base,strtrim(expstr.base,2)
-;endfor
-;allbase = file_basename(str.fluxfile,'.fits.fz')
-;MATCH,allbase,base,ind1,ind2,/sort
-;gdexp = ind1
-;ngdexp = n_elements(gdexp)
-
-;glactc,str.ra,str.dec,2000.0,glon,glat,1,/deg
-;gal2mag,glon,glat,mlon,mlat
-;filt = strmid(str.filter,0,1)
-;exptime = str.exposure
 
 gdexp = lindgen(nstr)
 ngdexp = nstr
@@ -192,80 +171,6 @@ for i=0,ngdexp-1 do begin
   BOMB:
 endfor
 
-; Compare to /dl1/users/dnidever/nsc/instcal/v3/lists/nsc_measure_expstr.fits
-;sum = mrdfits('/dl1/users/dnidever/nsc/instcal/v3/lists/nsc_measure_expstr.fits',1)
-;done = where(sum.done eq 1,ndone)
-;if ndone gt 0 then begin
-;  expstr[done].done = 1
-;  expstr[done].torun = 0
-;endif
-;sum = mrdfits('/dl1/users/dnidever/nsc/instcal/v3/lists/nsc_measure_summary.fits',1)
-;sum.base = strtrim(sum.base,2)
-;done = where(sum.nsources gt 0,ndone)
-;if ndone gt 0 then begin
-;  base_done = sum[done].base
-;  base = file_basename(expstr.fluxfile,'.fits.fz')
-;  MATCH,base,base_done,ind1,ind2,/sort,count=nmatch
-;  if nmatch gt 0 then begin
-;    expstr[ind1].done = 1
-;    expstr[ind1].torun = 0
-;  endif
-;endif
-
-; Have hulk help out gp09, ran last 10,000 of gp09's jobs
-;torun = lindgen(10000)-10000+41633
-;expstr.torun = 0
-;expstr[torun].torun = 1
-;ntorun = 10000L
-
-;; Rerunning fails from all 7 machines
-;readline,'/d0/dnidever/nsc/instcal/v2/fails.txt',fails
-;ui = uniq(fails,sort(fails))  ; 4 duplicates
-;fails = fails[ui]
-;exp = file_basename(expstr.fluxfile,'.fits.fz')
-;MATCH,exp,fails,ind1,ind2,count=nmatch
-;expstr.torun = 0
-;expstr[ind1].torun = 1
-
-; help out gp09 and thing
-; 1800 for gp09 and 2600 for thing
-;torun = [lindgen(1800)-1800+28633, lindgen(2600)-2599+138377]
-;expstr[torun].torun = 1
-;dum = where(expstr.torun eq 1,ntorun)
-
-; Also help out gp09/gp05/gp06/gp07
-; 3000 each from end, but remember that gp08 is already taking off
-; last 6667 exposures, and hulk already ran 10,000 for gp09
-;torun = [lindgen(3000)-2999+48299L-6667L-10000L, lindgen(3000)-2999+96599L-6667L, lindgen(3000)-2999+193199L-6667L, lindgen(3000)-2999+241499L-6667L]
-;expstr[torun].torun=1
-;ntorun = n_elements(torun)
-
-; 91945 exposures to run
-;stop
-
-;; gp06-08 finished some jobs, call them done, 7/12/19
-;torun = where(expstr.torun eq 1,nalltorun)
-;;gp06  6882 / 25859
-;expstr[torun[0:6881]].done = 1
-;expstr[torun[0:6881]].torun = 0
-;;gp07  7675 / 25859
-;expstr[torun[25859L:25859L+7674]].done = 1
-;expstr[torun[25859L:25859L+7674]].torun = 0
-;;gp08  7511 / 25859
-;expstr[torun[2*25859L:2*25859L+7510]].done = 1
-;expstr[torun[2*25859L:2*25859L+7510]].torun = 0
-
-;; Only rerun failed exposures, SExtractor had a problem on hulk
-;;  9263 exposures with nchips=0
-;sumstr = mrdfits(dir+'lists/nsc_measure_summary.fits',1)
-;sumstr.dir = strtrim(sumstr.dir,2)
-;bd = where(sumstr.nchips eq 0,nbd)
-;expdir = file_dirname(strtrim(expstr.outfile,2))
-;expdir = repstr(expdir,'/net/dl1/','/dl1/')
-;MATCH,expdir,sumstr[bd].dir,ind1,ind2,/sort,count=nmatch
-;print,'Only meeting ',strtrim(nmatch,2),' failed exposures'
-;expstr = expstr[ind1]
-
 ;; Parcel out the jobs
 nhosts = n_elements(hosts)
 torun = where(expstr.torun eq 1,nalltorun)
@@ -274,15 +179,6 @@ for i=0,nhosts-1 do $
   if stregex(host,hosts[i],/boolean) eq 1 then torun=torun[i*nperhost:(i+1)*nperhost-1]
 ntorun = n_elements(torun)
 
-;; Rerun the failures
-;sum = mrdfits('/dl1/users/dnidever/nsc/instcal/v2/lists/nsc_measure_summary.fits',1)
-;bad = where(sum.success eq 0 or sum.chip1date gt sum.logdate,nbad)
-;exp = file_basename(strtrim(expstr.fluxfile,2),'.fits.fz')
-;MATCH,exp,strtrim(sum[bad].base,2),ind1,ind2,/sort,count=nmatch
-;expstr.torun = 0
-;expstr[ind1].torun = 1
-
-;torun = where(expstr.torun eq 1,ntorun)
 if ntorun eq 0 then begin
   print,'No exposures to process.'
   return
@@ -327,8 +223,6 @@ if keyword_set(dolock) then begin
   print,'Unlocking processed files'
   file_delete,expstr[tosubmit].outfile+'.lock',/allow,/quiet
 endif
-;for i=0,ntosubmit-1 do file_delete,expstr[tosubmit[i]].outfile+'.lock',/allow
-;for i=0,ntosubmit-1 do djs_unlockfile,expstr[tosubmit[i]].outfile
 
 print,'dt=',stringize(systime(1)-t0,ndec=2),' sec'
 

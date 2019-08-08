@@ -13,9 +13,9 @@
 ;  =nmulti   The number of simultaneously jobs to run. Default is 15.
 ;
 ; OUTPUTS:
-;  A log "journal" file is put in ROOTDIR+users/dnidever/nsc/instcal/logs/
+;  A log "journal" file is put in ROOTDIR+users/dnidever/nsc/instcal/v#/logs/
 ;  as well as a structure with information on the jobs that were run.
-;  The individual catalogs are put in ROOTDIR+users/dnidever/nsc/instcal/NIGHT/EXPOSURENAME/.
+;  The individual catalogs are put in ROOTDIR+users/dnidever/nsc/instcal/v#/NIGHT/EXPOSURENAME/.
 ;
 ; USAGE:
 ;  IDL>nsc_instcal_calibrate_main,'v3'
@@ -37,9 +37,10 @@ dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 if file_test(dir,/directory) eq 0 then file_mkdir,dir+'logs/'
 if file_test(tmpdir,/directory) eq 0 then file_mkdir,tmpdir
+if file_test(dir+'logs/',/directory) eq 0 then file_mkdir,dir+'logs/'
 ;; Hosts
 if n_elements(hosts) eq 0 then hosts = ['gp09','hulk','thing']
-if total(hosts eq host) eq 0 then begin
+if total(hosts eq hostname) eq 0 then begin
   print,'Current HOST='+host+' not in list of HOSTS = [ '+strjoin(hosts,', ')+' ] '
   return
 endif

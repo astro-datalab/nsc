@@ -48,7 +48,7 @@ nchsum = n_elements(chsum)
 ;healstr = MRDFITS(listdir+'nsc_healpix_list.fits',1)
 ;healstr.file = strtrim(healstr.file,2)
 ;healstr.base = strtrim(healstr.base,2)
-index = MRDFITS(listdir+'nsc_healpix_list.fits',2)
+index = MRDFITS(listdir+'nsc_instcal_combine_healpix_list.fits.gz',2)
 ;; Get unique exposure
 ;ui = uniq(healstr.file,sort(healstr.file))
 ;uhstr = healstr[ui]

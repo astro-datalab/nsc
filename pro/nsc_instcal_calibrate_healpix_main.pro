@@ -8,12 +8,13 @@
 ;  version   The version name, e.g. 'v3'.  
 ;  =hosts    Array of hosts to run.  The default is gp09,hulk and thing. 
 ;  =nmulti   The number of simultaneously jobs to run. Default is 10.
+;  =nside    The HEALPix nside to use.  Default is 64.
 ;  /redo     Rerun on exposures that were previously processed.
 ;
 ; OUTPUTS:
-;  A log "journal" file is put in ROOTDIR+users/dnidever/nsc/instcal/logs/
+;  A log "journal" file is put in ROOTDIR+users/dnidever/nsc/instcal/v#/logs/
 ;  as well as a structure with information on the jobs that were run.
-;  The individual catalogs are put in ROOTDIR+users/dnidever/nsc/instcal/NIGHT/EXPOSURENAME/.  
+;  The individual catalogs are put in ROOTDIR+users/dnidever/nsc/instcal/v#/NIGHT/EXPOSURENAME/.  
 ;
 ; USAGE:
 ;  IDL>nsc_instcal_calibrate_healpix_main,'v3'
@@ -21,12 +22,12 @@
 ; By D. Nidever  2017
 ;-
 
-pro nsc_instcal_calibrate_healpix_main,version,hosts=hosts,nmulti=nmulti,redo=redo
+pro nsc_instcal_calibrate_healpix_main,version,hosts=hosts,nmulti=nmulti,redo=redo,nside=nside
 
 ; Drive for NSC_INSTCAL_CALIBRATE_HEALPIX
 
 if n_elements(version) eq 0 then begin
-  print,'Syntax - nsc_instcal_calibrate_healpix_main,version,hosts=hosts,nmulti=nmulti,redo=redo'
+  print,'Syntax - nsc_instcal_calibrate_healpix_main,version,hosts=hosts,nmulti=nmulti,redo=redo,nside=nside'
   return
 endif
 
@@ -40,6 +41,7 @@ dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
 if file_test(dir,/directory) eq 0 then file_mkdir,dir+'logs/'
 if file_test(tmpdir,/directory) eq 0 then file_mkdir,tmpdir
+if file_test(dir+'logs/',/directory) eq 0 then file_mkdir,dir+'logs/'
 ;; Hosts
 if n_elements(hosts) eq 0 then hosts = ['gp09','hulk','thing']
 if total(hosts eq hostname) eq 0 then begin
@@ -92,15 +94,15 @@ print,strtrim(nstr,2),' InstCal images'
 
 ; Get good RA/DEC
 ;  this was obtained with grabcoords_all.pro
-coords = mrdfits(dir+'lists/allcoords.fits',1)
-coords.file = strtrim(coords.file,2)
-MATCH,str.fluxfile,'/net'+coords.file,ind1,ind2,/sort
-dist=sphdist(str[ind1].ra,str[ind1].dec,coords[ind2].ra,coords[ind2].dec,/deg)
-str[ind1].ra = coords[ind2].ra
-str[ind1].dec = coords[ind2].dec
-;; 13 didn't match b/c the fluxfiles aren't found, trim them out
-;str = str[ind1]
-;nstr = n_elements(str)
+;coords = mrdfits(dir+'lists/allcoords.fits',1)
+;coords.file = strtrim(coords.file,2)
+;MATCH,str.fluxfile,'/net'+coords.file,ind1,ind2,/sort
+;dist=sphdist(str[ind1].ra,str[ind1].dec,coords[ind2].ra,coords[ind2].dec,/deg)
+;str[ind1].ra = coords[ind2].ra
+;str[ind1].dec = coords[ind2].dec
+;;; 13 didn't match b/c the fluxfiles aren't found, trim them out
+;;str = str[ind1]
+;;nstr = n_elements(str)
 
 ; Get good RA/DEC
 bd = where(finite(str.ra) eq 0 or finite(str.dec) eq 0,nbd)
@@ -146,6 +148,12 @@ for i=0,nstr-1 do begin
   ;str[i].dec = sxpar(head,'crval2')
 endfor
 
+;; Only rerun c4d-VR exposures
+g = where(str.instrument eq 'c4d' and strmid(str.filter,0,2) eq 'VR',ng)
+print,'Rerunning ',strtrim(ng,2),' VR exposures'
+str = str[g]
+list = list[g]
+
 ; Calculate the healpix
 theta = (90-str.dec)/radeg
 phi = str.ra/radeg
@@ -166,7 +174,7 @@ upix = list[uipix].pix
 npix = n_elements(upix)
 print,strtrim(npix,2),' healpix to run'
 ; Create the commands
-allcmd = 'nsc_instcal_calibrate_healpix,'+strtrim(upix,2)
+allcmd = 'nsc_instcal_calibrate_healpix,'+strtrim(upix,2)+'"'+version+'",nside='+strtrim(nside,2)
 if keyword_set(redo) then allcmd+=',/redo'
 alldirs = strarr(npix)+tmpdir
 allupix = upix

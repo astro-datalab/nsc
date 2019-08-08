@@ -1,7 +1,7 @@
-pro nsc_instcal_combine_qacuts,version,redo=redo
+pro nsc_instcal_combine_qacuts,version,redo=redo,nocuts=nocuts
 
 if n_elements(version) eq 0 then begin
-  print,'Syntax - nsc_instcal_combine_qacuts,version,redo=redo'
+  print,'Syntax - nsc_instcal_combine_qacuts,version,redo=redo,nocuts=nocuts'
   return
 endif
 
@@ -13,13 +13,14 @@ if file_test(localdir+'dnidever/nsc/instcal/'+version+'/') eq 0 then file_mkdir,
 plotsdir = dir+'plots/'
 if file_test(plotsdir,/directory) eq 0 then file_mkdir,plotsdir
 radeg = 180.0d0 / !dpi
-
+nside = 128
+t0 = systime(1)
 
 ; Restore the calibration summary file
 temp = MRDFITS(dir+'lists/nsc_calibrate_summary.fits.gz',1,/silent)
 schema = temp[0]
 struct_assign,{dum:''},schema
-schema = create_struct(schema,'chipindx',-1LL,'NGOODCHIPWCS',0)
+schema = create_struct(schema,'chipindx',-1LL,'NGOODCHIPWCS',0,'wcscal','')
 str = replicate(schema,n_elements(temp))
 struct_assign,temp,str,/nozero
 str.expdir = strtrim(str.expdir,2)
@@ -29,8 +30,6 @@ str.file = strtrim(str.file,2)
 str.base = strtrim(str.base,2)
 str.filter = strtrim(str.filter,2)
 ; Add WCSCAL and TELSTAT information
-add_tag,str,'wcscal','',str
-add_tag,str,'telstat','',str
 coords = MRDFITS(dir+'lists/allcoords.fits',1)
 coords.file = strtrim(coords.file,2)
 coords.wcscal = strtrim(coords.wcscal,2)
@@ -40,10 +39,9 @@ g = where(strmid(fluxfile,0,4) eq '/net',ng)
 if ng gt 0 then fluxfile[g]=strmid(fluxfile[g],4)
 MATCH,fluxfile,coords.file,ind1,ind2,/sort
 str[ind1].wcscal = coords[ind2].wcscal    ; Failed (3153), Poor (14), Successful (308190)
-str[ind1].telstat = coords[ind2].telstat  ; NAN (68188), Not (1222), Track (241826), UNKNOWN (116), Unknown (5)
-; the 2054 failed exposures did not match b/c no fluxfile info
 ; Only want exposures with successful SE processing
 gd = where(str.success eq 1,nstr)
+print,strtrim(nstr,2),' successful exposures'
 str = str[gd]
 si = sort(str.expdir)
 str = str[si]
@@ -72,7 +70,7 @@ if ng2 gt 0 then file[g2] = strmid(file[g2],6)
 ; Fixing very negative RAs
 print,'FIXING NEGATIVE RAs in STR and CHSTR'
 ;bdra = where(chstr.cenra lt -180,nbdra)
-bdra = where(chstr.cenra lt -0,nbdra)
+bdra = where(chstr.cenra lt 0,nbdra)
 uibd = uniq(chstr[bdra].expdir,sort(chstr[bdra].expdir))
 MATCH,str.expdir,chstr[bdra[uibd]].expdir,ind1,ind2,/sort,count=nmatch
 for i=0,nmatch-1 do begin
@@ -96,14 +94,14 @@ for i=0,nmatch-1 do begin
 endfor
 
 ; Fix instrument in STR and CHSTR
-print,'FIXING INSTRUMENT IN STR AND CHSTR'
-type = ['c4d','k4m','ksb']
-for i=0,n_elements(type)-1 do begin
-  gd = where(stregex(str.expdir,'/'+type[i]+'/',/boolean) eq 1,ngd)
-  if ngd gt 0 then str[gd].instrument=type[i]
-  gd = where(stregex(chstr.expdir,'/'+type[i]+'/',/boolean) eq 1,ngd)
-  if ngd gt 0 then chstr[gd].instrument=type[i]
-endfor
+;print,'FIXING INSTRUMENT IN STR AND CHSTR'
+;type = ['c4d','k4m','ksb']
+;for i=0,n_elements(type)-1 do begin
+;  gd = where(stregex(str.expdir,'/'+type[i]+'/',/boolean) eq 1,ngd)
+;  if ngd gt 0 then str[gd].instrument=type[i]
+;  gd = where(stregex(chstr.expdir,'/'+type[i]+'/',/boolean) eq 1,ngd)
+;  if ngd gt 0 then chstr[gd].instrument=type[i]
+;endfor
 
 ;; Fix missing AIRMASS                                                                                                                                                           
 ;bdam = where(str.airmass lt 0.9,nbdam)
@@ -122,55 +120,31 @@ endfor
 ;endfor
 ; THIS IS STILL RETURNING -1, IS ONE OF THE VALUES WRONG??
 
-; This is now done at the beginning when the lists are created
-;; APPLY RELEASE-DATE CUTS
-;list1 = MRDFITS(dir+'lists/decam_instcal_list.fits',1)
-;list2 = MRDFITS(dir+'lists/mosaic3_instcal_list.fits',1)
-;list3 = MRDFITS(dir+'lists/bok90prime_instcal_list.fits',1)
-;list = [list1,list2,list3]
-;list.fluxfile = strtrim(list.fluxfile,2)
-;fluxfile = strmid(list.fluxfile,10)
-;MATCH,fluxfile,file,ind1,ind2,/sort,count=nmatch
-;; some don't match because they were from a previous version
-;;  of the input list
-;release_date = strarr(n_elements(str))+'2020-01-01 00:00:00'
-;release_date[ind2] = list[ind1].release_date
-;release_year = long(strmid(release_date,0,4))
-;release_month = long(strmid(release_date,5,2))
-;release_day = long(strmid(release_date,8,2))
-;release_mjd = JULDAY(release_month,release_day,release_year)-2400000.5d0
-;;release_cutoff = [2017,4,24]  ; v1 - April 24, 2017
-;release_cutoff = [2017,10,11]  ; v2 - Oct 11, 2017
-;release_cutoff_mjd = JULDAY(release_cutoff[1],release_cutoff[2],release_cutoff[0])-2400000.5d0
-;gdrelease = where(release_mjd le release_cutoff_mjd,ngdrelease,comp=bdrelease,ncomp=nbdrelease)
-;print,strtrim(ngdrelease,2),' exposures are PUBLIC'
-;str = str[gdrelease]  ; impose the public data cut
-
 ; Zero-point structure
 zpstr = replicate({instrument:'',filter:'',amcoef:fltarr(2),thresh:0.5},10)
 zpstr[0:6].instrument = 'c4d'
 zpstr[0:6].filter = ['u','g','r','i','z','Y','VR']
 zpstr[0].amcoef = [-1.60273, -0.375253]   ; c4d-u
 zpstr[1].amcoef = [0.277124, -0.198037]   ; c4d-g
-zpstr[2].amcoef = [0.516382, -0.115443]   ; c4d-r
+zpstr[2].amcoef = [0.516382, -0.115443]   ; c4d-r  changed a bit, fine
 zpstr[3].amcoef = [0.380338, -0.067439]   ; c4d-i
-zpstr[4].amcoef = [0.123924, -0.096877]   ; c4d-z
-zpstr[5].amcoef = [-1.06529, -0.051967]   ; c4d-Y
-zpstr[6].amcoef = [1.004357, -0.081105]   ; c4d-VR
+zpstr[4].amcoef = [0.074517, -0.067031]   ; c4d-z
+zpstr[5].amcoef = [-1.07800, -0.060014]   ; c4d-Y  
+zpstr[6].amcoef = [1.111859, -0.083630]   ; c4d-VR
 ; Mosiac3 z-band
 zpstr[7].instrument = 'k4m'
 zpstr[7].filter = 'z'
-zpstr[7].amcoef = [-2.687201, -0.73573]   ; k4m-z
+zpstr[7].amcoef = [2.232800, -0.73573]   ; k4m-z
 ; Bok 90Prime, g and r
 zpstr[8].instrument = 'ksb'
 zpstr[8].filter = 'g'
-zpstr[8].amcoef = [-2.859646, -1.40837]   ; ksb-g
+zpstr[8].amcoef = [1.055275, -0.30629]   ; ksb-g
 zpstr[9].instrument = 'ksb'
 zpstr[9].filter = 'r'
-zpstr[9].amcoef = [-4.008771, -0.25718]   ; ksb-r
+zpstr[9].amcoef = [0.836968, -0.19646]   ; ksb-r
 nzpstr = n_elements(zpstr)
 
-STOP,'DOUBLE-CHECK THESE ZERO-POINTS!!!'
+;STOP,'DOUBLE-CHECK THESE ZERO-POINTS!!!'
 
 ; APPLY QA CUTS IN ZEROPOINT AND SEEING
 If not keyword_set(nocuts) then begin
@@ -188,9 +162,23 @@ If not keyword_set(nocuts) then begin
     print,zpstr[i].instrument,'-',zpstr[i].filter,' ',strtrim(nind,2),' exposures'
     if nind gt 0 then begin
       str1 = str[ind]
+      ;; Fix Infinity/NAN values
       zpterm = str1.zpterm
       bdzp = where(finite(zpterm) eq 0,nbdzp)  ; fix Infinity/NAN
       if nbdzp gt 0 then zpterm[bdzp] = 999999.9
+      ;; Correct "DES" zeropoints,  DES exposures are in electrons and
+      ;; CP are in ADU, so there's an offset of 2.5*log(gain)=2.5*log(4.41)=1.611
+      gdes = where(strmid(str1.plver,0,3) eq 'DES',ngdes)
+      if ngdes gt 0 then begin
+        print,'Offsetting ',strtrim(ngdes,2),' DES exposure zero-points'
+        zpterm[gdes] -= 1.611
+      endif
+      ;; CORRECT K4M/KSB for exptime-dependence in the zero-points
+      ;;   this is because the image units are counts/sec.
+      if zpstr[i].instrument eq 'k4m' or zpstr[i].instrument eq 'ksb' then begin
+        print,'REMOVING EXPTIME-DEPENDENCE IN K4M/KSB ZEROPOINTS!!!'
+        zpterm += 2.5*alog10(str1.exptime)
+      endif
       am = str1.airmass
       mjd = str1.mjd
       bdam = where(am lt 0.9,nbdam)
@@ -208,19 +196,14 @@ If not keyword_set(nocuts) then begin
       ; Trim out bad exposures to determine the correlations and make figures
       gg = where(abs(zpterm-zpf) lt (3.5*sig0 > 0.2) and str1.airmass lt 2.0 and str1.fwhm lt 2.0 and str1.rarms lt 0.15 and $
                  str1.decrms lt 0.15 and str1.success eq 1 and str1.wcscal eq 'Successful' and str1.zptermerr lt 0.05 and $
-                 str1.zptermsig lt 0.08 and (str1.ngoodchipwcs eq str1.nchips) and $
+                 str1.zptermsig lt 0.08 and $
+                 ;str1.zptermsig lt 0.08 and (str1.ngoodchipwcs eq str1.nchips) and $
                  (str1.instrument ne 'c4d' or str1.zpspatialvar_nccd le 5 or (str1.instrument eq 'c4d' and str1.zpspatialvar_nccd gt 5 and str1.zpspatialvar_rms lt 0.1)) and $
                  abs(glat) gt 10 and str1.nrefmatch gt 100 and str1.exptime ge 30,ngg)
 
       ; Zpterm with airmass dependence removed
       relzpterm = zpterm + 25   ; 25 to get "absolute" zpterm
       relzpterm -= zpstr[i].amcoef[1]*(am-1)
-
-      ; CURRENTLY K4M/KSB HAVE EXPTIME-DEPENDENCE IN THE ZEROPOINTS!!
-      if zpstr[i].instrument eq 'k4m' or zpstr[i].instrument eq 'ksb' then begin
-        print,'REMOVING EXPTIME-DEPENDENCE IN K4M/KSB ZEROPOINTS!!!'
-        relzpterm += 2.5*alog10(str1.exptime)
-      endif
 
       ; Fit temporal variation in zpterm
       mjd0 = 56200L
@@ -243,17 +226,20 @@ If not keyword_set(nocuts) then begin
       ; ZPterm vs. airmass
       file = plotsdir+zpstr[i].instrument+'-'+zpstr[i].filter+'_zpterm_airmass'
       ps_open,file,/color,thick=4,/encap
-      hess,am[gg],relzpterm[gg],dx=0.01,dy=0.02,xr=[0.9,2.5],yr=[-0.5,0.5]+median(relzpterm[gg]),xtit='Airmass',ytit='Zero-point',$
+      ;hess,am[gg],relzpterm[gg],dx=0.01,dy=0.02,xr=[0.9,2.5],yr=[-0.5,0.5]+median(relzpterm[gg]),xtit='Airmass',ytit='Zero-point',$
+      zp = relzpterm + zpstr[i].amcoef[1]*(am-1) - (allzpfit-median(allzpfit))
+      hess,am[gg],zp[gg],dx=0.01,dy=0.02,xr=[0.9,2.5],yr=[-0.5,0.5]+median(zp[gg]),xtit='Airmass',ytit='Zero-point',$
            tit=zpstr[i].instrument+'-'+zpstr[i].filter
       x = scale_vector(findgen(100),0.5,2.0)
-      oplot,x,poly(x,coef),co=250
+      oplot,x,poly(x,coef)+25.0,co=250
+      oplot,x,poly(x,zpstr[i].amcoef)+25.0,co=150
       ps_close
       ps2png,file+'.eps',/eps
       ; ZPterm vs. time (density)
       file = plotsdir+zpstr[i].instrument+'-'+zpstr[i].filter+'_zpterm_time_density'
       ps_open,file,/color,thick=4,/encap
-      hess,str1[gg].mjd-mjd0,relzpterm[gg],dx=2,dy=0.02,yr=[-0.5,0.5]+median(relzpterm[gg]),xtit='Time (days)',ytit='Zero-point',$
-           tit=zpstr[i].instrument+'-'+zpstr[i].filter
+      hess,str1[gg].mjd-mjd0,relzpterm[gg],dx=5,dy=0.01,yr=[-0.5,0.5]+median(relzpterm[gg]),xtit='Time (days)',ytit='Zero-point',$
+           tit=zpstr[i].instrument+'-'+zpstr[i].filter,/log
       oplot,str1[gg].mjd-mjd0,allzpfit[gg],ps=1,sym=0.3,co=250
       xyouts,50,-0.45+median(relzpterm[gg]),'MJD!d0!n = '+strtrim(mjd0,2),align=0,charsize=1.2
       ps_close
@@ -282,29 +268,36 @@ If not keyword_set(nocuts) then begin
       gdind = where(relzpterm ge -zpstr[i].thresh and relzpterm le zpstr[i].thresh,ngdind,comp=bdind,ncomp=nbdind)
       print,'  ',strtrim(nbdind,2),' exposures with ZPTERM below the threshold'    
       if ngdind gt 0 then badzpmask[ind[gdind]] = 0
-
+      ;stop
     endif
   endfor
   ; Get bad DECaLS and SMASH exposures
   badexp = bytarr(n_elements(str))
-  READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/smash_badexposures.txt',smashexpnum,format='A',comment='#',/silent
+  READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/'+version+'/smash_badexposures.txt',smashexpnum,format='A',comment='#',/silent
   MATCH,long(str.expnum),long(smashexpnum),ind1,ind2,/sort,count=nmatch
   if nmatch gt 0 then begin
     badexp[ind1] = 1
     badexp[ind1] = badexp[ind1] AND (str[ind1].instrument eq 'c4d')   ; make sure they are DECam exposures
   endif
-  READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/decals_bad_expid.txt',decalsexpnum,format='A',comment='#',/silent
+  READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/'+version+'/decals_bad_expid.txt',decalsexpnum,format='A',comment='#',/silent
   MATCH,long(str.expnum),long(decalsexpnum),ind1,ind2,/sort,count=nmatch
   if nmatch gt 0 then begin
     badexp[ind1] = 1
     badexp[ind1] = badexp[ind1] AND (str[ind1].instrument eq 'c4d')   ; make sure they are DECam exposures
   endif
-  READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/mzls_bad_expid.txt',mzlsexpnum,format='A',comment='#',/silent
+  READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/'+version+'/mzls_bad_expid.txt',mzlsexpnum,format='A',comment='#',/silent
   MATCH,long(str.expnum),long(mzlsexpnum),ind1,ind2,/sort,count=nmatch
   if nmatch gt 0 then begin
     badexp[ind1] = 1
     badexp[ind1] = badexp[ind1] AND (str[ind1].instrument eq 'k4m')   ; make sure they are Mosaic3 exposures
   endif
+
+  ;; Zero-point spatial variability threshold
+  ;;  varies with galactic latitude
+  ;;  |b|>10   0.15
+  ;;  |b|<=10  0.55
+  glactc,str.ra,str.dec,2000.0,glon,glat,1,/deg
+  zpspvarthresh = (abs(glat) gt 10)*0.15 + (abs(glat) le 10)*0.55
 
   ; Final QA cuts
   ;  Many of the short u-band exposures have weird ZPTERMs, not sure why
@@ -319,9 +312,10 @@ If not keyword_set(nocuts) then begin
                 str.nrefmatch lt 5 or $                            ; few phot ref match
                 badexp eq 1 or $                                   ; bad SMASH/LS exposure
                 ;str.ngoodchipwcs lt str.nchips or $                ; not all chips astrom calibrated
-                (str.instrument eq 'c4d' and str.zpspatialvar_nccd gt 5 and str.zpspatialvar_rms gt 0.1),nbdexp)  ; bad spatial zpterm
+                (str.instrument eq 'c4d' and str.zpspatialvar_nccd gt 5 and str.zpspatialvar_rms gt zpspvarthresh),nbdexp)  ; bad spatial zpterm
   ; rarms/decrms, nrefmatch
   print,'QA cuts remove ',strtrim(nbdexp,2),' exposures'
+;stop
   ; Remove
   torem = bytarr(nchstr)
   for i=0,nbdexp-1 do torem[str[bdexp[i]].chipindx:str[bdexp[i]].chipindx+str[bdexp[i]].nchips-1]=1
@@ -435,12 +429,19 @@ if nlistpix eq 0 then stop,'No healpix for this exposure.  Something is wrong!'
   ; Write the full list plus an index
   print,'Writing list to ',listfile
   MWRFITS,healstr,listfile,/create
+  ;; Add NSIDE to header
+  hd0 = headfits(listfile,exten=0)
+  sxaddpar,hd0,'nside',nside
+  modfits,listfile,0,hd0,exten_no=0
   MWRFITS,index,listfile,/silent
   if file_test(listfile+'.gz') eq 1 then file_delete,listfile+'.gz',/allow
   spawn,['gzip',listfile],/noshell
-  ; PUT NSIDE IN HEADER!!
 
-endif
+endif else begin
+  print,listfile,' EXISTS and /redo NOT set'
+endelse
+
+print,'dt = ',strtrim(systime(1)-t0,2),' sec.'
 
 stop
 

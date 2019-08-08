@@ -156,8 +156,12 @@ For i=0,n_elements(filter)-1 do begin
   end
   ; DECam VR-band
   'c4d-VR': begin
-    ; Use GAIA G-band to calibrate
-    push,refcat,['2MASS-PSC']
+    ; Use PS1 if possible
+    if cendec gt -29 then begin
+      push,refcat,['2MASS-PSC','PS']
+    endif else begin
+      push,refcat,['2MASS-PSC','ATLAS']
+    endelse
   end
   ; Bok+90Prime g-band
   'ksb-g': begin
@@ -192,7 +196,8 @@ For i=0,n_elements(filter)-1 do begin
   ; Mosaic3 VR-band
   'k4m-VR': begin
     ; Use GAIA G-band to calibrate
-    push,refcat,['2MASS-PSC']
+    push,refcat,['2MASS-PSC','PS']
+    ;push,refcat,['2MASS-PSC']
   end
   else: begin
     printlog,logf,filter,' not currently supported'

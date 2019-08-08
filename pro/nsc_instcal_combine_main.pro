@@ -29,17 +29,20 @@ if n_elements(version) eq 0 then begin
 endif
 
 ; Combine all of the data
-NSC_ROOTDIRS,dldir,mssdir,localdir,longhost
-host = first_el(strsplit(longhost,'.',/extract))
+NSC_ROOTDIRS,dldir,mssdir,localdir,host
+hostname = first_el(strsplit(host,'.',/extract))
 dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
+tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
+if file_test(tmpdir,/directory) eq 0 then file_mkdir,tmpdir
 if file_test(dir+'combine/',/directory) eq 0 then file_mkdir,dir+'combine/'
 if file_test(dir+'combine/logs/',/directory) eq 0 then file_mkdir,dir+'combine/logs/'
 if file_test(localdir+'dnidever/nsc/instcal/'+version+'/') eq 0 then file_mkdir,localdir+'dnidever/nsc/instcal/'+version+'/'
 plotsdir = dir+'plots/'
 if file_test(plotsdir,/directory) eq 0 then file_mkdir,plotsdir
+if file_test(dir+'logs/',/directory) eq 0 then file_mkdir,dir+'logs/'
 ;; Hosts
 if n_elements(hosts) eq 0 then hosts = ['gp09','hulk','thing']
-if total(hosts eq host) eq 0 then begin
+if total(hosts eq hostname) eq 0 then begin
   print,'Current HOST='+host+' not in list of HOSTS = [ '+strjoin(hosts,', ')+' ] '
   return
 endif
@@ -63,7 +66,8 @@ sminute = strtrim(minute,2)
 if minute lt 10 then sminute='0'+sminute
 ssecond = strtrim(round(second),2)
 if second lt 10 then ssecond='0'+ssecond
-logfile = dir+'combine/logs/nsc_instcal_combine_main.'+smonth+sday+syear+shour+sminute+ssecond+'.log'
+logtime = smonth+sday+syear+shour+sminute+ssecond
+logfile = dir+'combine/logs/nsc_instcal_combine_main.'+logtime+'.log'
 JOURNAL,logfile
 
 print, "Combining NOAO InstCal catalogs"
@@ -86,13 +90,15 @@ file_copy,listfile,localdir+'dnidever/nsc/instcal/'+version+'/',/over
 
 
 ;; Create the commands
-allcmd = "nsc_instcal_combine,"+strtrim(upix,2)+",nside="+strtrim(nside,2)+",version='"+version+"'"
+allpix = upix
+allcmd = "nsc_instcal_combine,"+strtrim(allpix,2)+",nside="+strtrim(nside,2)+",version='"+version+"'"
 if keyword_set(redo) then allcmd+=',/redo'
-alldirs = strarr(npix)+localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
+alldirs = strarr(npix)+tmpdir
 nallcmd = n_elements(allcmd)
 
 ; RANDOMIZE
 rnd = sort(randomu(0,npix))
+allpix = allpix[rnd]
 allcmd = allcmd[rnd]
 alldirs = alldirs[rnd]
 
@@ -103,6 +109,7 @@ nperhost = nallcmd/nhosts
 for i=0,nhosts-1 do $
   if stregex(host,hosts[i],/boolean) eq 1 then torun=torun[i*nperhost:(i+1)*nperhost-1]
 ntorun = n_elements(torun)
+pix = allpix[torun]
 cmd = allcmd[torun]
 dirs = alldirs[torun]
 print,'Running ',strtrim(n_elements(torun),2),' on ',hostname
@@ -120,10 +127,8 @@ a = '' & read,a,prompt='Press RETURN to start'
 PBS_DAEMON,cmd,dirs,jobs=jobs,/hyperthread,/idle,prefix='nsccmb',wait=wait,nmulti=nmulti
 
 
-stop
 
 ; Run nsc_combine_summary.pro when it's done
-
 
 ; End logfile
 ;------------

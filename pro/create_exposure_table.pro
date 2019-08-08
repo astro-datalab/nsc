@@ -29,10 +29,10 @@ b = where(strmid(sexpdir,0,4) ne '/net',nb)
 if nb gt 0 then sexpdir[b]='/net'+sexpdir[b]
 
 ; Load the final list of combine exposures
-healstr = MRDFITS(listdir+'nsc_healpix_list.fits',1)
+healstr = MRDFITS(listdir+'nsc_instcal_combine_healpix_list.fits',1)
 healstr.file = strtrim(healstr.file,2)
 healstr.base = strtrim(healstr.base,2)
-index = MRDFITS(listdir+'nsc_healpix_list.fits',2)
+index = MRDFITS(listdir+'nsc_instcal_combine_healpix_list.fits',2)
 ; Get unique exposure
 ui = uniq(healstr.file,sort(healstr.file))
 uhstr = healstr[ui]
