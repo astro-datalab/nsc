@@ -162,9 +162,17 @@ If not keyword_set(nocuts) then begin
     print,zpstr[i].instrument,'-',zpstr[i].filter,' ',strtrim(nind,2),' exposures'
     if nind gt 0 then begin
       str1 = str[ind]
+      ;; Fix Infinity/NAN values
       zpterm = str1.zpterm
       bdzp = where(finite(zpterm) eq 0,nbdzp)  ; fix Infinity/NAN
       if nbdzp gt 0 then zpterm[bdzp] = 999999.9
+      ;; Correct "DES" zeropoints,  DES exposures are in electrons and
+      ;; CP are in ADU, so there's an offset of 2.5*log(gain)=2.5*log(4.41)=1.611
+      gdes = where(strmid(str1.plver,0,3) eq 'DES',ngdes)
+      if ngdes gt 0 then begin
+        print,'Offsetting ',strtrim(ngdes,2),' DES exposure zero-points'
+        zpterm[gdes] -= 1.611
+      endif
       am = str1.airmass
       mjd = str1.mjd
       bdam = where(am lt 0.9,nbdam)
