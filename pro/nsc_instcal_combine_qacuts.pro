@@ -130,18 +130,18 @@ zpstr[2].amcoef = [0.516382, -0.115443]   ; c4d-r  changed a bit, fine
 zpstr[3].amcoef = [0.380338, -0.067439]   ; c4d-i
 zpstr[4].amcoef = [0.074517, -0.067031]   ; c4d-z
 zpstr[5].amcoef = [-1.07800, -0.060014]   ; c4d-Y  
-zpstr[6].amcoef = [1.004357, -0.081105]   ; c4d-VR
+zpstr[6].amcoef = [1.111859, -0.083630]   ; c4d-VR
 ; Mosiac3 z-band
 zpstr[7].instrument = 'k4m'
 zpstr[7].filter = 'z'
-zpstr[7].amcoef = [-2.687201, -0.73573]   ; k4m-z  changed a bit
+zpstr[7].amcoef = [2.232800, -0.73573]   ; k4m-z
 ; Bok 90Prime, g and r
 zpstr[8].instrument = 'ksb'
 zpstr[8].filter = 'g'
-zpstr[8].amcoef = [-2.859646, -1.40837]   ; ksb-g  changed a bit
+zpstr[8].amcoef = [1.055275, -0.30629]   ; ksb-g
 zpstr[9].instrument = 'ksb'
 zpstr[9].filter = 'r'
-zpstr[9].amcoef = [-4.008771, -0.25718]   ; ksb-r  changed A LOT!!!
+zpstr[9].amcoef = [0.836968, -0.19646]   ; ksb-r
 nzpstr = n_elements(zpstr)
 
 ;STOP,'DOUBLE-CHECK THESE ZERO-POINTS!!!'
@@ -173,6 +173,12 @@ If not keyword_set(nocuts) then begin
         print,'Offsetting ',strtrim(ngdes,2),' DES exposure zero-points'
         zpterm[gdes] -= 1.611
       endif
+      ;; CORRECT K4M/KSB for exptime-dependence in the zero-points
+      ;;   this is because the image units are counts/sec.
+      if zpstr[i].instrument eq 'k4m' or zpstr[i].instrument eq 'ksb' then begin
+        print,'REMOVING EXPTIME-DEPENDENCE IN K4M/KSB ZEROPOINTS!!!'
+        zpterm += 2.5*alog10(str1.exptime)
+      endif
       am = str1.airmass
       mjd = str1.mjd
       bdam = where(am lt 0.9,nbdam)
@@ -199,12 +205,6 @@ If not keyword_set(nocuts) then begin
       relzpterm = zpterm + 25   ; 25 to get "absolute" zpterm
       relzpterm -= zpstr[i].amcoef[1]*(am-1)
 
-      ; CURRENTLY K4M/KSB HAVE EXPTIME-DEPENDENCE IN THE ZEROPOINTS!!
-      if zpstr[i].instrument eq 'k4m' or zpstr[i].instrument eq 'ksb' then begin
-        print,'REMOVING EXPTIME-DEPENDENCE IN K4M/KSB ZEROPOINTS!!!'
-        relzpterm += 2.5*alog10(str1.exptime)
-      endif
-
       ; Fit temporal variation in zpterm
       mjd0 = 56200L
       xx = str1[gg].mjd-mjd0
@@ -227,7 +227,8 @@ If not keyword_set(nocuts) then begin
       file = plotsdir+zpstr[i].instrument+'-'+zpstr[i].filter+'_zpterm_airmass'
       ps_open,file,/color,thick=4,/encap
       ;hess,am[gg],relzpterm[gg],dx=0.01,dy=0.02,xr=[0.9,2.5],yr=[-0.5,0.5]+median(relzpterm[gg]),xtit='Airmass',ytit='Zero-point',$
-      hess,am[gg],zpterm[gg]+25.0,dx=0.01,dy=0.02,xr=[0.9,2.5],yr=[-0.5,0.5]+median(relzpterm[gg]),xtit='Airmass',ytit='Zero-point',$
+      zp = relzpterm + zpstr[i].amcoef[1]*(am-1) - (allzpfit-median(allzpfit))
+      hess,am[gg],zp[gg],dx=0.01,dy=0.02,xr=[0.9,2.5],yr=[-0.5,0.5]+median(zp[gg]),xtit='Airmass',ytit='Zero-point',$
            tit=zpstr[i].instrument+'-'+zpstr[i].filter
       x = scale_vector(findgen(100),0.5,2.0)
       oplot,x,poly(x,coef)+25.0,co=250
@@ -267,24 +268,24 @@ If not keyword_set(nocuts) then begin
       gdind = where(relzpterm ge -zpstr[i].thresh and relzpterm le zpstr[i].thresh,ngdind,comp=bdind,ncomp=nbdind)
       print,'  ',strtrim(nbdind,2),' exposures with ZPTERM below the threshold'    
       if ngdind gt 0 then badzpmask[ind[gdind]] = 0
-stop
+      ;stop
     endif
   endfor
   ; Get bad DECaLS and SMASH exposures
   badexp = bytarr(n_elements(str))
-  READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/smash_badexposures.txt',smashexpnum,format='A',comment='#',/silent
+  READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/'+version+'/smash_badexposures.txt',smashexpnum,format='A',comment='#',/silent
   MATCH,long(str.expnum),long(smashexpnum),ind1,ind2,/sort,count=nmatch
   if nmatch gt 0 then begin
     badexp[ind1] = 1
     badexp[ind1] = badexp[ind1] AND (str[ind1].instrument eq 'c4d')   ; make sure they are DECam exposures
   endif
-  READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/decals_bad_expid.txt',decalsexpnum,format='A',comment='#',/silent
+  READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/'+version+'/decals_bad_expid.txt',decalsexpnum,format='A',comment='#',/silent
   MATCH,long(str.expnum),long(decalsexpnum),ind1,ind2,/sort,count=nmatch
   if nmatch gt 0 then begin
     badexp[ind1] = 1
     badexp[ind1] = badexp[ind1] AND (str[ind1].instrument eq 'c4d')   ; make sure they are DECam exposures
   endif
-  READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/mzls_bad_expid.txt',mzlsexpnum,format='A',comment='#',/silent
+  READCOL,'/home/dnidever/projects/noaosourcecatalog/obslog/'+version+'/mzls_bad_expid.txt',mzlsexpnum,format='A',comment='#',/silent
   MATCH,long(str.expnum),long(mzlsexpnum),ind1,ind2,/sort,count=nmatch
   if nmatch gt 0 then begin
     badexp[ind1] = 1
