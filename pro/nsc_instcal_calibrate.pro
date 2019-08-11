@@ -295,7 +295,7 @@ cat.sourceid = instrument+'.'+strtrim(expnum,2)+'.'+strtrim(cat.ccdnum,2)+'.'+st
 
 ; Start the exposure-level structure
 expstr = {file:fluxfile,wtfile:wtfile,maskfile:maskfile,instrument:'',base:base,expnum:long(expnum),ra:0.0d0,dec:0.0d0,dateobs:string(dateobs),$
-          mjd:0.0d,filter:filter,exptime:float(exptime),airmass:0.0,wcscal:'',nsources:long(ncat),ngoodsources:0L,fwhm:0.0,nchips:0L,$
+          mjd:0.0d,filter:filter,exptime:float(exptime),airmass:0.0,wcscal:'',nsources:long(ncat),ngoodsources:0L,nmeas:0L,fwhm:0.0,nchips:0L,$
           rarms:0.0,decrms:0.0,ebv:0.0,ngaiamatch:0L,ngoodgaiamatch:0L,zptype:0,zpterm:999999.0,zptermerr:99999.0,zptermsig:999999.0,$
           zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L,ngoodrefmatch:0L,depth95:99.99,depth10sig:99.99}
 expstr.instrument = instrument
@@ -780,6 +780,9 @@ for i=0,nchips-1 do begin
   endif
   CHIPBOMB:
 endfor
+
+;; Total number of measurements
+expstr.nmeas = total(chstr.nmeas)
 
 ;; Meta-data file
 metafile = expdir+'/'+base+'_meta.fits'
