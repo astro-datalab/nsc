@@ -30,7 +30,7 @@ chipoff = mrdfits(dldir+'users/dnidever/nsc/instcal/decam_chip_xyoff.fits',1)
 ; Load all the summary/metadata files
 expstr = replicate({expdir:'',instrument:'',pix:0L,metafile:'',metadate:0LL,success:0,file:'',wtfile:'',maskfile:'',base:'',expnum:'',ra:0.0d0,dec:0.0d0,$
                     dateobs:'',mjd:0.0d,filter:'',exptime:0.0,plver:'',airmass:0.0,meas_logfile_success:0,meas_success:0,meas_dt:0.0,meas_chip1date:0LL,$
-                    meas_logdate:0LL,nsources:0L,ngoodsources:-1L,fwhm:999.0,nchips:0L,rarms:999999.0,$
+                    meas_logdate:0LL,nsources:0L,ngoodsources:-1L,nmeas:-1L,fwhm:999.0,nchips:0L,rarms:999999.0,$
                     rastderr:999999.0,decrms:999999.0,decstderr:999999.0,ebv:0.0,ngaiamatch:0L,ngoodgaiamatch:-1L,zptype:1,zpterm:999999.0,$
                     zptermerr:99999.0,zptermsig:999999.0,zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L,$
                     ngoodrefmatch:0L,depth95:99.99,depth10sig:99.99},nlist)
