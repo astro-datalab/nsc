@@ -293,8 +293,8 @@ if __name__ == "__main__":
                           ('ndety',int),('nphoty',int),('ymag',float),('yrms',float),('yerr',float),('yasemi',float),('ybsemi',float),('ytheta',float),
                           ('ndetvr',int),('nphotvr',int),('vrmag',float),('vrrms',float),('vrerr',float),('vrasemi',float),('vrbsemi',float),('vrtheta',float),
                           ('asemi',float),('asemierr',float),('bsemi',float),('bsemierr',float),('theta',float),('thetaerr',float),
-                          ('fwhm',float),('flags',int),('class_star',float),('ebv',float),('jvar',float),('kvar',float),('avgvar',float),
-                          ('chivar',float),('rmsvar',float)])
+                          ('fwhm',float),('flags',int),('class_star',float),('ebv',float),('rmsvar',float),('madvar',float),('iqrvar',float),('etavar',float)
+                          ('jvar',float),('kvar',float),('avgvar',float),('chivar',float),('romsvar',float)])
 
     # Load the measurement catalog
     metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
@@ -426,16 +426,30 @@ if __name__ == "__main__":
             obj[filt+'bsemi'][i] = np.mean(cat1['BSEMI'][findx])
             obj[filt+'theta'][i] = np.mean(cat1['THETA'][findx])
 
-        # Calculate photometric RMS across all bands
+        # Calculate variability indices
         gdresid = np.isfinite(resid)
         ngdresid = np.sum(gdresid)
         if ngdresid>0:
             resid2 = resid[gdresid]
-            rms = np.sqrt(np.mean(resid2**2))
+            sumresidsq = np.sum(resid2**2)
+            tsi = np.argsort(cat1['MJD'][gdresid])
+            resid2tsi = resid2[tsi]
+            quartiles = np.percentile(resid2,[25,50,75])
+            # RMS
+            rms = np.sqrt(sumresidsq/ngdresid)
+            # MAD
+            madvar = 1.4826*np.median(np.abs(resid2-quartiles[1]))
+            # IQR
+            iqrvar = 0.741289*(quartiles[2]-quartiles[0])
+            # 1/eta
+            etavar = np.sum((resid2tsi[1:]-resdi2tsi[0:-1])**2) / sumresidsq
             obj['rmsvar'][i] = rms
-                       
+            obj['madvar'][i] = madvar
+            obj['iqrvar'][i] = iqrvar
+            obj['etavar'][i] = etavar
 
-        # Calculate variability indices
+
+        # Calculate variability indices wrt to uncertainties
         gdrelresid = np.isfinite(relresid)
         ngdrelresid = np.sum(gdrelresid)
         if ngdrelresid>0:
@@ -449,10 +463,13 @@ if __name__ == "__main__":
                 kvar = (np.sum(np.abs(relresid2))/ngdrelresid) / kdenom
             else:
                 kvar = 0.0
+            # RoMS
+            romsvar = np.sum(np.abs(relresid2))/(ngdrelresid-1)
             obj['jvar'][i] = jvar
             obj['kvar'][i] = kvar
             obj['avgvar'][i] = avgvar
             obj['chivar'][i] = chivar
+            obj['romsvar'][i] = romsvar
             #if chivar>50: import pdb; pdb.set_trace()
 
         # Make NPHOT from NPHOTX
