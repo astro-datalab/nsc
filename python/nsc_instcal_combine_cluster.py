@@ -115,7 +115,7 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
                 # Load the chip-level catalog
                 cat1 = fits.getdata(chfile,1)
                 ncat1 = len(cat1)
-                print('  chip '+str(chmeta[j]['ccdnum'])+'  '+str(ncat1)+' sources')
+                #print('  chip '+str(chmeta[j]['ccdnum'])+'  '+str(ncat1)+' sources')
 
                 # Make sure it's in the right format
                 if len(cat1.dtype.fields) != 32:
@@ -129,13 +129,13 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
                 #     with RA=0 wrapping or pol issues
                 if buffdict is not None:
                     lon, lat = coords.rotsphcen(cat1['ra'],cat1['dec'],buffdict['cenra'],buffdict['cendec'],gnomic=True)
-                    ind0, ind1 = dln.roi_cut(buffdict['lon'],buffdict['lat'],lon,lat)
-                    nmatch = len(ind1)
+                    ind_out, ind_in = dln.roi_cut(buffdict['lon'],buffdict['lat'],lon,lat)
+                    nmatch = len(ind_in)
                     # Only want source inside this pixel
                     if nmatch>0:
-                        cat1 = cat1[ind1]
+                        cat1 = cat1[ind_in]
                     ncat1 = len(cat1)
-                    if verbose: print('  '+str(nmatch)+' sources are inside this pixel')
+                    #if verbose: print('  '+str(nmatch)+' sources are inside this pixel')
 
                 # Combine the catalogs
                 if ncat1 > 0:
@@ -150,6 +150,8 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
                         cat = add_elements(cat,np.maximum(100000,ncat1))
                         ncat = len(cat)
 
+                    if verbose: print('  chip '+str(chmeta[j]['ccdnum'])+'  '+str(ncat1)+' measurements')
+
                     # Add it to the main CAT catalog
                     for n in dtype_cat.names: cat[n][catcount:catcount+ncat1] = cat1[n.upper()]
                     catcount += ncat1
@@ -161,7 +163,9 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
                 allmeta = newmeta
             else:
                 allmeta = np.hstack((allmeta,newmeta))
-            
+        # Total measurements for this exposure
+        print('  '+str(expcatcount)+' measurements')
+        #print(str(catcount)+' measurements total so far')
 
     if cat is not None: cat=cat[0:catcount]  # trim excess
     if cat is None: cat=np.array([])         # empty cat
@@ -177,6 +181,7 @@ if __name__ == "__main__":
     parser.add_argument('version', type=str, nargs=1, help='Version number')
     parser.add_argument('--nside', type=int, default=128, help='HEALPix Nside')
     parser.add_argument('-r','--redo', action='store_true', help='Redo this HEALPIX')
+    parser.add_argument('-v','--verbose', action='store_true', help='Verbose output')
     parser.add_argument('--outdir', type=str, default='', help='Output directory')
     #parser.add_argument('--filesexist', type=float, default=0.2, help='Time to wait between checking the status of running jobs')
     #parser.add_argument('--pixfiles', type=str, default=False, help='IDL program')
@@ -189,7 +194,8 @@ if __name__ == "__main__":
 
     # Inputs
     pix = int(args.pix[0])
-    version = args.version
+    version = args.version[0]
+    verbose = args.verbose
     nside = args.nside
     redo = args.redo
     outdir = args.outdir
@@ -232,7 +238,7 @@ if __name__ == "__main__":
         print("No entries for Healpix pixel '"+str(pix)+"' in the list")
         sys.exit()
     ind = ind[0]
-    hlist = healstr[index[ind]['LO']:index[ind]['HI']+1]
+    hlist = healstr[index['LO'][ind]:index['HI'][ind]+1]
     nlist = len(hlist)
     # GET EXPOSURES FOR NEIGHBORING PIXELS AS WELL
     #  so we can deal with the edge cases
@@ -293,7 +299,7 @@ if __name__ == "__main__":
                           ('ndety',int),('nphoty',int),('ymag',float),('yrms',float),('yerr',float),('yasemi',float),('ybsemi',float),('ytheta',float),
                           ('ndetvr',int),('nphotvr',int),('vrmag',float),('vrrms',float),('vrerr',float),('vrasemi',float),('vrbsemi',float),('vrtheta',float),
                           ('asemi',float),('asemierr',float),('bsemi',float),('bsemierr',float),('theta',float),('thetaerr',float),
-                          ('fwhm',float),('flags',int),('class_star',float),('ebv',float),('rmsvar',float),('madvar',float),('iqrvar',float),('etavar',float)
+                          ('fwhm',float),('flags',int),('class_star',float),('ebv',float),('rmsvar',float),('madvar',float),('iqrvar',float),('etavar',float),
                           ('jvar',float),('kvar',float),('avgvar',float),('chivar',float),('romsvar',float)])
 
     # Load the measurement catalog
