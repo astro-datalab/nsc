@@ -172,11 +172,13 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
         print('  '+str(expcatcount)+' measurements')
         print(str(catcount)+' measurements total so far')
 
-    if cat is not None: cat=cat[0:catcount]  # trim excess
+    #print('all exposures loaded. trimming now')
+    #if (cat is not None) & (catcount<ncat): del cat[catcount:]   # delete excess elements
     if cat is None: cat=np.array([])         # empty cat
     if allmeta is None: allmeta=np.array([])
 
-    return cat, allmeta
+    print('loadmeas done')
+    return cat, catcount, allmeta
     
 
 # Combine data for one NSC healpix region
@@ -308,15 +310,17 @@ if __name__ == "__main__":
                           ('jvar',float),('kvar',float),('avgvar',float),('chivar',float),('romsvar',float)])
 
     # Load the measurement catalog
+    #  this will contain excess rows at the end
     metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
-    cat, allmeta = loadmeas(metafiles,buffdict)
+    cat, catcount, allmeta = loadmeas(metafiles,buffdict)
     #import pdb; pdb.set_trace()
     # KLUDGE
     #cat = np.array(fits.getdata('60025_cat.fits',1))
     #allmeta = np.array(fits.getdata('60025_allmeta.fits',1))
     #cat = np.array(fits.getdata('148487_cat.fits',1))
     #allmeta = np.array(fits.getdata('148487_allmeta.fits',1))
-    ncat = dln.size(cat)
+    #ncat = dln.size(cat)
+    ncat = catcount
     print(str(ncat)+' measurements loaded')
 
     t1 = time.time()
@@ -324,7 +328,7 @@ if __name__ == "__main__":
 
     # Spatially cluster the measurements with DBSCAN
     # coordinates of measurement
-    X = np.column_stack((np.array(cat['RA']),np.array(cat['DEC'])))
+    X = np.column_stack((np.array(cat['RA'][0:ncat]),np.array(cat['DEC'][0:ncat])))
     # Compute DBSCAN on all measurements
     db = DBSCAN(eps=0.5/3600, min_samples=1).fit(X)
     labelindex = dln.create_index(db.labels_)
