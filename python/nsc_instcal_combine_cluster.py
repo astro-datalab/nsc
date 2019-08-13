@@ -472,6 +472,8 @@ if __name__ == "__main__":
             obj['romsvar'][i] = romsvar
             #if chivar>50: import pdb; pdb.set_trace()
 
+        # SELECT VARIABLES!!
+
         # Make NPHOT from NPHOTX
         obj['nphot'][i] = obj['nphotu'][i]+obj['nphotg'][i]+obj['nphotr'][i]+obj['nphoti'][i]+obj['nphotz'][i]+obj['nphoty'][i]+obj['nphotvr'][i]
 
