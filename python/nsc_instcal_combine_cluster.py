@@ -51,11 +51,16 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
     #                      ('MAGERR_APER2',float),('MAG_APER4',float),('MAGERR_APER4',float),('MAG_APER8',float),('MAGERR_APER8',float),
     #                      ('KRON_RADIUS',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),('THETA',float),
     #                      ('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
-    # All the columns that we need (19)
-    dtype_cat = np.dtype([('MEASID',np.str,50),('EXPOSURE',np.str,100),('CCDNUM',int),('FILTER',np.str,10),
-                          ('MJD',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
-                          ('MAG_AUTO',float),('MAGERR_AUTO',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),
-                          ('THETA',float),('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
+    # All the columns that we need (20)
+    #dtype_cat = np.dtype([('MEASID',np.str,30),('EXPOSURE',np.str,40),('CCDNUM',int),('FILTER',np.str,3),
+    #                      ('MJD',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
+    #                      ('MAG_AUTO',float),('MAGERR_AUTO',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),
+    #                      ('THETA',float),('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
+    dtype_cat = np.dtype([('MEASID',np.str,30),('EXPOSURE',np.str,40),('CCDNUM',np.int8),('FILTER',np.str,3),
+                          ('MJD',float),('RA',float),('RAERR',np.float16),('DEC',float),('DECERR',np.float16),
+                          ('MAG_AUTO',np.float16),('MAGERR_AUTO',np.float16),('ASEMI',np.float16),('ASEMIERR',np.float16),
+                          ('BSEMI',np.float16),('BSEMIERR',np.float16),('THETA',np.float16),('THETAERR',np.float16),
+                          ('FWHM',np.float16),('FLAGS',np.int16),('CLASS_STAR',np.float16)])
 
     #  Loop over exposures
     cat = None
@@ -165,7 +170,7 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
                 allmeta = np.hstack((allmeta,newmeta))
         # Total measurements for this exposure
         print('  '+str(expcatcount)+' measurements')
-        #print(str(catcount)+' measurements total so far')
+        print(str(catcount)+' measurements total so far')
 
     if cat is not None: cat=cat[0:catcount]  # trim excess
     if cat is None: cat=np.array([])         # empty cat
@@ -342,12 +347,24 @@ if __name__ == "__main__":
         obj[f+'theta'] = np.nan
     idstr = np.zeros(ncat,dtype=dtype_idstr)
 
+    # Higher precision catalog
+    dtype_hicat = np.dtype([('MEASID',np.str,30),('EXPOSURE',np.str,40),('CCDNUM',int),('FILTER',np.str,3),
+                            ('MJD',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
+                            ('MAG_AUTO',float),('MAGERR_AUTO',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),
+                            ('THETA',float),('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
+
+
     # Loop over the objects
     for i,lab in enumerate(labelindex['value']):
         if (i % 1000)==0: print(i)
         oindx = labelindex['index'][labelindex['lo'][i]:labelindex['hi'][i]+1]
-        cat1 = cat[oindx]
-        ncat1 = len(cat1)
+        cat1_orig = cat[oindx]
+        ncat1 = len(cat1_orig)
+        # Upgrade precisions of catalog
+        cat1 = np.zeros(ncat1,dtype=dtype_hicat)
+        for n in dtype_hicat.names: cat1[n] = cat1_orig[n]
+        del(cat1_orig)
+
         obj['ndet'][i] = ncat1
 
         # Add in IDSTR information
@@ -448,7 +465,7 @@ if __name__ == "__main__":
             # IQR
             iqrvar = 0.741289*(quartiles[2]-quartiles[0])
             # 1/eta
-            etavar = np.sum((resid2tsi[1:]-resdi2tsi[0:-1])**2) / sumresidsq
+            etavar = np.sum((resid2tsi[1:]-resid2tsi[0:-1])**2) / sumresidsq
             obj['rmsvar'][i] = rms
             obj['madvar'][i] = madvar
             obj['iqrvar'][i] = iqrvar
