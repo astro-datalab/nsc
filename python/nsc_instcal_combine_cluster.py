@@ -456,6 +456,7 @@ if __name__ == "__main__":
 
     # Spatially cluster the measurements with DBSCAN
     # coordinates of measurement
+    print('Spatial clustering with DBSCAN')
     X = np.column_stack((np.array(cat['RA'][0:ncat]),np.array(cat['DEC'][0:ncat])))
     # Compute DBSCAN on all measurements
     dbs = DBSCAN(eps=0.5/3600, min_samples=1).fit(X)
