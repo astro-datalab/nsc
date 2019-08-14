@@ -22,7 +22,7 @@ from scipy.interpolate import interp1d
 import sqlite3
 
 def writecat2db(cat,dbfile):
-    
+    """ Write a catalog to the database """
     sqlite3.register_adapter(np.int16, int)
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
@@ -44,18 +44,10 @@ def writecat2db(cat,dbfile):
                      asemi,asemierr,bsemi,bsemierr,theta,thetaerr,fwhm,flags,class_star)
                      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', data)
     db.commit()
- 
-    ## Print the users
-    ##c.row_factory = sqlite3.Row
-    #c.execute('''SELECT * FROM cat''')
-    #rows = c.fetchall()
-    #for r in rows:
-    #    print(r)
- 
     db.close()
 
 def getdbcoords(dbfile):
-
+    """ Get the coordinates and MEASID from the database """
     sqlite3.register_adapter(np.int16, int)
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
@@ -79,6 +71,7 @@ def getdbcoords(dbfile):
     return cat
 
 def indexdb(dbfile,col='measid',unique=True):
+    """ Index a column in the database """
     print('Indexing '+col)
     t0 = time.time()
     db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
@@ -92,7 +85,7 @@ def indexdb(dbfile,col='measid',unique=True):
     print('indexing done after '+str(time.time()-t0)+' sec')
 
 def insertobjlabelsdb(cat,labels,dbfile):
-    
+    """ Insert objectlabel values into the database """
     print('Inserting object labels')
     t0 = time.time()
     sqlite3.register_adapter(np.int16, int)
@@ -108,7 +101,7 @@ def insertobjlabelsdb(cat,labels,dbfile):
     print('inserting done after '+str(time.time()-t0)+' sec')
 
 def getobjmeasdb(dbfile,objlabel):
-
+    """ Get measurements for an object(s) from the database """
     sqlite3.register_adapter(np.int16, int)
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
@@ -178,8 +171,6 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                           ('MAG_AUTO',np.float16),('MAGERR_AUTO',np.float16),('ASEMI',np.float16),('ASEMIERR',np.float16),
                           ('BSEMI',np.float16),('BSEMIERR',np.float16),('THETA',np.float16),('THETAERR',np.float16),
                           ('FWHM',np.float16),('FLAGS',np.int16),('CLASS_STAR',np.float16)])
-
-
 
     #  Loop over exposures
     cat = None
@@ -303,12 +294,8 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
     if cat is None: cat=np.array([])         # empty cat
     if allmeta is None: allmeta=np.array([])
 
-    # Index MEASID in table
-    if dbfile is not None:
-        indexdb(dbfile)
-        
-
     print('loading measurements done after '+str(time.time()-t0))
+
     return cat, catcount, allmeta
     
 
@@ -458,21 +445,14 @@ if __name__ == "__main__":
     # Load the measurement catalog
     #  this will contain excess rows at the end
     cat, catcount, allmeta = loadmeas(metafiles,buffdict,dbfile=dbfile)
-    #import pdb; pdb.set_trace()
-    # KLUDGE
-    #cat = np.array(fits.getdata('60025_cat.fits',1))
-    #allmeta = np.array(fits.getdata('60025_allmeta.fits',1))
-    #cat = np.array(fits.getdata('148487_cat.fits',1))
-    #allmeta = np.array(fits.getdata('148487_allmeta.fits',1))
-    #ncat = dln.size(cat)
     ncat = catcount
     print(str(ncat)+' measurements loaded')
 
-
-    # Using database
-    #  -index 
-    #  -select MEASID, RA, DEC
-    if dbfile is not None: cat = getdbcoords(dbfile)
+    if usedb:
+        # Index MEASID in table
+        indexdb(dbfile,'measid')
+        # Get MEASID, RA, DEC from database
+        cat = getdbcoords(dbfile)
 
     # Spatially cluster the measurements with DBSCAN
     # coordinates of measurement
@@ -486,10 +466,10 @@ if __name__ == "__main__":
     nobj = dln.size(labelindex['value'])
     print(str(nobj)+' unique objects clustered within 0.5 arcsec')
 
-    if dbfile is not None:
+    if usedb:
         # Insert object label into database
         insertobjlabelsdb(cat,objlabels,dbfile)
-        # Index objlabel
+        # Index objlabel in database
         indexdb(dbfile,'objlabel',unique=False)
 
 
