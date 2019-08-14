@@ -19,6 +19,118 @@ from astropy.coordinates import SkyCoord
 from sklearn.cluster import DBSCAN
 from scipy.optimize import least_squares
 from scipy.interpolate import interp1d
+import sqlite3
+
+def writecat2db(cat,dbfile):
+    
+    sqlite3.register_adapter(np.int16, int)
+    sqlite3.register_adapter(np.int64, int)
+    sqlite3.register_adapter(np.float64, float)
+    sqlite3.register_adapter(np.float32, float)
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    #db = sqlite3.connect('test.db')
+    #db.text_factory = lambda x: str(x, 'latin1')
+    #db.row_factory = sqlite3.Row
+    c = db.cursor()
+    # Create the table
+    if len(c.execute('SELECT name from sqlite_master where type= "table" and name="meas"').fetchall()) < 1:
+        c.execute('''CREATE TABLE meas(measid TEXT, objlabel INTEGER, exposure TEXT, ccdnum INTEGER, filter TEXT, mjd REAL,
+                     ra REAL, raerr REAL, dec REAL, decerr REAL, mag_auto REAL, magerr_auto REAL, asemi REAL, asemierr REAL,
+                     bsemi REAL, bsemierr REAL, theta REAL, thetaerr REAL, fwhm REAL, flags INTEGER, class_star REAL)''')
+    data = list(zip(cat['measid'],cat['objectid'],cat['exposure'],cat['ccdnum'],cat['filter'],cat['mjd'],cat['ra'],
+                    cat['raerr'],cat['dec'],cat['decerr'],cat['mag_auto'],cat['magerr_auto'],cat['asemi'],cat['asemierr'],
+                    cat['bsemi'],cat['bsemierr'],cat['theta'],cat['thetaerr'],cat['fwhm'],cat['flags'],cat['class_star']))
+    c.executemany('''INSERT INTO meas(measid,objlabel,exposure,ccdnum,filter,mjd,ra,raerr,dec,decerr,mag_auto,magerr_auto,
+                     asemi,asemierr,bsemi,bsemierr,theta,thetaerr,fwhm,flags,class_star)
+                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', data)
+    db.commit()
+ 
+    ## Print the users
+    ##c.row_factory = sqlite3.Row
+    #c.execute('''SELECT * FROM cat''')
+    #rows = c.fetchall()
+    #for r in rows:
+    #    print(r)
+ 
+    db.close()
+
+def getdbcoords(dbfile):
+
+    sqlite3.register_adapter(np.int16, int)
+    sqlite3.register_adapter(np.int64, int)
+    sqlite3.register_adapter(np.float64, float)
+    sqlite3.register_adapter(np.float32, float)
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    #db = sqlite3.connect('test.db')
+    #db.text_factory = lambda x: str(x, 'latin1')
+    #db.row_factory = sqlite3.Row
+    c = db.cursor()
+    ##c.row_factory = sqlite3.Row
+    c.execute('''SELECT measid,ra,dec FROM meas''')
+    data = c.fetchall()
+    db.close()
+
+    # Convert to nump structured array
+    dtype = np.dtype([('MEASID',np.str,30),('RA',np.float64),('DEC',np.float64)])
+    cat = np.zeros(len(data),dtype=dtype)
+    cat[...] = data
+    del data
+
+    return cat
+
+def indexdb(dbfile,col='measid',unique=True):
+    print('Indexing')
+    t0 = time.time()
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = db.cursor()
+    if unique:
+        c.execute('CREATE UNIQUE INDEX idx_'+col+'_meas ON meas('+col+')')
+    else:
+        c.execute('CREATE INDEX idx_'+col+'_meas ON meas('+col+')')
+    data = c.fetchall()
+    db.close()
+    print('indexing done after '+str(time.time()-t0)+' sec')
+
+def insertobjlabelsdb(cat,labels,dbfile):
+    
+    print('Inserting object labels')
+    t0 = time.time()
+    sqlite3.register_adapter(np.int16, int)
+    sqlite3.register_adapter(np.int64, int)
+    sqlite3.register_adapter(np.float64, float)
+    sqlite3.register_adapter(np.float32, float)
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = db.cursor()
+    data = list(zip(labels,cat['MEASID']))
+    c.executemany('''UPDATE meas SET objlabel=? WHERE measid=?''', data) 
+    db.commit() 
+    db.close()
+    print('inserting done after '+str(time.time()-t0)+' sec')
+
+def getobjmeasdb(dbfile,objlabel):
+
+    sqlite3.register_adapter(np.int16, int)
+    sqlite3.register_adapter(np.int64, int)
+    sqlite3.register_adapter(np.float64, float)
+    sqlite3.register_adapter(np.float32, float)
+    #if cur is None:
+    #    print('Starting the db connection')
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    cur = db.cursor()
+    cur.execute('SELECT * FROM meas WHERE objlabel='+str(objlabel))
+    data = cur.fetchall()
+    db.close()
+
+    # Convert to nump structured array
+    dtype_hicat = np.dtype([('MEASID',np.str,30),('OBJLABEL',int),('EXPOSURE',np.str,40),('CCDNUM',int),('FILTER',np.str,3),
+                            ('MJD',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
+                            ('MAG_AUTO',float),('MAGERR_AUTO',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),
+                            ('THETA',float),('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
+    cat = np.zeros(len(data),dtype=dtype_hicat)
+    cat[...] = data
+    del data
+
+    return cat
 
 def add_elements(cat,nnew=300000):
     """ Add more elements to a catalog"""
@@ -30,7 +142,7 @@ def add_elements(cat,nnew=300000):
     del(old)
     return cat    
 
-def loadmeas(metafile=None,buffdict=None,verbose=False):
+def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
 
     if metafile is None:
         print('Need metafile')
@@ -61,6 +173,8 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
                           ('MAG_AUTO',np.float16),('MAGERR_AUTO',np.float16),('ASEMI',np.float16),('ASEMIERR',np.float16),
                           ('BSEMI',np.float16),('BSEMIERR',np.float16),('THETA',np.float16),('THETAERR',np.float16),
                           ('FWHM',np.float16),('FLAGS',np.int16),('CLASS_STAR',np.float16)])
+
+
 
     #  Loop over exposures
     cat = None
@@ -144,21 +258,28 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
 
                 # Combine the catalogs
                 if ncat1 > 0:
-                    if cat is None:
-                        #dtype_cat = cat1.dtype
-                        #ncat_init = np.sum(chmeta['nsources'])*dln.size(metafile)
-                        ncat_init = np.maximum(100000,ncat1)
-                        cat = np.zeros(ncat_init,dtype=dtype_cat)
-                        catcount = 0
-                    # Add more elements if necessary
-                    if (catcount+ncat1)>ncat:
-                        cat = add_elements(cat,np.maximum(100000,ncat1))
-                        ncat = len(cat)
+                    # Keep it all in memory
+                    if dbfile is None:
+                        if cat is None:
+                            #dtype_cat = cat1.dtype
+                            #ncat_init = np.sum(chmeta['nsources'])*dln.size(metafile)
+                            ncat_init = np.maximum(100000,ncat1)
+                            cat = np.zeros(ncat_init,dtype=dtype_cat)
+                            catcount = 0
+                        # Add more elements if necessary
+                        if (catcount+ncat1)>ncat:
+                            cat = add_elements(cat,np.maximum(100000,ncat1))
+                            ncat = len(cat)
+
+                        # Add it to the main CAT catalog
+                        for n in dtype_cat.names: cat[n][catcount:catcount+ncat1] = cat1[n.upper()]
+                    # Use the database
+                    else:
+                        writecat2db(cat1,dbfile)
 
                     if verbose: print('  chip '+str(chmeta[j]['ccdnum'])+'  '+str(ncat1)+' measurements')
 
-                    # Add it to the main CAT catalog
-                    for n in dtype_cat.names: cat[n][catcount:catcount+ncat1] = cat1[n.upper()]
+
                     catcount += ncat1
                     expcatcount += ncat1
 
@@ -176,6 +297,11 @@ def loadmeas(metafile=None,buffdict=None,verbose=False):
     #if (cat is not None) & (catcount<ncat): del cat[catcount:]   # delete excess elements
     if cat is None: cat=np.array([])         # empty cat
     if allmeta is None: allmeta=np.array([])
+
+    # Index MEASID in table
+    if dbfile is not None:
+        indexdb(dbfile)
+        
 
     print('loadmeas done')
     return cat, catcount, allmeta
@@ -309,10 +435,16 @@ if __name__ == "__main__":
                           ('fwhm',float),('flags',int),('class_star',float),('ebv',float),('rmsvar',float),('madvar',float),('iqrvar',float),('etavar',float),
                           ('jvar',float),('kvar',float),('avgvar',float),('chivar',float),('romsvar',float)])
 
+    usedb = True
+    dbfile = tmproot+str(pix)+'_combine.db'
+    #dbfile = '/data0/dnidever/nsc/instcal/v3/tmp/test.db'
+    print('Using database file = '+dbfile)
+    if usedb and os.path.exists(dbfile): os.remove(dbfile)
+
     # Load the measurement catalog
     #  this will contain excess rows at the end
     metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
-    cat, catcount, allmeta = loadmeas(metafiles,buffdict)
+    cat, catcount, allmeta = loadmeas(metafiles,buffdict,dbfile=dbfile)
     #import pdb; pdb.set_trace()
     # KLUDGE
     #cat = np.array(fits.getdata('60025_cat.fits',1))
@@ -323,17 +455,28 @@ if __name__ == "__main__":
     ncat = catcount
     print(str(ncat)+' measurements loaded')
 
-    t1 = time.time()
 
+    # Using database
+    #  -index 
+    #  -select MEASID, RA, DEC
+    cat = getdbcoords(dbfile)
 
     # Spatially cluster the measurements with DBSCAN
     # coordinates of measurement
     X = np.column_stack((np.array(cat['RA'][0:ncat]),np.array(cat['DEC'][0:ncat])))
     # Compute DBSCAN on all measurements
-    db = DBSCAN(eps=0.5/3600, min_samples=1).fit(X)
-    labelindex = dln.create_index(db.labels_)
+    dbs = DBSCAN(eps=0.5/3600, min_samples=1).fit(X)
+    objlabels = dbs.labels_
+    labelindex = dln.create_index(objlabels)
     nobj = len(labelindex['value'])
     print(str(nobj)+' unique objects clustered within 0.5 arcsec')
+
+    if dbfile is not None:
+        # Insert object label into database
+        insertobjlabelsdb(cat,objlabels,dbfile)
+        # Index objlabel
+        indexdb(dbfile,'objlabel',unique=False)
+
 
     # Initialize the OBJ structured arra
     obj = np.zeros(nobj,dtype=dtype_obj)
@@ -356,18 +499,29 @@ if __name__ == "__main__":
                             ('MJD',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
                             ('MAG_AUTO',float),('MAGERR_AUTO',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),
                             ('THETA',float),('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
-
+    t1 = time.time()
 
     # Loop over the objects
+    cur = None
+    meascount = 0
     for i,lab in enumerate(labelindex['value']):
         if (i % 1000)==0: print(i)
-        oindx = labelindex['index'][labelindex['lo'][i]:labelindex['hi'][i]+1]
-        cat1_orig = cat[oindx]
-        ncat1 = len(cat1_orig)
-        # Upgrade precisions of catalog
-        cat1 = np.zeros(ncat1,dtype=dtype_hicat)
-        for n in dtype_hicat.names: cat1[n] = cat1_orig[n]
-        del(cat1_orig)
+
+        # Get meas data for this object
+        if dbfile is None:
+            oindx = labelindex['index'][labelindex['lo'][i]:labelindex['hi'][i]+1]
+            cat1_orig = cat[oindx]
+            ncat1 = len(cat1_orig)
+            # Upgrade precisions of catalog
+            cat1 = np.zeros(ncat1,dtype=dtype_hicat)
+            for n in dtype_hicat.names: cat1[n] = cat1_orig[n]
+            del(cat1_orig)
+        # Get from the database
+        else:
+            cat1 = getobjmeasdb(dbfile,lab)
+            ncat1 = len(cat1)
+            oindx = np.arange(ncat1)+meascount
+            meascount += ncat1
 
         obj['ndet'][i] = ncat1
 
@@ -430,7 +584,7 @@ if __name__ == "__main__":
             filt = filtindex['value'][f].lower()
             findx = filtindex['index'][filtindex['lo'][f]:filtindex['hi'][f]+1]
             obj['ndet'+filt][i] = filtindex['num'][f]
-            gph,ngph = dln.where(cat['MAG_AUTO'][findx]<50)
+            gph,ngph = dln.where(cat1['MAG_AUTO'][findx]<50)
             obj['nphot'+filt][i] = ngph
             if ngph==1:
                 obj[filt+'mag'][i] = cat1['MAG_AUTO'][findx[gph]]
@@ -605,3 +759,7 @@ if __name__ == "__main__":
     dt = time.time()-t0
     print('dt = '+str(dt)+' sec.')
     print('dt = ',str(time.time()-t1)+' sec. after loading the catalogs')
+
+    if dbfile is not None:
+        print('Deleting temporary database file '+dbfile)
+        #os.remove(dbfile)
