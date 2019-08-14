@@ -117,7 +117,10 @@ def getobjmeasdb(dbfile,objlabel):
     #    print('Starting the db connection')
     db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
     cur = db.cursor()
-    cur.execute('SELECT * FROM meas WHERE objlabel='+str(objlabel))
+    if len(objlabel)==2:
+        cur.execute('SELECT * FROM meas WHERE objlabel>='+str(objlabel[0])+' AND objlabel<='+str(objlabel[1]))
+    else:
+        cur.execute('SELECT * FROM meas WHERE objlabel='+str(objlabel))
     data = cur.fetchall()
     db.close()
 
@@ -437,7 +440,15 @@ if __name__ == "__main__":
                           ('fwhm',float),('flags',int),('class_star',float),('ebv',float),('rmsvar',float),('madvar',float),('iqrvar',float),('etavar',float),
                           ('jvar',float),('kvar',float),('avgvar',float),('chivar',float),('romsvar',float)])
 
-    usedb = True
+    # Decide whether to load everything into RAM or use temporary database
+    metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
+    nmeasperchip = np.zeros(dln.size(metafiles),int)
+    for i,m in enumerate(metafiles):
+        expstr = fits.getdata(m,1)
+        nmeasperchip[i] = expstr['NMEAS']/expstr['NCHIPS']
+    totmeasest = np.sum(nmeasperchip)
+    usedb = False
+    if totmeasest>500000: usedb=True
     dbfile = None
     if usedb:
         dbfile = tmproot+str(pix)+'_combine.db'
@@ -446,7 +457,6 @@ if __name__ == "__main__":
 
     # Load the measurement catalog
     #  this will contain excess rows at the end
-    metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
     cat, catcount, allmeta = loadmeas(metafiles,buffdict,dbfile=dbfile)
     #import pdb; pdb.set_trace()
     # KLUDGE
@@ -469,9 +479,11 @@ if __name__ == "__main__":
     X = np.column_stack((np.array(cat['RA'][0:ncat]),np.array(cat['DEC'][0:ncat])))
     # Compute DBSCAN on all measurements
     dbs = DBSCAN(eps=0.5/3600, min_samples=1).fit(X)
+    # Cluster labels are integers and in ascending order, but there are gaps
     objlabels = dbs.labels_
     labelindex = dln.create_index(objlabels)
-    nobj = len(labelindex['value'])
+    meascumcount = np.cumsum(labelindex['num'])
+    nobj = dln.size(labelindex['value'])
     print(str(nobj)+' unique objects clustered within 0.5 arcsec')
 
     if dbfile is not None:
@@ -511,20 +523,11 @@ if __name__ == "__main__":
 
     t1 = time.time()
 
-
-    # Initialize the database connection to get meas values
-    if dbfile is not None:
-        sqlite3.register_adapter(np.int16, int)
-        sqlite3.register_adapter(np.int64, int)
-        sqlite3.register_adapter(np.float64, float)
-        sqlite3.register_adapter(np.float32, float)
-        db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-        cur = db.cursor()
-
     # Loop over the objects
     meascount = 0
     ngroup = -1
     grpcount = 0
+    maxmeasload = 50000
     for i,lab in enumerate(labelindex['value']):
         if (i % 1000)==0: print(i)
 
@@ -538,32 +541,28 @@ if __name__ == "__main__":
             for n in dtype_hicat.names: cat1[n] = cat1_orig[n]
             del(cat1_orig)
         # Get from the database
-        else:
-            #cat1 = getobjmeasdb(dbfile,lab)
-            npergroup = 20
-            # Get next group of data
-            if grpcount>ngroup:
+        else:            
+            npergroup = 1000
+            # Get next group of object measurements
+            if grpcount>=ngroup:
+                # Use maxmeaslead to figure out how many objects we can load
+                #import pdb; pdb.set_trace()    
+                if i==0:
+                    ngroup = np.max(np.where(meascumcount[i:]<=maxmeasload)[0])+1
+                else:
+                    ngroup = np.max(np.where((meascumcount[i:]-meascumcount[i-1])<=maxmeasload)[0])+1
+                ngroup = np.max([1,ngroup])   # need to load at least 1
                 lab0 = lab
-                lab1 = objlabels[np.min([i+npergroup,nobj])]
-                cur.execute('SELECT * FROM meas WHERE objlabel>='+str(lab0)+' AND objlabel<='+str(lab1))
-                data = cur.fetchall()
-                grpcat = np.zeros(len(data),dtype=dtype_hicatdb)
-                grpcat[...] = data
-                del data                
+                lab1 = labelindex['value'][np.min([i+ngroup-1,nobj-1])]
+                grpcat = getobjmeasdb(dbfile,[lab0,lab1])
                 grpindex = dln.create_index(grpcat['OBJLABEL'])                
-                ngroup = len(grpindex)
+                #ngroup = len(grpindex['value'])
                 grpcount = 0
-            # Get data for this object
+            # Get the measurement data for this object
             gindx = grpindex['index'][grpindex['lo'][grpcount]:grpindex['hi'][grpcount]+1]
             cat1 = grpcat[gindx]
-            grpcount += 1
-            #cur.execute('SELECT * FROM meas WHERE objlabel='+str(lab))
-            #data = cur.fetchall()
-            #cat1 = np.zeros(len(data),dtype=dtype_hicatdb)
-            #cat1[...] = data
-            #del data
-
             ncat1 = len(cat1)
+            grpcount += 1
             oindx = np.arange(ncat1)+meascount
             meascount += ncat1            
 
