@@ -79,7 +79,7 @@ def getdbcoords(dbfile):
     return cat
 
 def indexdb(dbfile,col='measid',unique=True):
-    print('Indexing')
+    print('Indexing '+col)
     t0 = time.time()
     db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
     c = db.cursor()
@@ -143,6 +143,8 @@ def add_elements(cat,nnew=300000):
     return cat    
 
 def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
+
+    t0 = time.time()
 
     if metafile is None:
         print('Need metafile')
@@ -303,7 +305,7 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
         indexdb(dbfile)
         
 
-    print('loadmeas done')
+    print('loading measurements done after '+str(time.time()-t0))
     return cat, catcount, allmeta
     
 
@@ -436,10 +438,11 @@ if __name__ == "__main__":
                           ('jvar',float),('kvar',float),('avgvar',float),('chivar',float),('romsvar',float)])
 
     usedb = True
-    dbfile = tmproot+str(pix)+'_combine.db'
-    #dbfile = '/data0/dnidever/nsc/instcal/v3/tmp/test.db'
-    print('Using database file = '+dbfile)
-    if usedb and os.path.exists(dbfile): os.remove(dbfile)
+    dbfile = None
+    if usedb:
+        dbfile = tmproot+str(pix)+'_combine.db'
+        print('Using database file = '+dbfile)
+        if os.path.exists(dbfile): os.remove(dbfile)
 
     # Load the measurement catalog
     #  this will contain excess rows at the end
@@ -459,7 +462,7 @@ if __name__ == "__main__":
     # Using database
     #  -index 
     #  -select MEASID, RA, DEC
-    cat = getdbcoords(dbfile)
+    if dbfile is not None: cat = getdbcoords(dbfile)
 
     # Spatially cluster the measurements with DBSCAN
     # coordinates of measurement
@@ -499,11 +502,29 @@ if __name__ == "__main__":
                             ('MJD',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
                             ('MAG_AUTO',float),('MAGERR_AUTO',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),
                             ('THETA',float),('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
+
+    # Convert to nump structured array
+    dtype_hicatdb = np.dtype([('MEASID',np.str,30),('OBJLABEL',int),('EXPOSURE',np.str,40),('CCDNUM',int),('FILTER',np.str,3),
+                              ('MJD',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
+                              ('MAG_AUTO',float),('MAGERR_AUTO',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),
+                              ('THETA',float),('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
+
     t1 = time.time()
 
+
+    # Initialize the database connection to get meas values
+    if dbfile is not None:
+        sqlite3.register_adapter(np.int16, int)
+        sqlite3.register_adapter(np.int64, int)
+        sqlite3.register_adapter(np.float64, float)
+        sqlite3.register_adapter(np.float32, float)
+        db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+        cur = db.cursor()
+
     # Loop over the objects
-    cur = None
     meascount = 0
+    ngroup = -1
+    grpcount = 0
     for i,lab in enumerate(labelindex['value']):
         if (i % 1000)==0: print(i)
 
@@ -518,10 +539,33 @@ if __name__ == "__main__":
             del(cat1_orig)
         # Get from the database
         else:
-            cat1 = getobjmeasdb(dbfile,lab)
+            #cat1 = getobjmeasdb(dbfile,lab)
+            npergroup = 20
+            # Get next group of data
+            if grpcount>ngroup:
+                lab0 = lab
+                lab1 = objlabels[np.min([i+npergroup,nobj])]
+                cur.execute('SELECT * FROM meas WHERE objlabel>='+str(lab0)+' AND objlabel<='+str(lab1))
+                data = cur.fetchall()
+                grpcat = np.zeros(len(data),dtype=dtype_hicatdb)
+                grpcat[...] = data
+                del data                
+                grpindex = dln.create_index(grpcat['OBJLABEL'])                
+                ngroup = len(grpindex)
+                grpcount = 0
+            # Get data for this object
+            gindx = grpindex['index'][grpindex['lo'][grpcount]:grpindex['hi'][grpcount]+1]
+            cat1 = grpcat[gindx]
+            grpcount += 1
+            #cur.execute('SELECT * FROM meas WHERE objlabel='+str(lab))
+            #data = cur.fetchall()
+            #cat1 = np.zeros(len(data),dtype=dtype_hicatdb)
+            #cat1[...] = data
+            #del data
+
             ncat1 = len(cat1)
             oindx = np.arange(ncat1)+meascount
-            meascount += ncat1
+            meascount += ncat1            
 
         obj['ndet'][i] = ncat1
 
