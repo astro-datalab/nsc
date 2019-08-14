@@ -452,7 +452,7 @@ if __name__ == "__main__":
     dbfile = None
     if usedb:
         dbfile = tmproot+str(pix)+'_combine.db'
-        print('Using database file = '+dbfile)
+        print('Using temporary database file = '+dbfile)
         if os.path.exists(dbfile): os.remove(dbfile)
 
     # Load the measurement catalog
