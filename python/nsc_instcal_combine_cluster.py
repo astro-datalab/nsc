@@ -326,7 +326,7 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
         print(str(catcount)+' measurements total so far')
 
     #print('all exposures loaded. trimming now')
-    #if (cat is not None) & (catcount<ncat): del cat[catcount:]   # delete excess elements
+    if (cat is not None) & (catcount<ncat): cat=cat[0:catcount]   # delete excess elements
     if cat is None: cat=np.array([])         # empty cat
     if allmeta is None: allmeta=np.array([])
 
@@ -334,9 +334,10 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
 
     return cat, catcount, allmeta
 
-def clusterdata(cat,ncat,dbfile=None):
+def clusterdata(cat,dbfile=None):
     """ Perform spatial clustering """
 
+    ncat = dln.size(cat)
     print('Spatial clustering with DBSCAN')    
     # Divide into subregions
     if (ncat>1000000) & (dbfile is not None):
@@ -438,9 +439,12 @@ def clusterdata(cat,ncat,dbfile=None):
 
     # No subdividing
     else:
+        # Get MEASID, RA, DEC from database
+        if dbfile is not None:
+            cat = getdbcoords(dbfile)
         # Spatially cluster the measurements with DBSCAN
         # coordinates of measurement
-        X = np.column_stack((np.array(cat['RA'][0:ncat]),np.array(cat['DEC'][0:ncat])))
+        X = np.column_stack((np.array(cat['RA']),np.array(cat['DEC'])))
         # Compute DBSCAN on all measurements
         dbs = DBSCAN(eps=0.5/3600, min_samples=1).fit(X)
         # Cluster labels are integers and in ascending order, but there are gaps
@@ -612,17 +616,15 @@ if __name__ == "__main__":
         if os.path.exists(dbfile): os.remove(dbfile)
 
     # Load the measurement catalog
-    #  this will contain excess rows at the end
+    #  this will contain excess rows at the end, if all in RAM
+    #  if using database, CAT is empty
     cat, catcount, allmeta = loadmeas(metafiles,buffdict,dbfile=dbfile)
     ncat = catcount
-
-    if usedb:
-        # Get MEASID, RA, DEC from database
-        cat = getdbcoords(dbfile)
+    print(str(ncat))
 
     # Spatially cluster the measurements with DBSCAN
     #   this might also resort CAT
-    objstr, cat = clusterdata(cat,ncat,dbfile=dbfile)
+    objstr, cat = clusterdata(cat,dbfile=dbfile)
     nobj = dln.size(objstr)
     meascumcount = np.cumsum(objstr['NMEAS'])
     print(str(nobj)+' unique objects clustered within 0.5 arcsec')
@@ -667,7 +669,7 @@ if __name__ == "__main__":
 
         # Get meas data for this object
         if usedb is False:
-            oindx = np.arange(objstr['LO'][i],objstr['HI'][i])  # this fails if start,stop are the same
+            oindx = np.arange(objstr['LO'][i],objstr['HI'][i]+1)  # this fails if start,stop are the same
             if objstr['NMEAS'][i]==1: oindx=np.atleast_1d(objstr['LO'][i])
             ncat1 = dln.size(oindx)
             cat1_orig = cat[oindx]
