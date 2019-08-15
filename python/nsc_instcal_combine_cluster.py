@@ -34,6 +34,7 @@ def writecat2db(cat,dbfile):
     #db.row_factory = sqlite3.Row
     c = db.cursor()
     # Create the table
+    #   the primary key ROWID is automatically generated
     if len(c.execute('SELECT name from sqlite_master where type= "table" and name="meas"').fetchall()) < 1:
         c.execute('''CREATE TABLE meas(measid TEXT, objlabel INTEGER, exposure TEXT, ccdnum INTEGER, filter TEXT, mjd REAL,
                      ra REAL, raerr REAL, dec REAL, decerr REAL, mag_auto REAL, magerr_auto REAL, asemi REAL, asemierr REAL,
@@ -48,7 +49,7 @@ def writecat2db(cat,dbfile):
     db.close()
 
 def getdbcoords(dbfile):
-    """ Get the coordinates and MEASID from the database """
+    """ Get the coordinates and ROWID from the database """
     sqlite3.register_adapter(np.int16, int)
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
@@ -59,12 +60,12 @@ def getdbcoords(dbfile):
     #db.row_factory = sqlite3.Row
     c = db.cursor()
     ##c.row_factory = sqlite3.Row
-    c.execute('''SELECT rowid,measid,ra,dec FROM meas''')
+    c.execute('''SELECT rowid,ra,dec FROM meas''')
     data = c.fetchall()
     db.close()
 
     # Convert to nump structured array
-    dtype = np.dtype([('ROWID',int),('MEASID',np.str,30),('RA',np.float64),('DEC',np.float64)])
+    dtype = np.dtype([('ROWID',int),('RA',np.float64),('DEC',np.float64)])
     cat = np.zeros(len(data),dtype=dtype)
     cat[...] = data
     del data
@@ -94,7 +95,7 @@ def createindexdb(dbfile,col='measid',unique=True):
     db.close()
     print('indexing done after '+str(time.time()-t0)+' sec')
 
-def insertobjlabelsdb(measid,labels,dbfile):
+def insertobjlabelsdb(rowid,labels,dbfile):
     """ Insert objectlabel values into the database """
     print('Inserting object labels')
     t0 = time.time()
@@ -104,13 +105,13 @@ def insertobjlabelsdb(measid,labels,dbfile):
     sqlite3.register_adapter(np.float32, float)
     db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
     c = db.cursor()
-    data = list(zip(labels,measid))
-    c.executemany('''UPDATE meas SET objlabel=? WHERE measid=?''', data) 
+    data = list(zip(labels,rowid))
+    c.executemany('''UPDATE meas SET objlabel=? WHERE rowid=?''', data) 
     db.commit() 
     db.close()
     print('inserting done after '+str(time.time()-t0)+' sec')
 
-def getdatadb(dbfile,table='meas',cols='*',objlabel=None,rar=None,decr=None):
+def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=None):
     """ Get measurements for an object(s) from the database """
     sqlite3.register_adapter(np.int16, int)
     sqlite3.register_adapter(np.int64, int)
@@ -157,7 +158,7 @@ def getdatadb(dbfile,table='meas',cols='*',objlabel=None,rar=None,decr=None):
         return np.array([])
 
     # Convert to nump structured array
-    dtype_hicat = np.dtype([('MEASID',np.str,30),('OBJLABEL',int),('EXPOSURE',np.str,40),('CCDNUM',int),('FILTER',np.str,3),
+    dtype_hicat = np.dtype([('ROWID',int),('MEASID',np.str,30),('OBJLABEL',int),('EXPOSURE',np.str,40),('CCDNUM',int),('FILTER',np.str,3),
                             ('MJD',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
                             ('MAG_AUTO',float),('MAGERR_AUTO',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),
                             ('THETA',float),('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
@@ -411,18 +412,19 @@ def clusterdata(cat,ncat,dbfile=None):
                         obj1 = obj1[gdobj]
                         nobj1 = ngdobj
                         # Arrays of measid and objlabels to add
-                        add_measid1 = np.zeros(np.sum(labelindex1['num'][gdobj]),(np.str,30))
+                        #add_measid1 = np.zeros(np.sum(labelindex1['num'][gdobj]),(np.str,30))
+                        add_rowid1 = np.zeros(np.sum(labelindex1['num'][gdobj]),(np.str,30))
                         add_objlabels1 = np.zeros(np.sum(labelindex1['num'][gdobj]),int)
                         cnt1 = 0
                         for k in range(ngdobj):
                             indx = labelindex1['index'][labelindex1['lo'][gdobj[k]]:labelindex1['hi'][gdobj[k]]+1]
                             nmeas1 = labelindex1['num'][gdobj[k]]
-                            add_measid1[cnt1:cnt1+nmeas1] = cat1['MEASID'][indx]
+                            add_rowid1[cnt1:cnt1+nmeas1] = cat1['ROWID'][indx]
                             add_objlabels1[cnt1:cnt1+nmeas1] = labelindex1['value'][gdobj[k]]
                             cnt1 += nmeas1
 
                         # Add the object labels into the database
-                        insertobjlabelsdb(add_measid1,add_objlabels1,dbfile)
+                        insertobjlabelsdb(add_rowid1,add_objlabels1,dbfile)
 
                         # Add OBJ1 to OBJSTR
                         if (objcount+nobj1>nobjstr):    # add new elements
@@ -437,8 +439,6 @@ def clusterdata(cat,ncat,dbfile=None):
         # Trim extra elements
         if nobjstr>objcount:
             objstr = objstr[0:objcount]
-
-        import pdb; pdb.set_trace()
 
     # No subdividing
     else:
@@ -458,7 +458,7 @@ def clusterdata(cat,ncat,dbfile=None):
         objstr['NMEAS'] = labelindex['num']
         nobjstr = len(objstr)
         # Insert object label into database
-        insertobjlabelsdb(cat['MEASID'],objlabels,dbfile)
+        insertobjlabelsdb(cat['ROWID'],objlabels,dbfile)
         # Resort CAT, and use index LO/HI
         cat = cat[labelindex['index']]
         objstr['LO'] = labelindex['LO']
@@ -628,7 +628,7 @@ if __name__ == "__main__":
 
     if usedb:
         # Index MEASID in table
-        createindexdb(dbfile,'measid')
+        #createindexdb(dbfile,'measid')
         # Get MEASID, RA, DEC from database
         cat = getdbcoords(dbfile)
 
@@ -636,7 +636,6 @@ if __name__ == "__main__":
     # coordinates of measurement
     print('Spatial clustering with DBSCAN')
     objstr = clusterdata(cat,ncat,dbfile=dbfile)
-    import pdb; pdb.set_trace()    
 
     #X = np.column_stack((np.array(cat['RA'][0:ncat]),np.array(cat['DEC'][0:ncat])))
     ## Compute DBSCAN on all measurements
@@ -690,7 +689,7 @@ if __name__ == "__main__":
         if (i % 1000)==0: print(i)
 
         # Get meas data for this object
-        if dbfile is None:
+        if usedb is False:
             oindx = np.arange(objstr[i]['LO'],objstr[i]['HI'])
             #oindx = labelindex['index'][labelindex['lo'][i]:labelindex['hi'][i]+1]
             cat1_orig = cat[oindx]
@@ -701,7 +700,6 @@ if __name__ == "__main__":
             del(cat1_orig)
         # Get from the database
         else:            
-            npergroup = 1000
             # Get next group of object measurements
             if grpcount>=ngroup:
                 # Use maxmeaslead to figure out how many objects we can load
@@ -714,7 +712,7 @@ if __name__ == "__main__":
                 lab0 = lab
                 lab1 = objstr['OBJLABEL'][np.min([i+ngroup-1,nobj-1])]
                 #lab1 = labelindex['value'][np.min([i+ngroup-1,nobj-1])]
-                grpcat = getdatadb(dbfile,[lab0,lab1])
+                grpcat = getdatadb(dbfile,objlabel=[lab0,lab1])
                 grpindex = dln.create_index(grpcat['OBJLABEL'])                
                 #ngroup = len(grpindex['value'])
                 grpcount = 0
