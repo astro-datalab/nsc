@@ -128,7 +128,7 @@ def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=Non
             cmd += ' WHERE '
         else:
             cmd += ' AND '
-        if len(objlabel)==2:
+        if dln.size(objlabel)==2:
             cmd += 'objlabel>='+str(objlabel[0])+' AND objlabel<='+str(objlabel[1])
         else:
             cmd += 'objlabel='+str(objlabel)
@@ -340,19 +340,16 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
 
 def clusterdata(cat,ncat,dbfile=None):
     """ Perform spatial clustering """
-    
+
+    print('Spatial clustering with DBSCAN')    
     # Divide into subregions
-    print('Dividing clustering problem into subregions')
-    #if ncat>1000000:
-    print('KLUDGE: HARD-CODED TO SUBDIVIDE!!!')
-    if ncat>1:
+    if (ncat>1000000) & (dbfile is not None):
+        print('Dividing clustering problem into subregions')
         # Index RA and DEC
         createindexdb(dbfile,'ra',unique=False)
         createindexdb(dbfile,'dec',unique=False)
         # Subdivide
         nsub = np.ceil(ncat/100000)
-        print('KLUDGE: HARD-CODED NSUB')
-        nsub = 4
         print(str(nsub)+' sub regions')
         nx = int(np.ceil(np.sqrt(nsub)))  # divide RA and DEC intro nx regions
         xr = [np.min(cat['RA'])-0.001,np.max(cat['RA'])+0.001]  # extend slightly
@@ -361,9 +358,11 @@ def clusterdata(cat,ncat,dbfile=None):
         if (xr[1]-xr[0])>180:   # across RA=0
             dx = (xr[0]-(xr[1]-360))/nx
         yr = [np.min(cat['DEC'])-0.001,np.max(cat['DEC'])+0.001]  # extend slightly
+        mndec = np.mean(yr)
         print('DEC: '+str(yr[0])+' '+str(yr[1]))
         dy = (yr[1]-yr[0])/nx
         buff = 10./3600.0  # buffer in arc seconds
+        rabuff = buff/np.cos(np.deg2rad(mndec))  # correct for cos(dec)
         objstr = np.zeros(100000,dtype=np.dtype([('OBJLABEL',int),('RA',float),('DEC',float),('NMEAS',int)]))
         nobjstr = len(objstr)
         # Loop over sub regions
@@ -371,17 +370,16 @@ def clusterdata(cat,ncat,dbfile=None):
         objcount = 0
         # RA loop
         for r in range(nx):
-            r0 = xr[0]+r*dx-buff
-            r1 = xr[0]+(r+1)*dx+buff
+            r0 = xr[0]+r*dx
+            r1 = xr[0]+(r+1)*dx
             # DEC loop
             for d in range(nx):
                 d0 = yr[0]+d*dy
                 d1 = yr[0]+(d+1)*dy
-                cat1 = getdatadb(dbfile,rar=[r0-buff,r1+buff],decr=[d0-buff,d1+buff])
+                cat1 = getdatadb(dbfile,rar=[r0-rabuff,r1+rabuff],decr=[d0-buff,d1+buff])
                 ncat1 = len(cat1)
-                print(str(r0)+' '+str(r1))
-                print(str(d0)+' '+str(d1))
                 print(str(r+1)+' '+str(d+1)+'  '+str(ncat1)+' measurements')
+                print('RA: '+str(r0)+' '+str(r1)+'  DEC: '+str(d0)+' '+str(d1))
                 # Some measurements to work with
                 if ncat1>0:
                     # Run DBSCAN
@@ -413,7 +411,7 @@ def clusterdata(cat,ncat,dbfile=None):
                         nobj1 = ngdobj
                         # Arrays of measid and objlabels to add
                         #add_measid1 = np.zeros(np.sum(labelindex1['num'][gdobj]),(np.str,30))
-                        add_rowid1 = np.zeros(np.sum(labelindex1['num'][gdobj]),(np.str,30))
+                        add_rowid1 = np.zeros(np.sum(labelindex1['num'][gdobj]),int)
                         add_objlabels1 = np.zeros(np.sum(labelindex1['num'][gdobj]),int)
                         cnt1 = 0
                         for k in range(ngdobj):
@@ -424,7 +422,9 @@ def clusterdata(cat,ncat,dbfile=None):
                             cnt1 += nmeas1
 
                         # Add the object labels into the database
-                        insertobjlabelsdb(add_rowid1,add_objlabels1,dbfile)
+                        #  much faster if in rowid order
+                        si = np.argsort(add_rowid1)
+                        insertobjlabelsdb(add_rowid1[si],add_objlabels1[si],dbfile)
 
                         # Add OBJ1 to OBJSTR
                         if (objcount+nobj1>nobjstr):    # add new elements
@@ -444,7 +444,6 @@ def clusterdata(cat,ncat,dbfile=None):
     else:
         # Spatially cluster the measurements with DBSCAN
         # coordinates of measurement
-        print('Spatial clustering with DBSCAN')
         X = np.column_stack((np.array(cat['RA'][0:ncat]),np.array(cat['DEC'][0:ncat])))
         # Compute DBSCAN on all measurements
         dbs = DBSCAN(eps=0.5/3600, min_samples=1).fit(X)
@@ -452,24 +451,27 @@ def clusterdata(cat,ncat,dbfile=None):
         objlabels = dbs.labels_
         labelindex = dln.create_index(objlabels)   # create inex
         nobj = len(labelindex['value'])
+        print(str(ncat)+' measurements for '+str(nobj)+' objects')
         # Make structure
         objstr = np.zeros(nobj,dtype=np.dtype([('OBJLABEL',int),('NMEAS',int),('LO',int),('HI',int)]))
         objstr['OBJLABEL'] = labelindex['value']
         objstr['NMEAS'] = labelindex['num']
         nobjstr = len(objstr)
         # Insert object label into database
-        insertobjlabelsdb(cat['ROWID'],objlabels,dbfile)
+        if dbfile is not None:
+            insertobjlabelsdb(cat['ROWID'],objlabels,dbfile)
         # Resort CAT, and use index LO/HI
         cat = cat[labelindex['index']]
-        objstr['LO'] = labelindex['LO']
-        objstr['HI'] = labelindex['HI']
+        objstr['LO'] = labelindex['lo']
+        objstr['HI'] = labelindex['hi']
 
     print(str(len(objstr))+' final objects')
 
     # Index objlabel in database
-    createindexdb(dbfile,'objlabel',unique=False)
+    if dbfile is not None:
+        createindexdb(dbfile,'objlabel',unique=False)
 
-    return objstr
+    return objstr, cat
 
 
 # Combine data for one NSC healpix region
@@ -609,44 +611,27 @@ if __name__ == "__main__":
     totmeasest = np.sum(nmeasperchip)
     usedb = False
     if totmeasest>500000: usedb=True
-    usedb = True
-    print('KLUDGE: HARD-CODED TO USE DATABASE')
     dbfile = None
     if usedb:
         dbfile = tmproot+str(pix)+'_combine.db'
         print('Using temporary database file = '+dbfile)
-        #if os.path.exists(dbfile): os.remove(dbfile)
+        if os.path.exists(dbfile): os.remove(dbfile)
 
     # Load the measurement catalog
     #  this will contain excess rows at the end
-    #cat, catcount, allmeta = loadmeas(metafiles,buffdict,dbfile=dbfile)
-    #ncat = catcount
-    cat = np.array([])
-    catcount = 105390
+    cat, catcount, allmeta = loadmeas(metafiles,buffdict,dbfile=dbfile)
     ncat = catcount
     print(str(ncat)+' measurements loaded')
 
     if usedb:
-        # Index MEASID in table
-        #createindexdb(dbfile,'measid')
         # Get MEASID, RA, DEC from database
         cat = getdbcoords(dbfile)
 
     # Spatially cluster the measurements with DBSCAN
-    # coordinates of measurement
-    print('Spatial clustering with DBSCAN')
-    objstr = clusterdata(cat,ncat,dbfile=dbfile)
-
-    #X = np.column_stack((np.array(cat['RA'][0:ncat]),np.array(cat['DEC'][0:ncat])))
-    ## Compute DBSCAN on all measurements
-    #dbs = DBSCAN(eps=0.5/3600, min_samples=1).fit(X)
-    ## Cluster labels are integers and in ascending order, but there are gaps
-    #objlabels = dbs.labels_
-    #labelindex = dln.create_index(objlabels)
-    #meascumcount = np.cumsum(labelindex['num'])
-    #nobj = dln.size(labelindex['value'])
-    meascumcount = np.cumsum(objstr['NMEAS'])
+    #   this might also resort CAT
+    objstr, cat = clusterdata(cat,ncat,dbfile=dbfile)
     nobj = dln.size(objstr)
+    meascumcount = np.cumsum(objstr['NMEAS'])
     print(str(nobj)+' unique objects clustered within 0.5 arcsec')
 
     # Initialize the OBJ structured arra
@@ -684,14 +669,12 @@ if __name__ == "__main__":
     ngroup = -1
     grpcount = 0
     maxmeasload = 50000
-    #for i,lab in enumerate(labelindex['value']):
     for i,lab in enumerate(objstr['OBJLABEL']):
         if (i % 1000)==0: print(i)
 
         # Get meas data for this object
         if usedb is False:
             oindx = np.arange(objstr[i]['LO'],objstr[i]['HI'])
-            #oindx = labelindex['index'][labelindex['lo'][i]:labelindex['hi'][i]+1]
             cat1_orig = cat[oindx]
             ncat1 = len(cat1_orig)
             # Upgrade precisions of catalog
@@ -703,7 +686,6 @@ if __name__ == "__main__":
             # Get next group of object measurements
             if grpcount>=ngroup:
                 # Use maxmeaslead to figure out how many objects we can load
-                #import pdb; pdb.set_trace()    
                 if i==0:
                     ngroup = np.max(np.where(meascumcount[i:]<=maxmeasload)[0])+1
                 else:
@@ -963,4 +945,4 @@ if __name__ == "__main__":
 
     if dbfile is not None:
         print('Deleting temporary database file '+dbfile)
-        #os.remove(dbfile)
+        os.remove(dbfile)
