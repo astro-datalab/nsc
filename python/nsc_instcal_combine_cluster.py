@@ -239,14 +239,14 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
         for j in range(len(chmeta)):
             # Check that this chip was astrometrically calibrated
             #   and falls in to HEALPix region
-            if chmeta[j]['ngaiamatch'] == 0:
+            if chmeta['ngaiamatch'][j] == 0:
                 if verbose: print('This chip was not astrometrically calibrate')
 
             # Check that this overlaps the healpix region
             inside = True
             if buffdict is not None:
-                vra = chmeta[j]['vra']
-                vdec = chmeta[j]['vdec']
+                vra = chmeta['vra'][j]
+                vdec = chmeta['vdec'][j]
                 if (np.max(vra)-np.min(vra)) > 100:    # deal with RA=0 wrapround
                     bd,nbd = dln.where(vra>180)
                     if bbd>0: vra[bd] -= 360
@@ -255,12 +255,12 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                     inside = False
 
             # Check if the chip-level file exists
-            chfile = fdir+'/'+fbase+'_'+str(chmeta[j]['ccdnum'])+'_meas.fits'
+            chfile = fdir+'/'+fbase+'_'+str(chmeta['ccdnum'][j])+'_meas.fits'
             if os.path.exists(chfile) is False:
                 print(chfile+' NOT FOUND')
 
             # Load this one
-            if (os.path.exists(chfile) is True) and (inside is True) and (chmeta[j]['ngaiamatch']>1):
+            if (os.path.exists(chfile) is True) and (inside is True) and (chmeta['ngaiamatch'][j]>1):
                 # Load the chip-level catalog
                 cat1 = fits.getdata(chfile,1)
                 ncat1 = len(cat1)
@@ -279,11 +279,14 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                 if buffdict is not None:
                     lon, lat = coords.rotsphcen(cat1['ra'],cat1['dec'],buffdict['cenra'],buffdict['cendec'],gnomic=True)
                     ind_out, ind_in = dln.roi_cut(buffdict['lon'],buffdict['lat'],lon,lat)
-                    nmatch = len(ind_in)
+                    nmatch = dln.size(ind_in)
                     # Only want source inside this pixel
                     if nmatch>0:
                         cat1 = cat1[ind_in]
-                    ncat1 = len(cat1)
+                        ncat1 = len(cat1)
+                    else:
+                        cat1 = None
+                        ncat1 = 0
                     #if verbose: print('  '+str(nmatch)+' sources are inside this pixel')
 
                 # Combine the catalogs
@@ -307,8 +310,7 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                     else:
                         writecat2db(cat1,dbfile)
 
-                    if verbose: print('  chip '+str(chmeta[j]['ccdnum'])+'  '+str(ncat1)+' measurements')
-
+                    if verbose: print('  chip '+str(chmeta['ccdnum'][j])+'  '+str(ncat1)+' measurements')
 
                     catcount += ncat1
                     expcatcount += ncat1
@@ -613,7 +615,6 @@ if __name__ == "__main__":
     #  this will contain excess rows at the end
     cat, catcount, allmeta = loadmeas(metafiles,buffdict,dbfile=dbfile)
     ncat = catcount
-    print(str(ncat)+' measurements loaded')
 
     if usedb:
         # Get MEASID, RA, DEC from database
