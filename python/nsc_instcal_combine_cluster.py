@@ -23,6 +23,7 @@ import sqlite3
 
 def writecat2db(cat,dbfile):
     """ Write a catalog to the database """
+    ncat = dln.size(cat)
     sqlite3.register_adapter(np.int16, int)
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
@@ -37,7 +38,7 @@ def writecat2db(cat,dbfile):
         c.execute('''CREATE TABLE meas(measid TEXT, objlabel INTEGER, exposure TEXT, ccdnum INTEGER, filter TEXT, mjd REAL,
                      ra REAL, raerr REAL, dec REAL, decerr REAL, mag_auto REAL, magerr_auto REAL, asemi REAL, asemierr REAL,
                      bsemi REAL, bsemierr REAL, theta REAL, thetaerr REAL, fwhm REAL, flags INTEGER, class_star REAL)''')
-    data = list(zip(cat['measid'],cat['objectid'],cat['exposure'],cat['ccdnum'],cat['filter'],cat['mjd'],cat['ra'],
+    data = list(zip(cat['measid'],np.zeros(ncat,int)-1,cat['exposure'],cat['ccdnum'],cat['filter'],cat['mjd'],cat['ra'],
                     cat['raerr'],cat['dec'],cat['decerr'],cat['mag_auto'],cat['magerr_auto'],cat['asemi'],cat['asemierr'],
                     cat['bsemi'],cat['bsemierr'],cat['theta'],cat['thetaerr'],cat['fwhm'],cat['flags'],cat['class_star']))
     c.executemany('''INSERT INTO meas(measid,objlabel,exposure,ccdnum,filter,mjd,ra,raerr,dec,decerr,mag_auto,magerr_auto,
@@ -58,33 +59,42 @@ def getdbcoords(dbfile):
     #db.row_factory = sqlite3.Row
     c = db.cursor()
     ##c.row_factory = sqlite3.Row
-    c.execute('''SELECT measid,ra,dec FROM meas''')
+    c.execute('''SELECT rowid,measid,ra,dec FROM meas''')
     data = c.fetchall()
     db.close()
 
     # Convert to nump structured array
-    dtype = np.dtype([('MEASID',np.str,30),('RA',np.float64),('DEC',np.float64)])
+    dtype = np.dtype([('ROWID',int),('MEASID',np.str,30),('RA',np.float64),('DEC',np.float64)])
     cat = np.zeros(len(data),dtype=dtype)
     cat[...] = data
     del data
 
     return cat
 
-def indexdb(dbfile,col='measid',unique=True):
+def createindexdb(dbfile,col='measid',unique=True):
     """ Index a column in the database """
-    print('Indexing '+col)
     t0 = time.time()
     db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
     c = db.cursor()
+    index_name = 'idx_'+col+'_meas'
+    # Check if the index exists first
+    c.execute('select name from sqlite_master')
+    d = c.fetchall()
+    for nn in d:
+        if nn[0]==index_name:
+            print(index_name+' already exists')
+            return
+    # Create the index
+    print('Indexing '+col)
     if unique:
-        c.execute('CREATE UNIQUE INDEX idx_'+col+'_meas ON meas('+col+')')
+        c.execute('CREATE UNIQUE INDEX '+index_name+' ON meas('+col+')')
     else:
-        c.execute('CREATE INDEX idx_'+col+'_meas ON meas('+col+')')
+        c.execute('CREATE INDEX '+index_name+' ON meas('+col+')')
     data = c.fetchall()
     db.close()
     print('indexing done after '+str(time.time()-t0)+' sec')
 
-def insertobjlabelsdb(cat,labels,dbfile):
+def insertobjlabelsdb(measid,labels,dbfile):
     """ Insert objectlabel values into the database """
     print('Inserting object labels')
     t0 = time.time()
@@ -94,13 +104,13 @@ def insertobjlabelsdb(cat,labels,dbfile):
     sqlite3.register_adapter(np.float32, float)
     db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
     c = db.cursor()
-    data = list(zip(labels,cat['MEASID']))
+    data = list(zip(labels,measid))
     c.executemany('''UPDATE meas SET objlabel=? WHERE measid=?''', data) 
     db.commit() 
     db.close()
     print('inserting done after '+str(time.time()-t0)+' sec')
 
-def getobjmeasdb(dbfile,objlabel):
+def getdatadb(dbfile,table='meas',cols='*',objlabel=None,rar=None,decr=None):
     """ Get measurements for an object(s) from the database """
     sqlite3.register_adapter(np.int16, int)
     sqlite3.register_adapter(np.int64, int)
@@ -110,12 +120,41 @@ def getobjmeasdb(dbfile,objlabel):
     #    print('Starting the db connection')
     db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
     cur = db.cursor()
-    if len(objlabel)==2:
-        cur.execute('SELECT * FROM meas WHERE objlabel>='+str(objlabel[0])+' AND objlabel<='+str(objlabel[1]))
-    else:
-        cur.execute('SELECT * FROM meas WHERE objlabel='+str(objlabel))
+    cmd = 'SELECT '+cols+' FROM '+table
+    # OBJLABEL constraints
+    if objlabel is not None:
+        if cmd.find('WHERE') == -1:
+            cmd += ' WHERE '
+        else:
+            cmd += ' AND '
+        if len(objlabel)==2:
+            cmd += 'objlabel>='+str(objlabel[0])+' AND objlabel<='+str(objlabel[1])
+        else:
+            cmd += 'objlabel='+str(objlabel)
+    # RA constraints
+    if rar is not None:
+        if cmd.find('WHERE') == -1:
+            cmd += ' WHERE '
+        else:
+            cmd += ' AND '
+        cmd += 'ra>='+str(rar[0])+' AND ra<'+str(rar[1])
+    # DEC constraints
+    if decr is not None:
+        if cmd.find('WHERE') == -1:
+            cmd += ' WHERE '
+        else:
+            cmd += ' AND '
+        cmd += 'dec>='+str(decr[0])+' AND dec<'+str(decr[1])
+
+    # Execute the select command
+    #print('CMD = '+cmd)
+    cur.execute(cmd)
     data = cur.fetchall()
     db.close()
+
+    # No results
+    if len(data)==0:
+        return np.array([])
 
     # Convert to nump structured array
     dtype_hicat = np.dtype([('MEASID',np.str,30),('OBJLABEL',int),('EXPOSURE',np.str,40),('CCDNUM',int),('FILTER',np.str,3),
@@ -297,7 +336,141 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
     print('loading measurements done after '+str(time.time()-t0))
 
     return cat, catcount, allmeta
+
+def clusterdata(cat,ncat,dbfile=None):
+    """ Perform spatial clustering """
     
+    # Divide into subregions
+    print('Dividing clustering problem into subregions')
+    #if ncat>1000000:
+    print('KLUDGE: HARD-CODED TO SUBDIVIDE!!!')
+    if ncat>1:
+        # Index RA and DEC
+        createindexdb(dbfile,'ra',unique=False)
+        createindexdb(dbfile,'dec',unique=False)
+        # Subdivide
+        nsub = np.ceil(ncat/100000)
+        print('KLUDGE: HARD-CODED NSUB')
+        nsub = 4
+        print(str(nsub)+' sub regions')
+        nx = int(np.ceil(np.sqrt(nsub)))  # divide RA and DEC intro nx regions
+        xr = [np.min(cat['RA'])-0.001,np.max(cat['RA'])+0.001]  # extend slightly
+        print('RA: '+str(xr[0])+' '+str(xr[1]))
+        dx = (xr[1]-xr[0])/nx
+        if (xr[1]-xr[0])>180:   # across RA=0
+            dx = (xr[0]-(xr[1]-360))/nx
+        yr = [np.min(cat['DEC'])-0.001,np.max(cat['DEC'])+0.001]  # extend slightly
+        print('DEC: '+str(yr[0])+' '+str(yr[1]))
+        dy = (yr[1]-yr[0])/nx
+        buff = 10./3600.0  # buffer in arc seconds
+        objstr = np.zeros(100000,dtype=np.dtype([('OBJLABEL',int),('RA',float),('DEC',float),('NMEAS',int)]))
+        nobjstr = len(objstr)
+        # Loop over sub regions
+        lastobjlabel = -1
+        objcount = 0
+        # RA loop
+        for r in range(nx):
+            r0 = xr[0]+r*dx-buff
+            r1 = xr[0]+(r+1)*dx+buff
+            # DEC loop
+            for d in range(nx):
+                d0 = yr[0]+d*dy
+                d1 = yr[0]+(d+1)*dy
+                cat1 = getdatadb(dbfile,rar=[r0-buff,r1+buff],decr=[d0-buff,d1+buff])
+                ncat1 = len(cat1)
+                print(str(r0)+' '+str(r1))
+                print(str(d0)+' '+str(d1))
+                print(str(r+1)+' '+str(d+1)+'  '+str(ncat1)+' measurements')
+                # Some measurements to work with
+                if ncat1>0:
+                    # Run DBSCAN
+                    X1 = np.column_stack((np.array(cat1['RA']),np.array(cat1['DEC'])))
+                    dbs1 = DBSCAN(eps=0.5/3600, min_samples=1).fit(X1)
+                    # Cluster labels are integers and in ascending order, but there are gaps
+                    objlabels1 = dbs1.labels_
+                    objlabels1 += lastobjlabel+1                 # add offset to labels
+                    labelindex1 = dln.create_index(objlabels1)   # create inex
+                    nobj1 = len(labelindex1['value'])
+                    print(str(ncat1)+' measurements for '+str(nobj1)+' objects')
+                    # Compute mean positions
+                    obj1 = np.zeros(nobj1,dtype=np.dtype([('OBJLABEL',int),('RA',float),('DEC',float),('NMEAS',int)]))
+                    obj1['OBJLABEL'] = labelindex1['value']
+                    obj1['NMEAS'] = labelindex1['num']
+                    for k in range(nobj1):
+                        indx = labelindex1['index'][labelindex1['lo'][k]:labelindex1['hi'][k]+1]
+                        wt_ra = 1.0/cat1['RAERR'][indx]**2
+                        wt_dec = 1.0/cat1['DECERR'][indx]**2
+                        obj1['RA'][k] = np.sum(cat1['RA'][indx]*wt_ra)/np.sum(wt_ra)
+                        obj1['DEC'][k] = np.sum(cat1['DEC'][indx]*wt_dec)/np.sum(wt_dec)
+                    # Only keep objects (and measurements) inside the box region
+                    #  keep objects on LOWER boundary in RA/DEC
+                    gdobj, ngdobj = dln.where((obj1['RA']>=r0) & (obj1['RA']<r1) & (obj1['DEC']>=d0) & (obj1['DEC']<d1))
+                    print(str(ngdobj)+' objects all inside the boundary')
+                    # Some objects in the region
+                    if ngdobj>0:
+                        obj1 = obj1[gdobj]
+                        nobj1 = ngdobj
+                        # Arrays of measid and objlabels to add
+                        add_measid1 = np.zeros(np.sum(labelindex1['num'][gdobj]),(np.str,30))
+                        add_objlabels1 = np.zeros(np.sum(labelindex1['num'][gdobj]),int)
+                        cnt1 = 0
+                        for k in range(ngdobj):
+                            indx = labelindex1['index'][labelindex1['lo'][gdobj[k]]:labelindex1['hi'][gdobj[k]]+1]
+                            nmeas1 = labelindex1['num'][gdobj[k]]
+                            add_measid1[cnt1:cnt1+nmeas1] = cat1['MEASID'][indx]
+                            add_objlabels1[cnt1:cnt1+nmeas1] = labelindex1['value'][gdobj[k]]
+                            cnt1 += nmeas1
+
+                        # Add the object labels into the database
+                        insertobjlabelsdb(add_measid1,add_objlabels1,dbfile)
+
+                        # Add OBJ1 to OBJSTR
+                        if (objcount+nobj1>nobjstr):    # add new elements
+                            objstr = add_elements(objstr,np.max([nobj1,100000]))
+                            nobjstr = len(objstr)
+                        objstr[objcount:objcount+nobj1] = obj1
+                        objcount += nobj1
+
+                        # Keep track of last label
+                        lastobjlabel = np.max(obj1['OBJLABEL'])
+
+        # Trim extra elements
+        if nobjstr>objcount:
+            objstr = objstr[0:objcount]
+
+        import pdb; pdb.set_trace()
+
+    # No subdividing
+    else:
+        # Spatially cluster the measurements with DBSCAN
+        # coordinates of measurement
+        print('Spatial clustering with DBSCAN')
+        X = np.column_stack((np.array(cat['RA'][0:ncat]),np.array(cat['DEC'][0:ncat])))
+        # Compute DBSCAN on all measurements
+        dbs = DBSCAN(eps=0.5/3600, min_samples=1).fit(X)
+        # Cluster labels are integers and in ascending order, but there are gaps
+        objlabels = dbs.labels_
+        labelindex = dln.create_index(objlabels)   # create inex
+        nobj = len(labelindex['value'])
+        # Make structure
+        objstr = np.zeros(nobj,dtype=np.dtype([('OBJLABEL',int),('NMEAS',int),('LO',int),('HI',int)]))
+        objstr['OBJLABEL'] = labelindex['value']
+        objstr['NMEAS'] = labelindex['num']
+        nobjstr = len(objstr)
+        # Insert object label into database
+        insertobjlabelsdb(cat['MEASID'],objlabels,dbfile)
+        # Resort CAT, and use index LO/HI
+        cat = cat[labelindex['index']]
+        objstr['LO'] = labelindex['LO']
+        objstr['HI'] = labelindex['HI']
+
+    print(str(len(objstr))+' final objects')
+
+    # Index objlabel in database
+    createindexdb(dbfile,'objlabel',unique=False)
+
+    return objstr
+
 
 # Combine data for one NSC healpix region
 if __name__ == "__main__":
@@ -436,43 +609,46 @@ if __name__ == "__main__":
     totmeasest = np.sum(nmeasperchip)
     usedb = False
     if totmeasest>500000: usedb=True
+    usedb = True
+    print('KLUDGE: HARD-CODED TO USE DATABASE')
     dbfile = None
     if usedb:
         dbfile = tmproot+str(pix)+'_combine.db'
         print('Using temporary database file = '+dbfile)
-        if os.path.exists(dbfile): os.remove(dbfile)
+        #if os.path.exists(dbfile): os.remove(dbfile)
 
     # Load the measurement catalog
     #  this will contain excess rows at the end
-    cat, catcount, allmeta = loadmeas(metafiles,buffdict,dbfile=dbfile)
+    #cat, catcount, allmeta = loadmeas(metafiles,buffdict,dbfile=dbfile)
+    #ncat = catcount
+    cat = np.array([])
+    catcount = 105390
     ncat = catcount
     print(str(ncat)+' measurements loaded')
 
     if usedb:
         # Index MEASID in table
-        indexdb(dbfile,'measid')
+        createindexdb(dbfile,'measid')
         # Get MEASID, RA, DEC from database
         cat = getdbcoords(dbfile)
 
     # Spatially cluster the measurements with DBSCAN
     # coordinates of measurement
     print('Spatial clustering with DBSCAN')
-    X = np.column_stack((np.array(cat['RA'][0:ncat]),np.array(cat['DEC'][0:ncat])))
-    # Compute DBSCAN on all measurements
-    dbs = DBSCAN(eps=0.5/3600, min_samples=1).fit(X)
-    # Cluster labels are integers and in ascending order, but there are gaps
-    objlabels = dbs.labels_
-    labelindex = dln.create_index(objlabels)
-    meascumcount = np.cumsum(labelindex['num'])
-    nobj = dln.size(labelindex['value'])
+    objstr = clusterdata(cat,ncat,dbfile=dbfile)
+    import pdb; pdb.set_trace()    
+
+    #X = np.column_stack((np.array(cat['RA'][0:ncat]),np.array(cat['DEC'][0:ncat])))
+    ## Compute DBSCAN on all measurements
+    #dbs = DBSCAN(eps=0.5/3600, min_samples=1).fit(X)
+    ## Cluster labels are integers and in ascending order, but there are gaps
+    #objlabels = dbs.labels_
+    #labelindex = dln.create_index(objlabels)
+    #meascumcount = np.cumsum(labelindex['num'])
+    #nobj = dln.size(labelindex['value'])
+    meascumcount = np.cumsum(objstr['NMEAS'])
+    nobj = dln.size(objstr)
     print(str(nobj)+' unique objects clustered within 0.5 arcsec')
-
-    if usedb:
-        # Insert object label into database
-        insertobjlabelsdb(cat,objlabels,dbfile)
-        # Index objlabel in database
-        indexdb(dbfile,'objlabel',unique=False)
-
 
     # Initialize the OBJ structured arra
     obj = np.zeros(nobj,dtype=dtype_obj)
@@ -509,12 +685,14 @@ if __name__ == "__main__":
     ngroup = -1
     grpcount = 0
     maxmeasload = 50000
-    for i,lab in enumerate(labelindex['value']):
+    #for i,lab in enumerate(labelindex['value']):
+    for i,lab in enumerate(objstr['OBJLABEL']):
         if (i % 1000)==0: print(i)
 
         # Get meas data for this object
         if dbfile is None:
-            oindx = labelindex['index'][labelindex['lo'][i]:labelindex['hi'][i]+1]
+            oindx = np.arange(objstr[i]['LO'],objstr[i]['HI'])
+            #oindx = labelindex['index'][labelindex['lo'][i]:labelindex['hi'][i]+1]
             cat1_orig = cat[oindx]
             ncat1 = len(cat1_orig)
             # Upgrade precisions of catalog
@@ -534,8 +712,9 @@ if __name__ == "__main__":
                     ngroup = np.max(np.where((meascumcount[i:]-meascumcount[i-1])<=maxmeasload)[0])+1
                 ngroup = np.max([1,ngroup])   # need to load at least 1
                 lab0 = lab
-                lab1 = labelindex['value'][np.min([i+ngroup-1,nobj-1])]
-                grpcat = getobjmeasdb(dbfile,[lab0,lab1])
+                lab1 = objstr['OBJLABEL'][np.min([i+ngroup-1,nobj-1])]
+                #lab1 = labelindex['value'][np.min([i+ngroup-1,nobj-1])]
+                grpcat = getdatadb(dbfile,[lab0,lab1])
                 grpindex = dln.create_index(grpcat['OBJLABEL'])                
                 #ngroup = len(grpindex['value'])
                 grpcount = 0
