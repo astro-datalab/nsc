@@ -55,11 +55,7 @@ def getdbcoords(dbfile):
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
     db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    #db = sqlite3.connect('test.db')
-    #db.text_factory = lambda x: str(x, 'latin1')
-    #db.row_factory = sqlite3.Row
     c = db.cursor()
-    ##c.row_factory = sqlite3.Row
     c.execute('''SELECT rowid,ra,dec FROM meas''')
     data = c.fetchall()
     db.close()
@@ -117,8 +113,6 @@ def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=Non
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    #if cur is None:
-    #    print('Starting the db connection')
     db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
     cur = db.cursor()
     cmd = 'SELECT '+cols+' FROM '+table
@@ -483,8 +477,6 @@ if __name__ == "__main__":
     parser.add_argument('-r','--redo', action='store_true', help='Redo this HEALPIX')
     parser.add_argument('-v','--verbose', action='store_true', help='Verbose output')
     parser.add_argument('--outdir', type=str, default='', help='Output directory')
-    #parser.add_argument('--filesexist', type=float, default=0.2, help='Time to wait between checking the status of running jobs')
-    #parser.add_argument('--pixfiles', type=str, default=False, help='IDL program')
     args = parser.parse_args()
 
     t0 = time.time()
@@ -674,12 +666,14 @@ if __name__ == "__main__":
 
         # Get meas data for this object
         if usedb is False:
-            oindx = np.arange(objstr[i]['LO'],objstr[i]['HI'])
+            oindx = np.arange(objstr['LO'][i],objstr['HI'][i])  # this fails if start,stop are the same
+            if objstr['NMEAS'][i]==1: oindx=np.atleast_1d(objstr['LO'][i])
+            ncat1 = dln.size(oindx)
             cat1_orig = cat[oindx]
-            ncat1 = len(cat1_orig)
             # Upgrade precisions of catalog
             cat1 = np.zeros(ncat1,dtype=dtype_hicat)
-            for n in dtype_hicat.names: cat1[n] = cat1_orig[n]
+            cat1[...] = cat1_orig   # stuff in the data
+            #for n in dtype_hicat.names: cat1[n] = cat1_orig[n]
             del(cat1_orig)
         # Get from the database
         else:            
@@ -700,7 +694,7 @@ if __name__ == "__main__":
                 grpcount = 0
             # Get the measurement data for this object
             gindx = grpindex['index'][grpindex['lo'][grpcount]:grpindex['hi'][grpcount]+1]
-            cat1 = grpcat[gindx]
+            cat1 = np.atleast_1d(grpcat[gindx])
             ncat1 = len(cat1)
             grpcount += 1
             oindx = np.arange(ncat1)+meascount
