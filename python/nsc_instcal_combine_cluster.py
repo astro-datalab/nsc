@@ -162,6 +162,20 @@ def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=Non
 
     return cat
 
+def getradecrangedb(dbfile):
+    """ Get RA/DEC ranges from database """
+    sqlite3.register_adapter(np.int16, int)
+    sqlite3.register_adapter(np.int64, int)
+    sqlite3.register_adapter(np.float64, float)
+    sqlite3.register_adapter(np.float32, float)
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = db.cursor()
+    c.execute('''SELECT MIN(ra),MAX(ra),MIN(dec),MAX(dec) FROM meas''')
+    data = c.fetchall()
+    db.close()
+
+    return data[0]
+
 def add_elements(cat,nnew=300000):
     """ Add more elements to a catalog"""
     ncat = len(cat)
@@ -334,10 +348,9 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
 
     return cat, catcount, allmeta
 
-def clusterdata(cat,dbfile=None):
+def clusterdata(cat,ncat,dbfile=None):
     """ Perform spatial clustering """
 
-    ncat = dln.size(cat)
     print('Spatial clustering with DBSCAN')    
     # Divide into subregions
     if (ncat>1000000) & (dbfile is not None):
@@ -349,12 +362,14 @@ def clusterdata(cat,dbfile=None):
         nsub = np.ceil(ncat/100000)
         print(str(nsub)+' sub regions')
         nx = int(np.ceil(np.sqrt(nsub)))  # divide RA and DEC intro nx regions
-        xr = [np.min(cat['RA'])-0.001,np.max(cat['RA'])+0.001]  # extend slightly
+        # Get RA/DEC ranges from the database
+        ranges = getradecrangedb(dbfile)  # [min(ra),max(ra),min(dec),max(dec)]
+        xr = [ranges[0]-0.001, ranges[1]+0.001]  # extend slightly 
         print('RA: '+str(xr[0])+' '+str(xr[1]))
         dx = (xr[1]-xr[0])/nx
         if (xr[1]-xr[0])>180:   # across RA=0
             dx = (xr[0]-(xr[1]-360))/nx
-        yr = [np.min(cat['DEC'])-0.001,np.max(cat['DEC'])+0.001]  # extend slightly
+        yr = [ranges[2]-0.001, ranges[3]+0.001]  # extend slightly 
         mndec = np.mean(yr)
         print('DEC: '+str(yr[0])+' '+str(yr[1]))
         dy = (yr[1]-yr[0])/nx
@@ -624,7 +639,7 @@ if __name__ == "__main__":
 
     # Spatially cluster the measurements with DBSCAN
     #   this might also resort CAT
-    objstr, cat = clusterdata(cat,dbfile=dbfile)
+    objstr, cat = clusterdata(cat,ncat,dbfile=dbfile)
     nobj = dln.size(objstr)
     meascumcount = np.cumsum(objstr['NMEAS'])
     print(str(nobj)+' unique objects clustered within 0.5 arcsec')
