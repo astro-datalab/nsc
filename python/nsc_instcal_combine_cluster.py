@@ -9,7 +9,7 @@ from astropy.utils.exceptions import AstropyWarning
 from astropy.table import Table, vstack, Column
 from astropy.time import Time
 import healpy as hp
-from dlnpyutils import utils as dln, coords
+from dlnpyutils import utils as dln, coords, bindata
 import subprocess
 import time
 from argparse import ArgumentParser
@@ -613,7 +613,7 @@ if __name__ == "__main__":
                           ('ndetvr',int),('nphotvr',int),('vrmag',float),('vrrms',float),('vrerr',float),('vrasemi',float),('vrbsemi',float),('vrtheta',float),
                           ('asemi',float),('asemierr',float),('bsemi',float),('bsemierr',float),('theta',float),('thetaerr',float),
                           ('fwhm',float),('flags',int),('class_star',float),('ebv',float),('rmsvar',float),('madvar',float),('iqrvar',float),('etavar',float),
-                          ('jvar',float),('kvar',float),('avgvar',float),('chivar',float),('romsvar',float)])
+                          ('jvar',float),('kvar',float),('avgrelvar',float),('chivar',float),('romsvar',float),('variable',int),('nsigvar',float)])
 
     # Decide whether to load everything into RAM or use temporary database
     metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
@@ -644,13 +644,14 @@ if __name__ == "__main__":
     meascumcount = np.cumsum(objstr['NMEAS'])
     print(str(nobj)+' unique objects clustered within 0.5 arcsec')
 
-    # Initialize the OBJ structured arra
+    # Initialize the OBJ structured array
     obj = np.zeros(nobj,dtype=dtype_obj)
     obj['objectid'] = dln.strjoin( str(pix)+'.', ((np.arange(nobj)+1).astype(np.str)) )
     obj['pix'] = pix
     # all bad to start
     for f in ['pmra','pmraerr','pmdec','pmdecerr','asemi','bsemi','theta','asemierr',
-              'bsemierr','thetaerr','fwhm','class_star','jvar','kvar','avgvar','chivar']: obj[f]=np.nan
+              'bsemierr','thetaerr','fwhm','class_star','rmsvar','madvar','iqrvar',
+              'etavar','jvar','kvar','avgrelvar','chivar','romsvar']: obj[f]=np.nan
     for f in ['u','g','r','i','z','y','vr']:
         obj[f+'mag'] = 99.99
         obj[f+'err'] = 9.99
@@ -658,6 +659,8 @@ if __name__ == "__main__":
         obj[f+'asemi'] = np.nan
         obj[f+'bsemi'] = np.nan
         obj[f+'theta'] = np.nan
+    obj['variable'] = 0
+    obj['nsigvar'] = np.nan
     idstr = np.zeros(ncat,dtype=dtype_idstr)
 
     # Higher precision catalog
@@ -679,6 +682,7 @@ if __name__ == "__main__":
     ngroup = -1
     grpcount = 0
     maxmeasload = 50000
+    fidmag = np.zeros(nobj,float)+np.nan  # fiducial magnitude
     for i,lab in enumerate(objstr['OBJLABEL']):
         if (i % 1000)==0: print(i)
 
@@ -832,23 +836,29 @@ if __name__ == "__main__":
             relresid2 = relresid[gdrelresid]
             pk = relresid2**2-1
             jvar = np.sum( np.sign(pk)*np.sqrt(np.abs(pk)) )/ngdrelresid
-            avgvar = np.mean(relresid2)    # average of relative residuals
+            avgrelvar = np.mean(np.abs(relresid2))    # average of absolute relative residuals
             chivar = np.sqrt(np.sum(relresid2**2))/ngdrelresid
             kdenom = np.sqrt(np.sum(relresid2**2)/ngdrelresid)
             if kdenom!=0:
                 kvar = (np.sum(np.abs(relresid2))/ngdrelresid) / kdenom
             else:
-                kvar = 0.0
+                kvar = np.nan
             # RoMS
             romsvar = np.sum(np.abs(relresid2))/(ngdrelresid-1)
             obj['jvar'][i] = jvar
             obj['kvar'][i] = kvar
-            obj['avgvar'][i] = avgvar
+            obj['avgrelvar'][i] = avgrelvar
             obj['chivar'][i] = chivar
             obj['romsvar'][i] = romsvar
             #if chivar>50: import pdb; pdb.set_trace()
 
-        # SELECT VARIABLES!!
+        # Fiducial magnitude, used to select variables below
+        #  order of priority: r,g,i,z,Y,VR,u
+        if ngph>0:
+            magarr = np.zeros(7,float)
+            for ii,nn in enumerate(['rmag','gmag','imag','zmag','ymag','vrmag','umag']): magarr[ii]=obj[nn][i]
+            gfid,ngfid = dln.where(magarr<50)
+            if ngfid>0: fidmag[i]=magarr[gfid[0]]
 
         # Make NPHOT from NPHOTX
         obj['nphot'][i] = obj['nphotu'][i]+obj['nphotg'][i]+obj['nphotr'][i]+obj['nphoti'][i]+obj['nphotz'][i]+obj['nphoty'][i]+obj['nphotvr'][i]
@@ -863,6 +873,41 @@ if __name__ == "__main__":
         obj['fwhm'][i] = np.mean(cat1['FWHM'])
         obj['class_star'][i] = np.mean(cat1['CLASS_STAR'])
         obj['flags'][i] = np.bitwise_or.reduce(cat1['FLAGS'])  # OR combine
+
+    # Select Variables
+    #  1) Construct fiducial magnitude (done in loop above)
+    #  2) Construct median VAR and sigma VAR versus magnitude
+    #  3) Find objects that Nsigma above the median VAR line
+    si = np.argsort(fidmag)   # NaNs are at end
+    nbins = np.ceil(nobj/100)
+    nbins = np.max([2,nbins])
+    varcol = 'madvar'
+    xx = np.arange(nobj)
+    fidmagmed, bin_edges1, binnumber1 = bindata.binned_statistic(xx,fidmag[si],statistic='median',bins=nbins)
+    varmed, bin_edges2, binnumber2 = bindata.binned_statistic(xx,obj[varcol][si],statistic='median',bins=nbins)
+    varsig, bin_edges3, binnumber3 = bindata.binned_statistic(xx,obj[varcol][si],statistic='mad',bins=nbins)
+    # Smooth med and sigma
+    smvarmed = dln.gsmooth(varmed,10)
+    smvarsig = dln.gsmooth(varmed,10)
+    # Deal with NaNs in the med/sig values
+    # Interpolate to all the objects
+    fvarmed = interp1d(fidmagmed,smvarmed,kind='linear',bounds_error=False,
+                       fill_value=(np.median(smvarmed),np.median(smvarmed)),assume_sorted=True)
+    objvarmed = fvarmed(fidmag)
+    fvarsig = interp1d(fidmagmed,smvarsig,kind='linear',bounds_error=False,
+                       fill_value=(np.median(smvarsig),np.median(smvarsig)),assume_sorted=True)
+    objvarsig = fvarsig(fidmag)
+    # Objects with bad fidmag
+    # Detect positive outliers
+    nsigvarthresh = 5.0
+    nsigvar = (obj[varcol]-objvarmed)/objvarsig
+    isvar,nisvar = dln.where(nsigdiff>nsigvar)
+    if nisvar>0:
+        obj['variable'][isvar] = 1
+        obj['nsigvar'][isvar] = nsigvar[isvar]
+
+    import pdb; pdb.set_trace()
+
 
 
     # Add E(B-V)
