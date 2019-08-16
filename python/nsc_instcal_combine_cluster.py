@@ -392,7 +392,7 @@ def clusterdata(cat,ncat,dbfile=None):
             for d in range(nx):
                 d0 = yr[0]+d*dy
                 d1 = yr[0]+(d+1)*dy
-                print(str(r+1)+' '+str(d+1)(
+                print(str(r+1)+' '+str(d+1))
                 print('RA: '+str(r0)+' '+str(r1)+'  DEC: '+str(d0)+' '+str(d1))
                 #import pdb; pdb.set_trace()
                 cat1 = getdatadb(dbfile,rar=[r0-rabuff,r1+rabuff],decr=[d0-buff,d1+buff],verbose=True)
@@ -617,19 +617,28 @@ if __name__ == "__main__":
     dtype_idstr = np.dtype([('measid',np.str,200),('exposure',np.str,200),('objectid',np.str,200),('objectindex',int)])
 
     # OBJ schema
-    dtype_obj = np.dtype([('objectid',np.str,100),('pix',int),('ra',np.float64),('dec',np.float64),('raerr',float),('decerr',float),
-                          ('pmra',float),('pmdec',float),('pmraerr',float),('pmdecerr',float),('mjd',np.float64),
-                          ('deltamjd',float),('ndet',int),('nphot',int),
-                          ('ndetu',int),('nphotu',int),('umag',float),('urms',float),('uerr',float),('uasemi',float),('ubsemi',float),('utheta',float),
-                          ('ndetg',int),('nphotg',int),('gmag',float),('grms',float),('gerr',float),('gasemi',float),('gbsemi',float),('gtheta',float),
-                          ('ndetr',int),('nphotr',int),('rmag',float),('rrms',float),('rerr',float),('rasemi',float),('rbsemi',float),('rtheta',float),
-                          ('ndeti',int),('nphoti',int),('imag',float),('irms',float),('ierr',float),('iasemi',float),('ibsemi',float),('itheta',float),
-                          ('ndetz',int),('nphotz',int),('zmag',float),('zrms',float),('zerr',float),('zasemi',float),('zbsemi',float),('ztheta',float),
-                          ('ndety',int),('nphoty',int),('ymag',float),('yrms',float),('yerr',float),('yasemi',float),('ybsemi',float),('ytheta',float),
-                          ('ndetvr',int),('nphotvr',int),('vrmag',float),('vrrms',float),('vrerr',float),('vrasemi',float),('vrbsemi',float),('vrtheta',float),
-                          ('asemi',float),('asemierr',float),('bsemi',float),('bsemierr',float),('theta',float),('thetaerr',float),
-                          ('fwhm',float),('flags',int),('class_star',float),('ebv',float),('rmsvar',float),('madvar',float),('iqrvar',float),('etavar',float),
-                          ('jvar',float),('kvar',float),('avgrelvar',float),('chivar',float),('romsvar',float),('variable',int),('nsigvar',float)])
+    dtype_obj = np.dtype([('objectid',np.str,100),('pix',int),('ra',np.float64),('dec',np.float64),('raerr',np.float32),('decerr',np.float32),
+                          ('pmra',np.float32),('pmdec',np.float32),('pmraerr',np.float32),('pmdecerr',np.float32),('mjd',np.float64),
+                          ('deltamjd',np.float32),('ndet',np.int16),('nphot',np.int16),
+                          ('ndetu',np.int16),('nphotu',np.int16),('umag',np.float32),('urms',np.float32),('uerr',np.float32),
+                             ('uasemi',np.float32),('ubsemi',np.float32),('utheta',np.float32),
+                          ('ndetg',np.int16),('nphotg',np.int16),('gmag',np.float32),('grms',np.float32),('gerr',np.float32),
+                             ('gasemi',np.float32),('gbsemi',np.float32),('gtheta',np.float32),
+                          ('ndetr',np.int16),('nphotr',np.int16),('rmag',np.float32),('rrms',np.float32),('rerr',np.float32),
+                             ('rasemi',np.float32),('rbsemi',np.float32),('rtheta',np.float32),
+                          ('ndeti',np.int16),('nphoti',np.int16),('imag',np.float32),('irms',np.float32),('ierr',np.float32),
+                             ('iasemi',np.float32),('ibsemi',np.float32),('itheta',np.float32),
+                          ('ndetz',np.int16),('nphotz',np.int16),('zmag',np.float32),('zrms',np.float32),('zerr',np.float32),
+                             ('zasemi',np.float32),('zbsemi',np.float32),('ztheta',np.float32),
+                          ('ndety',np.int16),('nphoty',np.int16),('ymag',np.float32),('yrms',np.float32),('yerr',np.float32),
+                             ('yasemi',np.float32),('ybsemi',np.float32),('ytheta',np.float32),
+                          ('ndetvr',np.int16),('nphotvr',np.int16),('vrmag',np.float32),('vrrms',np.float32),('vrerr',np.float32),
+                            ('vrasemi',np.float32),('vrbsemi',np.float32),('vrtheta',np.float32),
+                          ('asemi',np.float32),('asemierr',np.float32),('bsemi',np.float32),('bsemierr',np.float32),
+                          ('theta',np.float32),('thetaerr',np.float32),('fwhm',np.float32),('flags',np.int8),('class_star',np.float32),
+                          ('ebv',np.float32),('rmsvar',np.float32),('madvar',np.float32),('iqrvar',np.float32),('etavar',np.float32),
+                          ('jvar',np.float32),('kvar',np.float32),('avgrelvar',np.float32),('chivar',np.float32),('romsvar',np.float32),
+                          ('variable10sig',np.int8),('nsigvar',np.float32)])
 
     # Decide whether to load everything into RAM or use temporary database
     metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
@@ -675,7 +684,7 @@ if __name__ == "__main__":
         obj[f+'asemi'] = np.nan
         obj[f+'bsemi'] = np.nan
         obj[f+'theta'] = np.nan
-    obj['variable'] = 0
+    obj['variable10sig'] = 0
     obj['nsigvar'] = np.nan
     idstr = np.zeros(ncat,dtype=dtype_idstr)
 
@@ -900,38 +909,42 @@ if __name__ == "__main__":
     nbins = np.ceil(nobj/100)
     nbins = np.max([2,nbins])
     varcol = 'madvar'
-    xx = np.arange(nobj)
     gdvar,ngdvar = dln.where(np.isfinite(obj[varcol]))
     if ngdvar>0:
-        fidmagmed, bin_edges1, binnumber1 = bindata.binned_statistic(xx[gdvar],fidmag[si[gdvar]],statistic='median',bins=nbins)
-        varmed, bin_edges2, binnumber2 = bindata.binned_statistic(xx[gdvar],obj[varcol][si[gdvar]],statistic='median',bins=nbins)
-        varsig, bin_edges3, binnumber3 = bindata.binned_statistic(xx[gdvar],obj[varcol][si[gdvar]],statistic='mad',bins=nbins)
-        # Smooth med and sigma
+        xx = np.arange(ngdvar)
+        fidmagmed, bin_edges1, binnumber1 = bindata.binned_statistic(xx,fidmag[si[gdvar]],statistic='nanmedian',bins=nbins)
+        varmed, bin_edges2, binnumber2 = bindata.binned_statistic(xx,obj[varcol][si[gdvar]],statistic='nanmedian',bins=nbins)
+        varsig, bin_edges3, binnumber3 = bindata.binned_statistic(xx,obj[varcol][si[gdvar]],statistic='mad',bins=nbins)
+        # Smooth med and sigma        
         smvarmed = dln.gsmooth(varmed,10)
         smvarsig = dln.gsmooth(varsig,10)
         # Interpolate to all the objects
         fvarmed = interp1d(fidmagmed,smvarmed,kind='linear',bounds_error=False,
-                           fill_value=(np.median(smvarmed),np.median(smvarmed)),assume_sorted=True)
+                           fill_value=(smvarmed[0],smvarmed[-1]),assume_sorted=True)
         objvarmed = fvarmed(fidmag)
+        objvarmed[np.isnan(objvarmed)] = varmed[-1]
         objvarsig = np.maximum(np.min(smvarmed),objvarmed)   # lower limit
         fvarsig = interp1d(fidmagmed,smvarsig,kind='linear',bounds_error=False,
-                           fill_value=(np.median(smvarsig),np.median(smvarsig)),assume_sorted=True)
+                           fill_value=(smvarsig[0],smvarsig[-1]),assume_sorted=True)
         objvarsig = fvarsig(fidmag)
+        objvarsig[np.isnan(objvarsig)] = varsig[-1]
         objvarsig = np.maximum(np.min(smvarsig),objvarsig)   # lower limit
         # Objects with bad fidmag
         #  set to last value
-        bdfidmag,nbdfidmag = dln.where(np.nan(fidmag))
+        bdfidmag,nbdfidmag = dln.where(np.isnan(fidmag))
         if nbdfidmag>0:
             objvarmed[bdfidmag] = smvarmed[-1]
             objvarsig[bdfidmag] = smvarsig[-1]
         # Detect positive outliers
-        nsigvarthresh = 5.0
+        nsigvarthresh = 10.0
         nsigvar = (obj[varcol]-objvarmed)/objvarsig
-        isvar,nisvar = dln.where((nsigvar>nsigvarthresh) & np.isfinite(obj[varcol]))
+        obj['nsigvar'][gdvar] = nsigvar[gdvar]
+        isvar,nisvar = dln.where(nsigvar[gdvar]>nsigvarthresh)
         print(str(nisvar)+' variables detected')
         if nisvar>0:
-            obj['variable'][isvar] = 1
-            obj['nsigvar'][isvar] = nsigvar[isvar]
+            obj['variable10sig'][gdvar[isvar]] = 1
+
+    #import pdb; pdb.set_trace()
 
     # Add E(B-V)
     print('Getting E(B-V)')
