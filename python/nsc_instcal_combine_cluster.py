@@ -392,15 +392,17 @@ def clusterdata(cat,ncat,dbfile=None):
             for d in range(nx):
                 d0 = yr[0]+d*dy
                 d1 = yr[0]+(d+1)*dy
-                import pdb; pdb.set_trace()
+                print(str(r+1)+' '+str(d+1)(
+                print('RA: '+str(r0)+' '+str(r1)+'  DEC: '+str(d0)+' '+str(d1))
+                #import pdb; pdb.set_trace()
                 cat1 = getdatadb(dbfile,rar=[r0-rabuff,r1+rabuff],decr=[d0-buff,d1+buff],verbose=True)
                 ncat1 = len(cat1)
-                print(str(r+1)+' '+str(d+1)+'  '+str(ncat1)+' measurements')
-                print('RA: '+str(r0)+' '+str(r1)+'  DEC: '+str(d0)+' '+str(d1))
+                print(str(ncat1)+' measurements')
+
                 # Some measurements to work with
                 if ncat1>0:
                     # Run DBSCAN
-                    import pdb; pdb.set_trace()
+                    #import pdb; pdb.set_trace()
                     t0 = time.time()
                     X1 = np.column_stack((np.array(cat1['RA']),np.array(cat1['DEC'])))
                     dbs1 = DBSCAN(eps=0.5/3600, min_samples=1).fit(X1)
@@ -458,7 +460,7 @@ def clusterdata(cat,ncat,dbfile=None):
                         # Keep track of last label
                         lastobjlabel = np.max(obj1['OBJLABEL'])
 
-                        import pdb; pdb.set_trace()
+                        #import pdb; pdb.set_trace()
 
         # Trim extra elements
         if nobjstr>objcount:
@@ -888,7 +890,7 @@ if __name__ == "__main__":
         obj['class_star'][i] = np.mean(cat1['CLASS_STAR'])
         obj['flags'][i] = np.bitwise_or.reduce(cat1['FLAGS'])  # OR combine
 
-    import pdb; pdb.set_trace()
+    #import pdb; pdb.set_trace()
 
     # Select Variables
     #  1) Construct fiducial magnitude (done in loop above)
