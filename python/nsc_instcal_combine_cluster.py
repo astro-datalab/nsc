@@ -107,8 +107,9 @@ def insertobjlabelsdb(rowid,labels,dbfile):
     db.close()
     print('inserting done after '+str(time.time()-t0)+' sec')
 
-def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=None):
+def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=None,verbose=False):
     """ Get measurements for an object(s) from the database """
+    t0 = time.time()
     sqlite3.register_adapter(np.int16, int)
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
@@ -158,7 +159,9 @@ def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=Non
                             ('THETA',float),('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
     cat = np.zeros(len(data),dtype=dtype_hicat)
     cat[...] = data
-    del data
+    del(data)
+
+    if verbose: print('got data in '+str(time.time()-t0)+' sec.')
 
     return cat
 
@@ -351,6 +354,7 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
 def clusterdata(cat,ncat,dbfile=None):
     """ Perform spatial clustering """
 
+    t00 = time.time()
     print('Spatial clustering with DBSCAN')    
     # Divide into subregions
     if (ncat>1000000) & (dbfile is not None):
@@ -388,15 +392,19 @@ def clusterdata(cat,ncat,dbfile=None):
             for d in range(nx):
                 d0 = yr[0]+d*dy
                 d1 = yr[0]+(d+1)*dy
-                cat1 = getdatadb(dbfile,rar=[r0-rabuff,r1+rabuff],decr=[d0-buff,d1+buff])
+                import pdb; pdb.set_trace()
+                cat1 = getdatadb(dbfile,rar=[r0-rabuff,r1+rabuff],decr=[d0-buff,d1+buff],verbose=True)
                 ncat1 = len(cat1)
                 print(str(r+1)+' '+str(d+1)+'  '+str(ncat1)+' measurements')
                 print('RA: '+str(r0)+' '+str(r1)+'  DEC: '+str(d0)+' '+str(d1))
                 # Some measurements to work with
                 if ncat1>0:
                     # Run DBSCAN
+                    import pdb; pdb.set_trace()
+                    t0 = time.time()
                     X1 = np.column_stack((np.array(cat1['RA']),np.array(cat1['DEC'])))
                     dbs1 = DBSCAN(eps=0.5/3600, min_samples=1).fit(X1)
+                    print('DBSCAN after '+str(time.time()-t0)+' sec.')
                     # Cluster labels are integers and in ascending order, but there are gaps
                     objlabels1 = dbs1.labels_
                     objlabels1 += lastobjlabel+1                 # add offset to labels
@@ -416,13 +424,12 @@ def clusterdata(cat,ncat,dbfile=None):
                     # Only keep objects (and measurements) inside the box region
                     #  keep objects on LOWER boundary in RA/DEC
                     gdobj, ngdobj = dln.where((obj1['RA']>=r0) & (obj1['RA']<r1) & (obj1['DEC']>=d0) & (obj1['DEC']<d1))
-                    print(str(ngdobj)+' objects all inside the boundary')
+                    print(str(ngdobj)+' objects are inside the boundary')
                     # Some objects in the region
                     if ngdobj>0:
                         obj1 = obj1[gdobj]
                         nobj1 = ngdobj
-                        # Arrays of measid and objlabels to add
-                        #add_measid1 = np.zeros(np.sum(labelindex1['num'][gdobj]),(np.str,30))
+                        # Arrays of rowid and objlabels to add
                         add_rowid1 = np.zeros(np.sum(labelindex1['num'][gdobj]),int)
                         add_objlabels1 = np.zeros(np.sum(labelindex1['num'][gdobj]),int)
                         cnt1 = 0
@@ -440,13 +447,18 @@ def clusterdata(cat,ncat,dbfile=None):
 
                         # Add OBJ1 to OBJSTR
                         if (objcount+nobj1>nobjstr):    # add new elements
+                            print('Adding more elements to OBSTR')
+                            t1 = time.time()
                             objstr = add_elements(objstr,np.max([nobj1,100000]))
                             nobjstr = len(objstr)
+                            print('more elements added in '+str(time.time()-t1)+' sec.')
                         objstr[objcount:objcount+nobj1] = obj1
                         objcount += nobj1
 
                         # Keep track of last label
                         lastobjlabel = np.max(obj1['OBJLABEL'])
+
+                        import pdb; pdb.set_trace()
 
         # Trim extra elements
         if nobjstr>objcount:
@@ -485,6 +497,8 @@ def clusterdata(cat,ncat,dbfile=None):
     # Index objlabel in database
     if dbfile is not None:
         createindexdb(dbfile,'objlabel',unique=False)
+
+    print('clustering done after '+str(time.time()-t00)+' sec.')
 
     return objstr, cat
 
@@ -874,6 +888,8 @@ if __name__ == "__main__":
         obj['class_star'][i] = np.mean(cat1['CLASS_STAR'])
         obj['flags'][i] = np.bitwise_or.reduce(cat1['FLAGS'])  # OR combine
 
+    import pdb; pdb.set_trace()
+
     # Select Variables
     #  1) Construct fiducial magnitude (done in loop above)
     #  2) Construct median VAR and sigma VAR versus magnitude
@@ -883,32 +899,37 @@ if __name__ == "__main__":
     nbins = np.max([2,nbins])
     varcol = 'madvar'
     xx = np.arange(nobj)
-    fidmagmed, bin_edges1, binnumber1 = bindata.binned_statistic(xx,fidmag[si],statistic='median',bins=nbins)
-    varmed, bin_edges2, binnumber2 = bindata.binned_statistic(xx,obj[varcol][si],statistic='median',bins=nbins)
-    varsig, bin_edges3, binnumber3 = bindata.binned_statistic(xx,obj[varcol][si],statistic='mad',bins=nbins)
-    # Smooth med and sigma
-    smvarmed = dln.gsmooth(varmed,10)
-    smvarsig = dln.gsmooth(varmed,10)
-    # Deal with NaNs in the med/sig values
-    # Interpolate to all the objects
-    fvarmed = interp1d(fidmagmed,smvarmed,kind='linear',bounds_error=False,
-                       fill_value=(np.median(smvarmed),np.median(smvarmed)),assume_sorted=True)
-    objvarmed = fvarmed(fidmag)
-    fvarsig = interp1d(fidmagmed,smvarsig,kind='linear',bounds_error=False,
-                       fill_value=(np.median(smvarsig),np.median(smvarsig)),assume_sorted=True)
-    objvarsig = fvarsig(fidmag)
-    # Objects with bad fidmag
-    # Detect positive outliers
-    nsigvarthresh = 5.0
-    nsigvar = (obj[varcol]-objvarmed)/objvarsig
-    isvar,nisvar = dln.where(nsigdiff>nsigvar)
-    if nisvar>0:
-        obj['variable'][isvar] = 1
-        obj['nsigvar'][isvar] = nsigvar[isvar]
-
-    import pdb; pdb.set_trace()
-
-
+    gdvar,ngdvar = dln.where(np.isfinite(obj[varcol]))
+    if ngdvar>0:
+        fidmagmed, bin_edges1, binnumber1 = bindata.binned_statistic(xx[gdvar],fidmag[si[gdvar]],statistic='median',bins=nbins)
+        varmed, bin_edges2, binnumber2 = bindata.binned_statistic(xx[gdvar],obj[varcol][si[gdvar]],statistic='median',bins=nbins)
+        varsig, bin_edges3, binnumber3 = bindata.binned_statistic(xx[gdvar],obj[varcol][si[gdvar]],statistic='mad',bins=nbins)
+        # Smooth med and sigma
+        smvarmed = dln.gsmooth(varmed,10)
+        smvarsig = dln.gsmooth(varsig,10)
+        # Interpolate to all the objects
+        fvarmed = interp1d(fidmagmed,smvarmed,kind='linear',bounds_error=False,
+                           fill_value=(np.median(smvarmed),np.median(smvarmed)),assume_sorted=True)
+        objvarmed = fvarmed(fidmag)
+        objvarsig = np.maximum(np.min(smvarmed),objvarmed)   # lower limit
+        fvarsig = interp1d(fidmagmed,smvarsig,kind='linear',bounds_error=False,
+                           fill_value=(np.median(smvarsig),np.median(smvarsig)),assume_sorted=True)
+        objvarsig = fvarsig(fidmag)
+        objvarsig = np.maximum(np.min(smvarsig),objvarsig)   # lower limit
+        # Objects with bad fidmag
+        #  set to last value
+        bdfidmag,nbdfidmag = dln.where(np.nan(fidmag))
+        if nbdfidmag>0:
+            objvarmed[bdfidmag] = smvarmed[-1]
+            objvarsig[bdfidmag] = smvarsig[-1]
+        # Detect positive outliers
+        nsigvarthresh = 5.0
+        nsigvar = (obj[varcol]-objvarmed)/objvarsig
+        isvar,nisvar = dln.where((nsigvar>nsigvarthresh) & np.isfinite(obj[varcol]))
+        print(str(nisvar)+' variables detected')
+        if nisvar>0:
+            obj['variable'][isvar] = 1
+            obj['nsigvar'][isvar] = nsigvar[isvar]
 
     # Add E(B-V)
     print('Getting E(B-V)')
