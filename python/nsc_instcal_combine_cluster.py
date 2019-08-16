@@ -916,8 +916,10 @@ if __name__ == "__main__":
         varmed, bin_edges2, binnumber2 = bindata.binned_statistic(xx,obj[varcol][si[gdvar]],statistic='nanmedian',bins=nbins)
         varsig, bin_edges3, binnumber3 = bindata.binned_statistic(xx,obj[varcol][si[gdvar]],statistic='mad',bins=nbins)
         # Smooth med and sigma        
-        smvarmed = dln.gsmooth(varmed,10)
-        smvarsig = dln.gsmooth(varsig,10)
+        #   use FWHM~0.5 mag
+        smlen = np.ceil(0.5/np.nanmedian(dln.slope(fidmagmed)))
+        smvarmed = dln.gsmooth(varmed,smlen)
+        smvarsig = dln.gsmooth(varsig,smlen)
         # Interpolate to all the objects
         fvarmed = interp1d(fidmagmed,smvarmed,kind='linear',bounds_error=False,
                            fill_value=(smvarmed[0],smvarmed[-1]),assume_sorted=True)
