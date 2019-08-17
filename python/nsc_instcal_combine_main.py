@@ -8,16 +8,22 @@ import warnings
 from astropy.io import fits
 from astropy.utils.exceptions import AstropyWarning
 from astropy.table import Table
-from dlnpyutils import utils as dln, coords, job_daemon
+from dlnpyutils import utils as dln, coords, job_daemon as jd
+from astropy import units as u
+from astropy.coordinates import SkyCoord
 #import subprocess
 import time
 from argparse import ArgumentParser
 import socket
+import logging
+import healpy as hp
 
 # Combine data for one NSC healpix region
 if __name__ == "__main__":
     parser = ArgumentParser(description='Combine NSC Instcal Catalogs.')
     parser.add_argument('version', type=str, nargs=1, help='Version number')
+    parser.add_argument('--hosts', type=str, nargs=1, help='Delimited list of hosts')
+    parser.add_argument('-nm','--nmulti', type=int, nargs=1, default=15, help='Number of jobs')
     parser.add_argument('-r','--redo', action='store_true', help='Redo this HEALPIX')
     args = parser.parse_args()
 
@@ -26,9 +32,13 @@ if __name__ == "__main__":
     host = hostname.split('.')[0]
 
     # Inputs
-    version = args.version
+    version = args.version[0]
     redo = args.redo
     nmulti = args.nmulti
+    if args.hosts is not None:
+        hosts = [int(item) for item in args.hosts.split(',')]
+    else:
+        hosts = host
     nside = 128
     radeg = 180 / np.pi
 
@@ -37,24 +47,24 @@ if __name__ == "__main__":
         basedir = "/dl1/users/dnidever/nsc/instcal/"+version+"/"
         mssdir = "/mss1/"
         localdir = "/d0/"
-        tmproot = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
+        tmpdir = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
     # on gp09 use
     if (host == "gp09") or (host == "gp08") or (host == "gp07") or (host == "gp06") or (host == "gp05"):
-        basedir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"/"
+        basedir = "/dl1/users/dnidever/nsc/instcal/"+version+"/"
         mssdir = "/net/mss1/"
         localdir = "/data0/"
-        tmproot = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
+        tmpdir = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
 
     t0 = time.time()
 
-    if ~os.path.exists(tmpdir): os.mkdir(tmpdir)
-    if ~os.path.exists(basedir+'combine'): os.mkdir(basedir+'combine/')
-    if ~os.path.exists(basedir+'combine/logs/'): os.mkdir(basedir+'combine/logs/')
-    if ~os.path.exists(localdir+'dnidever/nsc/instcal/'+version+'/'): os.mkdir(localdir+'dnidever/nsc/instcal/'+version+'/')
-    if ~os.path.exists(basedir+'logs'): os.mkdir(basedir+'logs/')
+    if not os.path.exists(tmpdir): os.mkdir(tmpdir)
+    if not os.path.exists(basedir+'combine'): os.mkdir(basedir+'combine/')
+    if not os.path.exists(basedir+'combine/logs/'): os.mkdir(basedir+'combine/logs/')
+    if not os.path.exists(localdir+'dnidever/nsc/instcal/'+version+'/'): os.mkdir(localdir+'dnidever/nsc/instcal/'+version+'/')
+    if not os.path.exists(basedir+'logs'): os.mkdir(basedir+'logs/')
     # Hosts
     if hosts is None: hosts = ['gp09','hulk','thing']
-    if ~(host in hosts):
+    if (host not in hosts):
       print('Current HOST='+host+' not in list of HOSTS = [ '+','.join(hosts)+' ] ')
       sys.exit()
 
@@ -89,9 +99,15 @@ if __name__ == "__main__":
     rootLogger.addHandler(consoleHandler)
     rootLogger.setLevel(logging.NOTSET)
 
+    print("Combining NOAO InstCal catalogs")
+    print("version = "+version)
+    print("nmulti = "+str(nmulti))
+    print("hosts = "+','.join(hosts))
+    print("redo = "+str(redo))
+    
     # Which healpix pixels have data
     listfile = basedir+'lists/nsc_instcal_combine_healpix_list.fits.gz'
-    if ~os.path.exists(listfile):
+    if not os.path.exists(listfile):
         print(listfile+' NOT FOUND.  Run nsc_instcal_combine_qacuts.pro/py')
         sys.exit()
 
@@ -104,26 +120,41 @@ if __name__ == "__main__":
     # Copy to local directory for faster reading speed
     if os.path.exists(localdir+'dnidever/nsc/instcal/'+version+'/'+os.path.basename(listfile)):
                  os.remove(localdir+'dnidever/nsc/instcal/'+version+'/'+os.path.basename(listfile))
-    shutil.copyfile(listfile,localdir+'dnidever/nsc/instcal/'+version+'/')
+    shutil.copyfile(listfile,localdir+'dnidever/nsc/instcal/'+version+'/'+os.path.basename(listfile))
     #file_copy,listfile,localdir+'dnidever/nsc/instcal/'+version+'/',/over
 
     # Create the commands
     allpix = upix.copy()
-    allcmd = "/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal_combine.py "+str(allpix)+" "+version+" --nside "+str(nside)
-    if redo: allcmd += ' -r'
+    allcmd = dln.strjoin("/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal_combine_cluster.py ",allpix.astype(np.str))
+    allcmd = dln.strjoin(allcmd," "+version+" --nside "+str(nside))
+    if redo: allcmd = dln.strjoin(allcmd,' -r')
     alldirs = np.zeros(npix,(np.str,200))
     alldirs[:] = tmpdir
     nallcmd = len(allcmd)
 
+    # Only keep MC region
+    ra,dec = hp.pix2ang(nside,upix,lonlat=True)
+    coords = SkyCoord(ra=ra*u.degree,dec=dec*u.degree)
+    lmc = SkyCoord(ra=81.9*u.degree,dec=-69.866*u.degree)
+    lrad = lmc.separation(coords).deg
+    smc = SkyCoord(ra=13.183*u.degree,dec=-72.8283*u.degree)
+    srad = smc.separation(coords).deg
+    gd,ngd = dln.where( (coords.galactic.b.deg<-10) & ((lrad>6) & (lrad<25)) | ((srad>6) & (srad<15)) )
+    print('Only processing '+str(ngd)+' Magellanic Clouds HEALPix')
+    allpix = allpix[gd]
+    allcmd = allcmd[gd]
+    alldirs = alldirs[gd]
+    nallcmd = ngd
+
     # RANDOMIZE
     np.random.seed(0)
-    rnd = np.argsort(np.random.rand(npix))
+    rnd = np.argsort(np.random.rand(nallcmd))
     allpix = allpix[rnd]
     allcmd = allcmd[rnd]
     alldirs = alldirs[rnd]
 
     # Parcel out the jobs
-    nhosts = len(hosts)
+    nhosts = dln.size(hosts)
     torun = np.arange(nallcmd)
     nperhost = int(np.ceil(nallcmd/nhosts))
     for i in range(nhosts):
@@ -143,8 +174,9 @@ if __name__ == "__main__":
     Table(runstr).write(runfile)
 
     # Now run the combination program on each healpix pixel
-    a = raw_input("Press RETURN to start")
-    jobs = job_daemon(cmd,cmddir,hyperthread=True,prefix='nsccmb',nmulti=nmulti)
+    import pdb; pdb.set_trace()
+    a = input("Press RETURN to start")
+    jobs = jd.job_daemon(cmd,dirs,hyperthread=True,prefix='nsccmb',nmulti=nmulti)
 
-    # Save the jobs???
-    Table(jobs).write( basedir+'lists/nsc_instcal_combine_main.'+hostname+'.'+logtime+'_jobs.fits')
+    # Save the jobs
+    Table(jobs).write(basedir+'lists/nsc_instcal_combine_main.'+hostname+'.'+logtime+'_jobs.fits')
