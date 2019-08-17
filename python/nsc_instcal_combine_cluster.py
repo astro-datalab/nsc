@@ -363,7 +363,7 @@ def clusterdata(cat,ncat,dbfile=None):
         createindexdb(dbfile,'ra',unique=False)
         createindexdb(dbfile,'dec',unique=False)
         # Subdivide
-        nsub = np.ceil(ncat/100000)
+        nsub = int(np.ceil(ncat/100000))
         print(str(nsub)+' sub regions')
         nx = int(np.ceil(np.sqrt(nsub)))  # divide RA and DEC intro nx regions
         # Get RA/DEC ranges from the database
@@ -635,10 +635,10 @@ if __name__ == "__main__":
                           ('ndetvr',np.int16),('nphotvr',np.int16),('vrmag',np.float32),('vrrms',np.float32),('vrerr',np.float32),
                             ('vrasemi',np.float32),('vrbsemi',np.float32),('vrtheta',np.float32),
                           ('asemi',np.float32),('asemierr',np.float32),('bsemi',np.float32),('bsemierr',np.float32),
-                          ('theta',np.float32),('thetaerr',np.float32),('fwhm',np.float32),('flags',np.int8),('class_star',np.float32),
+                          ('theta',np.float32),('thetaerr',np.float32),('fwhm',np.float32),('flags',np.int16),('class_star',np.float32),
                           ('ebv',np.float32),('rmsvar',np.float32),('madvar',np.float32),('iqrvar',np.float32),('etavar',np.float32),
-                          ('jvar',np.float32),('kvar',np.float32),('avgrelvar',np.float32),('chivar',np.float32),('romsvar',np.float32),
-                          ('variable10sig',np.int8),('nsigvar',np.float32)])
+                          ('jvar',np.float32),('kvar',np.float32),('chivar',np.float32),('romsvar',np.float32),
+                          ('variable10sig',np.int16),('nsigvar',np.float32)])
 
     # Decide whether to load everything into RAM or use temporary database
     metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
@@ -676,7 +676,7 @@ if __name__ == "__main__":
     # all bad to start
     for f in ['pmra','pmraerr','pmdec','pmdecerr','asemi','bsemi','theta','asemierr',
               'bsemierr','thetaerr','fwhm','class_star','rmsvar','madvar','iqrvar',
-              'etavar','jvar','kvar','avgrelvar','chivar','romsvar']: obj[f]=np.nan
+              'etavar','jvar','kvar','chivar','romsvar']: obj[f]=np.nan
     for f in ['u','g','r','i','z','y','vr']:
         obj[f+'mag'] = 99.99
         obj[f+'err'] = 9.99
@@ -780,7 +780,7 @@ if __name__ == "__main__":
             ra = np.array(cat1['RA'],np.float64)
             ra -= np.mean(ra)
             ra *= 3600*1e3 * np.cos(obj['dec'][i]/radeg)     # convert to true angle, milli arcsec
-            t = cat1['MJD']
+            t = cat1['MJD'].copy()
             t -= np.mean(t)
             t /= 365.2425                          # convert to year
             # Calculate robust slope
@@ -823,8 +823,7 @@ if __name__ == "__main__":
                 resid[findx[gph]] = cat1['MAG_AUTO'][findx[gph]]-newmag
                 # Residual mag relative to the uncertainty
                 #  set a lower threshold of 0.02 in the uncertainty
-                relresid[findx[gph]] = np.sqrt(ngph/(ngph-1)) * (cat1['MAG_AUTO'][findx[gph]]-newmag)/np.sqrt(cat1['MAGERR_AUTO'][findx[gph]]**2+0.02**2)
-
+                relresid[findx[gph]] = np.sqrt(ngph/(ngph-1)) * (cat1['MAG_AUTO'][findx[gph]]-newmag)/np.maximum(cat1['MAGERR_AUTO'][findx[gph]],0.02)
 
             # Calculate mean morphology parameters
             obj[filt+'asemi'][i] = np.mean(cat1['ASEMI'][findx])
@@ -847,12 +846,11 @@ if __name__ == "__main__":
             # IQR
             iqrvar = 0.741289*(quartiles[2]-quartiles[0])
             # 1/eta
-            etavar = np.sum((resid2tsi[1:]-resid2tsi[0:-1])**2) / sumresidsq
+            etavar = sumresidsq / np.sum((resid2tsi[1:]-resid2tsi[0:-1])**2)
             obj['rmsvar'][i] = rms
             obj['madvar'][i] = madvar
             obj['iqrvar'][i] = iqrvar
             obj['etavar'][i] = etavar
-
 
         # Calculate variability indices wrt to uncertainties
         gdrelresid = np.isfinite(relresid)
@@ -861,7 +859,7 @@ if __name__ == "__main__":
             relresid2 = relresid[gdrelresid]
             pk = relresid2**2-1
             jvar = np.sum( np.sign(pk)*np.sqrt(np.abs(pk)) )/ngdrelresid
-            avgrelvar = np.mean(np.abs(relresid2))    # average of absolute relative residuals
+            #avgrelvar = np.mean(np.abs(relresid2))    # average of absolute relative residuals
             chivar = np.sqrt(np.sum(relresid2**2))/ngdrelresid
             kdenom = np.sqrt(np.sum(relresid2**2)/ngdrelresid)
             if kdenom!=0:
@@ -872,21 +870,21 @@ if __name__ == "__main__":
             romsvar = np.sum(np.abs(relresid2))/(ngdrelresid-1)
             obj['jvar'][i] = jvar
             obj['kvar'][i] = kvar
-            obj['avgrelvar'][i] = avgrelvar
+            #obj['avgrelvar'][i] = avgrelvar
             obj['chivar'][i] = chivar
             obj['romsvar'][i] = romsvar
             #if chivar>50: import pdb; pdb.set_trace()
 
+        # Make NPHOT from NPHOTX
+        obj['nphot'][i] = obj['nphotu'][i]+obj['nphotg'][i]+obj['nphotr'][i]+obj['nphoti'][i]+obj['nphotz'][i]+obj['nphoty'][i]+obj['nphotvr'][i]
+
         # Fiducial magnitude, used to select variables below
         #  order of priority: r,g,i,z,Y,VR,u
-        if ngph>0:
+        if obj['nphot'][i]>0:
             magarr = np.zeros(7,float)
             for ii,nn in enumerate(['rmag','gmag','imag','zmag','ymag','vrmag','umag']): magarr[ii]=obj[nn][i]
             gfid,ngfid = dln.where(magarr<50)
             if ngfid>0: fidmag[i]=magarr[gfid[0]]
-
-        # Make NPHOT from NPHOTX
-        obj['nphot'][i] = obj['nphotu'][i]+obj['nphotg'][i]+obj['nphotr'][i]+obj['nphoti'][i]+obj['nphotz'][i]+obj['nphoty'][i]+obj['nphotvr'][i]
 
         # Mean morphology parameters
         obj['asemi'][i] = np.mean(cat1['ASEMI'])
@@ -899,44 +897,45 @@ if __name__ == "__main__":
         obj['class_star'][i] = np.mean(cat1['CLASS_STAR'])
         obj['flags'][i] = np.bitwise_or.reduce(cat1['FLAGS'])  # OR combine
 
-    #import pdb; pdb.set_trace()
-
     # Select Variables
     #  1) Construct fiducial magnitude (done in loop above)
     #  2) Construct median VAR and sigma VAR versus magnitude
     #  3) Find objects that Nsigma above the median VAR line
     si = np.argsort(fidmag)   # NaNs are at end
-    nbins = np.ceil(nobj/100)
-    nbins = np.max([2,nbins])
     varcol = 'madvar'
-    gdvar,ngdvar = dln.where(np.isfinite(obj[varcol]))
+    gdvar,ngdvar,bdvar,nbdvar = dln.where(np.isfinite(obj[varcol]) & np.isfinite(fidmag),comp=True)
+    nbins = np.ceil((np.max(fidmag[gdvar])-np.min(fidmag[gdvar]))/0.25)
+    nbins = int(np.max([2,nbins]))
     if ngdvar>0:
-        xx = np.arange(ngdvar)
-        fidmagmed, bin_edges1, binnumber1 = bindata.binned_statistic(xx,fidmag[si[gdvar]],statistic='nanmedian',bins=nbins)
-        varmed, bin_edges2, binnumber2 = bindata.binned_statistic(xx,obj[varcol][si[gdvar]],statistic='nanmedian',bins=nbins)
-        varsig, bin_edges3, binnumber3 = bindata.binned_statistic(xx,obj[varcol][si[gdvar]],statistic='mad',bins=nbins)
-        # Smooth med and sigma        
-        #   use FWHM~0.5 mag
-        smlen = np.ceil(0.5/np.nanmedian(dln.slope(fidmagmed)))
+        fidmagmed, bin_edges1, binnumber1 = bindata.binned_statistic(fidmag[gdvar],fidmag[gdvar],statistic='nanmedian',bins=nbins)
+        # Median metric
+        varmed, bin_edges2, binnumber2 = bindata.binned_statistic(fidmag[gdvar],obj[varcol][gdvar],statistic='nanmedian',bins=nbins)
+        # Smooth, it handles NaNs well
+        smlen = 5
         smvarmed = dln.gsmooth(varmed,smlen)
+        # Interpolate to all the objects
+        gv,ngv,bv,nbv = dln.where(np.isfinite(smvarmed),comp=True)
+        fvarmed = interp1d(fidmagmed[gv],smvarmed[gv],kind='linear',bounds_error=False,
+                           fill_value=(smvarmed[0],smvarmed[-1]),assume_sorted=True)
+        objvarmed = np.zeros(nobj,float)
+        objvarmed[gdvar] = fvarmed(fidmag[gdvar])
+        objvarmed[gdvar] = np.maximum(np.min(smvarmed[gv]),objvarmed[gdvar])   # lower limit
+        if nbdvar>0: objvarmed[bdvar]=smvarmed[gv[-1]]   # objects with bad fidmag, set to last value
+        # Scatter in metric around median
+        #  calculate MAD ourselves so that it's around our computed median metric line
+        varsig, bin_edges3, binnumber3 = bindata.binned_statistic(fidmag[gdvar],np.abs(obj[varcol][gdvar]-objvarmed[gdvar]),
+                                                                  statistic='nanmedian',bins=nbins)
+        varsig *= 1.4826   # scale MAD to stddev
+        # Smooth
         smvarsig = dln.gsmooth(varsig,smlen)
         # Interpolate to all the objects
-        fvarmed = interp1d(fidmagmed,smvarmed,kind='linear',bounds_error=False,
-                           fill_value=(smvarmed[0],smvarmed[-1]),assume_sorted=True)
-        objvarmed = fvarmed(fidmag)
-        objvarmed[np.isnan(objvarmed)] = varmed[-1]
-        objvarsig = np.maximum(np.min(smvarmed),objvarmed)   # lower limit
-        fvarsig = interp1d(fidmagmed,smvarsig,kind='linear',bounds_error=False,
-                           fill_value=(smvarsig[0],smvarsig[-1]),assume_sorted=True)
-        objvarsig = fvarsig(fidmag)
-        objvarsig[np.isnan(objvarsig)] = varsig[-1]
-        objvarsig = np.maximum(np.min(smvarsig),objvarsig)   # lower limit
-        # Objects with bad fidmag
-        #  set to last value
-        bdfidmag,nbdfidmag = dln.where(np.isnan(fidmag))
-        if nbdfidmag>0:
-            objvarmed[bdfidmag] = smvarmed[-1]
-            objvarsig[bdfidmag] = smvarsig[-1]
+        gv,ngv,bv,nbv = dln.where(np.isfinite(smvarsig),comp=True)
+        fvarsig = interp1d(fidmagmed[gv],smvarsig[gv],kind='linear',bounds_error=False,
+                           fill_value=(smvarsig[gv[0]],smvarsig[gv[-1]]),assume_sorted=True)
+        objvarsig = np.zeros(nobj,float)
+        objvarsig[gdvar] = fvarsig(fidmag[gdvar])
+        objvarsig[gdvar] = np.maximum(np.min(smvarsig[gv]),objvarsig[gdvar])   # lower limit
+        if nbdvar>0: objvarsig[bdvar]=smvarsig[gv[-1]]   # objects with bad fidmag, set to last value
         # Detect positive outliers
         nsigvarthresh = 10.0
         nsigvar = (obj[varcol]-objvarmed)/objvarsig
@@ -945,8 +944,6 @@ if __name__ == "__main__":
         print(str(nisvar)+' variables detected')
         if nisvar>0:
             obj['variable10sig'][gdvar[isvar]] = 1
-
-    #import pdb; pdb.set_trace()
 
     # Add E(B-V)
     print('Getting E(B-V)')
