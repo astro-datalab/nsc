@@ -76,9 +76,20 @@ if __name__ == "__main__":
     if ltime[5]<10: ssecond='0'+ssecond
     logtime = smonth+sday+syear+shour+sminute+ssecond
     logfile = basedir+'combine/logs/nsc_instcal_combine_main.'+logtime+'.log'
-    #JOURNAL,logfile
 
-    print('Reading list from '+listfile)
+    # Set up logging to screen and logfile
+    logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
+    rootLogger = logging.getLogger()
+    fileHandler = logging.FileHandler(logfile)
+    fileHandler.setFormatter(logFormatter)
+    rootLogger.addHandler(fileHandler)
+    consoleHandler = logging.StreamHandler()
+    consoleHandler.setFormatter(logFormatter)
+    rootLogger.addHandler(consoleHandler)
+    rootLogger.setLevel(logging.NOTSET)
+
+    rootLogger.info("Reading list from "+listfile)
+    #print('Reading list from '+listfile)
     healstr = fits.getdata(listfile,1)
     index = fits.getdata(listfile,2)
     upix = index['pix']
@@ -111,11 +122,11 @@ if __name__ == "__main__":
     pix = allpix[torun]
     cmd = allcmd[torun]
     dirs = alldirs[torun]
-    print('Running '+str(len(torun))+' on '+hostname)
+    rootLogger.info('Running '+str(len(torun))+' on '+hostname)
 
     # Saving the structure of jobs to run
-    runfile = dir+'lists/nsc_instcal_combine_main.'+hostname+'.'+logtime+'_run.fits'
-    print('Writing running information to '+runfile)
+    runfile = basedir+'lists/nsc_instcal_combine_main.'+hostname+'.'+logtime+'_run.fits'
+    rootLogger.info('Writing running information to '+runfile)
     runstr = np.zeros(len(cmd),dtype=np.dtype([('pix',int),('host',(np.str,20))]))
     runstr['pix'] = pix
     runstr['host'] = hostname
@@ -125,6 +136,5 @@ if __name__ == "__main__":
     a = raw_input("Press RETURN to start")
     jobs = job_daemon(cmd,cmddir,hyperthread=True,prefix='nsccmb',nmulti=nmulti)
 
-    # End logfile
-    #------------
-    #JOURNAL
+    # Save the jobs???
+    Table(jobs).write( basedir+'lists/nsc_instcal_combine_main.'+hostname+'.'+logtime+'_jobs.fits')
