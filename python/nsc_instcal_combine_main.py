@@ -2,6 +2,7 @@
 
 import os
 import sys
+import shutil
 import numpy as np
 import warnings
 from astropy.io import fits
@@ -88,6 +89,12 @@ if __name__ == "__main__":
     rootLogger.addHandler(consoleHandler)
     rootLogger.setLevel(logging.NOTSET)
 
+    # Which healpix pixels have data
+    listfile = basedir+'lists/nsc_instcal_combine_healpix_list.fits.gz'
+    if ~os.path.exists(listfile):
+        print(listfile+' NOT FOUND.  Run nsc_instcal_combine_qacuts.pro/py')
+        sys.exit()
+
     rootLogger.info("Reading list from "+listfile)
     #print('Reading list from '+listfile)
     healstr = fits.getdata(listfile,1)
@@ -95,7 +102,10 @@ if __name__ == "__main__":
     upix = index['pix']
     npix = len(index)
     # Copy to local directory for faster reading speed
-    file_copy,listfile,localdir+'dnidever/nsc/instcal/'+version+'/',/over
+    if os.path.exists(localdir+'dnidever/nsc/instcal/'+version+'/'+os.path.basename(listfile)):
+                 os.remove(localdir+'dnidever/nsc/instcal/'+version+'/'+os.path.basename(listfile))
+    shutil.copyfile(listfile,localdir+'dnidever/nsc/instcal/'+version+'/')
+    #file_copy,listfile,localdir+'dnidever/nsc/instcal/'+version+'/',/over
 
     # Create the commands
     allpix = upix.copy()
