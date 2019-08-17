@@ -36,7 +36,7 @@ if __name__ == "__main__":
     redo = args.redo
     nmulti = args.nmulti
     if args.hosts is not None:
-        hosts = [int(item) for item in args.hosts.split(',')]
+        hosts = args.hosts[0].split(',')
     else:
         hosts = host
     nside = 128
@@ -63,10 +63,10 @@ if __name__ == "__main__":
     if not os.path.exists(localdir+'dnidever/nsc/instcal/'+version+'/'): os.mkdir(localdir+'dnidever/nsc/instcal/'+version+'/')
     if not os.path.exists(basedir+'logs'): os.mkdir(basedir+'logs/')
     # Hosts
-    if hosts is None: hosts = ['gp09','hulk','thing']
+    #if hosts is None: hosts = ['gp09','hulk','thing']
     if (host not in hosts):
-      print('Current HOST='+host+' not in list of HOSTS = [ '+','.join(hosts)+' ] ')
-      sys.exit()
+        print('Current HOST='+host+' not in list of HOSTS = [ '+','.join(hosts)+' ] ')
+        sys.exit()
 
 
     # Log file
@@ -99,20 +99,20 @@ if __name__ == "__main__":
     rootLogger.addHandler(consoleHandler)
     rootLogger.setLevel(logging.NOTSET)
 
-    print("Combining NOAO InstCal catalogs")
-    print("version = "+version)
-    print("nmulti = "+str(nmulti))
-    print("hosts = "+','.join(hosts))
-    print("redo = "+str(redo))
+    rootLogger.info("Combining NOAO InstCal catalogs")
+    rootLogger.info("host = "+host)
+    rootLogger.info("version = "+version)
+    rootLogger.info("nmulti = "+str(nmulti))
+    rootLogger.info("hosts = "+','.join(np.array(hosts)))
+    rootLogger.info("redo = "+str(redo))
     
     # Which healpix pixels have data
     listfile = basedir+'lists/nsc_instcal_combine_healpix_list.fits.gz'
     if not os.path.exists(listfile):
-        print(listfile+' NOT FOUND.  Run nsc_instcal_combine_qacuts.pro/py')
+        rootLogger.info(listfile+' NOT FOUND.  Run nsc_instcal_combine_qacuts.pro/py')
         sys.exit()
 
     rootLogger.info("Reading list from "+listfile)
-    #print('Reading list from '+listfile)
     healstr = fits.getdata(listfile,1)
     index = fits.getdata(listfile,2)
     upix = index['pix']
@@ -140,7 +140,7 @@ if __name__ == "__main__":
     smc = SkyCoord(ra=13.183*u.degree,dec=-72.8283*u.degree)
     srad = smc.separation(coords).deg
     gd,ngd = dln.where( (coords.galactic.b.deg<-10) & ((lrad>6) & (lrad<25)) | ((srad>6) & (srad<15)) )
-    print('Only processing '+str(ngd)+' Magellanic Clouds HEALPix')
+    rootLogger.info('Only processing '+str(ngd)+' Magellanic Clouds HEALPix')
     allpix = allpix[gd]
     allcmd = allcmd[gd]
     alldirs = alldirs[gd]
@@ -163,14 +163,14 @@ if __name__ == "__main__":
     pix = allpix[torun]
     cmd = allcmd[torun]
     dirs = alldirs[torun]
-    rootLogger.info('Running '+str(len(torun))+' on '+hostname)
+    rootLogger.info('Running '+str(len(torun))+' on '+host)
 
     # Saving the structure of jobs to run
-    runfile = basedir+'lists/nsc_instcal_combine_main.'+hostname+'.'+logtime+'_run.fits'
+    runfile = basedir+'lists/nsc_instcal_combine_main.'+host+'.'+logtime+'_run.fits'
     rootLogger.info('Writing running information to '+runfile)
     runstr = np.zeros(len(cmd),dtype=np.dtype([('pix',int),('host',(np.str,20))]))
     runstr['pix'] = pix
-    runstr['host'] = hostname
+    runstr['host'] = host
     Table(runstr).write(runfile)
 
     # Now run the combination program on each healpix pixel
@@ -179,4 +179,4 @@ if __name__ == "__main__":
     jobs = jd.job_daemon(cmd,dirs,hyperthread=True,prefix='nsccmb',nmulti=nmulti)
 
     # Save the jobs
-    Table(jobs).write(basedir+'lists/nsc_instcal_combine_main.'+hostname+'.'+logtime+'_jobs.fits')
+    Table(jobs).write(basedir+'lists/nsc_instcal_combine_main.'+host+'.'+logtime+'_jobs.fits')
