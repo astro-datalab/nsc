@@ -91,8 +91,10 @@ file_copy,listfile,localdir+'dnidever/nsc/instcal/'+version+'/',/over
 
 ;; Create the commands
 allpix = upix
-allcmd = "nsc_instcal_combine,"+strtrim(allpix,2)+",nside="+strtrim(nside,2)+",version='"+version+"'"
-if keyword_set(redo) then allcmd+=',/redo'
+;allcmd = "nsc_instcal_combine,"+strtrim(allpix,2)+",nside="+strtrim(nside,2)+",version='"+version+"'"
+;if keyword_set(redo) then allcmd+=',/redo'
+allcmd = "/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal_combine.py "+strtrim(allpix,2)+" "+version+" --nside "+strtrim(nside,2)
+if keyword_set(redo) then allcmd+=' -r'
 alldirs = strarr(npix)+tmpdir
 nallcmd = n_elements(allcmd)
 
@@ -124,7 +126,7 @@ MWRFITS,runstr,runfile,/create
 stop
 
 a = '' & read,a,prompt='Press RETURN to start'
-PBS_DAEMON,cmd,dirs,jobs=jobs,/hyperthread,/idle,prefix='nsccmb',wait=wait,nmulti=nmulti
+PBS_DAEMON,cmd,dirs,jobs=jobs,/hyperthread,prefix='nsccmb',wait=wait,nmulti=nmulti
 
 
 
