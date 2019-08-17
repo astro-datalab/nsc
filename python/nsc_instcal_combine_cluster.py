@@ -548,7 +548,7 @@ if __name__ == "__main__":
     if outdir == '': outdir=dir+'combine/'
     subdir = str(int(pix)//1000)    # use the thousands to create subdirectory grouping
     outfile = outdir+'/'+subdir+'/'+str(pix)+'.fits'
-    if (os.path.exists(outfile) or os.path.exists(outfile+'.gz')) & ~redo:
+    if (os.path.exists(outfile) or os.path.exists(outfile+'.gz')) & (not redo):
         print(outfile+' EXISTS already and REDO not set')
         sys.exit()
 
