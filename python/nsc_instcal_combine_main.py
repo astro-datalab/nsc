@@ -138,6 +138,22 @@ if __name__ == "__main__":
     alldirs[:] = tmpdir
     nallcmd = len(allcmd)        
 
+    # Check what's been done already
+    if not redo:
+        exists = np.zeros(dln.size(allpix),bool)+False
+        for ip,p in enumerate(allpix):
+            outfile = basedir+'combine/'+str(p//1000)+'/'+str(p)+'.fits.gz'
+            if os.path.exists(outfile): exists[ip]=True
+        bd,nbd,gd,ngd = dln.where(exists,comp=True)
+        if ngd==0:
+            rootLogger.info('All pixels were previously completed. Nothing to run')
+            sys.exit()
+        if nbd>0:
+            rootLogger.info(str(nbd)+' pixels previously completed.  Removing them. '+str(ngd)+' left.')
+            allpix = allpix[gd]
+            allcmd = allcmd[gd]
+            alldirs = alldirs[gd]
+
     # Only keep MC region
     ra,dec = hp.pix2ang(nside,upix,lonlat=True)
     coords = SkyCoord(ra=ra*u.degree,dec=dec*u.degree)
@@ -171,21 +187,21 @@ if __name__ == "__main__":
     dirs = alldirs[torun]
     rootLogger.info('Running '+str(len(torun))+' on '+host)
 
-    # Check what's been done already
-    if not redo:
-        exists = np.zeros(dln.size(pix),bool)+False
-        for ip,p in enumerate(pix):
-            outfile = basedir+'combine/'+str(p//1000)+'/'+str(p)+'.fits.gz'
-            if os.path.exists(outfile): exists[ip]=True
-        bd,nbd,gd,ngd = dln.where(exists,comp=True)
-        if ngd==0:
-            rootLogger.info('All pixels were previously completed. Nothing to run')
-            sys.exit()
-        if nbd>0:
-            rootLogger.info(str(nbd)+' pixels previously completed.  Removing them. '+str(ngd)+' left.')
-            pix = pix[gd]
-            cmd = cmd[gd]
-            dirs = dirs[gd]
+    ## Check what's been done already
+    #if not redo:
+    #    exists = np.zeros(dln.size(pix),bool)+False
+    #    for ip,p in enumerate(pix):
+    #        outfile = basedir+'combine/'+str(p//1000)+'/'+str(p)+'.fits.gz'
+    #        if os.path.exists(outfile): exists[ip]=True
+    #    bd,nbd,gd,ngd = dln.where(exists,comp=True)
+    #    if ngd==0:
+    #        rootLogger.info('All pixels were previously completed. Nothing to run')
+    #        sys.exit()
+    #    if nbd>0:
+    #        rootLogger.info(str(nbd)+' pixels previously completed.  Removing them. '+str(ngd)+' left.')
+    #        pix = pix[gd]
+    #        cmd = cmd[gd]
+    #        dirs = dirs[gd]
 
     # Saving the structure of jobs to run
     runfile = basedir+'lists/nsc_instcal_combine_main.'+host+'.'+logtime+'_run.fits'
