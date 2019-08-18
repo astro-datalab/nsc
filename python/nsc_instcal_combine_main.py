@@ -68,6 +68,12 @@ if __name__ == "__main__":
         print('Current HOST='+host+' not in list of HOSTS = [ '+','.join(hosts)+' ] ')
         sys.exit()
 
+    # Turn off mulit-threading
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["OPENBLAS_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
+    os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+    os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
     # Log file
     #------------------
