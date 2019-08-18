@@ -32,9 +32,9 @@ if __name__ == "__main__":
     host = hostname.split('.')[0]
 
     # Inputs
-    version = args.version[0]
+    version = dln.first_el(args.version)
     redo = args.redo
-    nmulti = args.nmulti
+    nmulti = dln.first_el(args.nmulti)
     if args.hosts is not None:
         hosts = args.hosts[0].split(',')
     else:
