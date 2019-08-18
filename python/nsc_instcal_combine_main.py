@@ -140,6 +140,7 @@ if __name__ == "__main__":
 
     # Check what's been done already
     if not redo:
+        rootLogger.info("Checking if any have already been done")
         exists = np.zeros(dln.size(allpix),bool)+False
         for ip,p in enumerate(allpix):
             outfile = basedir+'combine/'+str(p//1000)+'/'+str(p)+'.fits.gz'
@@ -153,9 +154,10 @@ if __name__ == "__main__":
             allpix = allpix[gd]
             allcmd = allcmd[gd]
             alldirs = alldirs[gd]
+            nallcmd = len(allcmd)
 
     # Only keep MC region
-    ra,dec = hp.pix2ang(nside,upix,lonlat=True)
+    ra,dec = hp.pix2ang(nside,allpix,lonlat=True)
     coords = SkyCoord(ra=ra*u.degree,dec=dec*u.degree)
     lmc = SkyCoord(ra=81.9*u.degree,dec=-69.866*u.degree)
     lrad = lmc.separation(coords).deg
