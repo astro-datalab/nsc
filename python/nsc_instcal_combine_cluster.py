@@ -266,7 +266,7 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                 vdec = chmeta['vdec'][j]
                 if (np.max(vra)-np.min(vra)) > 100:    # deal with RA=0 wrapround
                     bd,nbd = dln.where(vra>180)
-                    if bbd>0: vra[bd] -= 360
+                    if nbd>0: vra[bd] -= 360
                 if coords.doPolygonsOverlap(buffdict['ra'],buffdict['dec'],vra,vdec) is False:
                     if verbose: print('This chip does NOT overlap the HEALPix region+buffer')
                     inside = False
