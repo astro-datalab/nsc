@@ -163,7 +163,8 @@ if __name__ == "__main__":
     lrad = lmc.separation(coords).deg
     smc = SkyCoord(ra=13.183*u.degree,dec=-72.8283*u.degree)
     srad = smc.separation(coords).deg
-    gd,ngd = dln.where( (coords.galactic.b.deg<-10) & ((lrad>6) & (lrad<25)) | ((srad>6) & (srad<15)) )
+    #gd,ngd = dln.where( (coords.galactic.b.deg<-10) & (lrad>6) & (srad>6) ((lrad>6) & (lrad<25)) | ((srad>6) & (srad<15)) )
+    gd,ngd = dln.where( (coords.galactic.b.deg<-10) & (lrad>6) & (srad>6) & ((lrad<25) | (srad<15)) )
     rootLogger.info('Only processing '+str(ngd)+' Magellanic Clouds HEALPix')
     allpix = allpix[gd]
     allcmd = allcmd[gd]
