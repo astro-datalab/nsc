@@ -1038,3 +1038,8 @@ if __name__ == "__main__":
     if dbfile is not None:
         print('Deleting temporary database file '+dbfile)
         os.remove(dbfile)
+
+    # Delete all arrays before we quit
+    del(sumstr)
+    del(obj)
+    del(idstr)
