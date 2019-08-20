@@ -159,7 +159,7 @@ def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=Non
                             ('THETA',float),('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
     cat = np.zeros(len(data),dtype=dtype_hicat)
     cat[...] = data
-    del(data)
+    del data
 
     if verbose: print('got data in '+str(time.time()-t0)+' sec.')
 
@@ -186,7 +186,7 @@ def add_elements(cat,nnew=300000):
     nnew = dln.gt(nnew,ncat)
     cat = np.zeros(ncat+nnew,dtype=old.dtype)
     cat[0:ncat] = old
-    del(old)
+    del old
     return cat    
 
 def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
@@ -286,7 +286,7 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                 # Make sure it's in the right format
                 if len(cat1.dtype.fields) != 32:
                     if verbose: print('  This catalog does not have the right format. Skipping')
-                    del(cat1)
+                    del cat1
                     ncat1 = 0
 
                 # Only include sources inside Boundary+Buffer zone
@@ -721,7 +721,7 @@ if __name__ == "__main__":
             cat1 = np.zeros(ncat1,dtype=dtype_hicat)
             cat1[...] = cat1_orig   # stuff in the data
             #for n in dtype_hicat.names: cat1[n] = cat1_orig[n]
-            del(cat1_orig)
+            del cat1_orig
         # Get from the database
         else:            
             # Get next group of object measurements
@@ -1040,6 +1040,6 @@ if __name__ == "__main__":
         os.remove(dbfile)
 
     # Delete all arrays before we quit
-    del(sumstr)
-    del(obj)
-    del(idstr)
+    del sumstr
+    del obj
+    del idstr
