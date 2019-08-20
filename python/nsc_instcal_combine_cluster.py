@@ -20,6 +20,7 @@ from sklearn.cluster import DBSCAN
 from scipy.optimize import least_squares
 from scipy.interpolate import interp1d
 import sqlite3
+import gc
 
 def writecat2db(cat,dbfile):
     """ Write a catalog to the database """
@@ -1043,3 +1044,5 @@ if __name__ == "__main__":
     del sumstr
     del obj
     del idstr
+    # garbage collection
+    gc.collect()
