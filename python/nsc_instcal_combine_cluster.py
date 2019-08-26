@@ -21,6 +21,7 @@ from scipy.optimize import least_squares
 from scipy.interpolate import interp1d
 import sqlite3
 import gc
+import psutil
 
 def writecat2db(cat,dbfile):
     """ Write a catalog to the database """
@@ -260,6 +261,9 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
             if chmeta['ngaiamatch'][j] == 0:
                 if verbose: print('This chip was not astrometrically calibrate')
 
+            v = psutil.virtual_memory()
+            print('%6.1f Percent of memory used. %6.1f GB available' % (v.percent,v.available/1e9))
+
             # Check that this overlaps the healpix region
             inside = True
             if buffdict is not None:
@@ -399,6 +403,9 @@ def clusterdata(cat,ncat,dbfile=None):
                 cat1 = getdatadb(dbfile,rar=[r0-rabuff,r1+rabuff],decr=[d0-buff,d1+buff],verbose=True)
                 ncat1 = len(cat1)
                 print(str(ncat1)+' measurements')
+
+                v = psutil.virtual_memory()
+                print('%6.1f Percent of memory used. %6.1f GB available' % (v.percent,v.available/1e9))
 
                 # Some measurements to work with
                 if ncat1>0:
@@ -1014,6 +1021,9 @@ if __name__ == "__main__":
     ind1,ind2 = dln.match(sumstr['base'],uexposure)
     nmatch = len(ind1)
     sumstr['nobjects'][ind1] = numobjexp
+
+    v = psutil.virtual_memory()
+    print('%6.1f Percent of memory used. %6.1f GB available' % (v.percent,v.available/1e9))
 
     # Write the output file
     print('Writing combined catalog to '+outfile)
