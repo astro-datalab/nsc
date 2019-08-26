@@ -5,7 +5,7 @@ NSC_ROOTDIRS,dldir,mssdir,localdir
 dir = dldir+'users/dnidever/nsc/'
 
 if n_elements(version) eq 0 then version = 'v3'
-if n_elements(file) eq 0 then file=dir+'instcal/'+version+'/decam_archive_info.fits.gz'
+if n_elements(file) eq 0 then file=dir+'instcal/'+version+'/lists/decam_archive_info.fits.gz'
 
 ; Load all of the instcal exposures
 if n_elements(all) eq 0 then begin
@@ -63,6 +63,7 @@ for i=0,ndbl-1 do begin
   remove,bestind,left
   push,torem,left  
 endfor
+stop
 ; removing duplicate entires
 remove,torem,imstr
 
