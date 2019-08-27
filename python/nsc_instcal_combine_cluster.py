@@ -960,6 +960,9 @@ if __name__ == "__main__":
     process = psutil.Process(os.getpid())
     print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
 
+    # Created OBJECTID index in IDSTR database
+    createindexdb(dbfile_idstr,'objectid',unique=False)
+
     # Select Variables
     #  1) Construct fiducial magnitude (done in loop above)
     #  2) Construct median VAR and sigma VAR versus magnitude
