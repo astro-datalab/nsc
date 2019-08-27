@@ -109,6 +109,26 @@ def insertobjlabelsdb(rowid,labels,dbfile):
     db.close()
     print('inserting done after '+str(time.time()-t0)+' sec')
 
+def writeidstr2db(cat,dbfile):
+    """ Insert IDSTR database values """
+    t0 = time.time()
+    sqlite3.register_adapter(np.int16, int)
+    sqlite3.register_adapter(np.int64, int)
+    sqlite3.register_adapter(np.float64, float)
+    sqlite3.register_adapter(np.float32, float)
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = db.cursor()
+    # Create the table
+    #   the primary key ROWID is automatically generated
+    if len(c.execute('SELECT name from sqlite_master where type= "table" and name="idstr"').fetchall()) < 1:
+        c.execute('''CREATE TABLE idstr(measid TEXT, exposure TEXT, objectid TEXT, objectindex INTEGER)''')
+    data = list(zip(cat['measid'],cat['measid'],cat['objectid'],cat['objectindex']))
+    c.executemany('''INSERT INTO idstr(measid,exposure,objectid,objectindex)
+                     VALUES(?,?,?,?)''', data)
+    db.commit() 
+    db.close()
+    print('inserting done after '+str(time.time()-t0)+' sec')
+
 def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=None,verbose=False):
     """ Get measurements for an object(s) from the database """
     t0 = time.time()
@@ -243,6 +263,10 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
         chmeta = fits.getdata(mfile,2)      # chip-level meta-data structure
         print('  FILTER='+meta['filter'][0]+'  EXPTIME='+str(meta['exptime'][0])+' sec')
 
+        v = psutil.virtual_memory()
+        process = psutil.Process(os.getpid())
+        print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
+
         # Convert META to new format
         newmeta = np.zeros(1,dtype=dtype_meta)
         # Copy over the meta information
@@ -260,9 +284,6 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
             #   and falls in to HEALPix region
             if chmeta['ngaiamatch'][j] == 0:
                 if verbose: print('This chip was not astrometrically calibrate')
-
-            v = psutil.virtual_memory()
-            print('%6.1f Percent of memory used. %6.1f GB available' % (v.percent,v.available/1e9))
 
             # Check that this overlaps the healpix region
             inside = True
@@ -405,7 +426,8 @@ def clusterdata(cat,ncat,dbfile=None):
                 print(str(ncat1)+' measurements')
 
                 v = psutil.virtual_memory()
-                print('%6.1f Percent of memory used. %6.1f GB available' % (v.percent,v.available/1e9))
+                process = psutil.Process(os.getpid())
+                print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
 
                 # Some measurements to work with
                 if ncat1>0:
@@ -562,20 +584,22 @@ if __name__ == "__main__":
 
     print("Combining InstCal SExtractor catalogs for Healpix pixel = "+str(pix))
 
+    #import pdb
+
     # Load the list
     listfile = localdir+'dnidever/nsc/instcal/'+version+'/nsc_instcal_combine_healpix_list.fits.gz'
     if os.path.exists(listfile) is False:
         print(listfile+" NOT FOUND")
         sys.exit()
-    healstr = Table(fits.getdata(listfile,1))
-    index = Table(fits.getdata(listfile,2))
+    healstr = fits.getdata(listfile,1)
+    index = fits.getdata(listfile,2)
     # Find our pixel
     ind,nind = dln.where(index['PIX'] == pix)
     if nind == 0:
         print("No entries for Healpix pixel '"+str(pix)+"' in the list")
         sys.exit()
     ind = ind[0]
-    hlist = healstr[index['LO'][ind]:index['HI'][ind]+1]
+    hlist = Table(healstr[index['LO'][ind]:index['HI'][ind]+1])
     nlist = len(hlist)
     # GET EXPOSURES FOR NEIGHBORING PIXELS AS WELL
     #  so we can deal with the edge cases
@@ -584,8 +608,13 @@ if __name__ == "__main__":
         ind1,nind1 = dln.where(index['PIX'] == neip)
         if nind1>0:
             ind1 = ind1[0]
-            hlist1 = healstr[index[ind1]['LO']:index[ind1]['HI']+1]
+            hlist1 = Table(healstr[index[ind1]['LO']:index[ind1]['HI']+1])
             hlist = vstack([hlist,hlist1])
+            #hlist = np.hstack([hlist,hlist1])
+
+    # Delete healstr and index
+    del healstr
+    del index
 
     # Use entire exposure files
     # Get unique values
@@ -593,6 +622,8 @@ if __name__ == "__main__":
     hlist = hlist[ui]
     nhlist = len(hlist)
     print(str(nhlist)+' exposures that overlap this pixel and neighbors')
+
+    #pdb.set_trace()
 
     # Get the boundary coordinates
     #   healpy.boundaries but not sure how to do it in IDL
@@ -663,6 +694,9 @@ if __name__ == "__main__":
         print('Using temporary database file = '+dbfile)
         if os.path.exists(dbfile): os.remove(dbfile)
 
+    # IDSTR database file
+    dbfile_idstr = outdir+'/'+subdir+'/'+str(pix)+'_idstr.db'
+
     # Load the measurement catalog
     #  this will contain excess rows at the end, if all in RAM
     #  if using database, CAT is empty
@@ -694,7 +728,7 @@ if __name__ == "__main__":
         obj[f+'theta'] = np.nan
     obj['variable10sig'] = 0
     obj['nsigvar'] = np.nan
-    idstr = np.zeros(ncat,dtype=dtype_idstr)
+    #idstr = np.zeros(ncat,dtype=dtype_idstr)
 
     # Higher precision catalog
     dtype_hicat = np.dtype([('MEASID',np.str,30),('EXPOSURE',np.str,40),('CCDNUM',int),('FILTER',np.str,3),
@@ -715,9 +749,17 @@ if __name__ == "__main__":
     ngroup = -1
     grpcount = 0
     maxmeasload = 50000
+    ngrpcat = 0
+    ncat1 = 0
     fidmag = np.zeros(nobj,float)+np.nan  # fiducial magnitude
     for i,lab in enumerate(objstr['OBJLABEL']):
         if (i % 1000)==0: print(i)
+
+        if (i % 1000)==0:
+            v = psutil.virtual_memory()
+            process = psutil.Process(os.getpid())
+            print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
+            import pdb; pdb.set_trace()
 
         # Get meas data for this object
         if usedb is False:
@@ -734,7 +776,7 @@ if __name__ == "__main__":
         else:            
             # Get next group of object measurements
             if grpcount>=ngroup:
-                # Use maxmeaslead to figure out how many objects we can load
+                # Use maxmeasload to figure out how many objects we can load
                 if i==0:
                     ngroup = np.max(np.where(meascumcount[i:]<=maxmeasload)[0])+1
                 else:
@@ -743,7 +785,10 @@ if __name__ == "__main__":
                 lab0 = lab
                 lab1 = objstr['OBJLABEL'][np.min([i+ngroup-1,nobj-1])]
                 #lab1 = labelindex['value'][np.min([i+ngroup-1,nobj-1])]
+                if ngrpcat>0: del grpcat
+                if ncat1>0: del cat1
                 grpcat = getdatadb(dbfile,objlabel=[lab0,lab1])
+                ngrpcat = dln.size(grpcat)
                 grpindex = dln.create_index(grpcat['OBJLABEL'])                
                 #ngroup = len(grpindex['value'])
                 grpcount = 0
@@ -758,10 +803,16 @@ if __name__ == "__main__":
         obj['ndet'][i] = ncat1
 
         # Add in IDSTR information
-        idstr['measid'][oindx] = cat1['MEASID']
-        idstr['exposure'][oindx] = cat1['EXPOSURE']
-        idstr['objectid'][oindx] = obj['objectid'][i]
-        idstr['objectindex'][oindx] = i
+        #idstr['measid'][oindx] = cat1['MEASID']
+        #idstr['exposure'][oindx] = cat1['EXPOSURE']
+        #idstr['objectid'][oindx] = obj['objectid'][i]
+        #idstr['objectindex'][oindx] = i
+        idcat = np.zeros(ncat1,dtype=dtype_idstr)
+        idcat['measid'] = cat1['MEASID']
+        idcat['exposure'] = cat1['EXPOSURE']
+        idcat['objectid'] = obj['objectid'][i]
+        idcat['objectindex'] = i
+        writeidstr2db(idcat,dbfile_idstr)
 
         # Computing quantities
         # Mean RA/DEC, RAERR/DECERR
@@ -905,6 +956,10 @@ if __name__ == "__main__":
         obj['class_star'][i] = np.mean(cat1['CLASS_STAR'])
         obj['flags'][i] = np.bitwise_or.reduce(cat1['FLAGS'])  # OR combine
 
+    v = psutil.virtual_memory()
+    process = psutil.Process(os.getpid())
+    print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
+
     # Select Variables
     #  1) Construct fiducial magnitude (done in loop above)
     #  2) Construct median VAR and sigma VAR versus magnitude
@@ -912,9 +967,9 @@ if __name__ == "__main__":
     si = np.argsort(fidmag)   # NaNs are at end
     varcol = 'madvar'
     gdvar,ngdvar,bdvar,nbdvar = dln.where(np.isfinite(obj[varcol]) & np.isfinite(fidmag),comp=True)
-    nbins = np.ceil((np.max(fidmag[gdvar])-np.min(fidmag[gdvar]))/0.25)
-    nbins = int(np.max([2,nbins]))
     if ngdvar>0:
+        nbins = np.ceil((np.max(fidmag[gdvar])-np.min(fidmag[gdvar]))/0.25)
+        nbins = int(np.max([2,nbins]))
         fidmagmed, bin_edges1, binnumber1 = bindata.binned_statistic(fidmag[gdvar],fidmag[gdvar],statistic='nanmedian',bins=nbins)
         # Median metric
         varmed, bin_edges2, binnumber2 = bindata.binned_statistic(fidmag[gdvar],obj[varcol][gdvar],statistic='nanmedian',bins=nbins)
@@ -983,6 +1038,8 @@ if __name__ == "__main__":
     obj = obj[ind1]
     print(str(nmatch)+' final objects fall inside the pixel')
 
+    import pdb; pdb.set_trace()
+
     # Remove trimmed objects from IDSTR
     totrim,ntotrim = dln.where(~objtokeep[idstr['objectindex']])  #using old index
     if ntotrim>0:
@@ -992,6 +1049,10 @@ if __name__ == "__main__":
         # Update IDSTR.objectindex
         old_idstr_objectindex = idstr['objectindex']
         idstr['objectindex'] = newobjindex[old_idstr_objectindex]
+
+    v = psutil.virtual_memory()
+    process = psutil.Process(os.getpid())
+    print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
 
     # Create final summary structure from ALLMETA
     #  get exposures that are in IDSTR
@@ -1023,7 +1084,8 @@ if __name__ == "__main__":
     sumstr['nobjects'][ind1] = numobjexp
 
     v = psutil.virtual_memory()
-    print('%6.1f Percent of memory used. %6.1f GB available' % (v.percent,v.available/1e9))
+    process = psutil.Process(os.getpid())
+    print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
 
     # Write the output file
     print('Writing combined catalog to '+outfile)
@@ -1035,8 +1097,8 @@ if __name__ == "__main__":
     hdulist = fits.open(outfile)
     hdu = fits.table_to_hdu(Table(obj))        # second, catalog
     hdulist.append(hdu)
-    hdu = fits.table_to_hdu(Table(idstr))      # third, ID table
-    hdulist.append(hdu)    
+    #hdu = fits.table_to_hdu(Table(idstr))      # third, ID table
+    #hdulist.append(hdu)    
     hdulist.writeto(outfile,overwrite=True)
     hdulist.close()
     if os.path.exists(outfile+'.gz'): os.remove(outfile+'.gz')
