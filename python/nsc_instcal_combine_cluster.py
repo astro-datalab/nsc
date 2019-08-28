@@ -70,12 +70,12 @@ def getdbcoords(dbfile):
 
     return cat
 
-def createindexdb(dbfile,col='measid',unique=True):
+def createindexdb(dbfile,col='measid',table='meas',unique=True):
     """ Index a column in the database """
     t0 = time.time()
     db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
     c = db.cursor()
-    index_name = 'idx_'+col+'_meas'
+    index_name = 'idx_'+col+'_'+table
     # Check if the index exists first
     c.execute('select name from sqlite_master')
     d = c.fetchall()
@@ -86,9 +86,9 @@ def createindexdb(dbfile,col='measid',unique=True):
     # Create the index
     print('Indexing '+col)
     if unique:
-        c.execute('CREATE UNIQUE INDEX '+index_name+' ON meas('+col+')')
+        c.execute('CREATE UNIQUE INDEX '+index_name+' ON '+table+'('+col+')')
     else:
-        c.execute('CREATE INDEX '+index_name+' ON meas('+col+')')
+        c.execute('CREATE INDEX '+index_name+' ON '+table+'('+col+')')
     data = c.fetchall()
     db.close()
     print('indexing done after '+str(time.time()-t0)+' sec')
@@ -127,7 +127,7 @@ def writeidstr2db(cat,dbfile):
                      VALUES(?,?,?,?)''', data)
     db.commit() 
     db.close()
-    print('inserting done after '+str(time.time()-t0)+' sec')
+    #print('inserting done after '+str(time.time()-t0)+' sec')
 
 def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=None,verbose=False):
     """ Get measurements for an object(s) from the database """
@@ -759,7 +759,7 @@ if __name__ == "__main__":
             v = psutil.virtual_memory()
             process = psutil.Process(os.getpid())
             print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
-            import pdb; pdb.set_trace()
+            #import pdb; pdb.set_trace()
 
         # Get meas data for this object
         if usedb is False:
@@ -961,7 +961,7 @@ if __name__ == "__main__":
     print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
 
     # Created OBJECTID index in IDSTR database
-    createindexdb(dbfile_idstr,'objectid',unique=False)
+    createindexdb(dbfile_idstr,'objectid',table='idstr',unique=False)
 
     # Select Variables
     #  1) Construct fiducial magnitude (done in loop above)
