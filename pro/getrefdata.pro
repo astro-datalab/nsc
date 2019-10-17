@@ -397,7 +397,7 @@ for i=0,nrefcat-1 do begin
   ; Add leftover ones
   if nmatch lt n_elements(ref1) then begin
     left1 = ref1
-    remove,ind2,left1
+    if nmatch gt 0 then remove,ind2,left1
     nleft1 = n_elements(left1)
     new = replicate(schema,nleft1)
     new.ra = left1.(raind)
