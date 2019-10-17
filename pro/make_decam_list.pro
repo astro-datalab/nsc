@@ -5,7 +5,7 @@ NSC_ROOTDIRS,dldir,mssdir,localdir
 dir = dldir+'users/dnidever/nsc/'
 
 if n_elements(version) eq 0 then version = 'v3'
-if n_elements(file) eq 0 then file=dir+'instcal/'+version+'/decam_archive_info.fits.gz'
+if n_elements(file) eq 0 then file=dir+'instcal/'+version+'/lists/decam_archive_info.fits.gz'
 
 ; Load all of the instcal exposures
 if n_elements(all) eq 0 then begin
@@ -30,50 +30,60 @@ imstr = all[gdim]
 
 ; Get unique IDs
 ;  DTACQNAM        STRING    '/data_local/images/DTS/2013A-0609/DECam_00178042.fits.fz'
-rawname = file_basename(imstr.dtacqnam)
+;rawname = file_basename(imstr.dtacqnam)
 ;; ~2000 don't have DECam_XX names but c4d_XXX_XXX_ ones instead, fix them
-bd = where(strmid(rawname,0,5) ne 'DECam',nbd)
-if nbd gt 0 then begin
-  ;; remove the version number at the end
-  rawname[bd] = strmid(rawname[bd],0,24)
-endif
-uirname = uniq(rawname,sort(rawname))
-urname = rawname[uirname]
-nrname = n_elements(urname)
+;bd = where(strmid(rawname,0,5) ne 'DECam',nbd)
+;if nbd gt 0 then begin
+;  ;; remove the version number at the end
+;  rawname[bd] = strmid(rawname[bd],0,24)
+;endif
+;uirname = uniq(rawname,sort(rawname))
+;urname = rawname[uirname]
+;nrname = n_elements(urname)
 
-; Get latest version for each ID
-; and use PLVER to get the most recent one
-;  this also demotes blank PLVER entries
-print,'Dealing with duplicates'
-;  this could be faster with better index management
-alldbl = doubles(rawname,/all)
-dbl = doubles(rawname)
-ndbl = n_elements(dbl)
-undefine,torem
-indx = create_index(rawname(alldbl))
-print,strtrim(ndbl,2),' duplicates to deal with'
-for i=0,ndbl-1 do begin
-  if i mod 5000 eq 0 then print,i
-  ind1 = indx.index[indx.lo[i]:indx.hi[i]]
-  ;MATCH,rawname[alldbl],rawname[dbl[i]],ind1,ind2,/sort,count=nmatch
-  dblind1 = alldbl[ind1]
-  plver = imstr[dblind1].plver
-  bestind = first_el(maxloc(plver))
-  left = dblind1
-  remove,bestind,left
-  push,torem,left  
-endfor
-; removing duplicate entires
-remove,torem,imstr
+;; Get latest version for each ID
+;; and use PLVER to get the most recent one
+;;  this also demotes blank PLVER entries
+;print,'Dealing with duplicates'
+;;  this could be faster with better index management
+;alldbl = doubles(rawname,/all)
+;dbl = doubles(rawname)
+;ndbl = n_elements(dbl)
+;undefine,torem
+;indx = create_index(rawname(alldbl))
+;print,strtrim(ndbl,2),' duplicates to deal with'
+;for i=0,ndbl-1 do begin
+;  if i mod 5000 eq 0 then print,i
+;  ind1 = indx.index[indx.lo[i]:indx.hi[i]]
+;  ;MATCH,rawname[alldbl],rawname[dbl[i]],ind1,ind2,/sort,count=nmatch
+;  dblind1 = alldbl[ind1]
+;  plver = imstr[dblind1].plver
+;  bestind = first_el(maxloc(plver))
+;  left = dblind1
+;  remove,bestind,left
+;  push,torem,left  
+;endfor
+;; removing duplicate entries
+;remove,torem,imstr
 
 ; Make new structure with minimal columns
 str = replicate({instrument:'',sp_id:'',sb_recno:0L,dtnsanam:'',dtacqnam:'',rawname:'',expnum:'',data_product_id:0L,uri:'',prop_id:'',ra:0.0d0,dec:0.0d0,$
                  exposure:0.0,release_date:'',date_obs:'',filter:'',mjd_obs:0.0d0,obstype:'',plver:'',proctype:'',prodtype:'',$
-                 filename:'',pldname:'',fluxfile:'',maskfile:'',wtfile:''},nrname)
+                 filename:'',pldname:'',fluxfile:'',maskfile:'',wtfile:''},n_elements(imstr))
+;                 filename:'',pldname:'',fluxfile:'',maskfile:'',wtfile:''},nrname)
 STRUCT_ASSIGN,imstr,str
 str.instrument = 'c4d'    ; CTIO-4m+DECam
 str.rawname = file_basename(str.dtacqnam)
 str.fluxfile = strtrim(str.uri,2)
+
+; Fix raw names
+;; ~2000 don't have DECam_XX names but c4d_XXX_XXX_ ones instead, fix them
+bd = where(strmid(str.rawname,0,5) ne 'DECam',nbd)
+if nbd gt 0 then begin
+  ;; remove the version number at the end
+  ;str[bd].rawname = strmid(str[bd].rawname,0,24)
+  str[bd].rawname = file_basename(str[bd].rawname,'.fits.fz&')
+endif
 
 ; Get exposure number
 expnum = strmid(file_basename(str.rawname,'.fits.fz'),6)
@@ -120,6 +130,43 @@ print,strtrim(nbd3,2),' exposures do NOT have flux/mask/wtmap files'
 str = str[gd3]
 print,strtrim(ngd3,2),' final exposures with the information we need'
 
+;; Saving full decam list
+print,'Saving full decam list'
+MWRFITS,str,dir+'instcal/'+version+'/lists/decam_instcal_list_full.fits',/create    
+spawn,['gzip','-f',dir+'instcal/'+version+'/lists/decam_instcal_list_full.fits'],/noshell
+
+
+; Get latest version for each ID
+; and use PLVER to get the most recent one
+;  this also demotes blank PLVER entries
+print,'Dealing with duplicates'
+;  this could be faster with better index management
+;alldbl = doubles(str.rawname,/all)
+;dbl = doubles(str.rawname)
+alldbl = doubles(str.date_obs,/all)
+dbl = doubles(str.date_obs)
+ndbl = n_elements(dbl)
+undefine,torem
+;indx = create_index(str[alldbl].rawname)
+indx = create_index(str[alldbl].date_obs)
+print,strtrim(ndbl,2),' duplicates to deal with'
+for i=0,ndbl-1 do begin
+  if i mod 5000 eq 0 then print,i
+  ind1 = indx.index[indx.lo[i]:indx.hi[i]]
+  ;MATCH,rawname[alldbl],rawname[dbl[i]],ind1,ind2,/sort,count=nmatch
+  dblind1 = alldbl[ind1]
+  plver = imstr[dblind1].plver
+  bestind = first_el(maxloc(plver))
+  left = dblind1
+  remove,bestind,left
+  push,torem,left  
+endfor
+; removing duplicate entries
+if n_elements(torem) gt 0 then begin
+  print,'Removing ',strtrim(n_elements(torem),2),' duplicates'
+  remove,torem,str
+endif
+
 ; APPLY RELEASE DATE CUTS
 release_date = strtrim(str.release_date,2)
 release_year = long(strmid(release_date,0,4))
@@ -136,18 +183,18 @@ print,strtrim(ngdrelease,2),' exposures are PUBLIC'
 str = str[gdrelease]  ; impose the public data cut
 
 ; Remove duplicate in DATE_OBS
-indx = create_index(str.date_obs)
-bd = where(indx.num gt 1,nbd)
-undefine,torem
-for i=0,nbd-1 do begin
-  ind = indx.index[indx.lo[bd[i]]:indx.hi[bd[i]]]
-  plver = str[ind].plver
-  bestind = first_el(maxloc(plver))
-  left = ind
-  remove,bestind,left
-  push,torem,left
-endfor
-print,'Removing ',strtrim(n_elements(torem),2),' duplicates'
+;indx = create_index(str.date_obs)
+;bd = where(indx.num gt 1,nbd)
+;undefine,torem
+;for i=0,nbd-1 do begin
+;  ind = indx.index[indx.lo[bd[i]]:indx.hi[bd[i]]]
+;  plver = str[ind].plver
+;  bestind = first_el(maxloc(plver))
+;  left = ind
+;  remove,bestind,left
+;  push,torem,left
+;endfor
+;print,'Removing ',strtrim(n_elements(torem),2),' duplicates'
 ;REMOVE,torem,str
 
 ;MWRFITS,str,dir+'instcal/'+version+'/lists/decam_instcal_list.fits',/create
