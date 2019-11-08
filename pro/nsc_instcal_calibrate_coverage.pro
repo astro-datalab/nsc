@@ -68,8 +68,8 @@ for e=0L,n_elements(expdirs)-1 do begin
   ui = uniq(all.pix,sort(all.pix))
   if n_elements(ui) lt n_elements(all) then begin
     orig = all
-    index = create_index(all.pix)
-    all = all[index.lo]
+    index = create_index(orig.pix)
+    all = orig[index.index[index.lo]]
     for i=0,n_elements(all)-1 do begin
       ind = index.index[index.lo[i]:index.hi[i]]
       all[i].nmeas = total(orig[ind].nmeas)
