@@ -1053,6 +1053,8 @@ if __name__ == "__main__":
         old_idstr_objectindex = idstr['objectindex']
         idstr['objectindex'] = newobjindex[old_idstr_objectindex]
 
+        # I THINK THIS STILL NEEDS TO BE UDPATED!!
+
     v = psutil.virtual_memory()
     process = psutil.Process(os.getpid())
     print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
