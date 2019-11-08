@@ -10,6 +10,10 @@ if n_elements(file) eq 0 then file=dir+'instcal/'+version+'/lists/decam_archive_
 ; Load all of the instcal exposures
 if n_elements(all) eq 0 then begin
   all = mrdfits(file,1)
+  ;; Only want DECam exposures
+  all.instrument = strtrim(all.instrument,2)
+  gd = where(stregex(all.instrument,'decam',/fold_case,/boolean) eq 1)
+  all = all[gd]
   all.dtnsanam = strtrim(all.dtnsanam,2)
   all.dtacqnam = strtrim(all.dtacqnam,2)
   all.proctype = strtrim(all.proctype,2)
@@ -176,7 +180,8 @@ release_mjd = JULDAY(release_month,release_day,release_year)-2400000.5d0
 ;release_cutoff = [2017,4,24]  ; v1 - April 24, 2017
 ;release_cutoff = [2017,10,11] ; v2 - Oct 11, 2017
 ;release_cutoff = [2018,10,9]  ; v3 - Oct 9, 2018
-release_cutoff = [2019,7,9]    ; v3 - July 9, 2019
+;release_cutoff = [2019,7,9]    ; v3 - July 9, 2019
+release_cutoff = [2019,10,17]    ; v3 - Oct 17, 2019
 release_cutoff_mjd = JULDAY(release_cutoff[1],release_cutoff[2],release_cutoff[0])-2400000.5d0
 gdrelease = where(release_mjd le release_cutoff_mjd,ngdrelease,comp=bdrelease,ncomp=nbdrelease)
 print,strtrim(ngdrelease,2),' exposures are PUBLIC'
