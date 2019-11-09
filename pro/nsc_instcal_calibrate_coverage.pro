@@ -24,7 +24,7 @@ for e=0L,n_elements(expdirs)-1 do begin
   nchstr = n_elements(chstr)
 
   print,'Creating coverage structure for exposure ',expdir
-  schema = {pix:0L,nmeas:0L,depth95:0.0}
+  schema = {pix:0L,nmeas:0L,depth95:0.0,coverage:0.0}
   undefine,all
   ;; Loop over chips
   for i=0,nchstr-1 do begin
@@ -62,6 +62,7 @@ for e=0L,n_elements(expdirs)-1 do begin
       ;print,j,' ',olap
       ;; get polygon intersection
       if olap eq 1 then begin
+        harea = polygonarea(bndlon,bndlat)
         polygonintersection,vlon,vlat,bndlon,bndlat,intlon,intlat
         intarea = polygonarea(intlon,intlat)
         ;print,intarea
@@ -70,6 +71,7 @@ for e=0L,n_elements(expdirs)-1 do begin
         new.pix = listpix[j]
         new.nmeas = round(chstr1.nmeas*(intarea/area))
         new.depth95 = chstr1.depth95   ;; depth should be identical for all chips
+        new.coverage = intarea/harea   ;; fraction area coverage
         push,all,new
       endif
     endfor  ; healpix list loop
