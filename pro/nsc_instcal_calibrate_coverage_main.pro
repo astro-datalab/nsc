@@ -39,6 +39,9 @@ for i=0,nexpdir-1 do begin
   if file_test(cfile) eq 0 then goto,BOMB
   cstr = mrdfits(cfile,1,/silent)
 
+  ;; Rerun if it's missing COVERAGE
+  if tag_exist(cstr,'COVERAGE') eq 0 then nsc_instcal_calibrate_coverage,expdir1,/redo
+
   nmeas += total(cstr.nmeas>0)
 
   ;; nmeas
