@@ -32,6 +32,10 @@ for e=0L,n_elements(expdirs)-1 do begin
 
     cenra = chstr1.cenra
     cendec = chstr1.cendec
+    if cenra gt 370 then begin
+      print,cenra,' out of range'
+      goto,expbomb
+    endif
     ROTSPHCEN,chstr1.vra,chstr1.vdec,cenra,cendec,vlon,vlat,/gnomic
     radius = max(sqrt(vlon^2+vlat^2))*1.5
     area = polygonarea(vlon,vlat)
