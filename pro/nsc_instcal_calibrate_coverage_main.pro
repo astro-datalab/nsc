@@ -48,7 +48,10 @@ for i=0,nexpdir-1 do begin
   ;; nexp
   covstr[cstr.pix].nexp++
   ;; nobj
-  covstr[cstr.pix].nobj >= cstr.nmeas
+  nobj = cstr.nmeas
+  g = where(cstr.coverage gt 0.01,ng)
+  if ng gt 0 then nobj[g] = cstr[g].nmeas/cstr[g].coverage  ;; correct for coverage fraction
+  covstr[cstr.pix].nobj >= nobj
   ;; Add filter depth and nexp
   case metastr.filter of
   'u': begin
