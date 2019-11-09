@@ -1,4 +1,4 @@
-pro nsc_instcal_calibrate_coverage,expdirs
+pro nsc_instcal_calibrate_coverage,expdirs,redo=redo
 
 ;; Get coverage information from one calibrated exposure
 
@@ -8,9 +8,16 @@ radeg = 180.0d0 / !dpi
 ;; Exposure loop
 for e=0L,n_elements(expdirs)-1 do begin
   expdir = expdirs[e]
+  base = file_basename(expdir)
+
+  ;; Check if output file already exists
+  outfile = expdir+'/'+base+'_hlpmeta.fits'
+  if file_test(outfile) eq 1 and not keyword_set(redo) then begin
+    print,outfile,' EXISTS and /redo NOT set'
+    goto,expbomb
+  endif
 
   ;; Load metadata information for this exposures
-  base = file_basename(expdir)
   metafile = expdir+'/'+base+'_meta.fits'
   expstr = mrdfits(metafile,1,/silent)
   chstr = mrdfits(metafile,2,/silent)
@@ -78,10 +85,10 @@ for e=0L,n_elements(expdirs)-1 do begin
   endif
 
   ;; save in exposure directory as hlpmeta.fits
-  outfile = expdir+'/'+base+'_hlpmeta.fits'
   print,'Writing output to ',outfile
   MWRFITS,all,outfile,/create
 
+  EXPBOMB:
 Endfor ;; exposure loop
 
 ;stop

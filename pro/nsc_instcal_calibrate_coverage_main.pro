@@ -1,11 +1,9 @@
-pro nsc_instcal_calibrate_coverage_main
+pro nsc_instcal_calibrate_coverage_main,lohi,outfile
 
 ;; combine all of the individual exposure coverage files
 
 version = 'v3'
-;expstr = mrdfits('/dl1/users/dnidever/nsc/instcal/v3/lists/nsc_calibrate_summary.fits.gz',1)
-;nexpstr = n_elements(expstr)
-;expstr.expdir=strtrim(expstr.expdir,2)
+
 ;; list of "good" exposures
 liststr = mrdfits('/dl1/users/dnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.fits.gz',1)
 liststr.file = strtrim(liststr.file,1)
@@ -13,18 +11,21 @@ expdir = file_dirname(liststr.file)
 ; get unique ones
 ui = uniq(expdir,sort(expdir))
 expdir = expdir[ui]
+; only do a fraction of them
+if n_elements(lohi) gt 0 then expdir=expdir[lohi[0]:lohi[1]]
 nexpdir = n_elements(expdir)
 print,strtrim(nexpdir,2),' good exposures'
 
 nside = 512L
 radeg = 180.0d0/!dpi
-covstr = replicate({pix:0L,ra:0.0d0,dec:0.0d0,nobj:0L,nmeas:0L,depth:0.0,nexp:0,unexp:0,udepth:-9999.0,gnexp:0,gdepth:-9999.0,$
+covstr = replicate({pix:0L,ra:0.0d0,dec:0.0d0,nobj:0L,nmeas:0LL,depth:0.0,nexp:0L,unexp:0,udepth:-9999.0,gnexp:0,gdepth:-9999.0,$
                     rnexp:0,rdepth:0.0,inexp:0,idepth:-9999.0,znexp:0,zdepth:-9999.0,ynexp:0,ydepth:-9999.0,vrnexp:0,vrdepth:-9999.0},3145728L)
 covstr.pix = lindgen(3145728L)
 pix2ang_ring,nside,covstr.pix,theta,phi
 covstr.dec = 90-theta*radeg
 covstr.ra = phi*radeg
 
+nmeas = 0L
 for i=0,nexpdir-1 do begin
   if i mod 1000 eq 0 then print,i
   expdir1 = expdir[i]
@@ -37,6 +38,8 @@ for i=0,nexpdir-1 do begin
   cfile = expdir1+'/'+base+'_hlpmeta.fits'
   if file_test(cfile) eq 0 then goto,BOMB
   cstr = mrdfits(cfile,1,/silent)
+
+  nmeas += total(cstr.nmeas>0)
 
   ;; nmeas
   covstr[cstr.pix].nmeas += cstr.nmeas
@@ -82,11 +85,14 @@ for i=0,nexpdir-1 do begin
   BOMB:
 endfor
 
+print,strtrim(nmeas,2),' total measurements'
+
 ;; Save the coverage file
-outfile = '/dl1/users/dnidever/nsc/instcal/'+version+'/lists/nsc_instcal_calibrate_coverage.fits'
+if n_elements(outfile) eq 0 then $
+  outfile = '/dl1/users/dnidever/nsc/instcal/'+version+'/lists/nsc_instcal_calibrate_coverage.fits'
 print,'Writing calib coverage information to ',outfile
 MWRFITS,covstr,outfile,/create
 
-stop
+;stop
 
 end
