@@ -25,7 +25,7 @@ from scipy.ndimage.filters import convolve
 import astropy.stats
 import struct
 import tempfile
-from utils import *
+from dlnpyutils.utils import *
 
 # Ignore these warnings, it's a bug
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -70,7 +70,7 @@ def parseprofs(lines):
     dtype = np.dtype([('ID',int),('SIG',float),('FLAG',np.str_,10)])
     profs = np.zeros(len(lines)*5,dtype=dtype)
     profs['ID'] = -1
-    cnt = 0L
+    cnt = 0
     for i in range(len(lines)):
         l = lines[i].rstrip()
         if l != "":
@@ -816,7 +816,7 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
     # WEIGHT_IMAGE  F4-00507860_01_comb.mask.fits
 
     filter_name = ''
-    cnt = 0L
+    cnt = 0
     for l in lines:
         # CATALOG_NAME
         m = re.search('^CATALOG_NAME',l)
@@ -1542,7 +1542,7 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
     f = open(scriptfile,'w')
     f.writelines(lines)
     f.close()
-    os.chmod(scriptfile,0775)
+    os.chmod(scriptfile,509)
 
     # Copy option file to daophot.opt
     if os.path.exists("daophot.opt") is False: shutil.copyfile(base+".opt","daophot.opt")
@@ -1727,7 +1727,7 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
     f = open(scriptfile,'w')
     f.writelines(lines)
     f.close()
-    os.chmod(scriptfile,0775)
+    os.chmod(scriptfile,509)
 
     # Copy option file to daophot.opt
     if os.path.exists("daophot.opt") is False: shutil.copyfile(base+".opt","daophot.opt")
@@ -1892,7 +1892,7 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
     f = open(scriptfile,'w')
     f.writelines(lines)
     f.close()
-    os.chmod(scriptfile,0775)
+    os.chmod(scriptfile,509)
 
     # Copy option file to daophot.opt
     if os.path.exists("daophot.opt") is False: shutil.copyfile(base+".opt","daophot.opt")
@@ -2051,7 +2051,7 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
     f = open(scriptfile,'w')
     f.writelines(lines)
     f.close()
-    os.chmod(scriptfile,0775)
+    os.chmod(scriptfile,509)
 
     # Copy option file to daophot.opt
     if os.path.exists("daophot.opt") is False: shutil.copyfile(base+".opt","daophot.opt")
@@ -2243,7 +2243,7 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
     f = open(scriptfile,'w')
     f.writelines(lines)
     f.close()
-    os.chmod(scriptfile,0775)
+    os.chmod(scriptfile,509)
 
     # Copy option file to daophot.opt
     if os.path.exists("daophot.opt") is False: shutil.copyfile(base+".opt","daophot.opt")
@@ -2570,7 +2570,7 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
     f = open(scriptfile,'w')
     f.writelines(lines)
     f.close()
-    os.chmod(scriptfile,0775)
+    os.chmod(scriptfile,509)
 
     # Copy option file to daophot.opt
     if os.path.exists("allstar.opt") is False: shutil.copyfile(optfile,"allstar.opt")
@@ -2736,7 +2736,7 @@ def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=Non
     f = open(scriptfile,'w')
     f.writelines(lines)
     f.close()
-    os.chmod(scriptfile,0775)
+    os.chmod(scriptfile,509)
 
     # Run the script
     try:
