@@ -577,6 +577,8 @@ if __name__ == "__main__":
     # Check if output file already exists
     if outdir == '': outdir=dir+'combine/'
     subdir = str(int(pix)//1000)    # use the thousands to create subdirectory grouping
+    if os.path.exists(outdir) is False: os.mkdir(outdir)
+    if os.path.exists(outdir+'/'+subdir) is False: os.mkdir(outdir+'/'+subdir)
     outfile = outdir+'/'+subdir+'/'+str(pix)+'.fits'
     if (os.path.exists(outfile) or os.path.exists(outfile+'.gz')) & (not redo):
         print(outfile+' EXISTS already and REDO not set')
@@ -1094,8 +1096,6 @@ if __name__ == "__main__":
 
     # Write the output file
     print('Writing combined catalog to '+outfile)
-    if os.path.exists(outdir) is False: os.mkdir(outdir)
-    if os.path.exists(outdir+'/'+subdir) is False: os.mkdir(outdir+'/'+subdir)
     if os.path.exists(outfile): os.remove(outfile)
     sumstr.write(outfile)               # first, summary table
     #  append other fits binary tables
