@@ -109,6 +109,39 @@ def insertobjlabelsdb(rowid,labels,dbfile):
     db.close()
     print('inserting done after '+str(time.time()-t0)+' sec')
 
+def updatecoldb(selcolname,selcoldata,updcolname,updcoldata,table,dbfile):
+    """ Update column in database """
+    print('Updating '+updcolname+' column in '+table+' table using '+selcolname)
+    t0 = time.time()
+    sqlite3.register_adapter(np.int16, int)
+    sqlite3.register_adapter(np.int64, int)
+    sqlite3.register_adapter(np.float64, float)
+    sqlite3.register_adapter(np.float32, float)
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = db.cursor()
+    data = list(zip(updcoldata,selcoldata))
+    c.executemany('''UPDATE '''+table+''' SET '''+updcolname+'''=? WHERE '''+selcolname+'''=?''', data) 
+    db.commit() 
+    db.close()
+    print('updating done after '+str(time.time()-t0)+' sec')    
+
+def deleterowsdb(colname,coldata,table,dbfile):
+    """ Delete rows from the database using rowid"""
+    print('Deleting rows from '+table+' table using '+colname)
+    t0 = time.time()
+    sqlite3.register_adapter(np.int16, int)
+    sqlite3.register_adapter(np.int64, int)
+    sqlite3.register_adapter(np.float64, float)
+    sqlite3.register_adapter(np.float32, float)
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = db.cursor()
+    data = list(coldata)
+    c.executemany('''DELETE from '''+table+''' WHERE '''+colname+'''=?''', data) 
+    db.commit() 
+    db.close()
+    print('inserting done after '+str(time.time()-t0)+' sec')
+
+    
 def writeidstr2db(cat,dbfile):
     """ Insert IDSTR database values """
     t0 = time.time()
@@ -122,12 +155,42 @@ def writeidstr2db(cat,dbfile):
     #   the primary key ROWID is automatically generated
     if len(c.execute('SELECT name from sqlite_master where type= "table" and name="idstr"').fetchall()) < 1:
         c.execute('''CREATE TABLE idstr(measid TEXT, exposure TEXT, objectid TEXT, objectindex INTEGER)''')
-    data = list(zip(cat['measid'],cat['measid'],cat['objectid'],cat['objectindex']))
+    data = list(zip(cat['measid'],cat['exposure'],cat['objectid'],cat['objectindex']))
     c.executemany('''INSERT INTO idstr(measid,exposure,objectid,objectindex)
                      VALUES(?,?,?,?)''', data)
     db.commit() 
     db.close()
     #print('inserting done after '+str(time.time()-t0)+' sec')
+
+def querydb(dbfile,table='meas',cols='rowid,*',where=None):
+    """ Query database table """
+    sqlite3.register_adapter(np.int16, int)
+    sqlite3.register_adapter(np.int64, int)
+    sqlite3.register_adapter(np.float64, float)
+    sqlite3.register_adapter(np.float32, float)
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    cur = db.cursor()
+    cmd = 'SELECT '+cols+' FROM '+table
+    if where is not None: cmd += ' WHERE '+where
+    cur.execute(cmd)
+    data = cur.fetchall()
+    db.close()
+
+    # Return results
+    return data
+
+def executedb(dbfile,cmd):
+    """ Execute a database command """
+    sqlite3.register_adapter(np.int16, int)
+    sqlite3.register_adapter(np.int64, int)
+    sqlite3.register_adapter(np.float64, float)
+    sqlite3.register_adapter(np.float32, float)
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    cur = db.cursor()
+    cur.execute(cmd)
+    data = cur.fetchall()
+    db.close()
+    return data    
 
 def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=None,verbose=False):
     """ Get measurements for an object(s) from the database """
@@ -174,7 +237,7 @@ def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=Non
     if len(data)==0:
         return np.array([])
 
-    # Convert to nump structured array
+    # Convert to numpy structured array
     dtype_hicat = np.dtype([('ROWID',int),('MEASID',np.str,30),('OBJLABEL',int),('EXPOSURE',np.str,40),('CCDNUM',int),('FILTER',np.str,3),
                             ('MJD',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
                             ('MAG_AUTO',float),('MAGERR_AUTO',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),
@@ -577,8 +640,6 @@ if __name__ == "__main__":
     # Check if output file already exists
     if outdir == '': outdir=dir+'combine/'
     subdir = str(int(pix)//1000)    # use the thousands to create subdirectory grouping
-    if os.path.exists(outdir) is False: os.mkdir(outdir)
-    if os.path.exists(outdir+'/'+subdir) is False: os.mkdir(outdir+'/'+subdir)
     outfile = outdir+'/'+subdir+'/'+str(pix)+'.fits'
     if (os.path.exists(outfile) or os.path.exists(outfile+'.gz')) & (not redo):
         print(outfile+' EXISTS already and REDO not set')
@@ -655,7 +716,7 @@ if __name__ == "__main__":
 
     
     # IDSTR schema
-    dtype_idstr = np.dtype([('measid',np.str,200),('exposure',np.str,200),('objectid',np.str,200),('objectindex',int)])
+    #dtype_idstr = np.dtype([('measid',np.str,200),('exposure',np.str,200),('objectid',np.str,200),('objectindex',int)])
 
     # OBJ schema
     dtype_obj = np.dtype([('objectid',np.str,100),('pix',int),('ra',np.float64),('dec',np.float64),('raerr',np.float32),('decerr',np.float32),
@@ -804,11 +865,7 @@ if __name__ == "__main__":
 
         obj['ndet'][i] = ncat1
 
-        # Add in IDSTR information
-        #idstr['measid'][oindx] = cat1['MEASID']
-        #idstr['exposure'][oindx] = cat1['EXPOSURE']
-        #idstr['objectid'][oindx] = obj['objectid'][i]
-        #idstr['objectindex'][oindx] = i
+        # Add IDSTR information to database
         idcat = np.zeros(ncat1,dtype=dtype_idstr)
         idcat['measid'] = cat1['MEASID']
         idcat['exposure'] = cat1['EXPOSURE']
@@ -1032,10 +1089,9 @@ if __name__ == "__main__":
     # Get trimmed objects and indices
     objtokeep = np.zeros(nobj,bool)         # boolean to keep or trim objects
     objtokeep[ind1] = True
-    if nmatch<nobj:
+    if nmatch<nobj:                         # some to trim
         trimind = np.arange(nobj)
         trimind = np.delete(trimind,ind1)
-        #trimind = dln.remove_indices(trimind,ind1)
         trimobj = obj[trimind]          # trimmed objects
     newobjindex = np.zeros(nobj,int)-1    # new indices
     newobjindex[ind1] = np.arange(nmatch)
@@ -1045,28 +1101,23 @@ if __name__ == "__main__":
 
     import pdb; pdb.set_trace()
 
-    # Remove trimmed objects from IDSTR
-    totrim,ntotrim = dln.where(~objtokeep[idstr['objectindex']])  #using old index
-    if ntotrim>0:
-        # Trim objects
-        idstr = np.delete(idstr,totrim)
-        #idstr = dln.remove_indices(idstr,totrim)
-        # Update IDSTR.objectindex
-        old_idstr_objectindex = idstr['objectindex']
-        idstr['objectindex'] = newobjindex[old_idstr_objectindex]
+    # Remove trimmed objects from IDSTR database
+    if nmatch<nobj:
+        # Delete measurements for the objects that we are trimming
+        deleterowsdb('objectid',trimobj['objectid'],'idstr',dbfile_idstr)
+        # Update OBJECTINDEX for the objects that we are keeping
+        updatecoldb('objectid',obj['objectid'],'objectindex',np.arange(nmatch),'idstr',dbfile_idstr)
 
-        # I THINK THIS STILL NEEDS TO BE UDPATED!!
 
     v = psutil.virtual_memory()
     process = psutil.Process(os.getpid())
     print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
 
-    # Create final summary structure from ALLMETA
-    #  get exposures that are in IDSTR
-    #  sometimes EXPNUM numbers have the leading 0s removed
-    #  and sometimes not, so turn to LONG to match
-    dum, uiexposure = np.unique(idstr['exposure'],return_index=True)
-    uexposure = idstr['exposure'][uiexposure]
+    # Get unique exposures in IDSTR database
+    uexposure = executedb(dbfile_idstr,'SELECT DISTINCT exposure from idstr')
+    # this returns a list of tuples, unpack
+    uexposure = [i[0] for i in uexposure]
+    # create sumstr for these using allmeta
     nuexposure = len(uexposure)
     ind1,ind2 = dln.match(allmeta['base'],uexposure)
     nmatch = len(ind1)
@@ -1077,18 +1128,11 @@ if __name__ == "__main__":
     sumstr['nobjects'] = 0
     sumstr['healpix'] = pix
     # get number of objects per exposure
-    exposure = idstr['exposure']
-    siexp = np.argsort(exposure)
-    exposure = exposure[siexp]
-    if nuexposure>1:
-        brklo,nbrk = dln.where(exposure != np.roll(exposure,1))
-        brkhi = np.hstack((brklo[1:nbrk],len(exposure)))
-        numobjexp = brkhi-brklo+1
-    else:
-        numobjexp=len(exposure)
-    ind1,ind2 = dln.match(sumstr['base'],uexposure)
-    nmatch = len(ind1)
-    sumstr['nobjects'][ind1] = numobjexp
+    for i,exp in enumerate(sumstr['exposure']):
+        nobjects = executedb(dbfile_idstr,'SELECT count(DISTINCT objectid) from idstr WHERE exposure='+exp)
+        sumstr['nobjects'][i] = nobjects[0][0]  # unpack list of tuples
+
+    #  can we use some sqlite3 aggregate functions to get nobjects??
 
     v = psutil.virtual_memory()
     process = psutil.Process(os.getpid())
@@ -1096,6 +1140,8 @@ if __name__ == "__main__":
 
     # Write the output file
     print('Writing combined catalog to '+outfile)
+    if os.path.exists(outdir) is False: os.mkdir(outdir)
+    if os.path.exists(outdir+'/'+subdir) is False: os.mkdir(outdir+'/'+subdir)
     if os.path.exists(outfile): os.remove(outfile)
     sumstr.write(outfile)               # first, summary table
     #  append other fits binary tables
