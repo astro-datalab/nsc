@@ -1129,11 +1129,16 @@ if __name__ == "__main__":
     sumstr['nobjects'] = 0
     sumstr['healpix'] = pix
     # get number of objects per exposure
-    for i,exp in enumerate(sumstr['exposure']):
-        nobjects = executedb(dbfile_idstr,'SELECT count(DISTINCT objectid) from idstr WHERE exposure='+exp)
-        sumstr['nobjects'][i] = nobjects[0][0]  # unpack list of tuples
+    data = executedb(dbfile_idstr,'SELECT exposure, count(DISTINCT objectid) from idstr GROUP BY exposure')
+    out = np.zeros(len(data),dtype=np.dtype([('exposure',np.str,40),('nobjects',int)]))
+    out[...] = data
+    ind1,ind2 = dln.match(sumstr['exposure'],out['exposure'])
+    sumstr['nobjects'][ind1] = out['nobjects'][ind2]
+    
+    #for i,exp in enumerate(sumstr['exposure']):
+    #    nobjects = executedb(dbfile_idstr,'SELECT count(DISTINCT objectid) from idstr WHERE exposure='+exp)
+    #    sumstr['nobjects'][i] = nobjects[0][0]  # unpack list of tuples
 
-    #  can we use some sqlite3 aggregate functions to get nobjects??
 
     v = psutil.virtual_memory()
     process = psutil.Process(os.getpid())
