@@ -1108,6 +1108,7 @@ if __name__ == "__main__":
         # Update OBJECTINDEX for the objects that we are keeping
         updatecoldb('objectid',obj['objectid'],'objectindex',np.arange(nmatch),'idstr',dbfile_idstr)
 
+    #  NEEDS TO BE TESTED!!
 
     v = psutil.virtual_memory()
     process = psutil.Process(os.getpid())
@@ -1148,6 +1149,7 @@ if __name__ == "__main__":
     hdulist = fits.open(outfile)
     hdu = fits.table_to_hdu(Table(obj))        # second, catalog
     hdulist.append(hdu)
+    # The IDSTR table is now in a stand-alone sqlite3 database called PIX_idstr.db
     #hdu = fits.table_to_hdu(Table(idstr))      # third, ID table
     #hdulist.append(hdu)    
     hdulist.writeto(outfile,overwrite=True)
