@@ -135,11 +135,11 @@ def deleterowsdb(colname,coldata,table,dbfile):
     sqlite3.register_adapter(np.float32, float)
     db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
     c = db.cursor()
-    data = list(coldata)
+    data = list(zip(coldata))
     c.executemany('''DELETE from '''+table+''' WHERE '''+colname+'''=?''', data) 
     db.commit() 
     db.close()
-    print('inserting done after '+str(time.time()-t0)+' sec')
+    print('deleting done after '+str(time.time()-t0)+' sec')
 
     
 def writeidstr2db(cat,dbfile):
@@ -1099,7 +1099,7 @@ if __name__ == "__main__":
     obj = obj[ind1]
     print(str(nmatch)+' final objects fall inside the pixel')
 
-    import pdb; pdb.set_trace()
+    #import pdb; pdb.set_trace()
 
     # Remove trimmed objects from IDSTR database
     if nmatch<nobj:
@@ -1107,8 +1107,6 @@ if __name__ == "__main__":
         deleterowsdb('objectid',trimobj['objectid'],'idstr',dbfile_idstr)
         # Update OBJECTINDEX for the objects that we are keeping
         updatecoldb('objectid',obj['objectid'],'objectindex',np.arange(nmatch),'idstr',dbfile_idstr)
-
-    #  NEEDS TO BE TESTED!!
 
     v = psutil.virtual_memory()
     process = psutil.Process(os.getpid())
@@ -1132,12 +1130,8 @@ if __name__ == "__main__":
     data = executedb(dbfile_idstr,'SELECT exposure, count(DISTINCT objectid) from idstr GROUP BY exposure')
     out = np.zeros(len(data),dtype=np.dtype([('exposure',np.str,40),('nobjects',int)]))
     out[...] = data
-    ind1,ind2 = dln.match(sumstr['exposure'],out['exposure'])
+    ind1,ind2 = dln.match(sumstr['base'],out['exposure'])
     sumstr['nobjects'][ind1] = out['nobjects'][ind2]
-    
-    #for i,exp in enumerate(sumstr['exposure']):
-    #    nobjects = executedb(dbfile_idstr,'SELECT count(DISTINCT objectid) from idstr WHERE exposure='+exp)
-    #    sumstr['nobjects'][i] = nobjects[0][0]  # unpack list of tuples
 
 
     v = psutil.virtual_memory()
@@ -1173,6 +1167,5 @@ if __name__ == "__main__":
     # Delete all arrays before we quit
     del sumstr
     del obj
-    del idstr
     # garbage collection
     gc.collect()
