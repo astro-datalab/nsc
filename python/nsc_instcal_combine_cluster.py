@@ -274,6 +274,133 @@ def add_elements(cat,nnew=300000):
     del old
     return cat    
 
+def seqcluster(cat,dcr=0.5):
+    """ Sequential clustering of measurements in exposures.  This was the old method."""
+
+    ncat = len(cat)
+    labels = np.zeros(ncat)-1
+
+    # Create exposures index
+    index = dln.create_index(cat['EXPOSURE'])
+    nexp = len(index['value'])
+
+    dtype_obj = np.dtype([('label',int),('ra',np.float64),('dec',np.float64),('num',int)])
+    obj = np.zeros(np.min([500000,ncat]),dtype=dtype_obj)
+
+    cnt = 0
+
+    # Loop over exposures
+    for i in range(nexp):
+        indx = index['index'][index['lo'][i]:index['hi'][i]+1]
+        cat1 = cat[indx]
+        ncat1 = len(cat1)
+
+        # First exposure
+        if cnt==0:
+            ind1 = np.arange(ncat1)
+            obj['label'][ind1] = ind1
+            obj['ra'][ind1] = cat1['RA']
+            obj['dec'][ind1] = cat1['DEC']
+            obj['num'][ind1] = 1
+            labels[indx] = ind1
+            cnt += ncat1
+
+        # Second and up
+        else:
+            #  Match new sources to the objects
+            ind1,ind2,dist = coords.xmatch(obj[0:cnt]['ra'],obj[0:cnt]['dec'],cat1['RA'],cat1['DEC'],dcr)
+            nmatch = len(ind1)
+            #  Some matches, add data to existing record for these sources
+            if nmatch>0:
+                obj['num'][ind1] += 1
+                labels[indx[ind2]] = ind1
+                #obj,totobj,idstr,idcnt = add_cat(obj,totobj,idstr,idcnt,ind1,cat[ind2],meta)
+                if nmatch<ncat1:
+                    leftindx = indx.copy()
+                    leftindx = np.delete(leftindx,ind2)
+                    cat1 = np.delete(cat1,ind2)
+                    ncat1 = len(cat1)
+                else:
+                    cat1 = np.array([])
+                    ncat1 = 0
+
+            # Some left, add records for these sources
+            if ncat1>0:
+                # Add new elements
+                if (cnt+ncat1)>nobj:
+                    obj = add_elements(obj)
+                    nobj = len(obj)
+                ind1 = np.arange(ncat1)+cnt
+                obj['label'][ind1] = ind1
+                obj['ra'][ind1] = cat1['RA']
+                obj['dec'][ind1] = cat1['DEC']
+                obj['num'][ind1] = 1
+                labels[leftindx] = ind1
+
+                cnt += ncat1
+
+    return labels, obj
+
+
+def propermotion(cat,labels):
+    """ Measure proper motions."""
+    
+    # Make object index
+    index = dln.create_index(labels)
+    nobj = len(index['value'])
+
+    dtype_obj = np.dtype([('ra',np.float64),('dec',np.float64),('raerr',np.float32),('decerr',np.float32),
+                          ('pmra',np.float32),('pmdec',np.float32),('pmraerr',np.float32),('pmdecerr',np.float32),('mjd',np.float64)])
+    obj = np.zeros(nobj,dtype=dtype_obj)
+
+    # Loop over the objects
+    for i in range(nobj):
+        indx = index['index'][index['lo'][i]:index['hi'][i]+1]
+        cat1 = cat[indx]
+
+        # Computing quantities
+        # Mean RA/DEC, RAERR/DECERR
+        if ncat1>1:
+            wt_ra = 1.0/cat1['RAERR']**2
+            wt_dec = 1.0/cat1['DECERR']**2
+            obj['ra'][i] = np.sum(cat1['RA']*wt_ra)/np.sum(wt_ra)
+            obj['raerr'][i] = np.sqrt(1.0/np.sum(wt_ra))
+            obj['dec'][i] = np.sum(cat1['DEC']*wt_dec)/np.sum(wt_dec)
+            obj['decerr'][i] = np.sqrt(1.0/np.sum(wt_dec))
+            obj['mjd'][i] = np.mean(cat1['MJD'])
+        else:
+            obj['ra'][i] = cat1['RA']
+            obj['dec'][i] = cat1['DEC']
+            obj['raerr'][i] = cat1['RAERR']
+            obj['decerr'][i] = cat1['DECERR']
+            obj['mjd'][i] = cat1['MJD']
+
+        # Mean proper motion and errors
+        if ncat1>1:
+            raerr = np.array(cat1['RAERR']*1e3,np.float64)    # milli arcsec
+            ra = np.array(cat1['RA'],np.float64)
+            ra -= np.mean(ra)
+            ra *= 3600*1e3 * np.cos(obj['dec'][i]/radeg)     # convert to true angle, milli arcsec
+            t = cat1['MJD'].copy()
+            t -= np.mean(t)
+            t /= 365.2425                          # convert to year
+            # Calculate robust slope
+            pmra, pmraerr = dln.robust_slope(t,ra,raerr,reweight=True)
+            obj['pmra'][i] = pmra                 # mas/yr
+            obj['pmraerr'][i] = pmraerr           # mas/yr
+
+            decerr = np.array(cat1['DECERR']*1e3,np.float64)   # milli arcsec
+            dec = np.array(cat1['DEC'],np.float64)
+            dec -= np.mean(dec)
+            dec *= 3600*1e3                         # convert to milli arcsec
+            # Calculate robust slope
+            pmdec, pmdecerr = dln.robust_slope(t,dec,decerr,reweight=True)
+            obj['pmdec'][i] = pmdec               # mas/yr
+            obj['pmdecerr'][i] = pmdecerr         # mas/yr
+
+    return obj
+
+
 def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
 
     t0 = time.time()
@@ -1160,9 +1287,9 @@ if __name__ == "__main__":
     print('dt = '+str(dt)+' sec.')
     print('dt = ',str(time.time()-t1)+' sec. after loading the catalogs')
 
-    if dbfile is not None:
-        print('Deleting temporary database file '+dbfile)
-        os.remove(dbfile)
+    #if dbfile is not None:
+    #    print('Deleting temporary database file '+dbfile)
+    #    os.remove(dbfile)
 
     # Delete all arrays before we quit
     del sumstr
