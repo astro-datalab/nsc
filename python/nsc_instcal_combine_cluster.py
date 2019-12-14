@@ -286,6 +286,7 @@ def seqcluster(cat,dcr=0.5):
 
     dtype_obj = np.dtype([('label',int),('ra',np.float64),('dec',np.float64),('num',int)])
     obj = np.zeros(np.min([500000,ncat]),dtype=dtype_obj)
+    nobj = len(obj)
 
     cnt = 0
 
@@ -338,6 +339,11 @@ def seqcluster(cat,dcr=0.5):
                 labels[leftindx] = ind1
 
                 cnt += ncat1
+    # Trim off the excess elements
+    obj = obj[0:cnt]
+
+    # Maybe iterate
+    # -measure mean ra/dec for each object and go through the process again
 
     return labels, obj
 
