@@ -292,10 +292,11 @@ def seqcluster(cat,dcr=0.5):
 
     # Loop over exposures
     for i in range(nexp):
+        print(str(i)+' '+index['value'][i])
         indx = index['index'][index['lo'][i]:index['hi'][i]+1]
         cat1 = cat[indx]
         ncat1 = len(cat1)
-
+        
         # First exposure
         if cnt==0:
             ind1 = np.arange(ncat1)
@@ -310,17 +311,16 @@ def seqcluster(cat,dcr=0.5):
         else:
             #  Match new sources to the objects
             ind1,ind2,dist = coords.xmatch(obj[0:cnt]['ra'],obj[0:cnt]['dec'],cat1['RA'],cat1['DEC'],dcr)
-            nmatch = len(ind1)
+            nmatch = dln.size(ind1)
             #  Some matches, add data to existing record for these sources
             if nmatch>0:
                 obj['num'][ind1] += 1
                 labels[indx[ind2]] = ind1
-                #obj,totobj,idstr,idcnt = add_cat(obj,totobj,idstr,idcnt,ind1,cat[ind2],meta)
                 if nmatch<ncat1:
-                    leftindx = indx.copy()
-                    leftindx = np.delete(leftindx,ind2)
+                    indx0 = indx.copy()
+                    indx = np.delete(indx,ind2)
                     cat1 = np.delete(cat1,ind2)
-                    ncat1 = len(cat1)
+                    ncat1 = dln.size(cat1)
                 else:
                     cat1 = np.array([])
                     ncat1 = 0
@@ -336,7 +336,7 @@ def seqcluster(cat,dcr=0.5):
                 obj['ra'][ind1] = cat1['RA']
                 obj['dec'][ind1] = cat1['DEC']
                 obj['num'][ind1] = 1
-                labels[leftindx] = ind1
+                labels[indx] = ind1
 
                 cnt += ncat1
     # Trim off the excess elements
