@@ -8,13 +8,13 @@ from astropy.io import fits
 from astropy.utils.exceptions import AstropyWarning
 from astropy.table import Table, vstack, Column
 from astropy.time import Time
-import healpy as hp
+#import healpy as hp
 from dlnpyutils import utils as dln, coords, bindata
 import subprocess
 import time
 from argparse import ArgumentParser
 import socket
-from dustmaps.sfd import SFDQuery
+#from dustmaps.sfd import SFDQuery
 from astropy.coordinates import SkyCoord
 from sklearn.cluster import DBSCAN
 from scipy.optimize import least_squares
@@ -274,28 +274,63 @@ def add_elements(cat,nnew=300000):
     del old
     return cat    
 
-def seqcluster(cat,dcr=0.5):
+def seqcluster(cat,dcr=0.5,iter=False,inpobj=None):
     """ Sequential clustering of measurements in exposures.  This was the old method."""
 
     ncat = len(cat)
     labels = np.zeros(ncat)-1
 
+    # Iterate
+    if iter is not False:
+        done = False
+        niter = 1
+        maxiter = 10
+        lastlabels = np.zeros(ncat)-1
+        while (done is False):
+            # First time
+            if niter==1:
+                inpobj = None
+            # Second and up
+            else:
+                del labels1, obj1
+                inpobj = obj2
+            # Cluster
+            labels1,obj1 = seqcluster(cat,dcr=dcr,iter=False,inpobj=inpobj)
+            print('Iter='+str(niter)+' '+str(int(np.max(labels1)))+' clusters')
+            # Calculate average ra/dec
+            obj2 = propermotion(cat,labels1)
+            #print(labels1-lastlabels)
+            # Are we done?
+            if (niter==maxiter) | (np.sum(labels1-lastlabels)==0): done=True
+            lastlabels = labels1
+            niter += 1
+        return labels1, obj2
+
     # Create exposures index
     index = dln.create_index(cat['EXPOSURE'])
     nexp = len(index['value'])
 
-    dtype_obj = np.dtype([('label',int),('ra',np.float64),('dec',np.float64),('num',int)])
-    obj = np.zeros(np.min([500000,ncat]),dtype=dtype_obj)
+    # Create object catalog
+    dtype_obj = np.dtype([('label',int),('ra',np.float64),('dec',np.float64),('ndet',int)])    
+    # Is there an input object catalog that we are starting with?
+    if inpobj is not None:
+        obj = inpobj
+        cnt = len(obj)
+    else:
+        obj = np.zeros(np.min([500000,ncat]),dtype=dtype_obj)
+        cnt = 0
     nobj = len(obj)
-
-    cnt = 0
 
     # Loop over exposures
     for i in range(nexp):
-        print(str(i)+' '+index['value'][i])
+        #print(str(i)+' '+index['value'][i])
         indx = index['index'][index['lo'][i]:index['hi'][i]+1]
         cat1 = cat[indx]
         ncat1 = len(cat1)
+        if dln.size(dcr)>1:
+            dcr1 = dcr[indx]
+        else:
+            dcr1 = dcr
         
         # First exposure
         if cnt==0:
@@ -303,18 +338,19 @@ def seqcluster(cat,dcr=0.5):
             obj['label'][ind1] = ind1
             obj['ra'][ind1] = cat1['RA']
             obj['dec'][ind1] = cat1['DEC']
-            obj['num'][ind1] = 1
+            obj['ndet'][ind1] = 1
             labels[indx] = ind1
             cnt += ncat1
 
         # Second and up
         else:
             #  Match new sources to the objects
-            ind1,ind2,dist = coords.xmatch(obj[0:cnt]['ra'],obj[0:cnt]['dec'],cat1['RA'],cat1['DEC'],dcr)
+            #ind1,ind2,dist = coords.xmatch(obj[0:cnt]['ra'],obj[0:cnt]['dec'],cat1['RA'],cat1['DEC'],dcr,unique=True)
+            ind2,ind1,dist = coords.xmatch(cat1['RA'],cat1['DEC'],obj[0:cnt]['ra'],obj[0:cnt]['dec'],dcr1,unique=True)            
             nmatch = dln.size(ind1)
             #  Some matches, add data to existing record for these sources
             if nmatch>0:
-                obj['num'][ind1] += 1
+                obj['ndet'][ind1] += 1
                 labels[indx[ind2]] = ind1
                 if nmatch<ncat1:
                     indx0 = indx.copy()
@@ -335,35 +371,41 @@ def seqcluster(cat,dcr=0.5):
                 obj['label'][ind1] = ind1
                 obj['ra'][ind1] = cat1['RA']
                 obj['dec'][ind1] = cat1['DEC']
-                obj['num'][ind1] = 1
+                obj['ndet'][ind1] = 1
                 labels[indx] = ind1
 
                 cnt += ncat1
     # Trim off the excess elements
     obj = obj[0:cnt]
-
+    # Trim off any objects that do not have any detections
+    #  could happen if an object catalog was input
+    bd, nbd = dln.where(obj['ndet']<1)
+    if nbd>0: obj = np.delete(obj,bd)
+    
     # Maybe iterate
     # -measure mean ra/dec for each object and go through the process again
 
     return labels, obj
 
+def meancoords(cat,labels):
+    """ Measure mean RA/DEC."""
 
-def propermotion(cat,labels):
-    """ Measure proper motions."""
-    
     # Make object index
     index = dln.create_index(labels)
     nobj = len(index['value'])
-
-    dtype_obj = np.dtype([('ra',np.float64),('dec',np.float64),('raerr',np.float32),('decerr',np.float32),
-                          ('pmra',np.float32),('pmdec',np.float32),('pmraerr',np.float32),('pmdecerr',np.float32),('mjd',np.float64)])
+    radeg = np.float64(180.00) / np.pi
+    
+    dtype_obj = np.dtype([('label',int),('ndet',int),('ra',np.float64),('dec',np.float64),('raerr',np.float32),('decerr',np.float32)])
     obj = np.zeros(nobj,dtype=dtype_obj)
 
     # Loop over the objects
     for i in range(nobj):
         indx = index['index'][index['lo'][i]:index['hi'][i]+1]
         cat1 = cat[indx]
-
+        ncat1 = dln.size(cat1)
+        obj['label'][i] = index['value'][i]
+        obj['ndet'][i] = ncat1
+        
         # Computing quantities
         # Mean RA/DEC, RAERR/DECERR
         if ncat1>1:
@@ -373,13 +415,55 @@ def propermotion(cat,labels):
             obj['raerr'][i] = np.sqrt(1.0/np.sum(wt_ra))
             obj['dec'][i] = np.sum(cat1['DEC']*wt_dec)/np.sum(wt_dec)
             obj['decerr'][i] = np.sqrt(1.0/np.sum(wt_dec))
-            obj['mjd'][i] = np.mean(cat1['MJD'])
         else:
             obj['ra'][i] = cat1['RA']
             obj['dec'][i] = cat1['DEC']
             obj['raerr'][i] = cat1['RAERR']
             obj['decerr'][i] = cat1['DECERR']
-            obj['mjd'][i] = cat1['MJD']
+
+    return obj
+            
+    
+def propermotion(cat,labels):
+    """ Measure proper motions."""
+    
+    # Make object index
+    index = dln.create_index(labels)
+    nobj = len(index['value'])
+    radeg = np.float64(180.00) / np.pi
+
+    obj = meancoords(cat,labels)
+    dtype_pm = np.dtype([('pmra',np.float32),('pmdec',np.float32),('pmraerr',np.float32),('pmdecerr',np.float32),('mjd',np.float64)])
+    obj = dln.addcatcols(obj,dtype_pm)
+    
+    #dtype_obj = np.dtype([('label',int),('ndet',int),('ra',np.float64),('dec',np.float64),('raerr',np.float32),('decerr',np.float32),
+    #                      ('pmra',np.float32),('pmdec',np.float32),('pmraerr',np.float32),('pmdecerr',np.float32),('mjd',np.float64)])
+    #obj = np.zeros(nobj,dtype=dtype_obj)
+
+    # Loop over the objects
+    for i in range(nobj):
+        indx = index['index'][index['lo'][i]:index['hi'][i]+1]
+        cat1 = cat[indx]
+        ncat1 = dln.size(cat1)
+        #obj['label'][i] = index['value'][i]
+        #obj['ndet'][i] = ncat1
+        
+        # Computing quantities
+        # Mean RA/DEC, RAERR/DECERR
+        #if ncat1>1:
+        #    wt_ra = 1.0/cat1['RAERR']**2
+        #    wt_dec = 1.0/cat1['DECERR']**2
+        #    obj['ra'][i] = np.sum(cat1['RA']*wt_ra)/np.sum(wt_ra)
+        #    obj['raerr'][i] = np.sqrt(1.0/np.sum(wt_ra))
+        #    obj['dec'][i] = np.sum(cat1['DEC']*wt_dec)/np.sum(wt_dec)
+        #    obj['decerr'][i] = np.sqrt(1.0/np.sum(wt_dec))
+        #    obj['mjd'][i] = np.mean(cat1['MJD'])
+        #else:
+        #    obj['ra'][i] = cat1['RA']
+        #    obj['dec'][i] = cat1['DEC']
+        #    obj['raerr'][i] = cat1['RAERR']
+        #    obj['decerr'][i] = cat1['DECERR']
+        #    obj['mjd'][i] = cat1['MJD']
 
         # Mean proper motion and errors
         if ncat1>1:
@@ -406,6 +490,126 @@ def propermotion(cat,labels):
 
     return obj
 
+def moments(cat,labels):
+    # Measure XX, YY, XY comments of multiple measurements of an object:
+
+    # Make object index
+    index = dln.create_index(labels)
+    nobj = len(index['value'])
+    radeg = np.float64(180.00) / np.pi
+
+    obj = meancoords(cat,labels)
+    dtype_mom = np.dtype([('x2',np.float32),('y2',np.float32),('xy',np.float32),('asemi',np.float32),('bsemi',np.float32),('theta',np.float32)])
+    obj = dln.addcatcols(obj,dtype_mom)
+    
+    #dtype_obj = np.dtype([('label',int),('ndet',int),('ra',np.float64),('raerr',np.float32),('dec',np.float64),('decerr',np.float32),
+    #                      ('x2',np.float32),('y2',np.float32),('xy',np.float32),('asemi',np.float32),('bsemi',np.float32),('theta',np.float32)])
+    #obj = np.zeros(nobj,dtype=dtype_obj)
+
+    # Loop over the objects
+    for i in range(nobj):
+        indx = index['index'][index['lo'][i]:index['hi'][i]+1]
+        cat1 = cat[indx]
+        ncat1 = dln.size(cat1)
+        #obj['label'][i] = index['value'][i]
+        #obj['ndet'][i] = ncat1
+        
+        # Computing quantities
+        # Mean RA/DEC, RAERR/DECERR
+        #if ncat1>1:
+        #    wt_ra = 1.0/cat1['RAERR']**2
+        #    wt_dec = 1.0/cat1['DECERR']**2
+        #    obj['ra'][i] = np.sum(cat1['RA']*wt_ra)/np.sum(wt_ra)
+        #    obj['raerr'][i] = np.sqrt(1.0/np.sum(wt_ra))
+        #    obj['dec'][i] = np.sum(cat1['DEC']*wt_dec)/np.sum(wt_dec)
+        #    obj['decerr'][i] = np.sqrt(1.0/np.sum(wt_dec))
+        #else:
+        #    obj['ra'][i] = cat1['RA']
+        #    obj['dec'][i] = cat1['DEC']
+        #    obj['raerr'][i] = cat1['RAERR']
+        #    obj['decerr'][i] = cat1['DECERR']
+
+        # Measure moments
+        if ncat1>1:
+            # See sextractor.pdf pg. 30
+            x2 = np.sum( ((cat1['RA']-obj['ra'][i])*np.cos(np.deg2rad(obj['dec'][i])))**2 ) / (ncat1-1) * 3600**2
+            y2 = np.sum( (cat1['DEC']-obj['dec'][i])**2 ) / (ncat1-1) * 3600**2
+            xy = np.sum( (cat1['RA']-obj['ra'][i])*np.cos(np.deg2rad(obj['dec'][i])) * (cat1['DEC']-obj['dec'][i]) ) / (ncat1-1) * 3600**2
+            obj['x2'][i] = x2
+            obj['y2'][i] = y2
+            obj['xy'][i] = xy
+            # See sextractor.pdf pg. 31
+            obj['asemi'][i] = np.sqrt( 0.5*(x2+y2) + np.sqrt(((x2-y2)*0.5)**2 + xy**2) )
+            obj['bsemi'][i] = np.sqrt( 0.5*(x2+y2) - np.sqrt(((x2-y2)*0.5)**2 + xy**2) )
+            if (x2==y2):
+                obj['theta'][i] = 0.0
+            else:
+                obj['theta'][i] = np.rad2deg(np.arctan(2*xy/(x2-y2))*0.5)
+        else:
+            obj['x2'][i] = obj['raerr'][i]**2
+            obj['y2'][i] = obj['decerr'][i]**2
+            obj['xy'][i] = 0.0
+            obj['asemi'][i] = obj['x2'][i]
+            obj['bsemi'][i] = obj['y2'][i]
+            obj['theta'][i] = 0.0
+
+    return obj
+
+def ellipsecoords(pars,npoints=100):
+    """ Create coordinates of an ellipse."""
+    # [x,y,asemi,bsemi,theta]
+    # copied from ellipsecoords.pro
+    xc = pars[0]
+    yc = pars[1]
+    asemi = pars[2]
+    bsemi = pars[3]
+    pos_ang = pars[4]
+    phi = 2*np.pi*(np.arange(npoints)/(npoints-1))   # Divide circle into Npoints
+    ang = np.deg2rad(pos_ang)                             # Position angle in radians
+    cosang = np.cos(ang)
+    sinang = np.sin(ang)
+    x =  asemi*np.cos(phi)                              # Parameterized equation of ellipse
+    y =  bsemi*np.sin(phi)
+    xprime = xc + x*cosang - y*sinang               # Rotate to desired position angle
+    yprime = yc + x*sinang + y*cosang
+    return xprime, yprime
+
+def hybridcluster(cat):
+    """ use both DBSCAN and sequential clustering to cluster the data"""
+
+    # Hybrid clustering algorithm
+    # 1) Find "object" centers by using DBSCAN with a smallish eps (~0.2-0.3") and maybe minclusters of 2-3
+    # 2) Do sequential clustering using the object centers and the measurements have to overlap with their own
+    #    coordinate uncertainties
+    # -what do we do with any "leftover" measurements at the end?
+    # -should we check whether we need to "split" any clusters in step #1 if two close objects got accidentally
+    #   clumped together?
+
+    err = np.sqrt(cat['RAERR']**2+cat['DECERR']**2)
+    
+    # Step 1: Find object centers using DBSCAN with a small eps
+    t0 = time.time()
+    X1 = np.column_stack((np.array(cat['RA']),np.array(cat['DEC'])))
+    eps = 2*np.median(err)
+    dbs1 = DBSCAN(eps=eps/3600, min_samples=1).fit(X1)
+    print('DBSCAN after '+str(time.time()-t0)+' sec.')
+
+    obj1 = meancoords(cat,dbs1.labels_)
+    inpobj = obj1
+    
+    # Step 2: sequential clustering with dbscan objects
+    labels, obj = seqcluster(cat,dcr=2*err,inpobj=inpobj)
+    # add proper motions
+    pms = propermotion(cat,labels)
+    obj = dln.addcatcols(obj,np.dtype([('pmra',np.float32),('pmdec',np.float32),('pmraerr',np.float32),('pmdecerr',np.float32),('mjd',np.float64)]))
+    for n in ['pmra','pmdec','pmraerr','pmdecerr']: obj[n] = pms[n]
+    # add moments
+    mom = moments(cat,labels)
+    obj = dln.addcatcols(obj,np.dtype([('x2',np.float32),('y2',np.float32),('xy',np.float32),('asemi',np.float32),('bsemi',np.float32),('theta',np.float32)])
+    for n in ['x2','y2','xy','asemi','bsemi','theta']: obj[n] = pms[n]
+
+    return obj
+    
 
 def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
 
