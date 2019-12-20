@@ -564,7 +564,7 @@ def ellipsecoords(pars,npoints=100):
     asemi = pars[2]
     bsemi = pars[3]
     pos_ang = pars[4]
-    phi = 2*np.pi*(np.arange(npoints)/(npoints-1))   # Divide circle into Npoints
+    phi = 2*np.pi*(np.arange(npoints,dtype=float)/(npoints-1))   # Divide circle into Npoints
     ang = np.deg2rad(pos_ang)                             # Position angle in radians
     cosang = np.cos(ang)
     sinang = np.sin(ang)
@@ -590,25 +590,30 @@ def hybridcluster(cat):
     # Step 1: Find object centers using DBSCAN with a small eps
     t0 = time.time()
     X1 = np.column_stack((np.array(cat['RA']),np.array(cat['DEC'])))
-    eps = 2*np.median(err)
+    eps = 3*np.median(err)
+    print('DBSCAN eps=%4.2f' % eps)
     dbs1 = DBSCAN(eps=eps/3600, min_samples=1).fit(X1)
     print('DBSCAN after '+str(time.time()-t0)+' sec.')
 
     obj1 = meancoords(cat,dbs1.labels_)
     inpobj = obj1
+    print(str(len(obj1))+' clusters')
     
     # Step 2: sequential clustering with dbscan objects
-    labels, obj = seqcluster(cat,dcr=2*err,inpobj=inpobj)
+    labels, obj = seqcluster(cat,dcr=3*err,inpobj=inpobj)
     # add proper motions
     pms = propermotion(cat,labels)
-    obj = dln.addcatcols(obj,np.dtype([('pmra',np.float32),('pmdec',np.float32),('pmraerr',np.float32),('pmdecerr',np.float32),('mjd',np.float64)]))
+    obj = dln.addcatcols(obj,np.dtype([('pmra',np.float32),('pmdec',np.float32),
+                                       ('pmraerr',np.float32),('pmdecerr',np.float32),('mjd',np.float64)]))
     for n in ['pmra','pmdec','pmraerr','pmdecerr']: obj[n] = pms[n]
     # add moments
     mom = moments(cat,labels)
-    obj = dln.addcatcols(obj,np.dtype([('x2',np.float32),('y2',np.float32),('xy',np.float32),('asemi',np.float32),('bsemi',np.float32),('theta',np.float32)])
-    for n in ['x2','y2','xy','asemi','bsemi','theta']: obj[n] = pms[n]
-
-    return obj
+    obj = dln.addcatcols(obj,np.dtype([('x2',np.float32),('y2',np.float32),('xy',np.float32),
+                                       ('asemi',np.float32),('bsemi',np.float32),('theta',np.float32)]))
+    for n in ['x2','y2','xy','asemi','bsemi','theta']: obj[n] = mom[n]
+    print(str(len(obj))+' final objects')
+    
+    return labels, obj
     
 
 def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
