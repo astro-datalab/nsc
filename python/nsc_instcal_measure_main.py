@@ -134,8 +134,8 @@ if __name__ == "__main__":
     # Check the exposures
     rootLogger.info('Checking on the exposures')
     dtype_expstr = np.dtype([('instrument',np.str,100),('fluxfile',np.str,100),('wtfile',np.str,100),('maskfile',np.str,100),('allexist',bool),
-                             ('outfile',np.str,100),('done',bool),('locked',bool),('torun',bool),('cmd',np.str,100),
-                             ('cmddir',np.str,100),('submitted',bool)])
+                             ('outfile',np.str,100),('done',bool),('locked',bool),('torun',bool),('cmd',np.str,1000),
+                             ('cmddir',np.str,200),('submitted',bool)])
     expstr = np.zeros(ngdexp,dtype=dtype_expstr)
     for i in range(ngdexp):
         if i % 500 == 0: rootLogger.info(i)
