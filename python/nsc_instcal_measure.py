@@ -160,8 +160,9 @@ if __name__ == "__main__":
         rootLogger.info(" Processing subimage "+str(i))
         try:
             flux,fhead = fits.getdata("bigflux.fits.fz",i,header=True)
-            wt,whead = fits.getdata("bigwt.fits.fz",i,header=True)
-            mask,mhead = fits.getdata("bigmask.fits.fz",i,header=True)
+            extname = fhead['EXTNAME']
+            wt,whead = fits.getdata("bigwt.fits.fz",extname,header=True)
+            mask,mhead = fits.getdata("bigmask.fits.fz",extname,header=True)
         except:
             rootLogger.info("No extension "+str(i))
 
