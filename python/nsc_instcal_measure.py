@@ -148,10 +148,10 @@ if __name__ == "__main__":
       rootLogger.info("  This is CTIO DECam data")
 
     # Make final output directory
-    if not os.path.exists(dir+instcode+"/"+night):
-        os.mkdir(dir+instcode+"/"+night)
-    if not os.path.exists(dir+instcode+"/"+night+"/"+base):
-        os.mkdir(dir+instcode+"/"+night+"/"+base)
+    if os.path.exists(dir+instcode+"/"+night) is False:
+        os.mkdirs(dir+instcode+"/"+night)
+    if os.path.exists(dir+instcode+"/"+night+"/"+base) is False:
+        os.mkdirs(dir+instcode+"/"+night+"/"+base)
         rootLogger.info("  Making output directory: "+dir+instcode+"/"+night+"/"+base)
 
     # LOOP through the HDUs/chips
