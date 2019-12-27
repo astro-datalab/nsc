@@ -257,7 +257,7 @@ if __name__ == "__main__":
     # Now run measurement on each exposure
     import pdb; pdb.set_trace()
     a = input("Press RETURN to start")
-    jobs = jd.job_daemon(cmd,cmddirs,hyperthread=True,prefix='nscmeas',wait=5,nmulti=nmulti)
+    jobs = jd.job_daemon(cmd,cmddir,hyperthread=True,prefix='nscmeas',wait=5,nmulti=nmulti)
 
     # Save the jobs
     Table(jobs).write(basedir+'lists/nsc_instcal_measure_main.'+host+'.'+logtime+'_jobs.fits')
