@@ -237,6 +237,7 @@ if __name__ == "__main__":
 
 
     # Lock the files that will be submitted
+    dolock = False
     if dolock is True:
         print('Locking files to be submitted')
         for i in range(ntosubmit):
