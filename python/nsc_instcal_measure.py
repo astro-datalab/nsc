@@ -158,6 +158,7 @@ if __name__ == "__main__":
     #----------------------------
     for i in range(1,nhdu):
         rootLogger.info(" Processing subimage "+str(i))
+
         try:
             flux,fhead = fits.getdata("bigflux.fits.fz",i,header=True)
             extname = fhead['EXTNAME']
@@ -219,7 +220,6 @@ if __name__ == "__main__":
           mask += (np.bitwise_and(omask,4)==4) * 32   # interpolated
           mask += (np.bitwise_and(omask,16)==16) * 16  # cosmic ray
           mask += (np.bitwise_and(omask,64)==64) * 8   # bleed trail
-
 
         # Mask out bad pixels in WEIGHT image
         #  set wt=0 for mask>0 pixels
@@ -339,6 +339,9 @@ if __name__ == "__main__":
             if os.path.exists("mask.fits"):
                 os.remove("mask.fits")
             fits.writeto("mask.fits",newmask,header=mhead,output_verify='warn')
+
+
+        import pdb; pdb.set_trace()
 
         # 3c) Run SExtractor
         #p = subprocess.Popen('sex', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
