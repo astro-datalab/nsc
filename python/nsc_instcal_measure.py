@@ -149,9 +149,9 @@ if __name__ == "__main__":
 
     # Make final output directory
     if os.path.exists(dir+instcode+"/"+night) is False:
-        os.mkdirs(dir+instcode+"/"+night)
+        os.makedirs(dir+instcode+"/"+night)
     if os.path.exists(dir+instcode+"/"+night+"/"+base) is False:
-        os.mkdirs(dir+instcode+"/"+night+"/"+base)
+        os.makedirs(dir+instcode+"/"+night+"/"+base)
         rootLogger.info("  Making output directory: "+dir+instcode+"/"+night+"/"+base)
 
     # LOOP through the HDUs/chips
