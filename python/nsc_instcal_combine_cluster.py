@@ -1136,7 +1136,7 @@ if __name__ == "__main__":
                           ('theta',np.float32),('thetaerr',np.float32),('fwhm',np.float32),('flags',np.int16),('class_star',np.float32),
                           ('ebv',np.float32),('rmsvar',np.float32),('madvar',np.float32),('iqrvar',np.float32),('etavar',np.float32),
                           ('jvar',np.float32),('kvar',np.float32),('chivar',np.float32),('romsvar',np.float32),
-                          ('variable10sig',np.int16),('nsigvar',np.float32)])
+                          ('variable10sig',np.int16),('nsigvar',np.float32),('parent',bool)])
 
     # Decide whether to load everything into RAM or use temporary database
     metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
@@ -1152,6 +1152,8 @@ if __name__ == "__main__":
         dbfile = tmproot+str(pix)+'_combine.db'
         print('Using temporary database file = '+dbfile)
         if os.path.exists(dbfile): os.remove(dbfile)
+    else:
+        print('Keeping all measurement data in memory')
 
     # IDSTR database file
     dbfile_idstr = outdir+'/'+subdir+'/'+str(pix)+'_idstr.db'
@@ -1168,7 +1170,7 @@ if __name__ == "__main__":
     objstr, cat = clusterdata(cat,ncat,dbfile=dbfile)
     nobj = dln.size(objstr)
     meascumcount = np.cumsum(objstr['NMEAS'])
-    print(str(nobj)+' unique objects clustered within 0.5 arcsec')
+    print(str(nobj)+' unique objects clustered')
 
     # Initialize the OBJ structured array
     obj = np.zeros(nobj,dtype=dtype_obj)
@@ -1188,6 +1190,10 @@ if __name__ == "__main__":
     obj['variable10sig'] = 0
     obj['nsigvar'] = np.nan
     #idstr = np.zeros(ncat,dtype=dtype_idstr)
+
+    # Initialize temporary IDSTR structure
+    idstr = np.zeros(100000,dtype=dtype_idstr)
+    nidstr = dln.size(idstr)
 
     # Higher precision catalog
     dtype_hicat = np.dtype([('MEASID',np.str,30),('EXPOSURE',np.str,40),('CCDNUM',int),('FILTER',np.str,3),
@@ -1210,6 +1216,8 @@ if __name__ == "__main__":
     maxmeasload = 50000
     ngrpcat = 0
     ncat1 = 0
+    idstr_count = 0
+    idstr_grpcount = 0
     fidmag = np.zeros(nobj,float)+np.nan  # fiducial magnitude
     for i,lab in enumerate(objstr['OBJLABEL']):
         if (i % 1000)==0: print(i)
@@ -1218,7 +1226,6 @@ if __name__ == "__main__":
             v = psutil.virtual_memory()
             process = psutil.Process(os.getpid())
             print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
-            #import pdb; pdb.set_trace()
 
         # Get meas data for this object
         if usedb is False:
@@ -1261,13 +1268,27 @@ if __name__ == "__main__":
 
         obj['ndet'][i] = ncat1
 
-        # Add IDSTR information to database
-        idcat = np.zeros(ncat1,dtype=dtype_idstr)
-        idcat['measid'] = cat1['MEASID']
-        idcat['exposure'] = cat1['EXPOSURE']
-        idcat['objectid'] = obj['objectid'][i]
-        idcat['objectindex'] = i
-        writeidstr2db(idcat,dbfile_idstr)
+
+        # Add IDSTR information to IDSTR structure/database
+        #  update in groups to database so it takes less time
+        if idstr_count+ncat1 > nidstr:
+            print('  Adding more elements to temporary IDSTR structure')
+            idstr = add_elements(idstr,50000)  # add more elements if necessary
+        # Add information to temporary IDSTR structure for this object
+        idstr['measid'][idstr_count:idstr_count+ncat1] = cat1['MEASID']
+        idstr['exposure'][idstr_count:idstr_count+ncat1] = cat1['EXPOSURE']
+        idstr['objectid'][idstr_count:idstr_count+ncat1] = obj['objectid'][i]
+        idstr['objectindex'][idstr_count:idstr_count+ncat1] = i
+        idstr_count += ncat1
+        idstr_grpcount += 1
+        # Write to database and reinitialize the temporary IDSTR structure
+        if (idstr_grpcount>50000) | (idstr_count>300000) |  (i==(nobj-1)):
+            print('  Writing data to IDSTR database')
+            writeidstr2db(idstr[0:idstr_count],dbfile_idstr)
+            idstr = np.zeros(100000,dtype=dtype_idstr)
+            nidstr = dln.size(idstr)
+            idstr_count = 0
+            idstr_grpcount = 0
 
         # Computing quantities
         # Mean RA/DEC, RAERR/DECERR
@@ -1411,6 +1432,7 @@ if __name__ == "__main__":
         obj['class_star'][i] = np.mean(cat1['CLASS_STAR'])
         obj['flags'][i] = np.bitwise_or.reduce(cat1['FLAGS'])  # OR combine
 
+
     v = psutil.virtual_memory()
     process = psutil.Process(os.getpid())
     print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
@@ -1477,8 +1499,9 @@ if __name__ == "__main__":
     
     # FIGURE OUT IF THERE ARE OBJECTS **INSIDE** OTHER OBJECTS!!
     #   could be a deblending problem. extended galaxy that was shredded, or asteroids going through
-    #obj = dln.addcatcols(obj,np.dtype([('parent',bool)]))
-    #obj = find_obj_parents(obj)
+    obj = find_obj_parents(obj)
+    bd,nbd = dln.where(obj['parent']==True)
+    print(str(nbd)+' objects are "parents" of other objects')
 
     
     # ONLY INCLUDE OBJECTS WITH AVERAGE RA/DEC
