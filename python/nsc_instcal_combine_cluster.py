@@ -395,9 +395,10 @@ def meancoords(cat,labels):
     nobj = len(index['value'])
     radeg = np.float64(180.00) / np.pi
     
-    dtype_obj = np.dtype([('label',int),('ndet',int),('ra',np.float64),('dec',np.float64),('raerr',np.float32),('decerr',np.float32)])
+    dtype_obj = np.dtype([('label',int),('ndet',int),('ra',np.float64),('dec',np.float64),('raerr',np.float32),
+                          ('decerr',np.float32),('asemi',np.float32),('bsemi',np.float32),('theta',np.float32),('fwhm',np.float32)])
     obj = np.zeros(nobj,dtype=dtype_obj)
-
+    
     # Loop over the objects
     for i in range(nobj):
         indx = index['index'][index['lo'][i]:index['hi'][i]+1]
@@ -421,6 +422,18 @@ def meancoords(cat,labels):
             obj['raerr'][i] = cat1['RAERR']
             obj['decerr'][i] = cat1['DECERR']
 
+        # Compute median FWHm
+        if ncat1>1:
+            obj['asemi'][i] = np.median(cat1['ASEMI'])
+            obj['bsemi'][i] = np.median(cat1['BSEMI'])
+            obj['theta'][i] = np.median(cat1['THETA'])
+            obj['fwhm'][i] = np.median(cat1['FWHM'])            
+        else:
+            obj['asemi'][i] = cat1['ASEMI']
+            obj['bsemi'][i] = cat1['BSEMI']
+            obj['theta'][i] = cat1['THETA']
+            obj['fwhm'][i] = cat1['FWHM']            
+            
     return obj
             
     
@@ -574,6 +587,45 @@ def ellipsecoords(pars,npoints=100):
     yprime = yc + x*sinang + y*cosang
     return xprime, yprime
 
+def find_obj_parents(obj):
+    """ Find objects that have other objects "inside" them. """
+
+    # Use crossmatch
+
+    X1 = np.vstack((obj['ra'],obj['dec'])).T
+    X2 = np.vstack((obj['ra'],obj['dec'])).T
+    
+    X1 = X1 * (np.pi / 180.)
+    X2 = X2 * (np.pi / 180.)
+    max_distance = (np.max(obj['fwhm']) / 3600) * (np.pi / 180.)
+
+    # Convert 2D RA/DEC to 3D cartesian coordinates
+    Y1 = np.transpose(np.vstack([np.cos(X1[:, 0]) * np.cos(X1[:, 1]),
+                                 np.sin(X1[:, 0]) * np.cos(X1[:, 1]),
+                                 np.sin(X1[:, 1])]))
+    Y2 = np.transpose(np.vstack([np.cos(X2[:, 0]) * np.cos(X2[:, 1]),
+                                 np.sin(X2[:, 0]) * np.cos(X2[:, 1]),
+                                 np.sin(X2[:, 1])]))
+
+    # law of cosines to compute 3D distance
+    max_y = np.sqrt(2 - 2 * np.cos(max_distance))
+    dist, ind = coords.crossmatch(Y1, Y2, max_y, k=2)
+
+    # convert distances back to angles using the law of tangents
+    not_inf = ~np.isinf(dist)
+    x = 0.5 * dist[not_inf]
+    dist[not_inf] = (180. / np.pi * 2 * np.arctan2(x,
+                                  np.sqrt(np.maximum(0, 1 - x ** 2))))
+    dist[not_inf] *= 3600.0      # in arcsec
+    
+    # Check if there are any objects within FWHM
+    #  the closest object will be itself, so check the second one
+    bd,nbd = dln.where( dist[:,1] <= 0.5*obj['fwhm'])
+    if nbd>0: obj['parent'][bd]=True
+    
+    return obj
+
+
 def hybridcluster(cat):
     """ use both DBSCAN and sequential clustering to cluster the data"""
 
@@ -600,18 +652,20 @@ def hybridcluster(cat):
     print(str(len(obj1))+' clusters')
     
     # Step 2: sequential clustering with dbscan objects
-    labels, obj = seqcluster(cat,dcr=3*err,inpobj=inpobj)
-    # add proper motions
-    pms = propermotion(cat,labels)
-    obj = dln.addcatcols(obj,np.dtype([('pmra',np.float32),('pmdec',np.float32),
-                                       ('pmraerr',np.float32),('pmdecerr',np.float32),('mjd',np.float64)]))
-    for n in ['pmra','pmdec','pmraerr','pmdecerr']: obj[n] = pms[n]
-    # add moments
-    mom = moments(cat,labels)
-    obj = dln.addcatcols(obj,np.dtype([('x2',np.float32),('y2',np.float32),('xy',np.float32),
-                                       ('asemi',np.float32),('bsemi',np.float32),('theta',np.float32)]))
-    for n in ['x2','y2','xy','asemi','bsemi','theta']: obj[n] = mom[n]
+    labels, obj2 = seqcluster(cat,dcr=3*err,inpobj=inpobj)
+    obj = meancoords(cat,labels)
+    ## add proper motions
+    #pms = propermotion(cat,labels)
+    #obj = dln.addcatcols(obj,np.dtype([('pmra',np.float32),('pmdec',np.float32),
+    #                                   ('pmraerr',np.float32),('pmdecerr',np.float32),('mjd',np.float64)]))
+    #for n in ['pmra','pmdec','pmraerr','pmdecerr']: obj[n] = pms[n]
+    ## add moments
+    #mom = moments(cat,labels)
+    #obj = dln.addcatcols(obj,np.dtype([('x2',np.float32),('y2',np.float32),('xy',np.float32),
+    #                                   ('asemi',np.float32),('bsemi',np.float32),('theta',np.float32)]))
+    #for n in ['x2','y2','xy','asemi','bsemi','theta']: obj[n] = mom[n]
     print(str(len(obj))+' final objects')
+
     
     return labels, obj
     
@@ -786,7 +840,7 @@ def clusterdata(cat,ncat,dbfile=None):
     """ Perform spatial clustering """
 
     t00 = time.time()
-    print('Spatial clustering with DBSCAN')    
+    print('Spatial clustering')    
     # Divide into subregions
     if (ncat>1000000) & (dbfile is not None):
         print('Dividing clustering problem into subregions')
@@ -836,14 +890,10 @@ def clusterdata(cat,ncat,dbfile=None):
 
                 # Some measurements to work with
                 if ncat1>0:
-                    # Run DBSCAN
-                    #import pdb; pdb.set_trace()
+                    # Cluster
                     t0 = time.time()
-                    X1 = np.column_stack((np.array(cat1['RA']),np.array(cat1['DEC'])))
-                    dbs1 = DBSCAN(eps=0.5/3600, min_samples=1).fit(X1)
-                    print('DBSCAN after '+str(time.time()-t0)+' sec.')
                     # Cluster labels are integers and in ascending order, but there are gaps
-                    objlabels1 = dbs1.labels_
+                    objlabels1, initobj1 = hybridcluster(cat)
                     objlabels1 += lastobjlabel+1                 # add offset to labels
                     labelindex1 = dln.create_index(objlabels1)   # create inex
                     nobj1 = len(labelindex1['value'])
@@ -907,12 +957,13 @@ def clusterdata(cat,ncat,dbfile=None):
         if dbfile is not None:
             cat = getdbcoords(dbfile)
         # Spatially cluster the measurements with DBSCAN
-        # coordinates of measurement
-        X = np.column_stack((np.array(cat['RA']),np.array(cat['DEC'])))
-        # Compute DBSCAN on all measurements
-        dbs = DBSCAN(eps=0.5/3600, min_samples=1).fit(X)
-        # Cluster labels are integers and in ascending order, but there are gaps
-        objlabels = dbs.labels_
+        ## coordinates of measurement
+        #X = np.column_stack((np.array(cat['RA']),np.array(cat['DEC'])))
+        ## Compute DBSCAN on all measurements
+        #dbs = DBSCAN(eps=0.5/3600, min_samples=1).fit(X)
+        ## Cluster labels are integers and in ascending order, but there are gaps
+        #objlabels = dbs.labels_
+        objlabels, initobj = hybridcluster(cat)
         labelindex = dln.create_index(objlabels)   # create inex
         nobj = len(labelindex['value'])
         print(str(ncat)+' measurements for '+str(nobj)+' objects')
@@ -1422,7 +1473,13 @@ if __name__ == "__main__":
     ebv = sfd(c)
     obj['ebv'] = ebv
 
+    
+    # FIGURE OUT IF THERE ARE OBJECTS **INSIDE** OTHER OBJECTS!!
+    #   could be a deblending problem. extended galaxy that was shredded, or asteroids going through
+    #obj = dln.addcatcols(obj,np.dtype([('parent',bool)]))
+    #obj = find_obj_parents(obj)
 
+    
     # ONLY INCLUDE OBJECTS WITH AVERAGE RA/DEC
     # WITHIN THE BOUNDARY OF THE HEALPIX PIXEL!!!
     ipring = hp.pixelfunc.ang2pix(nside,obj['ra'],obj['dec'],lonlat=True)
