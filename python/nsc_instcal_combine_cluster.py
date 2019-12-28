@@ -8,13 +8,13 @@ from astropy.io import fits
 from astropy.utils.exceptions import AstropyWarning
 from astropy.table import Table, vstack, Column
 from astropy.time import Time
-#import healpy as hp
+import healpy as hp
 from dlnpyutils import utils as dln, coords, bindata
 import subprocess
 import time
 from argparse import ArgumentParser
 import socket
-#from dustmaps.sfd import SFDQuery
+from dustmaps.sfd import SFDQuery
 from astropy.coordinates import SkyCoord
 from sklearn.cluster import DBSCAN
 from scipy.optimize import least_squares
@@ -1035,7 +1035,8 @@ if __name__ == "__main__":
     subdir = str(int(pix)//1000)    # use the thousands to create subdirectory grouping
     if os.path.exists(outdir) is False: os.mkdir(outdir)
     if os.path.exists(outdir+'/'+subdir) is False: os.mkdir(outdir+'/'+subdir)
-    outfile = outdir+'/'+subdir+'/'+str(pix)+'.fits'
+    #outfile = outdir+'/'+subdir+'/'+str(pix)+'.fits'
+    outfile = outdir+'/'+subdir+'/'+str(pix)+'_hybrid.fits'
     if (os.path.exists(outfile) or os.path.exists(outfile+'.gz')) & (not redo):
         print(outfile+' EXISTS already and REDO not set')
         sys.exit()
