@@ -560,7 +560,7 @@ if __name__ == "__main__":
     SRCMATCH,ref.ra,ref.dec,cat.ra,cat.dec,dcr,ind1,ind2,/sph,count=nmatch
     rootLogger.info(str(nmatch)+" matches to reference catalog")
     if nmatch == 0:
-         rootLogger.info("No matches to reference catalog'
+         rootLogger.info("No matches to reference catalog")
         goto,ENDBOMB
     ref1 = ref[ind1]
     cat1 = cat[ind2]
@@ -576,7 +576,7 @@ if __name__ == "__main__":
                       cat1.mag_auto lt 50 and cat1.magerr_auto lt 0.05 and $
                       cat1.fwhm_world*3600 lt 2*medfwhm and mmags[*,0] lt 50 and mmags[*,1] lt 5,ngdcat)
     if ngdcat == 0:
-         rootLogger.info("No good reference sources'
+         rootLogger.info("No good reference sources")
         goto,ENDBOMB
     ref2 = ref1[gdcat]
     mmags2 = mmags[gdcat,*]
@@ -621,8 +621,8 @@ if __name__ == "__main__":
         #  cat1[gdcatmag].cerr = sqrt(cat1[gdcatmag].magerr_auto^2 + zptermerr^2)  # add calibration error in quadrature
         #endfor
         # Print out the results
-         rootLogger.info("  CCDNUM=',strtrim(chstr[i].ccdnum,2),'  NREFSOURCES=',strtrim(chstr[i].nrefmatch,2),'  ZPTYPE=',strtrim(chstr[i].zptype,2),$
-        '  ZPTERM=',stringize(zpterm,ndec=4),'+/-',stringize(zptermerr,ndec=4)
+         rootLogger.info("  CCDNUM="+strtrim(chstr[i].ccdnum,2)+"  NREFSOURCES="+strtrim(chstr[i].nrefmatch,2)+"  ZPTYPE=',strtrim(chstr[i].zptype,2),
+ZPTERM=',stringize(zpterm,ndec=4),'+/-',stringize(zptermerr,ndec=4)")
         cat[lo[i]:hi[i]] = cat1  # stuff back in
         #stop
     #stop
