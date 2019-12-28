@@ -341,8 +341,6 @@ if __name__ == "__main__":
             fits.writeto("mask.fits",newmask,header=mhead,output_verify='warn')
 
 
-        import pdb; pdb.set_trace()
-
         # 3c) Run SExtractor
         #p = subprocess.Popen('sex', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         rootLogger.info("  Running SExtractor")
