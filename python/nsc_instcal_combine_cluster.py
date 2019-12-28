@@ -162,6 +162,16 @@ def writeidstr2db(cat,dbfile):
     db.close()
     #print('inserting done after '+str(time.time()-t0)+' sec')
 
+def readidstrdb(dbfile):
+    """ Get data from IDSTR database"""
+    data = querydb(dbfile,table='idstr',cols='*')
+    # Put in catalog
+    dtype_idstr = np.dtype([('measid',np.str,200),('exposure',np.str,200),('objectid',np.str,200),('objectindex',int)])
+    cat = np.zeros(len(data),dtype=dtype_idstr)
+    cat[...] = data
+    del data    
+    return cat
+
 def querydb(dbfile,table='meas',cols='rowid,*',where=None):
     """ Query database table """
     sqlite3.register_adapter(np.int16, int)
@@ -1157,6 +1167,7 @@ if __name__ == "__main__":
 
     # IDSTR database file
     dbfile_idstr = outdir+'/'+subdir+'/'+str(pix)+'_idstr.db'
+    if os.path.exists(dbfile_idstr): os.remove(dbfile_idstr)
 
     # Load the measurement catalog
     #  this will contain excess rows at the end, if all in RAM
