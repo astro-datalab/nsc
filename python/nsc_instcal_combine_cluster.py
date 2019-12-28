@@ -778,6 +778,13 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                 ncat1 = len(cat1)
                 #print('  chip '+str(chmeta[j]['ccdnum'])+'  '+str(ncat1)+' sources')
 
+                # Fix negative FWHM values
+                #  use A_WORLD and B_WORLD which are never negative
+                import pdb; pdb.set_trace()
+                bd,nbd = dln.where(cat1['FWHM']<0)
+                if nbd>0:
+                    cat1['FWHM'][bd] = np.sqrt(cat1['ASEMI'][bd]**2+cat1['BSEMI'][bd]**2)*2.35
+
                 # Make sure it's in the right format
                 if len(cat1.dtype.fields) != 32:
                     if verbose: print('  This catalog does not have the right format. Skipping')
