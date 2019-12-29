@@ -780,8 +780,7 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
 
                 # Fix negative FWHM values
                 #  use A_WORLD and B_WORLD which are never negative
-                import pdb; pdb.set_trace()
-                bd,nbd = dln.where(cat1['FWHM']<0)
+                bd,nbd = dln.where(cat1['FWHM']<0.1)
                 if nbd>0:
                     cat1['FWHM'][bd] = np.sqrt(cat1['ASEMI'][bd]**2+cat1['BSEMI'][bd]**2)*2.35
 
@@ -1580,6 +1579,9 @@ if __name__ == "__main__":
     v = psutil.virtual_memory()
     process = psutil.Process(os.getpid())
     print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
+
+    # same the measurement data to a file
+    Table(cat).write(outdir+'/'+subdir+'/'+str(pix)+'_meas.fits')
 
     # Write the output file
     print('Writing combined catalog to '+outfile)
