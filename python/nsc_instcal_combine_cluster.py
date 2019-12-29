@@ -580,6 +580,10 @@ def find_obj_overlap(obj):
     dist[not_inf] = (180. / np.pi * 2 * np.arctan2(x,
                                   np.sqrt(np.maximum(0, 1 - x ** 2))))
     dist[not_inf] *= 3600.0      # in arcsec
+
+    # Add "overlap" column if necessary
+    if 'overlap' not in obj.dtype.names:
+        obj = dln.addcatcols(obj,np.dtype([('overlap',bool)]))  
     
     # Check if there are any objects within FWHM
     #  the closest object will be itself, so check the second one
