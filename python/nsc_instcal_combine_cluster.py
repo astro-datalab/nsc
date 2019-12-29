@@ -8,13 +8,13 @@ from astropy.io import fits
 from astropy.utils.exceptions import AstropyWarning
 from astropy.table import Table, vstack, Column
 from astropy.time import Time
-#import healpy as hp
+import healpy as hp
 from dlnpyutils import utils as dln, coords, bindata
 import subprocess
 import time
 from argparse import ArgumentParser
 import socket
-#from dustmaps.sfd import SFDQuery
+from dustmaps.sfd import SFDQuery
 from astropy.coordinates import SkyCoord
 from sklearn.cluster import DBSCAN
 from scipy.optimize import least_squares
