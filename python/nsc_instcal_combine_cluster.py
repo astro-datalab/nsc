@@ -550,8 +550,8 @@ def ellipsecoords(pars,npoints=100):
     yprime = yc + x*sinang + y*cosang
     return xprime, yprime
 
-def find_obj_parents(obj):
-    """ Find objects that have other objects "inside" them. """
+def find_obj_overlap(obj):
+    """ Find objects that have other objects "inside" them or overlap. """
 
     # Use crossmatch
 
@@ -584,7 +584,7 @@ def find_obj_parents(obj):
     # Check if there are any objects within FWHM
     #  the closest object will be itself, so check the second one
     bd,nbd = dln.where( dist[:,1] <= 0.5*obj['fwhm'])
-    if nbd>0: obj['parent'][bd]=True
+    if nbd>0: obj['overlap'][bd]=True
     
     return obj
 
@@ -1104,7 +1104,7 @@ if __name__ == "__main__":
                           ('theta',np.float32),('thetaerr',np.float32),('fwhm',np.float32),('flags',np.int16),('class_star',np.float32),
                           ('ebv',np.float32),('rmsvar',np.float32),('madvar',np.float32),('iqrvar',np.float32),('etavar',np.float32),
                           ('jvar',np.float32),('kvar',np.float32),('chivar',np.float32),('romsvar',np.float32),
-                          ('variable10sig',np.int16),('nsigvar',np.float32),('parent',bool)])
+                          ('variable10sig',np.int16),('nsigvar',np.float32),('overlap',bool)])
 
     # Decide whether to load everything into RAM or use temporary database
     metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
@@ -1468,9 +1468,9 @@ if __name__ == "__main__":
     
     # FIGURE OUT IF THERE ARE OBJECTS **INSIDE** OTHER OBJECTS!!
     #   could be a deblending problem. extended galaxy that was shredded, or asteroids going through
-    obj = find_obj_parents(obj)
-    bd,nbd = dln.where(obj['parent']==True)
-    print(str(nbd)+' objects are "parents" of other objects')
+    obj = find_obj_overlap(obj)
+    bd,nbd = dln.where(obj['overlap']==True)
+    print(str(nbd)+' objects have large overlaps with other objects')
 
     
     # ONLY INCLUDE OBJECTS WITH AVERAGE RA/DEC
