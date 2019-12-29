@@ -8,13 +8,13 @@ from astropy.io import fits
 from astropy.utils.exceptions import AstropyWarning
 from astropy.table import Table, vstack, Column
 from astropy.time import Time
-import healpy as hp
+#import healpy as hp
 from dlnpyutils import utils as dln, coords, bindata
 import subprocess
 import time
 from argparse import ArgumentParser
 import socket
-from dustmaps.sfd import SFDQuery
+#from dustmaps.sfd import SFDQuery
 from astropy.coordinates import SkyCoord
 from sklearn.cluster import DBSCAN
 from scipy.optimize import least_squares
@@ -284,7 +284,7 @@ def add_elements(cat,nnew=300000):
     del old
     return cat    
 
-def seqcluster(cat,dcr=0.5,iter=False,inpobj=None):
+def seqcluster(cat,dcr=0.5,iter=False,inpobj=None,trim=False):
     """ Sequential clustering of measurements in exposures.  This was the old method."""
 
     ncat = len(cat)
@@ -389,8 +389,9 @@ def seqcluster(cat,dcr=0.5,iter=False,inpobj=None):
     obj = obj[0:cnt]
     # Trim off any objects that do not have any detections
     #  could happen if an object catalog was input
-    bd, nbd = dln.where(obj['ndet']<1)
-    if nbd>0: obj = np.delete(obj,bd)
+    if trim is True:
+        bd, nbd = dln.where(obj['ndet']<1)
+        if nbd>0: obj = np.delete(obj,bd)
     
     # Maybe iterate
     # -measure mean ra/dec for each object and go through the process again
@@ -550,8 +551,8 @@ def ellipsecoords(pars,npoints=100):
     yprime = yc + x*sinang + y*cosang
     return xprime, yprime
 
-def find_obj_overlap(obj):
-    """ Find objects that have other objects "inside" them or overlap. """
+def find_obj_parent(obj):
+    """ Find objects that have other objects "inside" them. """
 
     # Use crossmatch
 
@@ -580,11 +581,28 @@ def find_obj_overlap(obj):
     dist[not_inf] = (180. / np.pi * 2 * np.arctan2(x,
                                   np.sqrt(np.maximum(0, 1 - x ** 2))))
     dist[not_inf] *= 3600.0      # in arcsec
+
+    # Add "parent" column if necessary
+    if 'parent' not in obj.dtype.names:
+        obj = dln.addcatcols(obj,np.dtype([('parent',bool)]))
     
     # Check if there are any objects within FWHM
     #  the closest object will be itself, so check the second one
-    bd,nbd = dln.where( dist[:,1] <= 0.5*obj['fwhm'])
-    if nbd>0: obj['overlap'][bd]=True
+    bd,nbd = dln.where( dist[:,1] <= np.minimum(0.5*obj['fwhm'],obj['asemi']))
+
+    # Check that they are inside their ellipse footprint
+    obj['parent'] = False    # all false to start
+    if nbd>0:
+        for i in range(nbd):
+            ind1 = bd[i]
+            ind2 = ind[bd[i],1]
+            lon1,lat1 = (0.0, 0.0)
+            cenra = obj['ra'][ind1]
+            cendec = obj['dec'][ind1]
+            lon2,lat2 = coords.rotsphcen(obj['ra'][ind2],obj['dec'][ind2],cenra,cendec,gnomic=True)
+            pars = [lon1*3600,lon1*3600,obj['asemi'][ind1],obj['bsemi'][ind1],obj['theta'][ind1]]
+            ll,bb = ellipsecoords(pars,npoints=10)
+            obj['parent'][ind1] = coords.doPolygonsOverlap(ll,bb,np.atleast_1d(lon2*3600),np.atleast_1d(lat2*3600))
     
     return obj
 
@@ -603,6 +621,20 @@ def hybridcluster(cat):
     # Empty catalog input
     if len(cat)==0:
         return np.array([]), np.array([])
+
+    # Only one exposure, don't cluster
+    expindex = dln.create_index(cat['exposure'])
+    nexp = len(expindex['value'])
+    if nexp==1:
+        print('Only one exposure. Do not need to cluster')
+        labels = np.arange(len(cat))
+        obj = np.zeros(len(cat),dtype=np.dtype([('label',int),('ndet',int),('ra',np.float64),('dec',np.float64),('raerr',np.float32),
+                         ('decerr',np.float32),('asemi',np.float32),('bsemi',np.float32),('theta',np.float32),('fwhm',np.float32)]))
+        obj['label'] = labels
+        obj['ndet'] = 1
+        for n in ['ra','dec','raerr','decerr','asemi','bsemi','theta','fwhm']: obj[n]=cat[n]
+        return labels, obj
+
     
     # Step 1: Find object centers using DBSCAN with a small eps
     t0 = time.time()
@@ -612,21 +644,41 @@ def hybridcluster(cat):
     lon,lat = coords.rotsphcen(cat['RA'],cat['DEC'],cenra,cendec,gnomic=True)
     X1 = np.column_stack((lon,lat))
     err = np.sqrt(cat['RAERR']**2+cat['DECERR']**2)
-    eps = np.maximum(3*np.median(err),0.4)
+    eps = np.maximum(3*np.median(err),0.3)
     print('DBSCAN eps=%4.2f' % eps)
-    dbs1 = DBSCAN(eps=eps/3600, min_samples=1).fit(X1)
-    print('DBSCAN after '+str(time.time()-t0)+' sec.')
+    # Minimum number of measurements needed to define a cluster/object
+    minsamples = 3
+    if nexp<3: minsamples=2
+    dbs1 = DBSCAN(eps=eps/3600, min_samples=minsamples).fit(X1)
+    gdb,ngdb,bdb,nbdb = dln.where(dbs1.labels_ >= 0,comp=True)
+    # No clusters, lower minsamples
+    if (nexp==3) & (ngdb==0):
+        minsamples = 2
+        print('No clusters. Lowering min_samples to '+str(minsamples))
+        dbs1 = DBSCAN(eps=eps/3600, min_samples=minsamples).fit(X1)
+    gdb,ngdb,bdb,nbdb = dln.where(dbs1.labels_ >= 0,comp=True)
+    print('DBSCAN after %5.2f sec. ' % (time.time()-t0))
 
     # Get mean coordinates for each object
-    obj1 = meancoords(cat,dbs1.labels_)
+    #   only use the measurements that were clustered
+    obj1 = meancoords(cat[gdb],dbs1.labels_[gdb])
     inpobj = obj1
-    print(str(len(obj1))+' clusters')
+    print(str(ngdb)+' measurements clusters into '+str(len(obj1))+' objects. '+str(nbdb)+' remaining.')
     
-    # Step 2: sequential clustering with dbscan objects
+    # Step 2: sequential clustering with original list of objects with the outliers
+    #  this allows more distance measurements with larger errors to be clustered as well
     #  the RA/DEC uncertainties can be very small, set a lower threshold of EPS
-    dcr = np.maximum(3*err,eps)
-    labels, obj2 = seqcluster(cat,dcr=dcr,inpobj=inpobj)
-    obj = meancoords(cat,labels)    # Get mean coordinates again
+    if (nbdb>0):
+        print('Sequential Clustering the remaining measurements')
+        dcr = np.maximum(3*err[bdb],eps)
+        catrem = cat[bdb]
+        labels2, obj2 = seqcluster(catrem,dcr=dcr,inpobj=inpobj)
+        # Add these new labels to the original list
+        #  offset the numbers so they don't overlap
+        labels = dbs1.labels_
+        labels[bdb] = labels2+np.max(labels)+1
+        obj = meancoords(cat,labels)    # Get mean coordinates again
+
     print(str(len(obj))+' final objects')
     
     return labels, obj
@@ -1468,9 +1520,9 @@ if __name__ == "__main__":
     
     # FIGURE OUT IF THERE ARE OBJECTS **INSIDE** OTHER OBJECTS!!
     #   could be a deblending problem. extended galaxy that was shredded, or asteroids going through
-    obj = find_obj_overlap(obj)
-    bd,nbd = dln.where(obj['overlap']==True)
-    print(str(nbd)+' objects have large overlaps with other objects')
+    obj = find_obj_parent(obj)
+    bd,nbd = dln.where(obj['parent']==True)
+    print(str(nbd)+' objects have other objects inside their footprint')
 
     
     # ONLY INCLUDE OBJECTS WITH AVERAGE RA/DEC
