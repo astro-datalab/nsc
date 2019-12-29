@@ -408,42 +408,41 @@ def meancoords(cat,labels):
     dtype_obj = np.dtype([('label',int),('ndet',int),('ra',np.float64),('dec',np.float64),('raerr',np.float32),
                           ('decerr',np.float32),('asemi',np.float32),('bsemi',np.float32),('theta',np.float32),('fwhm',np.float32)])
     obj = np.zeros(nobj,dtype=dtype_obj)
-    
+
     # Loop over the objects
     for i in range(nobj):
         indx = index['index'][index['lo'][i]:index['hi'][i]+1]
-        cat1 = cat[indx]
-        ncat1 = dln.size(cat1)
+        ncat1 = dln.size(indx)
         obj['label'][i] = index['value'][i]
         obj['ndet'][i] = ncat1
         
         # Computing quantities
         # Mean RA/DEC, RAERR/DECERR
         if ncat1>1:
-            wt_ra = 1.0/cat1['RAERR']**2
-            wt_dec = 1.0/cat1['DECERR']**2
-            obj['ra'][i] = np.sum(cat1['RA']*wt_ra)/np.sum(wt_ra)
+            wt_ra = 1.0/cat['RAERR'][indx]**2
+            wt_dec = 1.0/cat['DECERR'][indx]**2
+            obj['ra'][i] = np.sum(cat['RA'][indx]*wt_ra)/np.sum(wt_ra)
             obj['raerr'][i] = np.sqrt(1.0/np.sum(wt_ra))
-            obj['dec'][i] = np.sum(cat1['DEC']*wt_dec)/np.sum(wt_dec)
+            obj['dec'][i] = np.sum(cat['DEC'][indx]*wt_dec)/np.sum(wt_dec)
             obj['decerr'][i] = np.sqrt(1.0/np.sum(wt_dec))
         else:
-            obj['ra'][i] = cat1['RA']
-            obj['dec'][i] = cat1['DEC']
-            obj['raerr'][i] = cat1['RAERR']
-            obj['decerr'][i] = cat1['DECERR']
+            obj['ra'][i] = cat['RA'][indx]
+            obj['dec'][i] = cat['DEC'][indx]
+            obj['raerr'][i] = cat['RAERR'][indx]
+            obj['decerr'][i] = cat['DECERR'][indx]
 
-        # Compute median FWHm
+        # Compute median FWHM
         if ncat1>1:
-            obj['asemi'][i] = np.median(cat1['ASEMI'])
-            obj['bsemi'][i] = np.median(cat1['BSEMI'])
-            obj['theta'][i] = np.median(cat1['THETA'])
-            obj['fwhm'][i] = np.median(cat1['FWHM'])            
+            obj['asemi'][i] = np.median(cat['ASEMI'][indx])
+            obj['bsemi'][i] = np.median(cat['BSEMI'][indx])
+            obj['theta'][i] = np.median(cat['THETA'][indx])
+            obj['fwhm'][i] = np.median(cat['FWHM'][indx])
         else:
-            obj['asemi'][i] = cat1['ASEMI']
-            obj['bsemi'][i] = cat1['BSEMI']
-            obj['theta'][i] = cat1['THETA']
-            obj['fwhm'][i] = cat1['FWHM']            
-            
+            obj['asemi'][i] = cat['ASEMI'][indx]
+            obj['bsemi'][i] = cat['BSEMI'][indx]
+            obj['theta'][i] = cat['THETA'][indx]
+            obj['fwhm'][i] = cat['FWHM'][indx]
+
     return obj
             
     
@@ -458,43 +457,19 @@ def propermotion(cat,labels):
     obj = meancoords(cat,labels)
     dtype_pm = np.dtype([('pmra',np.float32),('pmdec',np.float32),('pmraerr',np.float32),('pmdecerr',np.float32),('mjd',np.float64)])
     obj = dln.addcatcols(obj,dtype_pm)
-    
-    #dtype_obj = np.dtype([('label',int),('ndet',int),('ra',np.float64),('dec',np.float64),('raerr',np.float32),('decerr',np.float32),
-    #                      ('pmra',np.float32),('pmdec',np.float32),('pmraerr',np.float32),('pmdecerr',np.float32),('mjd',np.float64)])
-    #obj = np.zeros(nobj,dtype=dtype_obj)
 
     # Loop over the objects
     for i in range(nobj):
         indx = index['index'][index['lo'][i]:index['hi'][i]+1]
-        cat1 = cat[indx]
-        ncat1 = dln.size(cat1)
-        #obj['label'][i] = index['value'][i]
-        #obj['ndet'][i] = ncat1
-        
-        # Computing quantities
-        # Mean RA/DEC, RAERR/DECERR
-        #if ncat1>1:
-        #    wt_ra = 1.0/cat1['RAERR']**2
-        #    wt_dec = 1.0/cat1['DECERR']**2
-        #    obj['ra'][i] = np.sum(cat1['RA']*wt_ra)/np.sum(wt_ra)
-        #    obj['raerr'][i] = np.sqrt(1.0/np.sum(wt_ra))
-        #    obj['dec'][i] = np.sum(cat1['DEC']*wt_dec)/np.sum(wt_dec)
-        #    obj['decerr'][i] = np.sqrt(1.0/np.sum(wt_dec))
-        #    obj['mjd'][i] = np.mean(cat1['MJD'])
-        #else:
-        #    obj['ra'][i] = cat1['RA']
-        #    obj['dec'][i] = cat1['DEC']
-        #    obj['raerr'][i] = cat1['RAERR']
-        #    obj['decerr'][i] = cat1['DECERR']
-        #    obj['mjd'][i] = cat1['MJD']
+        ncat1 = dln.size(indx)
 
         # Mean proper motion and errors
         if ncat1>1:
-            raerr = np.array(cat1['RAERR']*1e3,np.float64)    # milli arcsec
-            ra = np.array(cat1['RA'],np.float64)
+            raerr = np.array(cat['RAERR'][indx]*1e3,np.float64)    # milli arcsec
+            ra = np.array(cat['RA'][indx],np.float64)
             ra -= np.mean(ra)
             ra *= 3600*1e3 * np.cos(obj['dec'][i]/radeg)     # convert to true angle, milli arcsec
-            t = cat1['MJD'].copy()
+            t = cat['MJD'][indx].copy()
             t -= np.mean(t)
             t /= 365.2425                          # convert to year
             # Calculate robust slope
@@ -502,8 +477,8 @@ def propermotion(cat,labels):
             obj['pmra'][i] = pmra                 # mas/yr
             obj['pmraerr'][i] = pmraerr           # mas/yr
 
-            decerr = np.array(cat1['DECERR']*1e3,np.float64)   # milli arcsec
-            dec = np.array(cat1['DEC'],np.float64)
+            decerr = np.array(cat['DECERR'][indx]*1e3,np.float64)   # milli arcsec
+            dec = np.array(cat['DEC'][indx],np.float64)
             dec -= np.mean(dec)
             dec *= 3600*1e3                         # convert to milli arcsec
             # Calculate robust slope
@@ -524,40 +499,18 @@ def moments(cat,labels):
     obj = meancoords(cat,labels)
     dtype_mom = np.dtype([('x2',np.float32),('y2',np.float32),('xy',np.float32),('asemi',np.float32),('bsemi',np.float32),('theta',np.float32)])
     obj = dln.addcatcols(obj,dtype_mom)
-    
-    #dtype_obj = np.dtype([('label',int),('ndet',int),('ra',np.float64),('raerr',np.float32),('dec',np.float64),('decerr',np.float32),
-    #                      ('x2',np.float32),('y2',np.float32),('xy',np.float32),('asemi',np.float32),('bsemi',np.float32),('theta',np.float32)])
-    #obj = np.zeros(nobj,dtype=dtype_obj)
 
     # Loop over the objects
     for i in range(nobj):
         indx = index['index'][index['lo'][i]:index['hi'][i]+1]
-        cat1 = cat[indx]
-        ncat1 = dln.size(cat1)
-        #obj['label'][i] = index['value'][i]
-        #obj['ndet'][i] = ncat1
+        ncat1 = dln.size(indx)
         
-        # Computing quantities
-        # Mean RA/DEC, RAERR/DECERR
-        #if ncat1>1:
-        #    wt_ra = 1.0/cat1['RAERR']**2
-        #    wt_dec = 1.0/cat1['DECERR']**2
-        #    obj['ra'][i] = np.sum(cat1['RA']*wt_ra)/np.sum(wt_ra)
-        #    obj['raerr'][i] = np.sqrt(1.0/np.sum(wt_ra))
-        #    obj['dec'][i] = np.sum(cat1['DEC']*wt_dec)/np.sum(wt_dec)
-        #    obj['decerr'][i] = np.sqrt(1.0/np.sum(wt_dec))
-        #else:
-        #    obj['ra'][i] = cat1['RA']
-        #    obj['dec'][i] = cat1['DEC']
-        #    obj['raerr'][i] = cat1['RAERR']
-        #    obj['decerr'][i] = cat1['DECERR']
-
         # Measure moments
         if ncat1>1:
             # See sextractor.pdf pg. 30
-            x2 = np.sum( ((cat1['RA']-obj['ra'][i])*np.cos(np.deg2rad(obj['dec'][i])))**2 ) / (ncat1-1) * 3600**2
-            y2 = np.sum( (cat1['DEC']-obj['dec'][i])**2 ) / (ncat1-1) * 3600**2
-            xy = np.sum( (cat1['RA']-obj['ra'][i])*np.cos(np.deg2rad(obj['dec'][i])) * (cat1['DEC']-obj['dec'][i]) ) / (ncat1-1) * 3600**2
+            x2 = np.sum( ((cat['RA'][indx]-obj['ra'][i])*np.cos(np.deg2rad(obj['dec'][i])))**2 ) / (ncat1-1) * 3600**2
+            y2 = np.sum( (cat['DEC'][indx]-obj['dec'][i])**2 ) / (ncat1-1) * 3600**2
+            xy = np.sum( (cat['RA'][indx]-obj['ra'][i])*np.cos(np.deg2rad(obj['dec'][i])) * (cat['DEC'][indx]-obj['dec'][i]) ) / (ncat1-1) * 3600**2
             obj['x2'][i] = x2
             obj['y2'][i] = y2
             obj['xy'][i] = xy
@@ -647,35 +600,31 @@ def hybridcluster(cat):
     # -should we check whether we need to "split" any clusters in step #1 if two close objects got accidentally
     #   clumped together?
 
-    err = np.sqrt(cat['RAERR']**2+cat['DECERR']**2)
     
     # Step 1: Find object centers using DBSCAN with a small eps
     t0 = time.time()
-    X1 = np.column_stack((np.array(cat['RA']),np.array(cat['DEC'])))
-    eps = 3*np.median(err)
+    # DBSCAN does not deal with cos(dec), convert to a different projection
+    cenra = np.mean(cat['RA'])
+    cendec = np.mean(cat['DEC'])
+    lon,lat = coords.rotsphcen(cat['RA'],cat['DEC'],cenra,cendec,gnomic=True)
+    X1 = np.column_stack((lon,lat))
+    err = np.sqrt(cat['RAERR']**2+cat['DECERR']**2)
+    eps = np.maximum(3*np.median(err),0.4)
     print('DBSCAN eps=%4.2f' % eps)
     dbs1 = DBSCAN(eps=eps/3600, min_samples=1).fit(X1)
     print('DBSCAN after '+str(time.time()-t0)+' sec.')
 
+    # Get mean coordinates for each object
     obj1 = meancoords(cat,dbs1.labels_)
     inpobj = obj1
     print(str(len(obj1))+' clusters')
     
     # Step 2: sequential clustering with dbscan objects
-    labels, obj2 = seqcluster(cat,dcr=3*err,inpobj=inpobj)
-    obj = meancoords(cat,labels)
-    ## add proper motions
-    #pms = propermotion(cat,labels)
-    #obj = dln.addcatcols(obj,np.dtype([('pmra',np.float32),('pmdec',np.float32),
-    #                                   ('pmraerr',np.float32),('pmdecerr',np.float32),('mjd',np.float64)]))
-    #for n in ['pmra','pmdec','pmraerr','pmdecerr']: obj[n] = pms[n]
-    ## add moments
-    #mom = moments(cat,labels)
-    #obj = dln.addcatcols(obj,np.dtype([('x2',np.float32),('y2',np.float32),('xy',np.float32),
-    #                                   ('asemi',np.float32),('bsemi',np.float32),('theta',np.float32)]))
-    #for n in ['x2','y2','xy','asemi','bsemi','theta']: obj[n] = mom[n]
+    #  the RA/DEC uncertainties can be very small, set a lower threshold of EPS
+    dcr = np.maximum(3*err,eps)
+    labels, obj2 = seqcluster(cat,dcr=dcr,inpobj=inpobj)
+    obj = meancoords(cat,labels)    # Get mean coordinates again
     print(str(len(obj))+' final objects')
-
     
     return labels, obj
     
