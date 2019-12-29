@@ -612,11 +612,7 @@ def hybridcluster(cat):
 
     # Hybrid clustering algorithm
     # 1) Find "object" centers by using DBSCAN with a smallish eps (~0.2-0.3") and maybe minclusters of 2-3
-    # 2) Do sequential clustering using the object centers and the measurements have to overlap with their own
-    #    coordinate uncertainties
-    # -what do we do with any "leftover" measurements at the end?
-    # -should we check whether we need to "split" any clusters in step #1 if two close objects got accidentally
-    #   clumped together?
+    # 2) Do sequential clustering using the object centers on the leftover measurements.
 
     # Empty catalog input
     if len(cat)==0:
