@@ -600,6 +600,9 @@ def hybridcluster(cat):
     # -should we check whether we need to "split" any clusters in step #1 if two close objects got accidentally
     #   clumped together?
 
+    # Empty catalog input
+    if len(cat)==0:
+        return np.array([]), np.array([])
     
     # Step 1: Find object centers using DBSCAN with a small eps
     t0 = time.time()
@@ -858,7 +861,7 @@ def clusterdata(cat,ncat,dbfile=None):
                     # Cluster
                     t0 = time.time()
                     # Cluster labels are integers and in ascending order, but there are gaps
-                    objlabels1, initobj1 = hybridcluster(cat)
+                    objlabels1, initobj1 = hybridcluster(cat1)
                     objlabels1 += lastobjlabel+1                 # add offset to labels
                     labelindex1 = dln.create_index(objlabels1)   # create inex
                     nobj1 = len(labelindex1['value'])
