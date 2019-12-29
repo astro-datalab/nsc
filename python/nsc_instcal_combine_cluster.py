@@ -619,7 +619,7 @@ def hybridcluster(cat):
         return np.array([]), np.array([])
 
     # Only one exposure, don't cluster
-    expindex = dln.create_index(cat['exposure'])
+    expindex = dln.create_index(cat['EXPOSURE'])
     nexp = len(expindex['value'])
     if nexp==1:
         print('Only one exposure. Do not need to cluster')
