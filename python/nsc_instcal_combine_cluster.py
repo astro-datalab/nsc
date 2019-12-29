@@ -1530,7 +1530,9 @@ if __name__ == "__main__":
     print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
 
     # same the measurement data to a file
-    Table(cat).write(outdir+'/'+subdir+'/'+str(pix)+'_meas.fits')
+    #outmeasfile = outdir+'/'+subdir+'/'+str(pix)+'_meas.fits'
+    #if os.path.exists(outmeasfile): os.remove(outmeasfile)
+    #Table(cat).write(outmeasfile)
 
     # Write the output file
     print('Writing combined catalog to '+outfile)
