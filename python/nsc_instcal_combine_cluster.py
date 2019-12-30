@@ -1299,7 +1299,7 @@ if __name__ == "__main__":
         idstr_count += ncat1
         idstr_grpcount += 1
         # Write to database and reinitialize the temporary IDSTR structure
-        if (idstr_grpcount>50000) | (idstr_count>300000) |  (i==(nobj-1)):
+        if (idstr_grpcount>5000) | (idstr_count>30000) |  (i==(nobj-1)):
             print('  Writing data to IDSTR database')
             writeidstr2db(idstr[0:idstr_count],dbfile_idstr)
             idstr = np.zeros(100000,dtype=dtype_idstr)
