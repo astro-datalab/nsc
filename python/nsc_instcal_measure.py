@@ -47,12 +47,12 @@ if __name__ == "__main__":
 
     t0 = time.time()
 
-    print sys.argv
+    print(sys.argv)
 
     # Not enough inputs
     n = len(sys.argv)
     if n < 4:
-        print "Syntax - nsc_instcal_measure.py fluxfile wtfile maskfile version"
+        print("Syntax - nsc_instcal_measure.py fluxfile wtfile maskfile version")
         sys.exit()
 
     # File names
@@ -61,13 +61,13 @@ if __name__ == "__main__":
     maskfile = sys.argv[3]
     # Check that the files exist
     if os.path.exists(fluxfile) == False:
-        print fluxfile, "file NOT FOUND"
+        print(fluxfile+"file NOT FOUND")
         sys.exit()
     if os.path.exists(wtfile) == False:
-        print wtfile, "file NOT FOUND"
+        print(wtfile+"file NOT FOUND")
         sys.exit()
     if os.path.exists(maskfile) == False:
-        print maskile, "file NOT FOUND"
+        print(maskile+"file NOT FOUND")
         sys.exit()
 
     base = os.path.basename(fluxfile)
@@ -76,13 +76,13 @@ if __name__ == "__main__":
     # 1) Prepare temporary directory
     #---------------------------------
     #print "Step #1: Preparing temporary directory"
-    tmpcntr = 1L
+    tmpcntr = 1
     tmpdir = tmproot+base+"."+str(tmpcntr)
     while (os.path.exists(tmpdir)):
         tmpcntr = tmpcntr+1
         tmpdir = tmproot+base+"."+str(tmpcntr)
         if tmpcntr > 20:
-            print "Temporary Directory counter getting too high. Exiting"
+            print("Temporary Directory counter getting too high. Exiting")
             sys.exit()
     os.mkdir(tmpdir)
     origdir = os.getcwd()
@@ -148,20 +148,22 @@ if __name__ == "__main__":
       rootLogger.info("  This is CTIO DECam data")
 
     # Make final output directory
-    if not os.path.exists(dir+instcode+"/"+night):
-        os.mkdir(dir+instcode+"/"+night)
-    if not os.path.exists(dir+instcode+"/"+night+"/"+base):
-        os.mkdir(dir+instcode+"/"+night+"/"+base)
+    if os.path.exists(dir+instcode+"/"+night) is False:
+        os.makedirs(dir+instcode+"/"+night)
+    if os.path.exists(dir+instcode+"/"+night+"/"+base) is False:
+        os.makedirs(dir+instcode+"/"+night+"/"+base)
         rootLogger.info("  Making output directory: "+dir+instcode+"/"+night+"/"+base)
 
     # LOOP through the HDUs/chips
     #----------------------------
-    for i in xrange(1,nhdu):
+    for i in range(1,nhdu):
         rootLogger.info(" Processing subimage "+str(i))
+
         try:
             flux,fhead = fits.getdata("bigflux.fits.fz",i,header=True)
-            wt,whead = fits.getdata("bigwt.fits.fz",i,header=True)
-            mask,mhead = fits.getdata("bigmask.fits.fz",i,header=True)
+            extname = fhead['EXTNAME']
+            wt,whead = fits.getdata("bigwt.fits.fz",extname,header=True)
+            mask,mhead = fits.getdata("bigmask.fits.fz",extname,header=True)
         except:
             rootLogger.info("No extension "+str(i))
 
@@ -219,7 +221,6 @@ if __name__ == "__main__":
           mask += (np.bitwise_and(omask,16)==16) * 16  # cosmic ray
           mask += (np.bitwise_and(omask,64)==64) * 8   # bleed trail
 
-
         # Mask out bad pixels in WEIGHT image
         #  set wt=0 for mask>0 pixels
         wt[ (mask>0) | (wt<0) ] = 0   # CP sets bad pixels to wt=0 or sometimes negative
@@ -267,7 +268,7 @@ if __name__ == "__main__":
         # WEIGHT_IMAGE  F4-00507860_01_comb.mask.fits
 
         filter_name = ''
-        cnt = 0L
+        cnt = 0
         for l in lines:
             # SATUR_LEVEL
             m = re.search('^SATUR_LEVEL',l)
@@ -338,6 +339,7 @@ if __name__ == "__main__":
             if os.path.exists("mask.fits"):
                 os.remove("mask.fits")
             fits.writeto("mask.fits",newmask,header=mhead,output_verify='warn')
+
 
         # 3c) Run SExtractor
         #p = subprocess.Popen('sex', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

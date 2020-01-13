@@ -139,6 +139,14 @@ for i=0,ncatfiles-1 do begin
   hd = headfits(catfiles[i],exten=2)
   cat1 = MRDFITS(catfiles[i],2,/silent)
   ncat1 = sxpar(hd,'naxis2')  ; handles empty catalogs
+
+  ;; Fix negative FWHM values
+  ;;  use A_WORLD and B_WORLD which are never negative
+  bdfwhm = where(cat1.fwhm_world lt 0.1,nbdfwhm)
+  if nbdfwhm gt 0 then begin
+    cat[bd].fwhm_world = sqrt(cat1.a_world^2+cat1.b_world^2)*2.35
+  endif
+
   ;ncat1 = n_elements(cat1)
   chstr[i].filename = catfiles[i]
   chstr[i].ccdnum = ccdnum

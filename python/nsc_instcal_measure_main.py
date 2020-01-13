@@ -25,7 +25,7 @@ if __name__ == "__main__":
     parser.add_argument('--hosts', type=str, nargs=1, help='Delimited list of hosts')
     parser.add_argument('-nm','--nmulti', type=int, nargs=1, default=30, help='Number of jobs')
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposure that were previously processed')
-    parser.add_argument('--maxjobs', type=int, nargs=1, default=48300, help='The maximum number of exposures to attempt to process per host')
+    parser.add_argument('--maxjobs', type=int, nargs=1, default=70000, help='The maximum number of exposures to attempt to process per host')
     args = parser.parse_args()
 
     t0 = time.time()
@@ -47,13 +47,13 @@ if __name__ == "__main__":
 
     # on thing/hulk use
     if (host == "thing") or (host == "hulk"):
-        basedir = "/dl1/users/dnidever/nsc/instcal/"+version+"/"
+        basedir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"/"
         mssdir = "/mss1/"
         localdir = "/d0/"
         tmpdir = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
     # on gp09 use
     if (host == "gp09") or (host == "gp08") or (host == "gp07") or (host == "gp06") or (host == "gp05"):
-        basedir = "/dl1/users/dnidever/nsc/instcal/"+version+"/"
+        basedir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"/"
         mssdir = "/net/mss1/"
         localdir = "/data0/"
         tmpdir = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
     # Hosts
     if (host not in hosts):
-        print('Current HOST='+host+' not in list of HOSTS = [ '+','.join(hosts)+' ] ')
+        print('Current HOST='+host+' not in list of HOSTS = [ '+','.join(np.atleast_1d(hosts))+' ] ')
         sys.exit()
 
     # Turn off mulit-threading
@@ -109,31 +109,15 @@ if __name__ == "__main__":
     rootLogger.info("host = "+host)
     rootLogger.info("version = "+version)
     rootLogger.info("nmulti = "+str(nmulti))
-    rootLogger.info("hosts = "+','.join(np.array(hosts)))
+    rootLogger.info("hosts = "+','.join(np.atleast_1d(hosts)))
     rootLogger.info("redo = "+str(redo))
     
     # Loading the lists
     list1 = fits.getdata(basedir+'/lists/decam_instcal_list.fits.gz',1)
-    nlist1 = len(list1)
     list2 = fits.getdata(basedir+'/lists/mosaic3_instcal_list.fits.gz',1)
-    nlist2 = len(list2)
     list3 = fits.getdata(basedir+'/lists/bok90prime_instcal_list.fits.gz',1)
-    nlist3 = len(list3)
-    # Concatenate
-    #   make sure string columns are same length
-    dtype_list = []
-    for f in list1.dtype.names:
-        if dtype[f].char == 'S':
-            isize = np.max([list1.dtype[f].itemsize,list2.dtype[f].itemsize,list3.dtype[f].itemsize])
-            dtype_list.append((f,'S'+str(isize)))
-        else:
-            dtype_list.append((f,list1.dtype[f].str))
-    dtype = np.dtype(dtype_list)
-    nlstr = nlist1+nlist2+nlist3
-    lstr = np.zeros(nlstr,dtype=dtype)
-    lstr[0:nlist1]=list1                             # load list1
-    lstr[nlist1:nlist1+nlist2]=list2                 # load list2
-    lstr[nlist1+nlist2:nlist1+nlist2+nlist3]=list3   # load list3
+    lstr = dln.concatenate([list1,list2,list3])    # concatenate
+    nlstr = dln.size(lstr)
     del(list1,list2,list3)
     rootLogger.info(str(nlstr)+' InstCal images')
 
@@ -149,16 +133,21 @@ if __name__ == "__main__":
 
     # Check the exposures
     rootLogger.info('Checking on the exposures')
-    dtype_expstr = np.dtype([('instrument','S100'),('fluxfile','S100'),('wtfile','S100'),('allexist',bool),('outfile','S100'),('done',bool),
-                             ('locked',bool),('torun',bool),('cmd','S100'),('cmddir','S100'),('submitted',bool)])
+    dtype_expstr = np.dtype([('instrument',np.str,100),('fluxfile',np.str,100),('wtfile',np.str,100),('maskfile',np.str,100),('allexist',bool),
+                             ('outfile',np.str,100),('done',bool),('locked',bool),('torun',bool),('cmd',np.str,1000),
+                             ('cmddir',np.str,200),('submitted',bool)])
     expstr = np.zeros(ngdexp,dtype=dtype_expstr)
     for i in range(ngdexp):
         if i % 500 == 0: rootLogger.info(i)
 
-        instrument = lstr[gdexp[i]]['INSTRUMENT']
-        fluxfile = lstr[gdexp[i]]['FLUXFILE']
-        wtfile = lstr[gdexp[i]]['WTFILE']
-        maskfile = lstr[gdexp[i]]['MASKFILE']
+        instrument = lstr['INSTRUMENT'][gdexp[i]].strip()
+        if type(instrument) is bytes: instrument=instrument.decode()
+        fluxfile = lstr['FLUXFILE'][gdexp[i]].strip()
+        if type(fluxfile) is bytes: fluxfile=fluxfile.decode()
+        wtfile = lstr['WTFILE'][gdexp[i]].strip()
+        if type(wtfile) is bytes: wtfile=wtfile.decode()
+        maskfile = lstr['MASKFILE'][gdexp[i]].strip()
+        if type(maskfile) is bytes: maskfile=maskfile.decode()
         fdir,base = os.path.split(fluxfile)
 
         # Change the root directory name
@@ -166,13 +155,17 @@ if __name__ == "__main__":
         fluxfile = mssdir+fluxfile[10:]
         wtfile = mssdir+wtfile[10:]
         maskfile = mssdir+maskfile[10:]
+
         expstr['instrument'][i] = instrument
         expstr['fluxfile'][i] = fluxfile
         expstr['wtfile'][i] = wtfile
         expstr['maskfile'][i] = maskfile
 
+        #import pdb; pdb.set_trace()
+
         # Check if the output already exists.
-        dateobs = lstr[gdexp[i]]['DATE_OBS']
+        dateobs = lstr['DATE_OBS'][gdexp[i]]
+        if type(dateobs) is np.bytes_: dateobs=dateobs.decode()
         night = dateobs[0:4]+dateobs[5:7]+dateobs[8:10]
         baseroot = base[0:base.find('.fits.fz')]
         #outfile = dldir+'users/dnidever/decamcatalog/instcal/'+night+'/'+baseroot+'/'+baseroot+'_'+strtrim(1,2)+'.fits'
@@ -185,15 +178,17 @@ if __name__ == "__main__":
         # Does the output file exist
         #if file_test(outfile) eq 1 or file_test(outfile+'.gz') eq 1 then expstr[i].done = 1
         #expstr[i].done = 0
+        expstr['done'][i] = False
+        if os.path.exists(outfile): expstr['done'][i] = True
 
         # Not all three files exist
-        if expstr[i]['allexist'] is False:
+        if expstr['allexist'][i] is False:
             if silent is False: rootLogger.info('Not all three flux/wt/mask files found for '+fluxfile)
             continue
 
         # Already done
-        if (expstr[i]['done'] is True) and redo is False:
-            is silent is False: rootLogger.info(outfile+' EXISTS and --redo NOT set')
+        if (expstr['done'][i] is True) and redo is False:
+            if silent is False: rootLogger.info(outfile+' EXISTS and --redo NOT set')
             continue
 
         #lock = djs_lockfile(outfile)
@@ -201,24 +196,24 @@ if __name__ == "__main__":
         #testlock = file_test(lockfile)
         testlock = False
 
-    # No lock file
-    if (testlock is False or unlock is true):
-        #dum = djs_lockfile(outfile)  ; this is slow
-        #if file_test(file_dirname(outfile),/directory) eq 0 then file_mkdir,file_dirname(outfile)  ; make directory
-        #if testlock eq 0 then touchzero,outfile+'.lock'  ; this is fast
-        expstr['cmd'][i] = '/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal_measure.py '+fluxfile+' '+wtfile+' '+maskfile+' '+version
-        expstr['cmddir'][i] = tmpdir
-        expstr['torun'][i] = True
-    # Lock file exists
-    else:
-        expstr['locked'][i] = True
-        expstr['torun'][i] = False
-        if silent is False: rootLogger.info('Lock file exists '+outfile+'.lock')
+        # No lock file
+        if (testlock is False or unlock is true):
+            #dum = djs_lockfile(outfile)  ; this is slow
+            #if file_test(file_dirname(outfile),/directory) eq 0 then file_mkdir,file_dirname(outfile)  ; make directory
+            #if testlock eq 0 then touchzero,outfile+'.lock'  ; this is fast
+            expstr['cmd'][i] = '/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal_measure.py '+fluxfile+' '+wtfile+' '+maskfile+' '+version
+            expstr['cmddir'][i] = tmpdir
+            expstr['torun'][i] = True
+        # Lock file exists
+        else:
+            expstr['locked'][i] = True
+            expstr['torun'][i] = False
+            if silent is False: rootLogger.info('Lock file exists '+outfile+'.lock')
 
     # Parcel out the jobs
     nhosts = dln.size(hosts)
-    torun = np.arange(nallcmd)
-    nperhost = int(np.ceil(nallcmd/nhosts))
+    torun,nalltorun = dln.where((expstr['torun'] == True) & (expstr['done'] == False))
+    nperhost = int(np.ceil(nalltorun/nhosts))
     for i in range(nhosts):
         if host==hosts[i]: torun=torun[i*nperhost:(i+1)*nperhost]
     ntorun = len(torun)
@@ -234,7 +229,7 @@ if __name__ == "__main__":
         expstr['submitted'][torun[0:maxjobs]] = True
     else:
         expstr['submitted'][torun] = True
-    tosubmit, = np.where(expstr['submitted'] eq True)
+    tosubmit, = np.where(expstr['submitted'] == True)
     ntosubmit = len(tosubmit)
     rootLogger.info(str(ntosubmit)+' jobs to submit')
     cmd = expstr[tosubmit]['cmd']
@@ -242,6 +237,7 @@ if __name__ == "__main__":
 
 
     # Lock the files that will be submitted
+    dolock = False
     if dolock is True:
         print('Locking files to be submitted')
         for i in range(ntosubmit):
@@ -261,7 +257,7 @@ if __name__ == "__main__":
     # Now run measurement on each exposure
     import pdb; pdb.set_trace()
     a = input("Press RETURN to start")
-    jobs = jd.job_daemon(cmd,cmddirs,hyperthread=True,prefix='nscmeas',wait=5,nmulti=nmulti)
+    jobs = jd.job_daemon(cmd,cmddir,hyperthread=True,prefix='nscmeas',waittime=5,nmulti=nmulti)
 
     # Save the jobs
     Table(jobs).write(basedir+'lists/nsc_instcal_measure_main.'+host+'.'+logtime+'_jobs.fits')

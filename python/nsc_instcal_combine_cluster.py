@@ -8,13 +8,13 @@ from astropy.io import fits
 from astropy.utils.exceptions import AstropyWarning
 from astropy.table import Table, vstack, Column
 from astropy.time import Time
-#import healpy as hp
+import healpy as hp
 from dlnpyutils import utils as dln, coords, bindata
 import subprocess
 import time
 from argparse import ArgumentParser
 import socket
-#from dustmaps.sfd import SFDQuery
+from dustmaps.sfd import SFDQuery
 from astropy.coordinates import SkyCoord
 from sklearn.cluster import DBSCAN
 from scipy.optimize import least_squares
@@ -162,6 +162,16 @@ def writeidstr2db(cat,dbfile):
     db.close()
     #print('inserting done after '+str(time.time()-t0)+' sec')
 
+def readidstrdb(dbfile):
+    """ Get data from IDSTR database"""
+    data = querydb(dbfile,table='idstr',cols='*')
+    # Put in catalog
+    dtype_idstr = np.dtype([('measid',np.str,200),('exposure',np.str,200),('objectid',np.str,200),('objectindex',int)])
+    cat = np.zeros(len(data),dtype=dtype_idstr)
+    cat[...] = data
+    del data    
+    return cat
+
 def querydb(dbfile,table='meas',cols='rowid,*',where=None):
     """ Query database table """
     sqlite3.register_adapter(np.int16, int)
@@ -274,7 +284,7 @@ def add_elements(cat,nnew=300000):
     del old
     return cat    
 
-def seqcluster(cat,dcr=0.5,iter=False,inpobj=None):
+def seqcluster(cat,dcr=0.5,iter=False,inpobj=None,trim=False):
     """ Sequential clustering of measurements in exposures.  This was the old method."""
 
     ncat = len(cat)
@@ -379,8 +389,9 @@ def seqcluster(cat,dcr=0.5,iter=False,inpobj=None):
     obj = obj[0:cnt]
     # Trim off any objects that do not have any detections
     #  could happen if an object catalog was input
-    bd, nbd = dln.where(obj['ndet']<1)
-    if nbd>0: obj = np.delete(obj,bd)
+    if trim is True:
+        bd, nbd = dln.where(obj['ndet']<1)
+        if nbd>0: obj = np.delete(obj,bd)
     
     # Maybe iterate
     # -measure mean ra/dec for each object and go through the process again
@@ -395,31 +406,43 @@ def meancoords(cat,labels):
     nobj = len(index['value'])
     radeg = np.float64(180.00) / np.pi
     
-    dtype_obj = np.dtype([('label',int),('ndet',int),('ra',np.float64),('dec',np.float64),('raerr',np.float32),('decerr',np.float32)])
+    dtype_obj = np.dtype([('label',int),('ndet',int),('ra',np.float64),('dec',np.float64),('raerr',np.float32),
+                          ('decerr',np.float32),('asemi',np.float32),('bsemi',np.float32),('theta',np.float32),('fwhm',np.float32)])
     obj = np.zeros(nobj,dtype=dtype_obj)
 
     # Loop over the objects
     for i in range(nobj):
         indx = index['index'][index['lo'][i]:index['hi'][i]+1]
-        cat1 = cat[indx]
-        ncat1 = dln.size(cat1)
+        ncat1 = dln.size(indx)
         obj['label'][i] = index['value'][i]
         obj['ndet'][i] = ncat1
         
         # Computing quantities
         # Mean RA/DEC, RAERR/DECERR
         if ncat1>1:
-            wt_ra = 1.0/cat1['RAERR']**2
-            wt_dec = 1.0/cat1['DECERR']**2
-            obj['ra'][i] = np.sum(cat1['RA']*wt_ra)/np.sum(wt_ra)
+            wt_ra = 1.0/cat['RAERR'][indx]**2
+            wt_dec = 1.0/cat['DECERR'][indx]**2
+            obj['ra'][i] = np.sum(cat['RA'][indx]*wt_ra)/np.sum(wt_ra)
             obj['raerr'][i] = np.sqrt(1.0/np.sum(wt_ra))
-            obj['dec'][i] = np.sum(cat1['DEC']*wt_dec)/np.sum(wt_dec)
+            obj['dec'][i] = np.sum(cat['DEC'][indx]*wt_dec)/np.sum(wt_dec)
             obj['decerr'][i] = np.sqrt(1.0/np.sum(wt_dec))
         else:
-            obj['ra'][i] = cat1['RA']
-            obj['dec'][i] = cat1['DEC']
-            obj['raerr'][i] = cat1['RAERR']
-            obj['decerr'][i] = cat1['DECERR']
+            obj['ra'][i] = cat['RA'][indx]
+            obj['dec'][i] = cat['DEC'][indx]
+            obj['raerr'][i] = cat['RAERR'][indx]
+            obj['decerr'][i] = cat['DECERR'][indx]
+
+        # Compute median FWHM
+        if ncat1>1:
+            obj['asemi'][i] = np.median(cat['ASEMI'][indx])
+            obj['bsemi'][i] = np.median(cat['BSEMI'][indx])
+            obj['theta'][i] = np.median(cat['THETA'][indx])
+            obj['fwhm'][i] = np.median(cat['FWHM'][indx])
+        else:
+            obj['asemi'][i] = cat['ASEMI'][indx]
+            obj['bsemi'][i] = cat['BSEMI'][indx]
+            obj['theta'][i] = cat['THETA'][indx]
+            obj['fwhm'][i] = cat['FWHM'][indx]
 
     return obj
             
@@ -435,43 +458,19 @@ def propermotion(cat,labels):
     obj = meancoords(cat,labels)
     dtype_pm = np.dtype([('pmra',np.float32),('pmdec',np.float32),('pmraerr',np.float32),('pmdecerr',np.float32),('mjd',np.float64)])
     obj = dln.addcatcols(obj,dtype_pm)
-    
-    #dtype_obj = np.dtype([('label',int),('ndet',int),('ra',np.float64),('dec',np.float64),('raerr',np.float32),('decerr',np.float32),
-    #                      ('pmra',np.float32),('pmdec',np.float32),('pmraerr',np.float32),('pmdecerr',np.float32),('mjd',np.float64)])
-    #obj = np.zeros(nobj,dtype=dtype_obj)
 
     # Loop over the objects
     for i in range(nobj):
         indx = index['index'][index['lo'][i]:index['hi'][i]+1]
-        cat1 = cat[indx]
-        ncat1 = dln.size(cat1)
-        #obj['label'][i] = index['value'][i]
-        #obj['ndet'][i] = ncat1
-        
-        # Computing quantities
-        # Mean RA/DEC, RAERR/DECERR
-        #if ncat1>1:
-        #    wt_ra = 1.0/cat1['RAERR']**2
-        #    wt_dec = 1.0/cat1['DECERR']**2
-        #    obj['ra'][i] = np.sum(cat1['RA']*wt_ra)/np.sum(wt_ra)
-        #    obj['raerr'][i] = np.sqrt(1.0/np.sum(wt_ra))
-        #    obj['dec'][i] = np.sum(cat1['DEC']*wt_dec)/np.sum(wt_dec)
-        #    obj['decerr'][i] = np.sqrt(1.0/np.sum(wt_dec))
-        #    obj['mjd'][i] = np.mean(cat1['MJD'])
-        #else:
-        #    obj['ra'][i] = cat1['RA']
-        #    obj['dec'][i] = cat1['DEC']
-        #    obj['raerr'][i] = cat1['RAERR']
-        #    obj['decerr'][i] = cat1['DECERR']
-        #    obj['mjd'][i] = cat1['MJD']
+        ncat1 = dln.size(indx)
 
         # Mean proper motion and errors
         if ncat1>1:
-            raerr = np.array(cat1['RAERR']*1e3,np.float64)    # milli arcsec
-            ra = np.array(cat1['RA'],np.float64)
+            raerr = np.array(cat['RAERR'][indx]*1e3,np.float64)    # milli arcsec
+            ra = np.array(cat['RA'][indx],np.float64)
             ra -= np.mean(ra)
             ra *= 3600*1e3 * np.cos(obj['dec'][i]/radeg)     # convert to true angle, milli arcsec
-            t = cat1['MJD'].copy()
+            t = cat['MJD'][indx].copy()
             t -= np.mean(t)
             t /= 365.2425                          # convert to year
             # Calculate robust slope
@@ -479,8 +478,8 @@ def propermotion(cat,labels):
             obj['pmra'][i] = pmra                 # mas/yr
             obj['pmraerr'][i] = pmraerr           # mas/yr
 
-            decerr = np.array(cat1['DECERR']*1e3,np.float64)   # milli arcsec
-            dec = np.array(cat1['DEC'],np.float64)
+            decerr = np.array(cat['DECERR'][indx]*1e3,np.float64)   # milli arcsec
+            dec = np.array(cat['DEC'][indx],np.float64)
             dec -= np.mean(dec)
             dec *= 3600*1e3                         # convert to milli arcsec
             # Calculate robust slope
@@ -501,40 +500,18 @@ def moments(cat,labels):
     obj = meancoords(cat,labels)
     dtype_mom = np.dtype([('x2',np.float32),('y2',np.float32),('xy',np.float32),('asemi',np.float32),('bsemi',np.float32),('theta',np.float32)])
     obj = dln.addcatcols(obj,dtype_mom)
-    
-    #dtype_obj = np.dtype([('label',int),('ndet',int),('ra',np.float64),('raerr',np.float32),('dec',np.float64),('decerr',np.float32),
-    #                      ('x2',np.float32),('y2',np.float32),('xy',np.float32),('asemi',np.float32),('bsemi',np.float32),('theta',np.float32)])
-    #obj = np.zeros(nobj,dtype=dtype_obj)
 
     # Loop over the objects
     for i in range(nobj):
         indx = index['index'][index['lo'][i]:index['hi'][i]+1]
-        cat1 = cat[indx]
-        ncat1 = dln.size(cat1)
-        #obj['label'][i] = index['value'][i]
-        #obj['ndet'][i] = ncat1
+        ncat1 = dln.size(indx)
         
-        # Computing quantities
-        # Mean RA/DEC, RAERR/DECERR
-        #if ncat1>1:
-        #    wt_ra = 1.0/cat1['RAERR']**2
-        #    wt_dec = 1.0/cat1['DECERR']**2
-        #    obj['ra'][i] = np.sum(cat1['RA']*wt_ra)/np.sum(wt_ra)
-        #    obj['raerr'][i] = np.sqrt(1.0/np.sum(wt_ra))
-        #    obj['dec'][i] = np.sum(cat1['DEC']*wt_dec)/np.sum(wt_dec)
-        #    obj['decerr'][i] = np.sqrt(1.0/np.sum(wt_dec))
-        #else:
-        #    obj['ra'][i] = cat1['RA']
-        #    obj['dec'][i] = cat1['DEC']
-        #    obj['raerr'][i] = cat1['RAERR']
-        #    obj['decerr'][i] = cat1['DECERR']
-
         # Measure moments
         if ncat1>1:
             # See sextractor.pdf pg. 30
-            x2 = np.sum( ((cat1['RA']-obj['ra'][i])*np.cos(np.deg2rad(obj['dec'][i])))**2 ) / (ncat1-1) * 3600**2
-            y2 = np.sum( (cat1['DEC']-obj['dec'][i])**2 ) / (ncat1-1) * 3600**2
-            xy = np.sum( (cat1['RA']-obj['ra'][i])*np.cos(np.deg2rad(obj['dec'][i])) * (cat1['DEC']-obj['dec'][i]) ) / (ncat1-1) * 3600**2
+            x2 = np.sum( ((cat['RA'][indx]-obj['ra'][i])*np.cos(np.deg2rad(obj['dec'][i])))**2 ) / (ncat1-1) * 3600**2
+            y2 = np.sum( (cat['DEC'][indx]-obj['dec'][i])**2 ) / (ncat1-1) * 3600**2
+            xy = np.sum( (cat['RA'][indx]-obj['ra'][i])*np.cos(np.deg2rad(obj['dec'][i])) * (cat['DEC'][indx]-obj['dec'][i]) ) / (ncat1-1) * 3600**2
             obj['x2'][i] = x2
             obj['y2'][i] = y2
             obj['xy'][i] = xy
@@ -574,43 +551,130 @@ def ellipsecoords(pars,npoints=100):
     yprime = yc + x*sinang + y*cosang
     return xprime, yprime
 
+def find_obj_parent(obj):
+    """ Find objects that have other objects "inside" them. """
+
+    # Use crossmatch
+
+    X1 = np.vstack((obj['ra'],obj['dec'])).T
+    X2 = np.vstack((obj['ra'],obj['dec'])).T
+    
+    X1 = X1 * (np.pi / 180.)
+    X2 = X2 * (np.pi / 180.)
+    max_distance = (np.max(obj['fwhm']) / 3600) * (np.pi / 180.)
+
+    # Convert 2D RA/DEC to 3D cartesian coordinates
+    Y1 = np.transpose(np.vstack([np.cos(X1[:, 0]) * np.cos(X1[:, 1]),
+                                 np.sin(X1[:, 0]) * np.cos(X1[:, 1]),
+                                 np.sin(X1[:, 1])]))
+    Y2 = np.transpose(np.vstack([np.cos(X2[:, 0]) * np.cos(X2[:, 1]),
+                                 np.sin(X2[:, 0]) * np.cos(X2[:, 1]),
+                                 np.sin(X2[:, 1])]))
+
+    # law of cosines to compute 3D distance
+    max_y = np.sqrt(2 - 2 * np.cos(max_distance))
+    dist, ind = coords.crossmatch(Y1, Y2, max_y, k=2)
+
+    # convert distances back to angles using the law of tangents
+    not_inf = ~np.isinf(dist)
+    x = 0.5 * dist[not_inf]
+    dist[not_inf] = (180. / np.pi * 2 * np.arctan2(x,
+                                  np.sqrt(np.maximum(0, 1 - x ** 2))))
+    dist[not_inf] *= 3600.0      # in arcsec
+
+    # Add "parent" column if necessary
+    if 'parent' not in obj.dtype.names:
+        obj = dln.addcatcols(obj,np.dtype([('parent',bool)]))
+    
+    # Check if there are any objects within FWHM
+    #  the closest object will be itself, so check the second one
+    bd,nbd = dln.where( dist[:,1] <= np.minimum(0.5*obj['fwhm'],obj['asemi']))
+
+    # Check that they are inside their ellipse footprint
+    obj['parent'] = False    # all false to start
+    if nbd>0:
+        for i in range(nbd):
+            ind1 = bd[i]
+            ind2 = ind[bd[i],1]
+            lon1,lat1 = (0.0, 0.0)
+            cenra = obj['ra'][ind1]
+            cendec = obj['dec'][ind1]
+            lon2,lat2 = coords.rotsphcen(obj['ra'][ind2],obj['dec'][ind2],cenra,cendec,gnomic=True)
+            pars = [lon1*3600,lon1*3600,obj['asemi'][ind1],obj['bsemi'][ind1],obj['theta'][ind1]]
+            ll,bb = ellipsecoords(pars,npoints=10)
+            obj['parent'][ind1] = coords.doPolygonsOverlap(ll,bb,np.atleast_1d(lon2*3600),np.atleast_1d(lat2*3600))
+    
+    return obj
+
+
 def hybridcluster(cat):
     """ use both DBSCAN and sequential clustering to cluster the data"""
 
     # Hybrid clustering algorithm
     # 1) Find "object" centers by using DBSCAN with a smallish eps (~0.2-0.3") and maybe minclusters of 2-3
-    # 2) Do sequential clustering using the object centers and the measurements have to overlap with their own
-    #    coordinate uncertainties
-    # -what do we do with any "leftover" measurements at the end?
-    # -should we check whether we need to "split" any clusters in step #1 if two close objects got accidentally
-    #   clumped together?
+    # 2) Do sequential clustering using the object centers on the leftover measurements.
 
-    err = np.sqrt(cat['RAERR']**2+cat['DECERR']**2)
+    # Empty catalog input
+    if len(cat)==0:
+        return np.array([]), np.array([])
+
+    # Only one exposure, don't cluster
+    expindex = dln.create_index(cat['EXPOSURE'])
+    nexp = len(expindex['value'])
+    if nexp==1:
+        print('Only one exposure. Do not need to cluster')
+        labels = np.arange(len(cat))
+        obj = np.zeros(len(cat),dtype=np.dtype([('label',int),('ndet',int),('ra',np.float64),('dec',np.float64),('raerr',np.float32),
+                         ('decerr',np.float32),('asemi',np.float32),('bsemi',np.float32),('theta',np.float32),('fwhm',np.float32)]))
+        obj['label'] = labels
+        obj['ndet'] = 1
+        for n in ['ra','dec','raerr','decerr','asemi','bsemi','theta','fwhm']: obj[n]=cat[n]
+        return labels, obj
+
     
     # Step 1: Find object centers using DBSCAN with a small eps
     t0 = time.time()
-    X1 = np.column_stack((np.array(cat['RA']),np.array(cat['DEC'])))
-    eps = 3*np.median(err)
+    # DBSCAN does not deal with cos(dec), convert to a different projection
+    cenra = np.mean(cat['RA'])
+    cendec = np.mean(cat['DEC'])
+    lon,lat = coords.rotsphcen(cat['RA'],cat['DEC'],cenra,cendec,gnomic=True)
+    X1 = np.column_stack((lon,lat))
+    err = np.sqrt(cat['RAERR']**2+cat['DECERR']**2)
+    eps = np.maximum(3*np.median(err),0.3)
     print('DBSCAN eps=%4.2f' % eps)
-    dbs1 = DBSCAN(eps=eps/3600, min_samples=1).fit(X1)
-    print('DBSCAN after '+str(time.time()-t0)+' sec.')
+    # Minimum number of measurements needed to define a cluster/object
+    minsamples = 3
+    if nexp<3: minsamples=2
+    dbs1 = DBSCAN(eps=eps/3600, min_samples=minsamples).fit(X1)
+    gdb,ngdb,bdb,nbdb = dln.where(dbs1.labels_ >= 0,comp=True)
+    # No clusters, lower minsamples
+    if (nexp==3) & (ngdb==0):
+        minsamples = 2
+        print('No clusters. Lowering min_samples to '+str(minsamples))
+        dbs1 = DBSCAN(eps=eps/3600, min_samples=minsamples).fit(X1)
+    gdb,ngdb,bdb,nbdb = dln.where(dbs1.labels_ >= 0,comp=True)
+    print('DBSCAN after %5.2f sec. ' % (time.time()-t0))
 
-    obj1 = meancoords(cat,dbs1.labels_)
+    # Get mean coordinates for each object
+    #   only use the measurements that were clustered
+    obj1 = meancoords(cat[gdb],dbs1.labels_[gdb])
     inpobj = obj1
-    print(str(len(obj1))+' clusters')
+    print(str(ngdb)+' measurements clusters into '+str(len(obj1))+' objects. '+str(nbdb)+' remaining.')
     
-    # Step 2: sequential clustering with dbscan objects
-    labels, obj = seqcluster(cat,dcr=3*err,inpobj=inpobj)
-    # add proper motions
-    pms = propermotion(cat,labels)
-    obj = dln.addcatcols(obj,np.dtype([('pmra',np.float32),('pmdec',np.float32),
-                                       ('pmraerr',np.float32),('pmdecerr',np.float32),('mjd',np.float64)]))
-    for n in ['pmra','pmdec','pmraerr','pmdecerr']: obj[n] = pms[n]
-    # add moments
-    mom = moments(cat,labels)
-    obj = dln.addcatcols(obj,np.dtype([('x2',np.float32),('y2',np.float32),('xy',np.float32),
-                                       ('asemi',np.float32),('bsemi',np.float32),('theta',np.float32)]))
-    for n in ['x2','y2','xy','asemi','bsemi','theta']: obj[n] = mom[n]
+    # Step 2: sequential clustering with original list of objects with the outliers
+    #  this allows more distance measurements with larger errors to be clustered as well
+    #  the RA/DEC uncertainties can be very small, set a lower threshold of EPS
+    if (nbdb>0):
+        print('Sequential Clustering the remaining measurements')
+        dcr = np.maximum(3*err[bdb],eps)
+        catrem = cat[bdb]
+        labels2, obj2 = seqcluster(catrem,dcr=dcr,inpobj=inpobj)
+        # Add these new labels to the original list
+        #  offset the numbers so they don't overlap
+        labels = dbs1.labels_
+        labels[bdb] = labels2+np.max(labels)+1
+        obj = meancoords(cat,labels)    # Get mean coordinates again
+
     print(str(len(obj))+' final objects')
     
     return labels, obj
@@ -714,6 +778,12 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                 ncat1 = len(cat1)
                 #print('  chip '+str(chmeta[j]['ccdnum'])+'  '+str(ncat1)+' sources')
 
+                # Fix negative FWHM values
+                #  use A_WORLD and B_WORLD which are never negative
+                bd,nbd = dln.where(cat1['FWHM']<0.1)
+                if nbd>0:
+                    cat1['FWHM'][bd] = np.sqrt(cat1['ASEMI'][bd]**2+cat1['BSEMI'][bd]**2)*2.35
+
                 # Make sure it's in the right format
                 if len(cat1.dtype.fields) != 32:
                     if verbose: print('  This catalog does not have the right format. Skipping')
@@ -786,7 +856,7 @@ def clusterdata(cat,ncat,dbfile=None):
     """ Perform spatial clustering """
 
     t00 = time.time()
-    print('Spatial clustering with DBSCAN')    
+    print('Spatial clustering')    
     # Divide into subregions
     if (ncat>1000000) & (dbfile is not None):
         print('Dividing clustering problem into subregions')
@@ -836,14 +906,10 @@ def clusterdata(cat,ncat,dbfile=None):
 
                 # Some measurements to work with
                 if ncat1>0:
-                    # Run DBSCAN
-                    #import pdb; pdb.set_trace()
+                    # Cluster
                     t0 = time.time()
-                    X1 = np.column_stack((np.array(cat1['RA']),np.array(cat1['DEC'])))
-                    dbs1 = DBSCAN(eps=0.5/3600, min_samples=1).fit(X1)
-                    print('DBSCAN after '+str(time.time()-t0)+' sec.')
                     # Cluster labels are integers and in ascending order, but there are gaps
-                    objlabels1 = dbs1.labels_
+                    objlabels1, initobj1 = hybridcluster(cat1)
                     objlabels1 += lastobjlabel+1                 # add offset to labels
                     labelindex1 = dln.create_index(objlabels1)   # create inex
                     nobj1 = len(labelindex1['value'])
@@ -907,12 +973,13 @@ def clusterdata(cat,ncat,dbfile=None):
         if dbfile is not None:
             cat = getdbcoords(dbfile)
         # Spatially cluster the measurements with DBSCAN
-        # coordinates of measurement
-        X = np.column_stack((np.array(cat['RA']),np.array(cat['DEC'])))
-        # Compute DBSCAN on all measurements
-        dbs = DBSCAN(eps=0.5/3600, min_samples=1).fit(X)
-        # Cluster labels are integers and in ascending order, but there are gaps
-        objlabels = dbs.labels_
+        ## coordinates of measurement
+        #X = np.column_stack((np.array(cat['RA']),np.array(cat['DEC'])))
+        ## Compute DBSCAN on all measurements
+        #dbs = DBSCAN(eps=0.5/3600, min_samples=1).fit(X)
+        ## Cluster labels are integers and in ascending order, but there are gaps
+        #objlabels = dbs.labels_
+        objlabels, initobj = hybridcluster(cat)
         labelindex = dln.create_index(objlabels)   # create inex
         nobj = len(labelindex['value'])
         print(str(ncat)+' measurements for '+str(nobj)+' objects')
@@ -984,7 +1051,8 @@ if __name__ == "__main__":
     subdir = str(int(pix)//1000)    # use the thousands to create subdirectory grouping
     if os.path.exists(outdir) is False: os.mkdir(outdir)
     if os.path.exists(outdir+'/'+subdir) is False: os.mkdir(outdir+'/'+subdir)
-    outfile = outdir+'/'+subdir+'/'+str(pix)+'.fits'
+    #outfile = outdir+'/'+subdir+'/'+str(pix)+'.fits'
+    outfile = outdir+'/'+subdir+'/'+str(pix)+'_hybrid.fits'
     if (os.path.exists(outfile) or os.path.exists(outfile+'.gz')) & (not redo):
         print(outfile+' EXISTS already and REDO not set')
         sys.exit()
@@ -1084,7 +1152,7 @@ if __name__ == "__main__":
                           ('theta',np.float32),('thetaerr',np.float32),('fwhm',np.float32),('flags',np.int16),('class_star',np.float32),
                           ('ebv',np.float32),('rmsvar',np.float32),('madvar',np.float32),('iqrvar',np.float32),('etavar',np.float32),
                           ('jvar',np.float32),('kvar',np.float32),('chivar',np.float32),('romsvar',np.float32),
-                          ('variable10sig',np.int16),('nsigvar',np.float32)])
+                          ('variable10sig',np.int16),('nsigvar',np.float32),('overlap',bool)])
 
     # Decide whether to load everything into RAM or use temporary database
     metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
@@ -1100,9 +1168,12 @@ if __name__ == "__main__":
         dbfile = tmproot+str(pix)+'_combine.db'
         print('Using temporary database file = '+dbfile)
         if os.path.exists(dbfile): os.remove(dbfile)
+    else:
+        print('Keeping all measurement data in memory')
 
     # IDSTR database file
     dbfile_idstr = outdir+'/'+subdir+'/'+str(pix)+'_idstr.db'
+    if os.path.exists(dbfile_idstr): os.remove(dbfile_idstr)
 
     # Load the measurement catalog
     #  this will contain excess rows at the end, if all in RAM
@@ -1116,7 +1187,7 @@ if __name__ == "__main__":
     objstr, cat = clusterdata(cat,ncat,dbfile=dbfile)
     nobj = dln.size(objstr)
     meascumcount = np.cumsum(objstr['NMEAS'])
-    print(str(nobj)+' unique objects clustered within 0.5 arcsec')
+    print(str(nobj)+' unique objects clustered')
 
     # Initialize the OBJ structured array
     obj = np.zeros(nobj,dtype=dtype_obj)
@@ -1136,6 +1207,10 @@ if __name__ == "__main__":
     obj['variable10sig'] = 0
     obj['nsigvar'] = np.nan
     #idstr = np.zeros(ncat,dtype=dtype_idstr)
+
+    # Initialize temporary IDSTR structure
+    idstr = np.zeros(100000,dtype=dtype_idstr)
+    nidstr = dln.size(idstr)
 
     # Higher precision catalog
     dtype_hicat = np.dtype([('MEASID',np.str,30),('EXPOSURE',np.str,40),('CCDNUM',int),('FILTER',np.str,3),
@@ -1158,6 +1233,8 @@ if __name__ == "__main__":
     maxmeasload = 50000
     ngrpcat = 0
     ncat1 = 0
+    idstr_count = 0
+    idstr_grpcount = 0
     fidmag = np.zeros(nobj,float)+np.nan  # fiducial magnitude
     for i,lab in enumerate(objstr['OBJLABEL']):
         if (i % 1000)==0: print(i)
@@ -1166,7 +1243,6 @@ if __name__ == "__main__":
             v = psutil.virtual_memory()
             process = psutil.Process(os.getpid())
             print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
-            #import pdb; pdb.set_trace()
 
         # Get meas data for this object
         if usedb is False:
@@ -1209,13 +1285,27 @@ if __name__ == "__main__":
 
         obj['ndet'][i] = ncat1
 
-        # Add IDSTR information to database
-        idcat = np.zeros(ncat1,dtype=dtype_idstr)
-        idcat['measid'] = cat1['MEASID']
-        idcat['exposure'] = cat1['EXPOSURE']
-        idcat['objectid'] = obj['objectid'][i]
-        idcat['objectindex'] = i
-        writeidstr2db(idcat,dbfile_idstr)
+
+        # Add IDSTR information to IDSTR structure/database
+        #  update in groups to database so it takes less time
+        if idstr_count+ncat1 > nidstr:
+            print('  Adding more elements to temporary IDSTR structure')
+            idstr = add_elements(idstr,50000)  # add more elements if necessary
+        # Add information to temporary IDSTR structure for this object
+        idstr['measid'][idstr_count:idstr_count+ncat1] = cat1['MEASID']
+        idstr['exposure'][idstr_count:idstr_count+ncat1] = cat1['EXPOSURE']
+        idstr['objectid'][idstr_count:idstr_count+ncat1] = obj['objectid'][i]
+        idstr['objectindex'][idstr_count:idstr_count+ncat1] = i
+        idstr_count += ncat1
+        idstr_grpcount += 1
+        # Write to database and reinitialize the temporary IDSTR structure
+        if (idstr_grpcount>5000) | (idstr_count>30000) |  (i==(nobj-1)):
+            print('  Writing data to IDSTR database')
+            writeidstr2db(idstr[0:idstr_count],dbfile_idstr)
+            idstr = np.zeros(100000,dtype=dtype_idstr)
+            nidstr = dln.size(idstr)
+            idstr_count = 0
+            idstr_grpcount = 0
 
         # Computing quantities
         # Mean RA/DEC, RAERR/DECERR
@@ -1359,6 +1449,7 @@ if __name__ == "__main__":
         obj['class_star'][i] = np.mean(cat1['CLASS_STAR'])
         obj['flags'][i] = np.bitwise_or.reduce(cat1['FLAGS'])  # OR combine
 
+
     v = psutil.virtual_memory()
     process = psutil.Process(os.getpid())
     print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
@@ -1422,7 +1513,14 @@ if __name__ == "__main__":
     ebv = sfd(c)
     obj['ebv'] = ebv
 
+    
+    # FIGURE OUT IF THERE ARE OBJECTS **INSIDE** OTHER OBJECTS!!
+    #   could be a deblending problem. extended galaxy that was shredded, or asteroids going through
+    obj = find_obj_parent(obj)
+    bd,nbd = dln.where(obj['parent']==True)
+    print(str(nbd)+' objects have other objects inside their footprint')
 
+    
     # ONLY INCLUDE OBJECTS WITH AVERAGE RA/DEC
     # WITHIN THE BOUNDARY OF THE HEALPIX PIXEL!!!
     ipring = hp.pixelfunc.ang2pix(nside,obj['ra'],obj['dec'],lonlat=True)
@@ -1481,6 +1579,11 @@ if __name__ == "__main__":
     v = psutil.virtual_memory()
     process = psutil.Process(os.getpid())
     print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
+
+    # same the measurement data to a file
+    #outmeasfile = outdir+'/'+subdir+'/'+str(pix)+'_meas.fits'
+    #if os.path.exists(outmeasfile): os.remove(outmeasfile)
+    #Table(cat).write(outmeasfile)
 
     # Write the output file
     print('Writing combined catalog to '+outfile)
