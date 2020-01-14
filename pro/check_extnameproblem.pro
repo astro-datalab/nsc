@@ -16,11 +16,12 @@ ndirs = n_elements(dirs)
 For n=0,ndirs-1 do begin
   idir = dirs[n]
   inight = file_basename(idir)
-  print,strtrim(n+1,2),' ',inight
+  instrument = file_basename(file_dirname(idir))
+  print,strtrim(n+1,2),' ',inight,' ',instrument
 
   CD,idir
 
-  outfile = '/net/dl1/users/dnidever/nsc/instcal/v3/extcheck/'+inight+'_summary.fits'
+  outfile = '/net/dl1/users/dnidever/nsc/instcal/v3/extcheck/'+instrument+'_'+inight+'_summary.fits'
   if file_test(outfile) eq 1 and not keyword_set(redo) then begin
     print,outfile,' EXISTS and /red NOT set'
     goto,NIGHTBOMB
