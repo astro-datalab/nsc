@@ -26,6 +26,7 @@ if __name__ == "__main__":
     parser.add_argument('-nm','--nmulti', type=int, nargs=1, default=30, help='Number of jobs')
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposure that were previously processed')
     parser.add_argument('--maxjobs', type=int, nargs=1, default=70000, help='The maximum number of exposures to attempt to process per host')
+    parser.add_argument('--list',type=str,nargs=1,default=None,help='Input list of exposures to use')
     args = parser.parse_args()
 
     t0 = time.time()
@@ -41,6 +42,9 @@ if __name__ == "__main__":
     else:
         hosts = host
     maxjobs = args.maxjobs
+    inputlist = args.list
+    if inputlist is not None:
+        inputlist = inputlist[0]
     nside = 128
     radeg = 180 / np.pi
     t0 = time.time()
@@ -112,13 +116,26 @@ if __name__ == "__main__":
     rootLogger.info("hosts = "+','.join(np.atleast_1d(hosts)))
     rootLogger.info("redo = "+str(redo))
     
-    # Loading the lists
-    list1 = fits.getdata(basedir+'/lists/decam_instcal_list.fits.gz',1)
-    list2 = fits.getdata(basedir+'/lists/mosaic3_instcal_list.fits.gz',1)
-    list3 = fits.getdata(basedir+'/lists/bok90prime_instcal_list.fits.gz',1)
-    lstr = dln.concatenate([list1,list2,list3])    # concatenate
+    # Loading the list(s)
+    if inputlist is None:
+        rootLogger.info('Using input lists:')
+        rootLogger.info('  '+basedir+'/lists/decam_instcal_list.fits.gz')
+        rootLogger.info('  '+basedir+'/lists/mosaic3_instcal_list.fits.gz')
+        rootLogger.info('  '+basedir+'/lists/bok90prime_instcal_list.fits.gz')
+        list1 = fits.getdata(basedir+'/lists/decam_instcal_list.fits.gz',1)
+        list2 = fits.getdata(basedir+'/lists/mosaic3_instcal_list.fits.gz',1)
+        list3 = fits.getdata(basedir+'/lists/bok90prime_instcal_list.fits.gz',1)
+        lstr = dln.concatenate([list1,list2,list3])    # concatenate
+        del(list1,list2,list3)
+    else:
+        rootLogger.info('Using input list: '+inputlist)
+        lstr = fits.getdata(inputlist,1)
+        # Check that it has all the columns that we need
+        needcols = ['INSTRUMENT','FLUXFILE','MASKFILE','WTFILE','DATE_OBS']
+        for n in needcols:
+            if n not in lstr.dtype.names:
+                raise ValueError('Column '+n+' not in '+inputlist)
     nlstr = dln.size(lstr)
-    del(list1,list2,list3)
     rootLogger.info(str(nlstr)+' InstCal images')
 
     # Putting them in RANDOM but REPEATABLE order
@@ -239,7 +256,7 @@ if __name__ == "__main__":
     # Lock the files that will be submitted
     dolock = False
     if dolock is True:
-        print('Locking files to be submitted')
+        rootLogger.info('Locking files to be submitted')
         for i in range(ntosubmit):
             outfile = expstr['outfile'][tosubmit[i]]
             if os.path.exists(os.path.dirname(outfile)) is False: os.mkdir(os.path.dirname(outfile))  # make directory 
