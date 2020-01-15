@@ -178,7 +178,6 @@ if __name__ == "__main__":
         expstr['wtfile'][i] = wtfile
         expstr['maskfile'][i] = maskfile
 
-        #import pdb; pdb.set_trace()
 
         # Check if the output already exists.
         dateobs = lstr['DATE_OBS'][gdexp[i]]
@@ -214,8 +213,7 @@ if __name__ == "__main__":
         testlock = False
 
         # No lock file
-        if (testlock is False or unlock is true):
-            #dum = djs_lockfile(outfile)  ; this is slow
+        if (testlock is False or unlock is true or redo is True):
             #if file_test(file_dirname(outfile),/directory) eq 0 then file_mkdir,file_dirname(outfile)  ; make directory
             #if testlock eq 0 then touchzero,outfile+'.lock'  ; this is fast
             expstr['cmd'][i] = '/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal_measure.py '+fluxfile+' '+wtfile+' '+maskfile+' '+version
@@ -229,7 +227,7 @@ if __name__ == "__main__":
 
     # Parcel out the jobs
     nhosts = dln.size(hosts)
-    torun,nalltorun = dln.where((expstr['torun'] == True) & (expstr['done'] == False))
+    torun,nalltorun = dln.where(expstr['torun'] == True)
     nperhost = int(np.ceil(nalltorun/nhosts))
     for i in range(nhosts):
         if host==hosts[i]: torun=torun[i*nperhost:(i+1)*nperhost]
