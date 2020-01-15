@@ -169,9 +169,12 @@ if __name__ == "__main__":
 
         # Change the root directory name
         #  /net/mss1/blah/blah/
-        fluxfile = mssdir+fluxfile[10:]
-        wtfile = mssdir+wtfile[10:]
-        maskfile = mssdir+maskfile[10:]
+        lo = fluxfile.find('/mss1/')
+        fluxfile = mssdir+fluxfile[(lo+6):]
+        lo = wtfile.find('/mss1/')
+        wtfile = mssdir+wtfile[(lo+6):]
+        lo = maskfile.find('/mss1/')
+        maskfile = mssdir+maskfile[(lo+6):]
 
         expstr['instrument'][i] = instrument
         expstr['fluxfile'][i] = fluxfile
