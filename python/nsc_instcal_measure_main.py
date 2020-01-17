@@ -131,9 +131,10 @@ if __name__ == "__main__":
         rootLogger.info('Using input list: '+inputlist)
         lstr = fits.getdata(inputlist,1)
         # Check that it has all the columns that we need
-        needcols = ['instrument','fluxfile','maskfile','wtfile','date_obs']
+        needcols = ['INSTRUMENT','FLUXFILE','MASKFILE','WTFILE','DATE_OBS']
         for n in needcols:
             if n not in lstr.dtype.names:
+                import pdb; pdb.set_trace()
                 raise ValueError('Column '+n+' not in '+inputlist)
     nlstr = dln.size(lstr)
     rootLogger.info(str(nlstr)+' InstCal images')
