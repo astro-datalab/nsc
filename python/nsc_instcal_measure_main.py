@@ -134,7 +134,6 @@ if __name__ == "__main__":
         needcols = ['INSTRUMENT','FLUXFILE','MASKFILE','WTFILE','DATE_OBS']
         for n in needcols:
             if n not in lstr.dtype.names:
-                import pdb; pdb.set_trace()
                 raise ValueError('Column '+n+' not in '+inputlist)
     nlstr = dln.size(lstr)
     rootLogger.info(str(nlstr)+' InstCal images')
