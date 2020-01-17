@@ -131,8 +131,8 @@ if __name__ == "__main__":
         rootLogger.info('Using input list: '+inputlist)
         lstr = fits.getdata(inputlist,1)
         # Check that it has all the columns that we need
-        needcols = ['INSTRUMENT','FLUXFILE','MASKFILE','WTFILE','DATE_OBS']
-        for n in needcols:
+        needcols = ['instrument','fluxfile','maskfile','wtfile','date_obs']
+        for n.lower() in needcols:
             if n not in lstr.dtype.names:
                 raise ValueError('Column '+n+' not in '+inputlist)
     nlstr = dln.size(lstr)
