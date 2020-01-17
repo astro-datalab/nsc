@@ -132,7 +132,7 @@ if __name__ == "__main__":
         lstr = fits.getdata(inputlist,1)
         # Check that it has all the columns that we need
         needcols = ['instrument','fluxfile','maskfile','wtfile','date_obs']
-        for n.lower() in needcols:
+        for n in needcols:
             if n not in lstr.dtype.names:
                 raise ValueError('Column '+n+' not in '+inputlist)
     nlstr = dln.size(lstr)
