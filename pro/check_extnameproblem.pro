@@ -79,6 +79,11 @@ For n=0,ndirs-1 do begin
     FILE_LINK,maskfile,tmpfile
     FITS_OPEN,tmpfile,mfcb & FITS_CLOSE,mfcb
     FILE_DELETE,tmpfile,/allow  ; delete the temporary symlink 
+    tmpfile = MKTEMP('tmp',/nodot,outdir=workdir) & TOUCHZERO,tmpfile+'.fits' & FILE_DELETE,[tmpfile,tmpfile+'.fits'],/allow
+    tmpfile += '.fits'
+    FILE_LINK,wtfile,tmpfile
+    FITS_OPEN,tmpfile,wfcb & FITS_CLOSE,wfcb
+    FILE_DELETE,tmpfile,/allow  ; delete the temporary symlink 
 
     newstr.fluxfile = fluxfile
     newstr.maskfile = maskfile
@@ -86,7 +91,7 @@ For n=0,ndirs-1 do begin
     newstr.okay = 1  ;; good until found bad
 
     ;; Check if there are differences
-    bd = where(fcb.extname ne mfcb.extname,nbd)
+    bd = where(fcb.extname ne mfcb.extname or fcb.extname ne wfcb.extname,nbd)
     if nbd gt 0 then begin
       print,inight,' ',base,'  PROBLEM'
       newstr.okay = 0
