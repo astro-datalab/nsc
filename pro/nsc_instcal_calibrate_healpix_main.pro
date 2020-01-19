@@ -92,6 +92,24 @@ str.maskfile = strtrim(str.maskfile,2)
 str.wtfile = strtrim(str.wtfile,2)
 print,strtrim(nstr,2),' InstCal images'
 
+;; Only run on the ~180,000 "new" exposures and the ~15,000 exposures
+;; with extension name problems
+sub1 = mrdfits(dir+'lists/nsc_instcal_measure_main.gp06.datalab.noao.edu.122719165718_run.fits',1)
+sub2 = mrdfits(dir+'lists/nsc_instcal_measure_main.gp07.datalab.noao.edu.122719165757_run.fits',1)
+sub3 = mrdfits(dir+'lists/nsc_instcal_measure_main.gp08.datalab.noao.edu.122719165811_run.fits',1)
+g1 = where(sub1.submitted eq 'T',ng1)
+g2 = where(sub2.submitted eq 'T',ng2)
+g3 = where(sub3.submitted eq 'T',ng3)
+sub = [sub1[g1],sub2[g2],sub3[g3]]
+extstr = mrdfits(dir+'lists/badexposures_extnameproblem2.fits',1)
+fluxfiletorun = [sub.fluxfile,extstr.fluxfile]
+fluxfiletorun = strtrim(fluxfiletorun,2)
+MATCH,file_basename(str.fluxfile,'.fits.fz'),file_basename(fluxfiletorun,'.fits.fz'),ind1,ind2,/sort,count=nmatch
+print,strtrim(nmatch,2),' exposures to rerun'
+str = str[ind1]
+nstr = n_elements(str)
+
+
 ; Get good RA/DEC
 ;  this was obtained with grabcoords_all.pro
 ;coords = mrdfits(dir+'lists/allcoords.fits',1)
@@ -148,11 +166,11 @@ for i=0,nstr-1 do begin
   ;str[i].dec = sxpar(head,'crval2')
 endfor
 
-;; Only rerun c4d-VR exposures
-g = where(str.instrument eq 'c4d' and strmid(str.filter,0,2) eq 'VR',ng)
-print,'Rerunning ',strtrim(ng,2),' VR exposures'
-str = str[g]
-list = list[g]
+;;; Only rerun c4d-VR exposures
+;g = where(str.instrument eq 'c4d' and strmid(str.filter,0,2) eq 'VR',ng)
+;print,'Rerunning ',strtrim(ng,2),' VR exposures'
+;str = str[g]
+;list = list[g]
 
 ; Calculate the healpix
 theta = (90-str.dec)/radeg
