@@ -1,4 +1,4 @@
-pro grabcoords,files
+pro grabcoords,files,redo=redo
 
 ; Grab the RA/DEC values out of the header and stuff them in a small file 
 ; upgraded to also grab the WCSCAL and TELSTAT from header
@@ -6,6 +6,13 @@ pro grabcoords,files
 
 for i=0,n_elements(files)-1 do begin
   file = files[i]
+  base = file_basename(file,'.fits.fz')
+  outfile = '/data0/dnidever/nsc/instcal/v3/tmp/coords/'+base+'_coords.txt'
+  if file_test(outfile) eq 1 and not keyword_set(redo) then begin
+    print,outfile,' already exists and /redo not set'
+    goto,bomb
+  endif
+
   if file_test(file) eq 0 then goto,bomb
   head = headfits(file,exten=1,errmsg=errmsg)
   if errmsg eq '' then begin
@@ -58,9 +65,6 @@ for i=0,n_elements(files)-1 do begin
   sep = ' | '
   line = file+sep+strtrim(ra,2)+sep+strtrim(dec,2)+sep+strtrim(wcscal,2)+sep+strtrim(telstat,2)+sep+$
          biasfil+sep+bpmfil+sep+bpm+sep+pupfil+sep+flatfil+sep+illumfil+sep+illumcor+sep+starfil
-  base = file_basename(file,'.fits.fz')
-  ;outfile = '/d0/dnidever/nsc/instcal/v2/tmp/coords/'+base+'_coords.txt'
-  outfile = '/data0/dnidever/nsc/instcal/v3/tmp/coords/'+base+'_coords.txt'
   writeline,outfile,line
   BOMB:
 endfor
