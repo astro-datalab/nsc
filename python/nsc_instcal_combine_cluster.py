@@ -1051,8 +1051,8 @@ if __name__ == "__main__":
     subdir = str(int(pix)//1000)    # use the thousands to create subdirectory grouping
     if os.path.exists(outdir) is False: os.mkdir(outdir)
     if os.path.exists(outdir+'/'+subdir) is False: os.mkdir(outdir+'/'+subdir)
-    #outfile = outdir+'/'+subdir+'/'+str(pix)+'.fits'
-    outfile = outdir+'/'+subdir+'/'+str(pix)+'_hybrid.fits'
+    outfile = outdir+'/'+subdir+'/'+str(pix)+'.fits'
+    #outfile = outdir+'/'+subdir+'/'+str(pix)+'_hybrid.fits'
     if (os.path.exists(outfile) or os.path.exists(outfile+'.gz')) & (not redo):
         print(outfile+' EXISTS already and REDO not set')
         sys.exit()
@@ -1515,7 +1515,7 @@ if __name__ == "__main__":
 
     
     # FIGURE OUT IF THERE ARE OBJECTS **INSIDE** OTHER OBJECTS!!
-    #   could be a deblending problem. extended galaxy that was shredded, or asteroids going through
+    #   could be a deblending problem, extended galaxy that was shredded, or asteroids going through
     obj = find_obj_parent(obj)
     bd,nbd = dln.where(obj['parent']==True)
     print(str(nbd)+' objects have other objects inside their footprint')
@@ -1580,7 +1580,7 @@ if __name__ == "__main__":
     process = psutil.Process(os.getpid())
     print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
 
-    # same the measurement data to a file
+    # save the measurement data to a file
     #outmeasfile = outdir+'/'+subdir+'/'+str(pix)+'_meas.fits'
     #if os.path.exists(outmeasfile): os.remove(outmeasfile)
     #Table(cat).write(outmeasfile)
@@ -1605,9 +1605,9 @@ if __name__ == "__main__":
     print('dt = '+str(dt)+' sec.')
     print('dt = ',str(time.time()-t1)+' sec. after loading the catalogs')
 
-    #if dbfile is not None:
-    #    print('Deleting temporary database file '+dbfile)
-    #    os.remove(dbfile)
+    if dbfile is not None:
+        print('Deleting temporary database file '+dbfile)
+        os.remove(dbfile)
 
     # Delete all arrays before we quit
     del sumstr
