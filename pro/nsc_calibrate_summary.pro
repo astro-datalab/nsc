@@ -34,6 +34,7 @@ expstr = replicate({expdir:'',instrument:'',pix:0L,metafile:'',metadate:0LL,succ
                     rastderr:999999.0,decrms:999999.0,decstderr:999999.0,ebv:0.0,ngaiamatch:0L,ngoodgaiamatch:-1L,zptype:1,zpterm:999999.0,$
                     zptermerr:99999.0,zptermsig:999999.0,zpspatialvar_rms:999999.0,zpspatialvar_range:999999.0,zpspatialvar_nccd:0,nrefmatch:0L,$
                     ngoodrefmatch:0L,depth95:99.99,depth10sig:99.99},nlist)
+; newer versions have WCSCAL but older ones don't
 expstr.expdir = list.expdir
 expstr.base = file_basename(list.expdir)
 expstr.instrument = list.instrument
@@ -186,6 +187,7 @@ for i=0,nlist-1 do begin
       endif
     endif
   endelse  ; no metafile
+stop
 endfor
 ; Trim CHSTR structure
 chstr = chstr[0:chcnt-1]
