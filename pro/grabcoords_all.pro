@@ -20,9 +20,9 @@ str.maskfile = strtrim(str.maskfile,2)
 str.wtfile = strtrim(str.wtfile,2)
 print,strtrim(nstr,2),' InstCal images'
 
-; Submit them 10 at a time
+; Submit them 100 at a time
 fluxfiles = strmid(str.fluxfile,4)
-nbin = 100
+nbin = 300
 nbatch = ceil(nstr/float(nbin))
 cmd = strarr(nbatch)
 dir = strarr(nbatch)+localdir+'dnidever/nsc/instcal/'+version+'/tmp/coords/'
@@ -35,7 +35,7 @@ endfor
 
 stop
 
-pbs_daemon,cmd,dir,jobs=jobs,/hyperthread,/idle,prefix='coords',wait=1,nmulti=10,verbose=0
+pbs_daemon,cmd,dir,jobs=jobs,/hyperthread,/idle,prefix='coords',wait=0.1,nmulti=20,verbose=0
 
 stop
 

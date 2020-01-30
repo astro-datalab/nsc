@@ -30,7 +30,7 @@ str.file = strtrim(str.file,2)
 str.base = strtrim(str.base,2)
 str.filter = strtrim(str.filter,2)
 ; Add WCSCAL and TELSTAT information
-coords = MRDFITS(dir+'lists/allcoords.fits',1)
+coords = MRDFITS(dir+'lists/allcoords.fits.gz',1)
 coords.file = strtrim(coords.file,2)
 coords.wcscal = strtrim(coords.wcscal,2)
 coords.telstat = strtrim(coords.telstat,2)
@@ -38,7 +38,8 @@ fluxfile = str.file
 g = where(strmid(fluxfile,0,4) eq '/net',ng)
 if ng gt 0 then fluxfile[g]=strmid(fluxfile[g],4)
 MATCH,fluxfile,coords.file,ind1,ind2,/sort
-str[ind1].wcscal = coords[ind2].wcscal    ; Failed (3153), Poor (14), Successful (308190)
+;; v3, 490617 out of 490623 matches, only 6 did not match
+str[ind1].wcscal = coords[ind2].wcscal    ; Failed (37712), Poor (0), Successful (452905)
 ; Only want exposures with successful SE processing
 gd = where(str.success eq 1,nstr)
 print,strtrim(nstr,2),' successful exposures'
@@ -173,6 +174,7 @@ If not keyword_set(nocuts) then begin
         print,'Offsetting ',strtrim(ngdes,2),' DES exposure zero-points'
         zpterm[gdes] -= 1.611
       endif
+
       ;; CORRECT K4M/KSB for exptime-dependence in the zero-points
       ;;   this is because the image units are counts/sec.
       if zpstr[i].instrument eq 'k4m' or zpstr[i].instrument eq 'ksb' then begin
@@ -200,6 +202,10 @@ If not keyword_set(nocuts) then begin
                  ;str1.zptermsig lt 0.08 and (str1.ngoodchipwcs eq str1.nchips) and $
                  (str1.instrument ne 'c4d' or str1.zpspatialvar_nccd le 5 or (str1.instrument eq 'c4d' and str1.zpspatialvar_nccd gt 5 and str1.zpspatialvar_rms lt 0.1)) and $
                  abs(glat) gt 10 and str1.nrefmatch gt 100 and str1.exptime ge 30,ngg)
+      ;; I removed WCSCAL check because there are ~38k exposures with
+      ;; WCSCAL=Failed but my DECRMS and RARMS is small.
+      ;; and str1.wcscal eq 'Successful' 
+      print,ngg
 
       ; Zpterm with airmass dependence removed
       relzpterm = zpterm + 25   ; 25 to get "absolute" zpterm
@@ -231,8 +237,8 @@ If not keyword_set(nocuts) then begin
       hess,am[gg],zp[gg],dx=0.01,dy=0.02,xr=[0.9,2.5],yr=[-0.5,0.5]+median(zp[gg]),xtit='Airmass',ytit='Zero-point',$
            tit=zpstr[i].instrument+'-'+zpstr[i].filter
       x = scale_vector(findgen(100),0.5,2.0)
-      oplot,x,poly(x,coef)+25.0,co=250
-      oplot,x,poly(x,zpstr[i].amcoef)+25.0,co=150
+      oplot,x,poly(x,coef)+25.0,co=250              ; new fit
+      oplot,x,poly(x,zpstr[i].amcoef)+25.0,co=150   ;ZPSTR structure
       ps_close
       ps2png,file+'.eps',/eps
       ; ZPterm vs. time (density)
@@ -303,7 +309,7 @@ If not keyword_set(nocuts) then begin
   ;  Many of the short u-band exposures have weird ZPTERMs, not sure why
   ;  There are a few exposures with BAD WCS, RA>360!
   bdexp = where(str.success eq 0 or $                              ; SE failure
-                str.wcscal ne 'Successful' or $                    ; CP WCS failure
+                ;;str.wcscal ne 'Successful' or $                  ;;CP WCS failure   TOO MANY FAILED
                 str.fwhm gt fwhmthresh or $                        ; bad seeing
                 str.ra gt 360 or $                                 ; bad WCS/coords
                 str.rarms gt 0.15 or str.decrms gt 0.15 or $       ; bad WCS
@@ -334,9 +340,6 @@ If not keyword_set(nocuts) then begin
   newchipindex = newindex[str.chipindx]
   str.chipindx = newchipindex
   nstr = n_elements(str)
-
-; SHOULD INCLUDE CUTS ON ZTERMERR OR NPHOTMATCH
-STOP,'SHOULD INCLUDE CUTS ON ZTERMERR OR NPHOTMATCH'
 
 Endif else print,'SKIPPING QA CUTS'
 
