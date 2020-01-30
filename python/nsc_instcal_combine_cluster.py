@@ -1033,7 +1033,7 @@ if __name__ == "__main__":
 
     # on thing/hulk use
     if (host == "thing") or (host == "hulk"):
-        dir = "/dl1/users/dnidever/nsc/instcal/"+version+"/"
+        dir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"/"
         mssdir = "/mss1/"
         localdir = "/d0/"
         tmproot = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"

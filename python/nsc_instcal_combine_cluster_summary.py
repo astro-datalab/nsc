@@ -335,12 +335,14 @@ if __name__ == "__main__":
                           ('jvar',np.float32),('kvar',np.float32),('chivar',np.float32),('romsvar',np.float32),
                           ('variable10sig',np.int16),('nsigvar',np.float32)])
 
+    dbfile = tmproot+str(pix)+'_combine.db'
+
     # IDSTR database file
     dbfile_idstr = outdir+'/'+subdir+'/'+str(pix)+'_idstr.db'
     usedb = True
 
     # Load the object structured array
-    obj = fits.getdata(outdir+'/'+subdir+'/'+str(pix)+'.fits.gz',1)
+    obj = fits.getdata(outdir+'/'+subdir+'/'+str(pix)+'.fits.gz',2)
     nobj = len(obj)
 
     # Initialize the OBJ structured array
@@ -378,6 +380,8 @@ if __name__ == "__main__":
     sumstr = np.zeros(nobj,dtype=dtype_sumstr)
 
     t1 = time.time()
+
+    import pdb; pdb.set_trace()
 
     # Loop over the objects
     meascount = 0
