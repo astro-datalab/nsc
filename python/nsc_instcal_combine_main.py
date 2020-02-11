@@ -44,13 +44,15 @@ if __name__ == "__main__":
 
     # on thing/hulk use
     if (host == "thing") or (host == "hulk"):
-        basedir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"/"
+        #basedir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"/"
+        basedir = "/net/dl2/users/dnidever/nsc/instcal/"+version+"/"
         mssdir = "/mss1/"
         localdir = "/d0/"
         tmpdir = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
     # on gp09 use
     if (host == "gp09") or (host == "gp08") or (host == "gp07") or (host == "gp06") or (host == "gp05"):
-        basedir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"/"
+        #basedir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"/"
+        basedir = "/net/dl2/users/dnidever/nsc/instcal/"+version+"/"
         mssdir = "/net/mss1/"
         localdir = "/data0/"
         tmpdir = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
