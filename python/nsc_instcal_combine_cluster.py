@@ -1033,7 +1033,7 @@ if __name__ == "__main__":
 
     # on thing/hulk use
     if (host == "thing") or (host == "hulk"):
-        dir = "/dl1/users/dnidever/nsc/instcal/"+version+"/"
+        dir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"/"
         mssdir = "/mss1/"
         localdir = "/d0/"
         tmproot = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
@@ -1047,7 +1047,9 @@ if __name__ == "__main__":
     t0 = time.time()
 
     # Check if output file already exists
-    if outdir == '': outdir=dir+'combine/'
+    #if outdir == '': outdir=dir+'combine/'
+    print('*** KLUDGE: Forcing output to /net/dl2 ***')
+    outdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combine/'
     subdir = str(int(pix)//1000)    # use the thousands to create subdirectory grouping
     if os.path.exists(outdir) is False: os.mkdir(outdir)
     if os.path.exists(outdir+'/'+subdir) is False: os.mkdir(outdir+'/'+subdir)

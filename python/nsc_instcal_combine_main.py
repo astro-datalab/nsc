@@ -44,13 +44,13 @@ if __name__ == "__main__":
 
     # on thing/hulk use
     if (host == "thing") or (host == "hulk"):
-        basedir = "/dl1/users/dnidever/nsc/instcal/"+version+"/"
+        basedir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"/"
         mssdir = "/mss1/"
         localdir = "/d0/"
         tmpdir = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
     # on gp09 use
     if (host == "gp09") or (host == "gp08") or (host == "gp07") or (host == "gp06") or (host == "gp05"):
-        basedir = "/dl1/users/dnidever/nsc/instcal/"+version+"/"
+        basedir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"/"
         mssdir = "/net/mss1/"
         localdir = "/data0/"
         tmpdir = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
@@ -156,21 +156,23 @@ if __name__ == "__main__":
             alldirs = alldirs[gd]
             nallcmd = len(allcmd)
 
-    # Only keep MC region
-    ra,dec = hp.pix2ang(nside,allpix,lonlat=True)
-    coords = SkyCoord(ra=ra*u.degree,dec=dec*u.degree)
-    lmc = SkyCoord(ra=81.9*u.degree,dec=-69.866*u.degree)
-    lrad = lmc.separation(coords).deg
-    smc = SkyCoord(ra=13.183*u.degree,dec=-72.8283*u.degree)
-    srad = smc.separation(coords).deg
-    #gd,ngd = dln.where( (coords.galactic.b.deg<-10) & (lrad>6) & (srad>6) ((lrad>6) & (lrad<25)) | ((srad>6) & (srad<15)) )
-    #gd,ngd = dln.where( (coords.galactic.b.deg<-10) & (lrad>6) & (srad>6) & ((lrad<25) | (srad<15)) )
-    gd,ngd = dln.where( (coords.galactic.b.deg<-10) & ((lrad<25) | (srad<15)) )
-    rootLogger.info('Only processing '+str(ngd)+' Magellanic Clouds HEALPix')
-    allpix = allpix[gd]
-    allcmd = allcmd[gd]
-    alldirs = alldirs[gd]
-    nallcmd = ngd
+    rootLogger.info(str(nallcmd)+' healpix to process')
+
+    ## Only keep MC region
+    #ra,dec = hp.pix2ang(nside,allpix,lonlat=True)
+    #coords = SkyCoord(ra=ra*u.degree,dec=dec*u.degree)
+    #lmc = SkyCoord(ra=81.9*u.degree,dec=-69.866*u.degree)
+    #lrad = lmc.separation(coords).deg
+    #smc = SkyCoord(ra=13.183*u.degree,dec=-72.8283*u.degree)
+    #srad = smc.separation(coords).deg
+    ##gd,ngd = dln.where( (coords.galactic.b.deg<-10) & (lrad>6) & (srad>6) ((lrad>6) & (lrad<25)) | ((srad>6) & (srad<15)) )
+    ##gd,ngd = dln.where( (coords.galactic.b.deg<-10) & (lrad>6) & (srad>6) & ((lrad<25) | (srad<15)) )
+    #gd,ngd = dln.where( (coords.galactic.b.deg<-10) & ((lrad<25) | (srad<15)) )
+    #rootLogger.info('Only processing '+str(ngd)+' Magellanic Clouds HEALPix')
+    #allpix = allpix[gd]
+    #allcmd = allcmd[gd]
+    #alldirs = alldirs[gd]
+    #nallcmd = ngd
 
     # RANDOMIZE
     np.random.seed(0)
