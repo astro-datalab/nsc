@@ -1047,7 +1047,9 @@ if __name__ == "__main__":
     t0 = time.time()
 
     # Check if output file already exists
-    if outdir == '': outdir=dir+'combine/'
+    #if outdir == '': outdir=dir+'combine/'
+    print('*** KLUDGE: Forcing output to /net/dl2 ***')
+    outdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combine/'
     subdir = str(int(pix)//1000)    # use the thousands to create subdirectory grouping
     if os.path.exists(outdir) is False: os.mkdir(outdir)
     if os.path.exists(outdir+'/'+subdir) is False: os.mkdir(outdir+'/'+subdir)
