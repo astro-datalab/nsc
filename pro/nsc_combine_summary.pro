@@ -9,7 +9,8 @@ endif
 
 ; Combine all of the data
 NSC_ROOTDIRS,dldir,mssdir,localdir
-dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
+dir = '/net/dl2/dnidever/nsc/instcal/'+version+'/'
+;dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
 nside = 128
 radeg = 180.0d0 / !dpi
 
@@ -26,8 +27,9 @@ npix = n_elements(index)
 ; Load all the summary/metadata files
 print,'Creating Healpix summary file'
 ; u, g, r, i, z, Y, VR
-sumstr = replicate({file:'',exists:0,pix:0L,ra:0.0d0,dec:0.0d0,nexposures:0L,nfilters:0L,filters:'',nobjects:0L,nsources:-1L,nobjfilt:lonarr(7),$
-                    nexpfilt:lonarr(7),exptimefilt:fltarr(7),depth95filt:fltarr(7)+99.99,depth10sigfilt:fltarr(7)+99.99,success:0,size:0LL,mtime:0LL},npix)
+sumstr = replicate({file:'',exists:0,pix:0L,ra:0.0d0,dec:0.0d0,nexposures:0L,nfilters:0L,filters:'',nobjects:0L,nmeas:-1L,nobjfilt:lonarr(7),$
+                    nexpfilt:lonarr(7),exptimefilt:fltarr(7),depth95filt:fltarr(7)+99.99,depth10sigfilt:fltarr(7)+99.99,nvariable10sig:0L,$
+                    success:0,size:0LL,mtime:0LL},npix)
 sumstr.pix = index.pix
 PIX2ANG_RING,nside,sumstr.pix,theta,phi
 sumstr.ra = phi*radeg
@@ -97,8 +99,11 @@ for i=0,npix-1 do begin
         sumstr[i].depth10sigfilt[j] = depth10sig
       endfor
       ; Load the source table header
-      hd3 = headfits(sumstr[i].file,exten=3,errmsg=errmsg3)
-      if errmsg3 eq '' then sumstr[i].nsources = sxpar(hd3,'naxis2')
+      ;hd3 = headfits(sumstr[i].file,exten=3,errmsg=errmsg3)
+      ;if errmsg3 eq '' then sumstr[i].nsources = sxpar(hd3,'naxis2')
+      sumstr[i].nmeas = long(total(cat.ndet))
+      ; Number of variables
+      sumstr[i].nvariable10sig = long(total(cat.variable10sig))
       sumstr[i].success = 1
     endif
   endif
