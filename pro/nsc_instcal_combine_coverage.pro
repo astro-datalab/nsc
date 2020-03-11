@@ -9,7 +9,8 @@ endif
 
 ; Combine all of the data
 NSC_ROOTDIRS,dldir,mssdir,localdir
-dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
+;dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
+dir = '/net/dl2/dnidever/nsc/instcal/'+version+'/'
 nside = 128
 nside2 = 4096
 radeg = 180.0d0 / !dpi
