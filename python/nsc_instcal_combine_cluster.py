@@ -971,16 +971,10 @@ def clusterdata(cat,ncat,dbfile=None):
     else:
         # Get MEASID, RA, DEC from database
         if dbfile is not None:
-            cat = getdbcoords(dbfile)
-        # Spatially cluster the measurements with DBSCAN
-        ## coordinates of measurement
-        #X = np.column_stack((np.array(cat['RA']),np.array(cat['DEC'])))
-        ## Compute DBSCAN on all measurements
-        #dbs = DBSCAN(eps=0.5/3600, min_samples=1).fit(X)
-        ## Cluster labels are integers and in ascending order, but there are gaps
-        #objlabels = dbs.labels_
+            #cat = getdbcoords(dbfile)
+            cat = getdatadb(dbfile,verbose=True)
         objlabels, initobj = hybridcluster(cat)
-        labelindex = dln.create_index(objlabels)   # create inex
+        labelindex = dln.create_index(objlabels)   # create index
         nobj = len(labelindex['value'])
         print(str(ncat)+' measurements for '+str(nobj)+' objects')
         # Make structure
