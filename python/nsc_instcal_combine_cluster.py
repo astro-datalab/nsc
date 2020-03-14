@@ -628,7 +628,7 @@ def hybridcluster(cat):
                          ('decerr',np.float32),('asemi',np.float32),('bsemi',np.float32),('theta',np.float32),('fwhm',np.float32)]))
         obj['label'] = labels
         obj['ndet'] = 1
-        for n in ['ra','dec','raerr','decerr','asemi','bsemi','theta','fwhm']: obj[n]=cat[n]
+        for n in ['ra','dec','raerr','decerr','asemi','bsemi','theta','fwhm']: obj[n]=cat[n.upper()]
         return labels, obj
 
     
