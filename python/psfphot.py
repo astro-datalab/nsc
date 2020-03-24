@@ -68,14 +68,17 @@ def sextractor(im,err=None,mask=None,nsig=5.0,gain=1.0):
         fluxerr[use_circle] = cfluxerr
         flag[use_circle] = cflag
     mag_auto = -2.5*np.log10(flux)+25.0
-
+    magerr_auto = 1.0857*fluxerr/flux
+    
     # Make the final catalog
-    newdt = np.dtype([('kronrad',float),('flux_auto',float),('mag_auto',float)])
+    newdt = np.dtype([('kronrad',float),('flux_auto',float),('fluxerr_auto',float),('mag_auto',float),('magerr_auto',float)])
     cat = dln.addcatcols(objects,newdt)
     cat['flag'] |= flag
     cat['kronrad'] = kronrad
     cat['flux_auto'] = flux
+    cat['fluxerr_auto'] = fluxerr
     cat['mag_auto'] = mag_auto
+    cat['magerr_auto'] = magerr_auto
     
     return cat
 
