@@ -659,7 +659,7 @@ def hybridcluster(cat):
     #   only use the measurements that were clustered
     obj1 = meancoords(cat[gdb],dbs1.labels_[gdb])
     inpobj = obj1
-    print(str(ngdb)+' measurements clusters into '+str(len(obj1))+' objects. '+str(nbdb)+' remaining.')
+    print(str(ngdb)+' measurements clustered into '+str(len(obj1))+' objects. '+str(nbdb)+' remaining.')
     
     # Step 2: sequential clustering with original list of objects with the outliers
     #  this allows more distance measurements with larger errors to be clustered as well
@@ -674,6 +674,9 @@ def hybridcluster(cat):
         labels = dbs1.labels_
         labels[bdb] = labels2+np.max(labels)+1
         obj = meancoords(cat,labels)    # Get mean coordinates again
+    else:
+        obj = obj1
+        labels = dbs1.labels_
 
     print(str(len(obj))+' final objects')
     
