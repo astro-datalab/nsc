@@ -23,6 +23,7 @@ if __name__ == "__main__":
     parser = ArgumentParser(description='Combine NSC Instcal Catalogs.')
     parser.add_argument('version', type=str, nargs=1, help='Version number')
     parser.add_argument('--hosts', type=str, nargs=1, help='Delimited list of hosts')
+    parser.add_argument('-l','--list', type=str, nargs=1, default='', help='List of HEALPix to run')
     parser.add_argument('-nm','--nmulti', type=int, nargs=1, default=15, help='Number of jobs')
     parser.add_argument('-r','--redo', action='store_true', help='Redo this HEALPIX')
     args = parser.parse_args()
@@ -39,6 +40,8 @@ if __name__ == "__main__":
         hosts = args.hosts[0].split(',')
     else:
         hosts = host
+    inplistfile = dln.first_el(args.list)
+    if inplistfile == '': inplistfile = None
     nside = 128
     radeg = 180 / np.pi
 
@@ -114,17 +117,25 @@ if __name__ == "__main__":
     rootLogger.info("hosts = "+','.join(np.array(hosts)))
     rootLogger.info("redo = "+str(redo))
     
-    # Which healpix pixels have data
+    # Healpix pixels to run
     listfile = basedir+'lists/nsc_instcal_combine_healpix_list.fits.gz'
-    if not os.path.exists(listfile):
-        rootLogger.info(listfile+' NOT FOUND.  Run nsc_instcal_combine_qacuts.pro/py')
-        sys.exit()
+    if inplistfile is None:
+        if not os.path.exists(listfile):
+            rootLogger.info(listfile+' NOT FOUND.  Run nsc_instcal_combine_qacuts.pro/py')
+            sys.exit()
 
-    rootLogger.info("Reading list from "+listfile)
-    healstr = fits.getdata(listfile,1)
-    index = fits.getdata(listfile,2)
-    upix = index['pix']
-    npix = len(index)
+        rootLogger.info("Reading list from "+listfile)
+    
+        healstr = fits.getdata(listfile,1)
+        index = fits.getdata(listfile,2)
+        upix = index['pix']
+        npix = len(index)
+    else:
+        rootLogger.info("Reading list from "+inplistfile)        
+        upix = dln.readlines(inplistfile)
+        upix = np.array(upix,int)
+        npix = len(upix)
+
     # Copy to local directory for faster reading speed
     if os.path.exists(localdir+'dnidever/nsc/instcal/'+version+'/'+os.path.basename(listfile)):
                  os.remove(localdir+'dnidever/nsc/instcal/'+version+'/'+os.path.basename(listfile))
