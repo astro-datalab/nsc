@@ -786,6 +786,13 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                 bd,nbd = dln.where(cat1['FWHM']<0.1)
                 if nbd>0:
                     cat1['FWHM'][bd] = np.sqrt(cat1['ASEMI'][bd]**2+cat1['BSEMI'][bd]**2)*2.35
+                # Fix RAERR=DECERR=0
+                bd,nbd = dln.where(cat1['RAERR']<0.0001)
+                if nbd>0:
+                    snr = 1.087/cat1['MAGERR_AUTO'][bd]
+                    coorderr = 0.664*cat1['FWHM'][bd]/snr
+                    cat1['RAERR'][bd] = coorderr
+                    cat1['DECERR'][bd] = coorderr
 
                 # Make sure it's in the right format
                 if len(cat1.dtype.fields) != 32:
@@ -900,8 +907,11 @@ def clusterdata(cat,ncat,dbfile=None):
                 print('RA: '+str(r0)+' '+str(r1)+'  DEC: '+str(d0)+' '+str(d1))
                 #import pdb; pdb.set_trace()
                 cat1 = getdatadb(dbfile,rar=[r0-rabuff,r1+rabuff],decr=[d0-buff,d1+buff],verbose=True)
+                gcat1,ngcat1 = dln.where(cat1['OBJLABEL']==-1)  # only want ones that haven't been taken yet
+                if ngcat1>0:
+                    cat1 = cat1[gcat1]
                 ncat1 = len(cat1)
-                print(str(ncat1)+' measurements')
+                print(str(ncat1)+' measurements with no labels')
 
                 v = psutil.virtual_memory()
                 process = psutil.Process(os.getpid())
