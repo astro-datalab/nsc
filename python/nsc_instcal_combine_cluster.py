@@ -1477,11 +1477,20 @@ if __name__ == "__main__":
         nbins = np.ceil((np.max(fidmag[gdvar])-np.min(fidmag[gdvar]))/0.25)
         nbins = int(np.max([2,nbins]))
         fidmagmed, bin_edges1, binnumber1 = bindata.binned_statistic(fidmag[gdvar],fidmag[gdvar],statistic='nanmedian',bins=nbins)
+        numhist, _, _ = bindata.binned_statistic(fidmag[gdvar],fidmag[gdvar],statistic='count',bins=nbins)
+        # Fix NaNs in fidmagmed
+        bdfidmagmed,nbdfidmagmed = dln.where(np.isfinite(fidmagmed)==False)
+        if nbdfidmagmed>0:
+            fidmagmed_bins = 0.5*(bin_edges1[0:-1]+bin_edges1[1:])
+            fidmagmed[bdfidmagmed] = fidmagmed_bins[bdfidmagmed]
         # Median metric
         varmed, bin_edges2, binnumber2 = bindata.binned_statistic(fidmag[gdvar],obj[varcol][gdvar],statistic='nanmedian',bins=nbins)
         # Smooth, it handles NaNs well
         smlen = 5
         smvarmed = dln.gsmooth(varmed,smlen)
+        bdsmvarmed,nbdsmvarmed = dln.where(np.isfinite(smvarmed)==False)
+        if nbdsmvarmed>0:
+            smvarmed[bdsmvarmed] = np.nanmedian(smvarmed)
         # Interpolate to all the objects
         gv,ngv,bv,nbv = dln.where(np.isfinite(smvarmed),comp=True)
         fvarmed = interp1d(fidmagmed[gv],smvarmed[gv],kind='linear',bounds_error=False,
@@ -1495,6 +1504,14 @@ if __name__ == "__main__":
         varsig, bin_edges3, binnumber3 = bindata.binned_statistic(fidmag[gdvar],np.abs(obj[varcol][gdvar]-objvarmed[gdvar]),
                                                                   statistic='nanmedian',bins=nbins)
         varsig *= 1.4826   # scale MAD to stddev
+        # Fix values for bins with few points
+        bdhist,nbdhist,gdhist,ngdhist = dln.where(numhist<3,comp=True)
+        if nbdhist>0:
+            if ngdhist>0:
+                varsig[bdhist] = np.nanmedian(varsig[gdhist])
+            else:
+                varsig[:] = 0.02
+            
         # Smooth
         smvarsig = dln.gsmooth(varsig,smlen)
         # Interpolate to all the objects
