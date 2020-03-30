@@ -1191,6 +1191,14 @@ if __name__ == "__main__":
     ncat = catcount
     print(str(ncat))
 
+    # No measurements
+    if ncat==0:
+        print('No measurements for this healpix')
+        if (dbfile is not None):
+            if os.path.exists(dbfile): os.remove(dbfile)
+        if os.path.exists(dbfile_idstr): os.remove(dbfile_idstr)
+        sys.exit()
+
     # Spatially cluster the measurements with DBSCAN
     #   this might also resort CAT
     objstr, cat = clusterdata(cat,ncat,dbfile=dbfile)
@@ -1553,6 +1561,9 @@ if __name__ == "__main__":
     ind1,nmatch = dln.where(ipring == pix)
     if nmatch==0:
         print('None of the final objects fall inside the pixel')
+        if (dbfile is not None):
+            if os.path.exists(dbfile): os.remove(dbfile)
+        if os.path.exists(dbfile_idstr): os.remove(dbfile_idstr)
         sys.exit()
     # Get trimmed objects and indices
     objtokeep = np.zeros(nobj,bool)         # boolean to keep or trim objects
