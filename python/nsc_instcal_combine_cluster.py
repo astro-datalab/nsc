@@ -644,15 +644,15 @@ def hybridcluster(cat):
     print('DBSCAN eps=%4.2f' % eps)
     # Minimum number of measurements needed to define a cluster/object
     minsamples = 3
-    if nexp<3: minsamples=2
+    if nexp<3: minsamples=nexp
     dbs1 = DBSCAN(eps=eps/3600, min_samples=minsamples).fit(X1)
     gdb,ngdb,bdb,nbdb = dln.where(dbs1.labels_ >= 0,comp=True)
     # No clusters, lower minsamples
-    if (nexp==3) & (ngdb==0):
-        minsamples = 2
+    while (ngdb==0):
+        minsamples -= 1
         print('No clusters. Lowering min_samples to '+str(minsamples))
         dbs1 = DBSCAN(eps=eps/3600, min_samples=minsamples).fit(X1)
-    gdb,ngdb,bdb,nbdb = dln.where(dbs1.labels_ >= 0,comp=True)
+        gdb,ngdb,bdb,nbdb = dln.where(dbs1.labels_ >= 0,comp=True)
     print('DBSCAN after %5.2f sec. ' % (time.time()-t0))
 
     # Get mean coordinates for each object
