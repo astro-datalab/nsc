@@ -1197,6 +1197,10 @@ if __name__ == "__main__":
         if (dbfile is not None):
             if os.path.exists(dbfile): os.remove(dbfile)
         if os.path.exists(dbfile_idstr): os.remove(dbfile_idstr)
+        print('Writing blank output file')
+        Table([]).write(outfile)
+        if os.path.exists(outfile+'.gz'): os.remove(outfile+'.gz')
+        ret = subprocess.call(['gzip',outfile])    # compress final catalog
         sys.exit()
 
     # Spatially cluster the measurements with DBSCAN
@@ -1564,6 +1568,10 @@ if __name__ == "__main__":
         if (dbfile is not None):
             if os.path.exists(dbfile): os.remove(dbfile)
         if os.path.exists(dbfile_idstr): os.remove(dbfile_idstr)
+        print('Writing blank output file')
+        Table([]).write(outfile)
+        if os.path.exists(outfile+'.gz'): os.remove(outfile+'.gz')
+        ret = subprocess.call(['gzip',outfile])    # compress final catalog
         sys.exit()
     # Get trimmed objects and indices
     objtokeep = np.zeros(nobj,bool)         # boolean to keep or trim objects
