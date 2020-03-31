@@ -9,7 +9,7 @@ from astropy.utils.exceptions import AstropyWarning
 from astropy.table import Table, vstack, Column
 from astropy.time import Time
 import healpy as hp
-from dlnpyutils import utils as dln, coords, bindata
+from dlnpyutils import utils as dln, coords, bindata, dbutils
 import subprocess
 import time
 from argparse import ArgumentParser
@@ -1061,44 +1061,37 @@ if __name__ == "__main__":
     if os.path.exists(outdir) is False: os.mkdir(outdir)
     if os.path.exists(outdir+'/'+subdir) is False: os.mkdir(outdir+'/'+subdir)
     outfile = outdir+'/'+subdir+'/'+str(pix)+'.fits'
-    #outfile = outdir+'/'+subdir+'/'+str(pix)+'_hybrid.fits'
     if (os.path.exists(outfile) or os.path.exists(outfile+'.gz')) & (not redo):
         print(outfile+' EXISTS already and REDO not set')
         sys.exit()
 
     print("Combining InstCal SExtractor catalogs for Healpix pixel = "+str(pix))
 
-    #import pdb
-
     # Load the list
-    listfile = localdir+'dnidever/nsc/instcal/'+version+'/nsc_instcal_combine_healpix_list.fits.gz'
+    listfile = localdir+'dnidever/nsc/instcal/'+version+'/nsc_instcal_combine_healpix_list.db'
     if os.path.exists(listfile) is False:
         print(listfile+" NOT FOUND")
         sys.exit()
-    healstr = fits.getdata(listfile,1)
-    index = fits.getdata(listfile,2)
     # Find our pixel
-    ind,nind = dln.where(index['PIX'] == pix)
-    if nind == 0:
+    hlist = dbutils.query(listfile,'hlist',where='PIX='+str(pix))
+    nlist = len(hlist)
+    if nlist == 0:
         print("No entries for Healpix pixel '"+str(pix)+"' in the list")
         sys.exit()
-    ind = ind[0]
-    hlist = Table(healstr[index['LO'][ind]:index['HI'][ind]+1])
-    nlist = len(hlist)
+    hlist = Table(hlist)
     # GET EXPOSURES FOR NEIGHBORING PIXELS AS WELL
     #  so we can deal with the edge cases
     neipix = hp.get_all_neighbours(nside,pix)
     for neip in neipix:
-        ind1,nind1 = dln.where(index['PIX'] == neip)
-        if nind1>0:
-            ind1 = ind1[0]
-            hlist1 = Table(healstr[index[ind1]['LO']:index[ind1]['HI']+1])
+        hlist1 = dbutils.query(listfile,'hlist',where='PIX='+str(neip))
+        nhlist1 = len(hlist1)
+        if nhlist1>0:
+            hlist1 = Table(hlist1)
             hlist = vstack([hlist,hlist1])
-            #hlist = np.hstack([hlist,hlist1])
-
-    # Delete healstr and index
-    del healstr
-    del index
+    # Rename to be consistent with the FITS file
+    hlist['file'].name = 'FILE'
+    hlist['base'].name = 'BASE'
+    hlist['pix'].name = 'PIX'
 
     # Use entire exposure files
     # Get unique values
