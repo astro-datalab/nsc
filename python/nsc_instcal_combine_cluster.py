@@ -1197,8 +1197,8 @@ if __name__ == "__main__":
         if (dbfile is not None):
             if os.path.exists(dbfile): os.remove(dbfile)
         if os.path.exists(dbfile_idstr): os.remove(dbfile_idstr)
-        print('Writing blank output file')
-        Table([]).write(outfile)
+        print('Writing blank output file to '+outfile)
+        fits.PrimaryHDU().writeto(outfile)
         if os.path.exists(outfile+'.gz'): os.remove(outfile+'.gz')
         ret = subprocess.call(['gzip',outfile])    # compress final catalog
         sys.exit()
@@ -1568,8 +1568,8 @@ if __name__ == "__main__":
         if (dbfile is not None):
             if os.path.exists(dbfile): os.remove(dbfile)
         if os.path.exists(dbfile_idstr): os.remove(dbfile_idstr)
-        print('Writing blank output file')
-        Table([]).write(outfile)
+        print('Writing blank output file to '+outfile)
+        fits.PrimaryHDU().writeto(outfile)
         if os.path.exists(outfile+'.gz'): os.remove(outfile+'.gz')
         ret = subprocess.call(['gzip',outfile])    # compress final catalog
         sys.exit()
