@@ -551,6 +551,73 @@ def ellipsecoords(pars,npoints=100):
     yprime = yc + x*sinang + y*cosang
     return xprime, yprime
 
+def checkboundaryoverlap(metafiles,buffdict,verbose=False):
+    """ Check a list of fits files against a buffer and return metadata of overlapping exposures."""
+
+    # New meta-data format
+    dtype_meta = np.dtype([('file',np.str,500),('base',np.str,200),('instrument',np.str,3),('expnum',int),('ra',np.float64),
+                           ('dec',np.float64),('dateobs',np.str,100),('mjd',np.float64),('filter',np.str,50),
+                           ('exptime',float),('airmass',float),('nsources',int),('fwhm',float),
+                           ('nchips',int),('badchip31',bool),('rarms',float),('decrms',float),
+                           ('ebv',float),('gaianmatch',int),('zpterm',float),('zptermerr',float),
+                           ('zptermsig',float),('refmatch',int)])
+
+    allmeta = None
+    for m,mfile in enumerate(np.atleast_1d(metafiles)):
+        noverlap = 0
+        if os.path.exists(mfile) is False:
+            if verbose: print(mfile+' NOT FOUND')
+            continue
+        meta = fits.getdata(mfile,1)
+        if verbose: print(str(m+1)+' Loading '+mfile)
+        t = Time(meta['dateobs'], format='isot', scale='utc')
+        meta['mjd'] = t.mjd                    # recompute because some MJD are bad
+        chmeta = fits.getdata(mfile,2)      # chip-level meta-data structure
+
+        # Convert META to new format
+        newmeta = np.zeros(1,dtype=dtype_meta)
+        # Copy over the meta information
+        for n in newmeta.dtype.names:
+            if n.upper() in meta.dtype.names: newmeta[n]=meta[n]
+
+        # Get the name
+        fdir = os.path.dirname(mfile)
+        fbase, ext = os.path.splitext(os.path.basename(mfile))
+        fbase = fbase[:-5]   # remove _meta at end
+        
+        # Loop over the chip files
+        for j in range(len(chmeta)):
+            # Check that this overlaps the healpix region
+            inside = True
+            vra = chmeta['vra'][j]
+            vdec = chmeta['vdec'][j]
+            if (np.max(vra)-np.min(vra)) > 100:    # deal with RA=0 wrapround
+                bd,nbd = dln.where(vra>180)
+                if nbd>0: vra[bd] -= 360
+            if coords.doPolygonsOverlap(buffdict['ra'],buffdict['dec'],vra,vdec) is False:
+                if verbose: print('This chip does NOT overlap the HEALPix region+buffer')
+                inside = False
+            if inside is True:
+                #chfile1 = chmeta['FILENAME'][j]
+                #if os.path.exists(chfile1) is True: chfiles.append(chfile1)
+                noverlap += 1
+
+        if verbose: print('  FILTER='+meta['filter'][0]+'  EXPTIME='+str(meta['exptime'][0])+' sec  '+str(noverlap)+' chips overlap')
+        if noverlap>0:
+            if allmeta is None:
+                allmeta = newmeta
+            else:
+                allmeta = np.hstack((allmeta,newmeta))
+    
+    if allmeta is None:
+        nallmeta = 0
+    else:
+        nallmeta = len(allmeta)
+    if verbose: print(str(nallmeta)+' exposures overlap')
+
+    return allmeta
+
+
 def find_obj_parent(obj):
     """ Find objects that have other objects "inside" them. """
 
@@ -771,11 +838,12 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
 
             # Check if the chip-level file exists
             chfile = fdir+'/'+fbase+'_'+str(chmeta['ccdnum'][j])+'_meas.fits'
-            if os.path.exists(chfile) is False:
+            chfile_exists = os.path.exists(chfile)
+            if chfile_exists is False:
                 print(chfile+' NOT FOUND')
 
             # Load this one
-            if (os.path.exists(chfile) is True) and (inside is True) and (chmeta['ngaiamatch'][j]>1):
+            if (chfile_exists is True) and (inside is True) and (chmeta['ngaiamatch'][j]>1):
                 # Load the chip-level catalog
                 cat1 = fits.getdata(chfile,1)
                 ncat1 = len(cat1)
@@ -1023,6 +1091,7 @@ if __name__ == "__main__":
     parser.add_argument('--nside', type=int, default=128, help='HEALPix Nside')
     parser.add_argument('-r','--redo', action='store_true', help='Redo this HEALPIX')
     parser.add_argument('-v','--verbose', action='store_true', help='Verbose output')
+    parser.add_argument('-m','--multilevel', action='store_true', help='Break into smaller healpix')
     parser.add_argument('--outdir', type=str, default='', help='Output directory')
     args = parser.parse_args()
 
@@ -1037,6 +1106,7 @@ if __name__ == "__main__":
     verbose = args.verbose
     nside = args.nside
     redo = args.redo
+    multilevel = args.multilevel
     outdir = args.outdir
 
     # on thing/hulk use
@@ -1054,41 +1124,102 @@ if __name__ == "__main__":
 
     t0 = time.time()
 
-    # Check if output file already exists
-    #if outdir == '': outdir=dir+'combine/'
+    # Only nside>=128 supported right now
+    if nside<128:
+        print('Only nside=>128 supported')
+        sys.exit()
+
     print('*** KLUDGE: Forcing output to /net/dl2 ***')
     outdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combine/'
-    subdir = str(int(pix)//1000)    # use the thousands to create subdirectory grouping
     if os.path.exists(outdir) is False: os.mkdir(outdir)
-    if os.path.exists(outdir+'/'+subdir) is False: os.mkdir(outdir+'/'+subdir)
-    outfile = outdir+'/'+subdir+'/'+str(pix)+'.fits'
+
+    # nside>128
+    if nside > 128:
+        # Get parent nside=128 pixel
+        pra,pdec = hp.pix2ang(nside,pix,lonlat=True)
+        parentpix = hp.ang2pix(128,pra,pdec,lonlat=True)
+        print('The nside=128 parent pixel is '+str(parentpix))
+        # Output filenames
+        outbase = str(parentpix)+'_n'+str(int(nside))+'_'+str(pix)
+        subdir = str(int(parentpix)//1000)    # use the thousands to create subdirectory grouping
+        if os.path.exists(outdir+'/'+subdir) is False: os.mkdir(outdir+'/'+subdir)
+        outfile = outdir+'/'+subdir+'/'+outbase+'.fits'
+
+    # nside=128
+    else:
+        # Output filenames
+        outbase = str(pix)
+        subdir = str(int(pix)//1000)    # use the thousands to create subdirectory grouping
+        if os.path.exists(outdir+'/'+subdir) is False: os.mkdir(outdir+'/'+subdir)
+        outfile = outdir+'/'+subdir+'/'+str(pix)+'.fits'
+
+    # Check if output file already exists
     if (os.path.exists(outfile) or os.path.exists(outfile+'.gz')) & (not redo):
         print(outfile+' EXISTS already and REDO not set')
         sys.exit()
 
     print("Combining InstCal SExtractor catalogs for Healpix pixel = "+str(pix))
 
-    # Load the list
+
+    # Use the healpix list, nside=128
     listfile = localdir+'dnidever/nsc/instcal/'+version+'/nsc_instcal_combine_healpix_list.db'
     if os.path.exists(listfile) is False:
         print(listfile+" NOT FOUND")
         sys.exit()
-    # Find our pixel
-    hlist = dbutils.query(listfile,'hlist',where='PIX='+str(pix))
-    nlist = len(hlist)
-    if nlist == 0:
-        print("No entries for Healpix pixel '"+str(pix)+"' in the list")
-        sys.exit()
-    hlist = Table(hlist)
-    # GET EXPOSURES FOR NEIGHBORING PIXELS AS WELL
-    #  so we can deal with the edge cases
-    neipix = hp.get_all_neighbours(nside,pix)
-    for neip in neipix:
-        hlist1 = dbutils.query(listfile,'hlist',where='PIX='+str(neip))
-        nhlist1 = len(hlist1)
-        if nhlist1>0:
-            hlist1 = Table(hlist1)
-            hlist = vstack([hlist,hlist1])
+
+    # -check nside=128 parent pixel
+    # -
+    # -write checkboundaryoverlap() function that checks that the boundaries of chips
+    #    compared to the buffer
+    # -maybe add nosub keyword to clusterdata() to not create subregions
+    # -do the subdivision in the main program, --multilevel or something
+    #   only allow ONE subdivision level per nside=128 pixel, to make it easier
+    #   to handle
+    #   -but how to know what level to choose, don't know the number of measurements beforehand
+    #    depends on density and Nexposures
+    #    -can I do a statistic search on the db to get the number of chips??
+    # -new filenames,  PARENTPIX_n2096_195832.fits
+
+
+    # nside>128
+    if nside > 128:
+        # Find our pixel
+        hlist = dbutils.query(listfile,'hlist',where='PIX='+str(parentpix))
+        nlist = len(hlist)
+        if nlist == 0:
+            print("No entries for Healpix pixel '"+str(parentpix)+"' in the list")
+            sys.exit()
+        hlist = Table(hlist)
+        # GET EXPOSURES FOR NEIGHBORING PIXELS AS WELL
+        #  so we can deal with the edge cases
+        neipix = hp.get_all_neighbours(128,parentpix)
+        for neip in neipix:
+            hlist1 = dbutils.query(listfile,'hlist',where='PIX='+str(neip))
+            nhlist1 = len(hlist1)
+            if nhlist1>0:
+                hlist1 = Table(hlist1)
+                hlist = vstack([hlist,hlist1])
+
+    # nside=128
+    else:
+        parentpix = pix
+        # Find our pixel
+        hlist = dbutils.query(listfile,'hlist',where='PIX='+str(pix))
+        nlist = len(hlist)
+        if nlist == 0:
+            print("No entries for Healpix pixel '"+str(pix)+"' in the list")
+            sys.exit()
+        hlist = Table(hlist)
+        # GET EXPOSURES FOR NEIGHBORING PIXELS AS WELL
+        #  so we can deal with the edge cases
+        neipix = hp.get_all_neighbours(nside,pix)
+        for neip in neipix:
+            hlist1 = dbutils.query(listfile,'hlist',where='PIX='+str(neip))
+            nhlist1 = len(hlist1)
+            if nhlist1>0:
+                hlist1 = Table(hlist1)
+                hlist = vstack([hlist,hlist1])
+
     # Rename to be consistent with the FITS file
     hlist['file'].name = 'FILE'
     hlist['base'].name = 'BASE'
@@ -1101,7 +1232,6 @@ if __name__ == "__main__":
     nhlist = len(hlist)
     print(str(nhlist)+' exposures that overlap this pixel and neighbors')
 
-    #pdb.set_trace()
 
     # Get the boundary coordinates
     #   healpy.boundaries but not sure how to do it in IDL
@@ -1129,7 +1259,6 @@ if __name__ == "__main__":
     buffdict = {'cenra':cenra,'cendec':cendec,'rar':dln.minmax(rabuff),'decr':dln.minmax(decbuff),'ra':rabuff,'dec':decbuff,\
                 'lon':lonbuff,'lat':latbuff,'lr':dln.minmax(lonbuff),'br':dln.minmax(latbuff)}
 
-    
     # IDSTR schema
     dtype_idstr = np.dtype([('measid',np.str,200),('exposure',np.str,200),('objectid',np.str,200),('objectindex',int)])
 
@@ -1157,25 +1286,135 @@ if __name__ == "__main__":
                           ('jvar',np.float32),('kvar',np.float32),('chivar',np.float32),('romsvar',np.float32),
                           ('variable10sig',np.int16),('nsigvar',np.float32),('overlap',bool)])
 
-    # Decide whether to load everything into RAM or use temporary database
+    # Estimate number of measurements in pixel
     metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
-    nmeasperchip = np.zeros(dln.size(metafiles),int)
-    for i,m in enumerate(metafiles):
-        expstr = fits.getdata(m,1)
-        nmeasperchip[i] = expstr['NMEAS']/expstr['NCHIPS']
-    totmeasest = np.sum(nmeasperchip)
+    metastr = checkboundaryoverlap(metafiles,buffdict,verbose=False)
+    nmeasperarea = np.zeros(dln.size(metastr),int)
+    areadict = {'c4d':3.0, 'k4m':0.3, 'ksb':1.0}  # total area
+    for j in range(dln.size(metastr)):
+        nmeasperarea[j] = metastr['nsources'][j]/areadict[metastr['instrument'][j]]
+    pixarea = hp.nside2pixarea(nside,degrees=True)
+    nmeasperpix = nmeasperarea * pixarea
+    totmeasest = np.sum(nmeasperpix)
+
+    # Break into smaller healpix regions
+    if (multilevel is True) & (nside == 128):
+        nsub = int(np.ceil(totmeasest/500000))
+        bestval,bestind = dln.closest([1,4,16,64],nsub)
+        hinside = [128,256,512,1024][bestind]
+        # Break into multiple smaller healpix
+        if hinside>128:
+            print('')
+            print('----- Breaking into smaller HEALPix using nside='+str(hinside)+' ------')
+            vecbound = hp.boundaries(nside,pix)
+            allpix = hp.query_polygon(hinside,np.transpose(vecbound))
+            print('Pix = '+','.join(allpix.astype(str)))
+            outfiles = []
+            for i in range(len(allpix)):
+                pix1 = allpix[i]
+                print('')
+                print('########### '+str(i+1)+' '+str(pix1)+' ###########')
+                print('')
+                # check the output file
+                outbase1 = str(parentpix)+'_n'+str(int(hinside))+'_'+str(pix1)
+                subdir1 = str(int(parentpix)//1000)    # use the thousands to create subdirectory grouping
+                outfile1 = outdir+'/'+subdir1+'/'+outbase1+'.fits.gz'
+                outfiles.append(outfile1)
+
+                if os.path.exists(outfile1) & (not redo):
+                    print(outfile1+' EXISTS already and REDO not set')
+                else:
+                    #retcode = subprocess.call([__file__,pix1,version,'--nside',hinside],stdout=sf,stderr=subprocess.STDOUT)
+                    if redo is True:
+                        retcode = subprocess.call([__file__,str(pix1),version,'--nside',str(hinside),'-r'],shell=False)
+                    else:
+                        retcode = subprocess.call([__file__,str(pix1),version,'--nside',str(hinside)],shell=False)
+
+            # Load and concatenate all of the files
+            print('Combining all of the object catalogs')
+            allmeta = None
+            allobj = None
+            nobjects = []
+            totobjects = 0
+            for i in range(len(allpix)):
+                pix1 = allpix[i]
+                outfile1 = outfiles[i]
+                if os.path.exists(outfile1) is False:
+                    print(outfile1+' NOT FOUND')
+                    sys.exit()
+                # meta columns different: nobjects   there'll be repeats
+                meta1 = fits.getdata(outfile1,1)
+                if allmeta is None:
+                    allmeta = meta1
+                else:
+                    allmeta = np.hstack((allmeta,meta1))
+                hd1 = fits.getheader(outfile1,2)
+                print(str(i+1)+' '+outfile1+' '+str(hd1['naxis2']))
+                obj1 = fits.getdata(outfile1,2)
+                nobj1 = len(obj1)
+
+                # Update the objectIDs
+                dbfile_idstr1 = outfile1.replace('.fits.gz','_idstr.db')
+                objectid_orig = obj1['objectid']
+                objectid_new = dln.strjoin( str(parentpix)+'.', ((np.arange(nobj1)+1+totobjects).astype(np.str)) )
+                #updatecoldb(selcolname,selcoldata,updcolname,updcoldata,table,dbfile):
+                updatecoldb('objectid',objectid_orig,'objectid',objectid_new,'idstr',dbfile_idstr1)
+                # Update objectIDs in catalog
+                obj1['objectid'] = objectid_new
+
+                if allobj is None:
+                    allobj = obj1
+                else:
+                    allobj = np.hstack((allobj,obj1))
+                nobjects.append(nobj1)
+                totobjects += nobj1
+
+            # Deal with duplicate metas
+            metaindex = dln.create_index(allmeta['base'])
+            for i in range(len(metaindex['value'])):
+                indx = metaindex['index'][metaindex['lo'][i]:metaindex['hi'][i]+1]
+                meta1 = allmeta[indx[0]].copy()
+                if len(indx)>1:
+                    meta1['nobjects'] = np.sum(allmeta['nobjects'][indx])
+                if i==0:
+                    sumstr = meta1
+                else:
+                    sumstr = np.hstack((sumstr,meta1))
+            sumstr = Table(sumstr)
+
+            # Write the output file
+            print('Writing combined catalog to '+outfile)
+            if os.path.exists(outfile): os.remove(outfile)
+            sumstr.write(outfile)               # first, summary table
+            #  append other fits binary tables
+            hdulist = fits.open(outfile)
+            hdu = fits.table_to_hdu(Table(allobj))        # second, catalog
+            hdulist.append(hdu)
+            hdulist.writeto(outfile,overwrite=True)
+            hdulist.close()
+            if os.path.exists(outfile+'.gz'): os.remove(outfile+'.gz')
+            ret = subprocess.call(['gzip',outfile])    # compress final catalog
+
+            dt = time.time()-t0
+            print('dt = '+str(dt)+' sec.')
+            sys.exit()
+
+
+    # Decide whether to load everything into RAM or use temporary database
     usedb = False
     if totmeasest>500000: usedb=True
     dbfile = None
     if usedb:
-        dbfile = tmproot+str(pix)+'_combine.db'
+        dbfile = tmproot+outbase+'_combine.db'
         print('Using temporary database file = '+dbfile)
         if os.path.exists(dbfile): os.remove(dbfile)
     else:
         print('Keeping all measurement data in memory')
 
+    #import pdb; pdb.set_trace()
+
     # IDSTR database file
-    dbfile_idstr = outdir+'/'+subdir+'/'+str(pix)+'_idstr.db'
+    dbfile_idstr = outdir+'/'+subdir+'/'+outbase+'_idstr.db'
     if os.path.exists(dbfile_idstr): os.remove(dbfile_idstr)
 
     # Load the measurement catalog
@@ -1206,8 +1445,13 @@ if __name__ == "__main__":
 
     # Initialize the OBJ structured array
     obj = np.zeros(nobj,dtype=dtype_obj)
-    obj['objectid'] = dln.strjoin( str(pix)+'.', ((np.arange(nobj)+1).astype(np.str)) )
-    obj['pix'] = pix
+    # if nside>128 then we need unique IDs, so use PIX and *not* PARENTPIX
+    #  add nside as well to make it truly unique
+    if nside>128:
+        obj['objectid'] = dln.strjoin( str(nside)+'.'+str(pix)+'.', ((np.arange(nobj)+1).astype(np.str)) )
+    else:
+        obj['objectid'] = dln.strjoin( str(pix)+'.', ((np.arange(nobj)+1).astype(np.str)) )
+    obj['pix'] = parentpix    # use PARENTPIX
     # all bad to start
     for f in ['pmra','pmraerr','pmdec','pmdecerr','asemi','bsemi','theta','asemierr',
               'bsemierr','thetaerr','fwhm','class_star','rmsvar','madvar','iqrvar',
@@ -1606,7 +1850,7 @@ if __name__ == "__main__":
     col_healpix = Column(name='healpix', dtype=np.int, length=len(sumstr))
     sumstr.add_columns([col_nobj, col_healpix])
     sumstr['nobjects'] = 0
-    sumstr['healpix'] = pix
+    sumstr['healpix'] = parentpix   # use PARENTPIX
     # get number of objects per exposure
     data = executedb(dbfile_idstr,'SELECT exposure, count(DISTINCT objectid) from idstr GROUP BY exposure')
     out = np.zeros(len(data),dtype=np.dtype([('exposure',np.str,40),('nobjects',int)]))
