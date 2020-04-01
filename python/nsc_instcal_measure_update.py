@@ -12,6 +12,7 @@ from dlnpyutils import utils as dln
 #from nsc_instcal_combine_cluster import readidstrdb
 import shutil
 import sqlite3
+from glob import glob
 
 def querydb(dbfile,table='meas',cols='rowid,*',where=None):
     """ Query database table """
@@ -130,6 +131,7 @@ def measurement_update(expdir):
     # Loop over the pixels
     ntotmatch = 0
     for i in range(npix):
+        fitsfile = cmbdir+'combine/'+str(int(upix[i])//1000)+'/'+str(upix[i])+'.fits.gz'
         dbfile = cmbdir+'combine/'+str(int(upix[i])//1000)+'/'+str(upix[i])+'_idstr.db'
         if os.path.exists(dbfile):
             #import pdb; pdb.set_trace()
@@ -145,7 +147,24 @@ def measurement_update(expdir):
             print(str(i+1)+' '+str(upix[i])+' '+str(nmatch))
         else:
             print(str(i+1)+' '+dbfile+' NOT FOUND')
-
+            # Check if there high-resolution healpix idstr databases
+            hidbfiles = glob(cmbdir+'combine/'+str(int(upix[i])//1000)+'/'+str(upix[i])+'_n*_*_idstr.db')
+            nhidbfiles = len(hidbfiles)
+            if os.path.exists(fitsfile) & (nhidbfiles>0):
+                print('Found high-resolution HEALPix IDSTR files')
+                for j in range(nhidbfiles):
+                    dbfile1 = hidbfiles[j]
+                    dbbase1 = os.path.basename(dbfile1)
+                    idstr = readidstrdb(dbfile1,where="exposure=='"+base+"'")
+                    nidstr = len(idstr)
+                    idstr_measid = np.char.array(idstr['measid']).strip()
+                    idstr_objectid = np.char.array(idstr['objectid']).strip()
+                    ind1,ind2 = dln.match(idstr_measid,measid)
+                    nmatch = len(ind1)
+                    if nmatch>0:
+                        meas['OBJECTID'][ind2] = idstr_objectid[ind1]
+                        ntotmatch += nmatch
+                    print('  '+str(j+1)+' '+dbbase1+' '+str(upix[i])+' '+str(nmatch))
 
     # Only keep sources with an objectid
     ind,nind = dln.where(meas['OBJECTID'] == '')
