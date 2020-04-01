@@ -1169,19 +1169,6 @@ if __name__ == "__main__":
         print(listfile+" NOT FOUND")
         sys.exit()
 
-    # -check nside=128 parent pixel
-    # -
-    # -write checkboundaryoverlap() function that checks that the boundaries of chips
-    #    compared to the buffer
-    # -maybe add nosub keyword to clusterdata() to not create subregions
-    # -do the subdivision in the main program, --multilevel or something
-    #   only allow ONE subdivision level per nside=128 pixel, to make it easier
-    #   to handle
-    #   -but how to know what level to choose, don't know the number of measurements beforehand
-    #    depends on density and Nexposures
-    #    -can I do a statistic search on the db to get the number of chips??
-    # -new filenames,  PARENTPIX_n2096_195832.fits
-
 
     # nside>128
     if nside > 128:
@@ -1326,7 +1313,6 @@ if __name__ == "__main__":
                 if os.path.exists(outfile1) & (not redo):
                     print(outfile1+' EXISTS already and REDO not set')
                 else:
-                    #retcode = subprocess.call([__file__,pix1,version,'--nside',hinside],stdout=sf,stderr=subprocess.STDOUT)
                     if redo is True:
                         retcode = subprocess.call([__file__,str(pix1),version,'--nside',str(hinside),'-r'],shell=False)
                     else:
@@ -1363,6 +1349,20 @@ if __name__ == "__main__":
                 updatecoldb('objectid',objectid_orig,'objectid',objectid_new,'idstr',dbfile_idstr1)
                 # Update objectIDs in catalog
                 obj1['objectid'] = objectid_new
+
+                # Update objectIDs in high resolution HEALPix output file
+                print('Updating objectIDs in '+outfile1)
+                outfile1fits = outfile1.replace('.fits.gz','.fits')
+                if os.path.exists(outfile1fits): os.remove(outfile1fits)
+                Table(meta1).write(outfile1fits)               # first, summary table
+                #  append other fits binary tables
+                hdulist = fits.open(outfile1fits)
+                hdu = fits.table_to_hdu(Table(obj1))        # second, catalog
+                hdulist.append(hdu)
+                hdulist.writeto(outfile1fits,overwrite=True)
+                hdulist.close()
+                if os.path.exists(outfile1): os.remove(outfile1)
+                ret = subprocess.call(['gzip',outfile1fits])    # compress final catalog
 
                 if allobj is None:
                     allobj = obj1
