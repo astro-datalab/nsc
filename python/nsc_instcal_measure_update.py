@@ -201,6 +201,10 @@ def measurement_update(expdir):
 
         #MWRFITS,meas1,chstr[i].measfile,/create
         #MWRFITS,meta1,chstr[i].measfile,/silent
+        # Create a file saying that the file was successfully updated.
+        #dln.writelines(hstr[i].measfile+'.updated','')
 
+    # Create a file saying that the files were updated okay.
+    #dln.writelines(expdir+'/'+base+'_meas.updated','')
 
     print('dt = ',str(time.time()-t0)+' sec.')
