@@ -1107,6 +1107,8 @@ if __name__ == "__main__":
     nside = args.nside
     redo = args.redo
     multilevel = args.multilevel
+    print('KLUDGE!!!  FORCING --MULTILEVEL')
+    multilevel = True
     outdir = args.outdir
 
     # on thing/hulk use
