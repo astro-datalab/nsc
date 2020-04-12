@@ -47,11 +47,53 @@ def rootdirs():
     if shost == 'gp07' or shost == 'gp08' or shost == 'gp09':
         return ('/dl1','/net/mss1/','/data0/')
 
-def stack(imagefiles,weightfiles,bgfiles):
+def meancube(imcube,wtcube,weights=None,crreject=False):
+    """ This does the actual stack of an image cube.  The images must already be background-subtracted and scaled."""
+    # Weights should be normalized, e.g., sum(weights)=1
+    # pixels to be masked in an image should have wtcube = 0
+
+    nx,ny,nimages = imcube.shape
+
+    # Unweighted
+    if weights is None:
+        weights = np.ones(nimages,float)/nimages
+    
+    # Do the weighted average
+    finaltot = np.zeros((nx,ny),float)
+    finaltotwt = np.zeros((nx,ny),float)        
+    totvarim = np.zeros((nx,ny),float)
+    for i in range(nimages):
+        mask = (wtcube[:,:,i] > )
+        var = np.zeros((nx,ny),float)  # sig^2
+        var[mask] = 1/wtcube[:,:,mask]
+        finaltot[mask] += imcube[:,:,mask]*weights[i]
+        finaltotwt[mask] += weights[i]
+        # Variance in each pixel for noise images and the scalar weights
+        totvarim[mask] += weights[i]*var
+    # Create the weighted average image
+    finaltotwt[finaltotwt<=0] = 1
+    final = finaltot/finaltotwt
+    # Create final error image
+    error = np.sqrt(finalvarim)
+    
+    # CR rejection
+    if crreject is True:
+        pass
+    
+    return final,error
+
+
+def stack(imagefiles,errorfiles,bgfiles,weights=None):
     """ Actually do the stacking/averaging of multiple images already reprojected."""
 
+    # DO NOT use the error maps for the weighted average.  Use scalar weights for each exposure.
+    #  otherwise you'll get screwy images
+    # Only use the error maps to generate the final error image
+    
     # imagefiles/weightfiles, list of filenames
 
+    # The images should already be background subtracted and scaled
+    
     # How many subimages
     file1 = imagefiles[0]
     hdu = fits.open(file1)
@@ -77,6 +119,7 @@ def stack(imagefiles,weightfiles,bgfiles):
 
     # Final image
     final = np.zeros((fnx,fny),float)
+    error = np.zeros((fnx,fny),float)    
         
     # Loop over bins
     for b in range(nbin):
@@ -93,22 +136,31 @@ def stack(imagefiles,weightfiles,bgfiles):
             imcube[:,:,f] = im
             wtcube[:,:,f] = wt
         # Do the weighted combination
-        # Normalize the weights
-        totwt = np.sum(wtcube,axis=2)
-        totwt[totwt<=0] = 1
-        avgim = np.sum(imcube*wtcube,axis=2)/totwt
-        medim = np.median(imcube,axis=2)
+        avgim,errim = meancube(imcube,wtcube,weights=weights)
         # Stuff into final image
         final[substr['X0'][b]:substr['X1'][b]+1,substr['Y0'][b]:substr['Y1'][b]+1] = avgim
+        error[substr['X0'][b]:substr['X1'][b]+1,substr['Y0'][b]:substr['Y1'][b]+1] = errim
 
-    return final
+    return final,error
 
     
-def coadd(imagefiles,weightfiles,outhead,coaddtype='average'):
+def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average'):
     """ Create a coadd given a list of images. """
 
+    # meta should have zpterm, exptime, fwhm
+    
     nimages = dln.size(imagefiles)
 
+    # Figure out scales and weights
+    # F_trans = 10^(-0.8*(delta_mag-0.2))    
+    scales = cat['exptime'] * 10**(-0.8*(cat['zpterm']-0.2))
+
+    # Use weight~S/N
+    # S/N goes as sqrt(exptime) and in background-dominated regime S/N ~ 1/FWHM
+    # so maybe something like weight ~ sqrt(scaling)/FWHM
+    weights = np.sqrt(scales)/cat['FWHM']
+    weights /= np.sum(weights)    # normalize
+    
     # Loop over the images
     tempfiles = []
     tempwtfiles = []
@@ -132,7 +184,13 @@ def coadd(imagefiles,weightfiles,outhead,coaddtype='average'):
         newbg, bfootprint = reproject_interp((bkg_image,head), outhead)        
         fnx,fny = newim.shape
 
-        # Step 3. Break up into bins and save to temporary file
+        # Step 3. Scale the image
+        #  divide image by "scales"
+        newim /= scales[i]
+        #  wt = 1/err^2, need to perform same operation on err as on image
+        newwt *= scales[i]**2
+        
+        # Step 4. Break up into bins and save to temporary file
         tid,tfile = tempfile.mkstemp(prefix="timage",dir="/tmp")
         tbase = os.path.basename(tfile)
         timfile = "/tmp/"+tbase+"_flx.fits"
@@ -158,6 +216,8 @@ def coadd(imagefiles,weightfiles,outhead,coaddtype='average'):
                 y1 = y0 + dy-1
                 if j==(ybin-1): y1=(fny-1)
                 newhead = outhead.copy()
+                newhead['SCALE'] = scales[i]
+                newhead['WEIGHT'] = weights[i]
                 newhead['ONAXIS1'] = newhead['NAXIS1']
                 newhead['ONAXIS2'] = newhead['NAXIS2']
                 newhead['SUBX0'] = x0
@@ -191,7 +251,7 @@ def coadd(imagefiles,weightfiles,outhead,coaddtype='average'):
 
         
     # Step 4. Stack the images
-    final = stack(tempfiles,tempwtfiles,tempbgfiles)
+    final = stack(tempfiles,tempwtfiles,tempbgfiles,weights)
 
     # Delete temporary files
 
