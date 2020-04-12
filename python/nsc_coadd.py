@@ -20,6 +20,7 @@ import numpy as np
 import warnings
 from astropy.io import fits
 from astropy.utils.exceptions import AstropyWarning
+from astropy.wcs import WCS
 #import photutils
 #from skimage import measure, morphology
 #from scipy.cluster import vq
@@ -47,6 +48,48 @@ def rootdirs():
     if shost == 'gp07' or shost == 'gp08' or shost == 'gp09':
         return ('/dl1','/net/mss1/','/data0/')
 
+def brickwcs(ra,dec,npix=3600,step=0.262):
+    """ Create the WCS and header for a brick."""
+
+    # This creates a brick WCS given the brick structure
+
+    # Make the tiling file
+    #---------------------
+    # Lines with the tiling scheme first
+    nx = npix
+    ny = npix
+    step = step / npix
+    xref = nx//2
+    yref = ny//2
+
+    w = WCS()
+    w.wcs.crpix = [xref+1,yref+1]
+    w.wcs.cdelt = np.array([step,step])
+    w.wcs.crval = [ra,dec]
+    w.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+
+    #  Make the header as well
+    hdu = fits.PrimaryHDU()
+    head = hdu.header
+
+    head['NAXIS1'] = nx
+    head['CDELT1'] = step
+    head['CRPIX1'] = xref+1
+    head['CRVAL1'] = ra
+    head['CTYPE1'] = 'RA---TAN'
+    head['NAXIS2'] = ny
+    head['CDELT2'] = step
+    head['CRPIX2'] = yref+1
+    head['CRVAL2'] = dec
+    head['CTYPE2'] = 'DEC--TAN'
+    #head['BRAMIN'] = brickstr.ra1,'RA min of unique brick area'
+    #head['BRAMAX'] = brickstr.ra2,'RA max of unique brick area'
+    #head['BDECMIN'] = brickstr.dec1,'DEC min of unique brick area'
+    #head['BDECMAX'] = brickstr.dec2,'DEC max of unique brick area'
+
+    return w,head
+
+    
 def meancube(imcube,wtcube,weights=None,crreject=False):
     """ This does the actual stack of an image cube.  The images must already be background-subtracted and scaled."""
     # Weights should be normalized, e.g., sum(weights)=1
@@ -166,10 +209,27 @@ def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average'):
     tempwtfiles = []
     tempbgfiles = []
     for f in range(nimages):
-
-        im,head = fits.getheader(imagefiles[f],header=True)
+        # Flux image
+        imfile = imagefiles[f]        
+        # Check for extension at the end, e.g., image.fits[3]
+        if imfile.endswith(']') & (imfile.find('[')>-1):
+            lo = imfile.find('[')
+            exten = imfile[lo:-2]
+            imfile = imfile[0:lo]
+        else:
+            exten = 0
+        im,head = fits.getheader(imagefiles[f],exten,header=True)
         im = im.byteswap(inplace=True).newbyteorder()    # for sep need native byte order
-        wt,whead = fits.getheader(weightfiles[f],header=True)
+        # Weight image
+        wtfile = wtfiles[f]        
+        # Check for extension at the end, e.g., image.fits[3]
+        if wtfile.endswith(']') & (wtfile.find('[')>-1):
+            lo = wtfile.find('[')
+            exten = wtfile[lo:-2]
+            wtfile = wtfile[0:lo]
+        else:
+            exten = 0
+        wt,whead = fits.getheader(weightfiles[f],exten,header=True)
         wt = wt.byteswap(inplace=True).newbyteorder()
         nx1,ny1 = im.shape
         
@@ -255,6 +315,9 @@ def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average'):
 
     # Delete temporary files
 
+    # Final header
+    #  scales, weights, image names, mean backgrounds
+    
     
     # OLD NOTES
     #-give list of FITS files (possible with extensions) and mask/noise file info, WCS/output header and coadd method
@@ -321,3 +384,10 @@ def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average'):
     # from reproject.mosaicking import reproject_and_coadd
     # could also use swarp
     # https://www.astromatic.net/pubsvn/software/swarp/trunk/doc/swarp.pdf
+
+def nsc_coadd(brick,band='g'):
+    pass
+    # This creates a coadd for one NSC brick
+
+    # Make sure to fix the WCS using the coefficients I fit with Gaia DR2
+    #  that are in the meta files.
