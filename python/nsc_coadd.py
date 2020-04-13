@@ -21,12 +21,7 @@ import warnings
 from astropy.io import fits
 from astropy.utils.exceptions import AstropyWarning
 from astropy.wcs import WCS
-#import photutils
 #from skimage import measure, morphology
-#from scipy.cluster import vq
-#import gaps
-#import matplotlib.pyplot as plt
-#import pylab
 #from scipy.signal import argrelmin
 #import scipy.ndimage.filters as filters
 import time
@@ -37,17 +32,19 @@ from reproject import reproject_interp
 import tempfile
 from dlnpyutils import utils as dln
 
+
 def rootdirs():
     # Returns dldir, mssdir, localdir
     host = socket.gethostname()
     shost = host.split('.')[0]
 
     if shost == 'thing' or shost == 'hulk':
-        return ('/dl1','/mss1/','/d0/')
+        return ('/net/dl1','/mss1/','/data0/')
 
-    if shost == 'gp07' or shost == 'gp08' or shost == 'gp09':
-        return ('/dl1','/net/mss1/','/data0/')
+    if shost == 'gp06' or shost == 'gp07' or shost == 'gp08' or shost == 'gp09':
+        return ('/net/dl1','/net/mss1/','/data0/')
 
+    
 def brickwcs(ra,dec,npix=3600,step=0.262):
     """ Create the WCS and header for a brick."""
 
@@ -88,6 +85,80 @@ def brickwcs(ra,dec,npix=3600,step=0.262):
     #head['BDECMAX'] = brickstr.dec2,'DEC max of unique brick area'
 
     return w,head
+
+def image_interp(imagefile,outhead,weightfile=None,masknan=False):
+    """ Interpolate a single image (can be multi-extension) to the output WCS."""
+
+    if os.path.exists(imagefile) is False:
+        raise ValueError(imagefile+" NOT FOUND")
+    if weightfile is not None:
+        if os.path.exists(weightfile) is False:
+            raise ValueError(weightfile+" NOT FOUND")    
+    
+    # How many extensions
+    hdulist = fits.open(imagefile)
+    nimhdu = len(hdulist)
+    hdulist.close()
+    if weightfile is not None:
+        hdulist = fits.open(weightfile)
+        nwthdu = len(hdulist)
+        hdulist.close()    
+        if nimhdu != nwthdu:
+            raise ValueError(imagefile+' and '+weightfile+' do NOT have the same number of extensions.')
+
+    # Open the files
+    imhdulist = fits.open(imagefile)
+    if weightfile is not None:
+        wthdulist = fits.open(weightfile)
+
+    # Initialize final images
+    fnx = outhead['NAXIS1']
+    fny = outhead['NAXIS1']    
+    fim = np.zeros((fnx,fny),float)
+    fwt = np.zeros((fnx,fny),float)
+    fbg = np.zeros((fnx,fny),float)
+        
+    # Loop over the HDUs
+    for i in range(nimhdu):           
+        mask = None
+        # Flux image
+        im = imhdulist[i].data
+        head = imhdulist[i].header
+        im = im.byteswap(inplace=True).newbyteorder()    # for sep need native byte order
+        nx1,ny1 = im.shape
+        # Weight image
+        if weightfile is not None:
+            wt = wthdulist[i].data
+            whead = wthdulist[i].header
+            wt = wt.byteswap(inplace=True).newbyteorder()
+            mask = (wt>0)
+
+        # Mask NaNs/Infs
+        if masknan is True:
+            if mask is not None:
+                mask = (mask is True) & np.isfinite(im)
+            else:
+                mask = np.isfinite(im)
+            im[~mask] = 0
+            
+        # Step 1. Background subtract the image
+        bkg = sep.Background(im, mask=mask, bw=64, bh=64, fw=3, fh=3)
+        bkg_image = bkg.back()
+        im -= bkg_image
+        
+        # Step 2. Reproject the image
+        newim, footprint = reproject_interp((im,head), outhead)
+        if weightfile is not None:
+            newwt, wfootprint = reproject_interp((wt,whead), outhead)
+        newbg, bfootprint = reproject_interp((bkg_image,head), outhead)        
+
+        # Step 3. Add to final images
+        fim += newim
+        if weightfile is not None:
+            fwt += newwt
+        fbg += newbg
+
+    return fim,fwt,fbf
 
     
 def meancube(imcube,wtcube,weights=None,crreject=False):
@@ -194,6 +265,10 @@ def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average'):
     
     nimages = dln.size(imagefiles)
 
+    # PUT ALL CHIPS FROM THE SAME EXPOSURE INTO THE SAME REBINNED IMAGE!!!
+    # if they fiels are MEF, then interp them all!!
+    # make an interp_single() function interpim, resampim
+    
     # Figure out scales and weights
     # F_trans = 10^(-0.8*(delta_mag-0.2))    
     scales = cat['exptime'] * 10**(-0.8*(cat['zpterm']-0.2))
