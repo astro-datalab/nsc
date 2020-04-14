@@ -494,8 +494,14 @@ def getbrickexposures(brick,band=None,version='v3'):
     if ngdch==0:
         print('No exposures overlap brick '+brick)
         return None
-    chipdata0 = chipdata.copy()
     chipdata = chipdata[olap]
+    # Check band
+    if band is not None:
+        gband, = np.where(chipdata['filter']==band)
+        if len(gband)==0:
+            print('No '+band+' exposures overlap brick '+brick)
+            return None
+        chipdata = chipdata[gband]
     exposure = np.unique(chipdata['exposure'])
     nexp = len(exposure)
     print(str(nexp)+' exposures overlap brick '+brick)
@@ -504,14 +510,6 @@ def getbrickexposures(brick,band=None,version='v3'):
     whr = ' or '.join(['exposure=="'+e+'"' for e in exposure.astype(str)])
     expdata = db.query(meta_dbfile, table='exposure', cols='*', where=whr)
 
-    # Check band
-    if band is not None:
-        gband, = np.where(expdata['filter']==band)
-        if len(gband)==0:
-            print('No '+band+' exposures overlap brick '+brick)
-            return None
-        expdata = expdata[gband]
-    
     return expdata
     
     
