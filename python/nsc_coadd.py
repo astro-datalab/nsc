@@ -17,24 +17,25 @@ import os
 import sys
 import numpy as np
 #import scipy
+import socket
 import warnings
 from astropy.io import fits
 from astropy.utils.exceptions import AstropyWarning
-#import photutils
+from astropy.wcs import WCS
 #from skimage import measure, morphology
-#from scipy.cluster import vq
-#import gaps
-#import matplotlib.pyplot as plt
-#import pylab
 #from scipy.signal import argrelmin
 #import scipy.ndimage.filters as filters
 import time
-import shutil
-import re
-import subprocess
 import glob
 import logging
-import socket
+import sep
+import healpy as hp
+from reproject import reproject_interp
+import tempfile
+from dlnpyutils import utils as dln, coords  #db
+#from . import coadd
+import coadd
+import db
 
 def rootdirs():
     # Returns dldir, mssdir, localdir
@@ -42,101 +43,13 @@ def rootdirs():
     shost = host.split('.')[0]
 
     if shost == 'thing' or shost == 'hulk':
-        return ('/dl1','/mss1/','/d0/')
+        return ('/net/dl2','/mss1','/data0')
 
-    if shost == 'gp07' or shost == 'gp08' or shost == 'gp09':
-        return ('/dl1','/net/mss1/','/data0/')
+    if shost == 'gp06' or shost == 'gp07' or shost == 'gp08' or shost == 'gp09':
+        return ('/net/dl2','/net/mss1','/data0')
 
-def coadd_healpix(pix,coaddtype='average'):
-    ''' Create a coadd for a single healpix pixel.
-    '''
-
-    #-give it healpix pixel number and any flags/constraints to use
-    #-it will figure out which exposures/chips overlap that healpix coadd region
-    #   (large rectangular box with buffer)
-    #-impose the flags/constraints
-    #-set up output WCS/header
-    #-call nsc_coadd.py with list of files, WCS header, coadd method
-
-    # Load the list    
-    dldir, mssdir, localdir = rootdirs()
-    listfile = localdir+'dnidever/nsc/instcal/nsc_healpix_list.fits'
-    if not os.path.exists(self.home):
-        print(listfile,' NOT FOUND')
-        return
-    healstr = fits.getdata(listfile,1)
-    index = fits.getdata(listfile,2)
-    # Find our pixel
-    ind, = np.where(index['pix'] == pix)
-    nind = len(ind)
-    if nind eq 0:
-        print('No entries for Healpix pixel "',%s,'" in the list' % pix)
-        return
-    ind = ind[0]
-    list = healstr[index[ind]['lo'][0]:index[ind]['hi'][0]+1]
-    nlist = len(list)
-
-    # GET EXPOSURES FOR NEIGHBORING PIXELS AS WELL
-    #  so we can deal with the edge cases
-    #NEIGHBOURS_RING,nside,pix,neipix,nneipix
-    #for i=0,nneipix-1 do begin
-    #  ind = where(index.pix eq neipix[i],nind)
-    #  if nind gt 0 then begin
-    #    ind = ind[0]
-    #    list1 = healstr[index[ind].lo:index[ind].hi]
-    #    push,list,list1
-    #  endif
-    #endfor
-    ## Get unique values
-    #ui = uniq(list.file,sort(list.file))
-    #list = list[ui]
-    #nlist = n_elements(list)
-    #print,strtrim(nlist,2),' exposures that overlap this pixel and neighbors'
-
-    # Get the boundary coordinates
-    #   healpy.boundaries but not sure how to do it in IDL
-    #   pix2vec_ring/nest can optionally return vertices but only 4
-    #     maybe subsample myself between the vectors
-    # Expand the boundary to include a "buffer" zone
-    #  to deal with edge cases
-    #PIX2VEC_RING,nside,pix,vec,vertex
-
-    # Use python code to get the boundary
-    #  this takes ~2s mostly from import statements
-    #tempfile = MKTEMP('bnd')
-    #file_delete,tempfile+'.fits',/allow
-    #step = 100
-    #pylines = 'python -c "from healpy import boundaries; from astropy.io import fits;'+$
-    #          ' v=boundaries('+strtrim(nside,2)+','+strtrim(pix,2)+',step='+strtrim(step,2)+');'+$
-    #          " fits.writeto('"+tempfile+".fits'"+',v)"'
-    #spawn,pylines,out,errout
-    #vecbound = MRDFITS(tempfile+'.fits',0,/silent)
-    #file_delete,[tempfile,tempfile+'.fits'],/allow
-    #VEC2ANG,vecbound,theta,phi
-    #rabound = phi*radeg
-    #decbound = 90-theta*radeg
-
-    # Expand the boundary by the buffer size
-    #PIX2ANG_RING,nside,pix,centheta,cenphi
-    #cenra = cenphi*radeg
-    #cendec = 90-centheta*radeg
-    # reproject onto tangent plane
-    #ROTSPHCEN,rabound,decbound,cenra,cendec,lonbound,latbound,/gnomic
-    # expand by a fraction, it's not an extact boundary but good enough
-    #buffsize = 10.0/3600. ; in deg
-    #radbound = sqrt(lonbound^2+latbound^2)
-    #frac = 1.0 + 1.5*max(buffsize/radbound)
-    #lonbuff = lonbound*frac
-    #latbuff = latbound*frac
-    #buffer = {cenra:cenra,cendec:cendec,lon:lonbuff,lat:latbuff}
-
-
-
-
-def coadd(images,outhead,coaddtype='average'):
-    ''' Create a coadd given a list of images.
-    '''
-
+    
+    # OLD NOTES
     #-give list of FITS files (possible with extensions) and mask/noise file info, WCS/output header and coadd method
     #-loop through each file and resample onto final projection (maybe write to temporary file)
     #  do same for error and mask images
@@ -149,3 +62,164 @@ def coadd(images,outhead,coaddtype='average'):
     # does that take the exposure time into account as well?  I think so.
     
     # Use the astropy reproject package
+
+
+    
+    # NEW NOTES
+    # When creating the NSC stacks, also create a deep/multi-band stack.
+
+    # coadd steps:
+    # -loop over each exposure that overlaps the image
+    #   -homogenize masks
+    #   -fix "bad" pixels in wt and flux arrays
+    #   -fit and subtract 2D background
+    #   -resample each overlapping chip onto the final brick WCS (flux preserving)
+    #      be careful when interpolating near bad pixels
+    #   -save flux/wt/mask/sky to a temporary directory to use later
+    # -once all of the resampling is done, figure out the relative weights for all the exposures
+    #   and the final scaling
+    # -use NSC zeropoints to figure out relative weighting between the exposures
+    # -need to be sure that the images are SCALED properly as well (takes into exptime/zeropoint)
+    # -depending on the number of overlapping exposures, break up the break into subregions which
+    #   will be combined separately.  need to make sure to use consistent weighting/scaling/zero
+    #   otherwise there'll be jumps at these boundaries
+    # -weighted/scaled combine in each subregion taking the mask and wt image into account properly.
+    # -how about outlier rejection?
+    # -fpack compress the final stacked images (flux, mask, weight) similar to how the CP files are done
+    # -PSF-matching???
+    # -with the exposure zpterm and exptime it should be possible to calculate the SCALING of the exposure
+    # -should I use that also for the weight?  should take FWHM/SEEING into account.
+    #   in allframe_calcweights/getweights I use weight~S/N
+    #   S/N goes as sqrt(exptime) and in background-dominated regime S/N ~ 1/FWHM
+    #   so maybe something like weight ~ sqrt(scaling)/FWHM
+    #   how about teff?  see eqn. 4, pg.10 of Morganson+2018
+    #   teff = (FWHM_fid/FwHM)^2 * (B_fid/B) * F_trans
+    #   B = background
+    #   F_trans = atmospheric transmission relative to a nearly clear night, basically zeropoint
+    #   F_trans = 10^(-0.8*(delta_mag-0.2))
+    #
+    #   teff is the ratio between the actual exposure time and the exposure time necessary to achieve
+    #   the same signal-to-noise for point sources observed in nominal conditions. An exposure taken
+    #   under “fiducial” conditions has teff = 1.
+    #
+    #   see section 6.3 for how DES performs the coadds/stacks, they create "chi-mean" coadds of r/i/z
+    #   also see Drlica-Wagner+2018, DES Y1 Cosmoogy results
+    #
+    # -ccdproc.combine
+    # https://ccdproc.readthedocs.io/en/latest/image_combination.html#id1
+    # -reproject.reproject_interp
+    # https://reproject.readthedocs.io/en/stable/
+    #   need to check the reprojection algorithms, doesn't support lanczos
+    # reproject also has a coadd/mosaicking sofware and can take weights, and can do background matching
+    # from reproject.mosaicking import reproject_and_coadd
+    # could also use swarp
+    # https://www.astromatic.net/pubsvn/software/swarp/trunk/doc/swarp.pdf
+
+def getbrickinfo(brick,version='v3'):
+    """ Get information on a brick."""
+    dldir, mssdir, localdir = rootdirs()
+    brick_dbfile = dldir+'/dnidever/nsc/instcal/'+version+'/lists/nsc_bricks.db'
+    brickdata = db.query(brick_dbfile, table='bricks', cols='*', where='brickname="'+brick+'"')
+    return brickdata
+
+def getbrickexposures(brick,band=None,version='v3'):
+    """ Get exposures information that overlap a brick."""
+
+    # Directories
+    dldir, mssdir, localdir = rootdirs()
+    # Get brick information
+    brickdata = getbrickinfo(brick,version=version)
+
+    # Healpix information
+    pix128 = hp.ang2pix(128,brickdata['ra'],brickdata['dec'],lonlat=True)
+    # neighbors
+    neipix = hp.get_all_neighbours(128,pix128)
+    
+    # Get all of the exposures overlapping this region
+    meta_dbfile = dldir+'/dnidever/nsc/instcal/'+version+'/lists/nsc_meta.db'
+    allpix = np.hstack((neipix.flatten(),pix128))
+    whr = ' or '.join(['ring128=='+h for h in allpix.astype(str)])
+    chipdata = db.query(meta_dbfile, table='chip', cols='*', where=whr)
+
+    # Do more overlap checking
+    brickvra = np.hstack((brickdata['ra1'],brickdata['ra2'],brickdata['ra2'],brickdata['ra1']))
+    brickvdec = np.hstack((brickdata['dec1'],brickdata['dec1'],brickdata['dec2'],brickdata['dec2']))    
+    brickvlon,brickvlat = coords.rotsphcen(brickvra,brickvdec,brickdata['ra'],brickdata['dec'],gnomic=True)
+    olap = np.zeros(len(chipdata),bool)
+    for i in range(len(chipdata)):
+        vra = np.hstack((chipdata['vra1'][i],chipdata['vra2'][i],chipdata['vra2'][i],chipdata['vra1'][i]))
+        vdec = np.hstack((chipdata['vdec1'][i],chipdata['vdec1'][i],chipdata['vdec2'][i],chipdata['vdec2'][i]))
+        vlon,vlat = coords.rotsphcen(vra,vdec,brickdata['ra'],brickdata['dec'],gnomic=True)
+        olap[i] = coords.doPolygonsOverlap(vlon,vlat,brickvlon,brickvlat)
+    ngdch = np.sum(olap)
+    if ngdch==0:
+        print('No exposures overlap brick '+brick)
+        return None
+    chipdata = chipdata[olap]
+    exposure = np.unique(chipdata['exposure'])
+
+    # Get the exosure data
+    whr = ' or '.join(['exposure=="'+e+'"' for e in exposure.astype(str)])
+    expdata = db.query(meta_dbfile, table='exposure', cols='*', where=whr)
+
+    # Check band
+    if band is not None:
+        gband, = np.where(expdata['filter']==band)
+        if len(gband)==0:
+            print('No '+band+' exposures overlap brick '+brick)
+            return None
+        expdata = expdata[gband]
+
+    nexp = len(expdata)
+    print(str(nexp)+' exposures overlap brick '+brick)
+
+    return expdata
+    
+    
+def nsc_coadd(brick,band=None,version='v3'):
+    # This creates a coadd for one NSC brick
+
+    # Make sure to fix the WCS using the coefficients I fit with Gaia DR2
+    #  that are in the meta files.
+
+    # Get brick information
+    brickdata = getbrickinfo(brick,version=version)
+    # Get information exposure information
+    expdata = getbrickexposures(brick,band=band,version=version)
+    # Great WCS for this brick
+    brickwcs,brickhead = coadd.brickwcs(brickdata['ra'][0],brickdata['dec'][0])
+
+
+    # Create the coadd
+    coadd.coadd(expdata['fluxfile'],expdata['wtfile'],expdata,brickhead)
+
+
+    import pdb; pdb.set_trace()
+
+
+
+if __name__ == "__main__":
+
+    parser = ArgumentParser(description='Create NSC coadd.')
+    parser.add_argument('brick', type=str, nargs=1, help='Brick name')
+    parser.add_argument('version', type=str, nargs=1, help='Version number')
+    parser.add_argument('-b','--band', type=str, default='', help='Band/filter')
+    parser.add_argument('-r','--redo', action='store_true', help='Redo this brick')
+    parser.add_argument('-v','--verbose', action='store_true', help='Verbose output')
+    args = parser.parse_args()
+
+    t0 = time.time()
+    hostname = socket.gethostname()
+    host = hostname.split('.')[0]
+    radeg = np.float64(180.00) / np.pi
+
+    # Inputs
+    pix = args.brick
+    version = args.version[0]
+    band = args.band
+    if band=='': band=None
+    verbose = args.verbose
+    redo = args.redo
+
+    # Create the coadd
+    nsc_coadd(brick,band=band,version=version,redo=redo)
