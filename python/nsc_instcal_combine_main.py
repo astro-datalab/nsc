@@ -39,7 +39,7 @@ if __name__ == "__main__":
     if args.hosts is not None:
         hosts = args.hosts[0].split(',')
     else:
-        hosts = host
+        hosts = [host]
     inplistfile = dln.first_el(args.list)
     if inplistfile == '': inplistfile = None
     nside = 128
