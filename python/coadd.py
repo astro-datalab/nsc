@@ -16,6 +16,7 @@ __version__ = '20170911'  # yyyymmdd
 import os
 import sys
 import numpy as np
+import shutil
 #import scipy
 import warnings
 from astropy.io import fits
@@ -31,6 +32,8 @@ import sep
 import healpy as hp
 from reproject import reproject_interp
 import tempfile
+import subprocess
+import glob
 from dlnpyutils import utils as dln, coords
 
     
@@ -53,6 +56,7 @@ def brickwcs(ra,dec,npix=3600,step=0.262):
     w.wcs.cdelt = np.array([step,step])
     w.wcs.crval = [ra,dec]
     w.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+    w.array_shape = (npix,npix)
 
     #  Make the header as well
     hdu = fits.PrimaryHDU()
@@ -107,7 +111,7 @@ def doImagesOverlap(head1,head2):
 
     return olap
 
-def image_reproject(im,head,outhead):
+def image_reproject(im,head,outhead,outfile,wtim=None,tmproot='.'):
     """ Reproject image onto new projection with interpolation."""
 
     if isinstance(head,WCS):
@@ -119,37 +123,125 @@ def image_reproject(im,head,outhead):
     else:
         outwcs = WCS(outhead)
 
-    ny1,nx1 = im.shape
-    # The coordinates vary smoothly, only get coordinate in new system for a sparse matrix
-    #  using the wcs to go from pix->world->pix takes 15 sec for 2046x4098 image
-    #  this way takes 4 sec
-    x1, y1 = np.mgrid[0:nx1+100:100,0:ny1+100:100]
-    ra,dec = wcs.all_pix2world(x1,y1,0)
-    x2,y2 = outwcs.wcs_world2pix(ra,dec,0)
-    # Now interpolate this for all pixels
-    from scipy import interpolate
-    xfn = interpolate.interp2d(x1.flatten(),y1.flatten(),x2.flatten(),kind='cubic',bounds_error=True,copy=False)
-    yfn = interpolate.interp2d(x1.flatten(),y1.flatten(),y2.flatten(),kind='cubic',bounds_error=True,copy=False)
-    #x1all,y1all = np.mgrid[0:nx1,0:ny1]  # slow
-    x1all = np.arange(nx1).repeat(ny1).reshape(nx1,ny1).T
-    y1all = np.arange(ny1).repeat(nx1).reshape(ny1,nx1)
-    x2all = xfn(np.arange(nx1),np.arange(ny1))
-    y2all = yfn(np.arange(nx1),np.arange(ny1))
-    # Interpolate the image
-    from scipy import ndimage
+    # Make temporary directory and CD to it
+    tmpdir = os.path.abspath(tempfile.mkdtemp(prefix="swrp",dir=tmproot))
+    origdir = os.path.abspath(os.curdir)
+    os.chdir(tmpdir)
 
-    import pdb; pdb.set_trace()
-    # coords = [1d x array, 1d y array]
-    #  coords in 2D image IM where we want interpolated values
-    # so we actually want to go the OTHER for this, what are the final x/y values in the ORIGINAL image
-    newim = ndimage.map_coordinates(im,[[0.5,2],[0.5,1]],order=1)
-    newim = ndimage.map_coordinates(im, coords, order=1, cval=0, output=bool)
-    imfx = interpolate.interp2d(x2all.flatten(),y2all.flatten(),im.flatten(),kind='cubic',bounds_error=True,copy=False)
-    tck = interpolate.bisplrep(x2all.flatten(),y2all.flatten(),im.flatten())
+    # Write image to temporary file
+    imfile = 'image.fits'
+    fits.PrimaryHDU(im,head).writeto(imfile,overwrite=True)
+    if wtim is not None:
+        wtfile = 'wt.fits'
+        fits.PrimaryHDU(wtim,head).writeto(wtfile,overwrite=True)
+
+    # Use swarp to do the resampling
+
+    # Create configuration file
+    # fields to modify: IMAGEOUT_NAME, WEIGHTOUT_NAME, WEIGHT_IMAGE, CENTER, PIXEL_SCALE, IMAGE_SIZE, GAIN?
+    fil = os.path.abspath(__file__)
+    codedir = os.path.dirname(os.path.dirname(fil))
+    paramdir = codedir+'/params/'
+    #import pdb; pdb.set_trace()
+    shutil.copyfile(paramdir+"swarp.config",tmpdir+"/swarp.config")
+    configfile = "swarp.config"
+    clines = dln.readlines(configfile)
+    #import pdb; pdb.set_trace()
+
+    imoutfile = 'image.out.fits'
+    if wtim is not None:
+        wtoutfile = 'wt.out.fits'
+
+    # IMAGEOUT_NAME
+    ind = dln.grep(clines,'^IMAGEOUT_NAME ',index=True)[0]
+    clines[ind] = 'IMAGEOUT_NAME        '+imoutfile+'     # Output filename'
+    # WEIGHTOUT_NAME
+    if wtim is not None:
+        ind = dln.grep(clines,'^WEIGHTOUT_NAME ',index=True)[0]
+        clines[ind] = 'WEIGHTOUT_NAME    '+wtoutfile+' # Output weight-map filename'
+        # WEIGHT_IMAGE
+        ind = dln.grep(clines,'^WEIGHT_IMAGE ',index=True)[0]
+        clines[ind] = 'WEIGHT_IMAGE      '+wtfile+'    # Weightmap filename if suffix not used'
+    else:
+        # Remove WEIGHT keywords
+        ind = dln.grep(clines,'^WEIGHT_TYPE ',index=True)[0]
+        clines[ind] = 'WEIGHT_TYPE            NONE            # BACKGROUND,MAP_RMS,MAP_VARIANCE'
+        #ind = dln.grep(clines,'^WEIGHT',index=True)
+        #clines = dln.remove_indices(clines,ind)
+    # CENTER
+    ind = dln.grep(clines,'^CENTER ',index=True)[0]
+    clines[ind] = 'CENTER         %9.6f, %9.6f  # Coordinates of the image center' % (outwcs.wcs.crval[0],outwcs.wcs.crval[1])
+    # PIXEL_SCALE
+    onx,ony = outwcs.array_shape
+    r,d = outwcs.all_pix2world([onx//2,onx//2],[ony//2,ony//2+1],0)
+    pixscale = (d[1]-d[0])*3600
+    ind = dln.grep(clines,'^PIXEL_SCALE ',index=True)[0]
+    clines[ind] = 'PIXEL_SCALE           %6.3f             # Pixel scale' % pixscale
+    # IMAGE_SIZE
+    ind = dln.grep(clines,'^IMAGE_SIZE ',index=True)[0]
+    clines[ind] = 'IMAGE_SIZE             %d,%d               # Image size (0 = AUTOMATIC)' % outwcs.array_shape
+    # GAIN??
+    #ind = dln.grep(clines,'^GAIN_KEYWORD ',index=True)[0]
+    #clines[ind] = 'GAIN_KEYWORD           GAIN            # FITS keyword for effect. gain (e-/ADU)'
+
+    # Write the updated configuration file
+    dln.writelines(configfile,clines,overwrite=True)
+
+
+    # Run swarp
+    retcode = subprocess.call(["swarp",imfile,"-c",configfile],shell=False)
+
+    #import pdb; pdb.set_trace()    
+
+    # Load the output file
+    oim,ohead = fits.getdata(imoutfile,header=True)
+    out = (oim,ohead)
+    if wtim is not None:
+        owtim,owthead = fits.getdata(wtoutfile,header=True)
+        out = (oim,ohead,owtim,owthead)
+
+    # Delete temporary directory and files??
+    tmpfiles = glob.glob('*')
+    for f in tmpfiles:
+        os.remove(f)
+    os.rmdir(tmpdir)
+
+    # Go back to the original direcotry
+    os.chdir(origdir)
+
+    return out
+
+    #ny1,nx1 = im.shape
+    ## The coordinates vary smoothly, only get coordinate in new system for a sparse matrix
+    ##  using the wcs to go from pix->world->pix takes 15 sec for 2046x4098 image
+    ##  this way takes 4 sec
+    #x1, y1 = np.mgrid[0:nx1+100:100,0:ny1+100:100]
+    #ra,dec = wcs.all_pix2world(x1,y1,0)
+    #x2,y2 = outwcs.wcs_world2pix(ra,dec,0)
+    ## Now interpolate this for all pixels
+    #from scipy import interpolate
+    #xfn = interpolate.interp2d(x1.flatten(),y1.flatten(),x2.flatten(),kind='cubic',bounds_error=True,copy=False)
+    #yfn = interpolate.interp2d(x1.flatten(),y1.flatten(),y2.flatten(),kind='cubic',bounds_error=True,copy=False)
+    ##x1all,y1all = np.mgrid[0:nx1,0:ny1]  # slow
+    #x1all = np.arange(nx1).repeat(ny1).reshape(nx1,ny1).T
+    #y1all = np.arange(ny1).repeat(nx1).reshape(ny1,nx1)
+    #x2all = xfn(np.arange(nx1),np.arange(ny1))
+    #y2all = yfn(np.arange(nx1),np.arange(ny1))
+    ## Interpolate the image
+    #from scipy import ndimage
+
+    #import pdb; pdb.set_trace()
+    ## coords = [1d x array, 1d y array]
+    ##  coords in 2D image IM where we want interpolated values
+    ## so we actually want to go the OTHER for this, what are the final x/y values in the ORIGINAL image
+    #newim = ndimage.map_coordinates(im,[[0.5,2],[0.5,1]],order=1)
+    #newim = ndimage.map_coordinates(im, coords, order=1, cval=0, output=bool)
+    #imfx = interpolate.interp2d(x2all.flatten(),y2all.flatten(),im.flatten(),kind='cubic',bounds_error=True,copy=False)
+    #tck = interpolate.bisplrep(x2all.flatten(),y2all.flatten(),im.flatten())
     
-    znew = interpolate.bisplev(xnew[:,0], ynew[0,:], tck)
+    #znew = interpolate.bisplev(xnew[:,0], ynew[0,:], tck)
 
-    import pdb; pdb.set_trace()
+    #import pdb; pdb.set_trace()
 
 
 
