@@ -111,7 +111,7 @@ def doImagesOverlap(head1,head2):
 
     return olap
 
-def image_reproject(im,head,outhead,outfile,wtim=None,tmproot='.'):
+def image_reproject(im,head,outhead,wtim=None,tmproot='.',verbose=False):
     """ Reproject image onto new projection with interpolation."""
 
     if isinstance(head,WCS):
@@ -142,11 +142,9 @@ def image_reproject(im,head,outhead,outfile,wtim=None,tmproot='.'):
     fil = os.path.abspath(__file__)
     codedir = os.path.dirname(os.path.dirname(fil))
     paramdir = codedir+'/params/'
-    #import pdb; pdb.set_trace()
     shutil.copyfile(paramdir+"swarp.config",tmpdir+"/swarp.config")
     configfile = "swarp.config"
     clines = dln.readlines(configfile)
-    #import pdb; pdb.set_trace()
 
     imoutfile = 'image.out.fits'
     if wtim is not None:
@@ -155,10 +153,14 @@ def image_reproject(im,head,outhead,outfile,wtim=None,tmproot='.'):
     # IMAGEOUT_NAME
     ind = dln.grep(clines,'^IMAGEOUT_NAME ',index=True)[0]
     clines[ind] = 'IMAGEOUT_NAME        '+imoutfile+'     # Output filename'
-    # WEIGHTOUT_NAME
+    # Weight parameteres
     if wtim is not None:
+        # WEIGHTOUT_NAME
         ind = dln.grep(clines,'^WEIGHTOUT_NAME ',index=True)[0]
         clines[ind] = 'WEIGHTOUT_NAME    '+wtoutfile+' # Output weight-map filename'
+        # WEIGHT_TYPE
+        ind = dln.grep(clines,'^WEIGHT_TYPE ',index=True)[0]
+        clines[ind] = 'WEIGHT_TYPE         MAP_WEIGHT            # BACKGROUND,MAP_RMS,MAP_VARIANCE'
         # WEIGHT_IMAGE
         ind = dln.grep(clines,'^WEIGHT_IMAGE ',index=True)[0]
         clines[ind] = 'WEIGHT_IMAGE      '+wtfile+'    # Weightmap filename if suffix not used'
@@ -187,12 +189,16 @@ def image_reproject(im,head,outhead,outfile,wtim=None,tmproot='.'):
     # Write the updated configuration file
     dln.writelines(configfile,clines,overwrite=True)
 
-
     # Run swarp
-    retcode = subprocess.call(["swarp",imfile,"-c",configfile],shell=False)
-
-    #import pdb; pdb.set_trace()    
-
+    if verbose is False:
+        slogfile = "swarp.log"
+        sf = open(slogfile,'w')
+        retcode = subprocess.call(["swarp",imfile,"-c",configfile],stdout=sf,stderr=subprocess.STDOUT,shell=False)
+        sf.close()
+        slines = dln.readlines(slogfile)
+    else:
+        retcode = subprocess.call(["swarp",imfile,"-c",configfile],shell=False)        
+                
     # Load the output file
     oim,ohead = fits.getdata(imoutfile,header=True)
     out = (oim,ohead)
@@ -240,9 +246,6 @@ def image_reproject(im,head,outhead,outfile,wtim=None,tmproot='.'):
     #tck = interpolate.bisplrep(x2all.flatten(),y2all.flatten(),im.flatten())
     
     #znew = interpolate.bisplev(xnew[:,0], ynew[0,:], tck)
-
-    #import pdb; pdb.set_trace()
-
 
 
 def image_interp(imagefile,outhead,weightfile=None,masknan=False):
