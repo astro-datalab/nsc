@@ -3,16 +3,18 @@
 # Update the measurement catalog with the objectID
 
 import os
+import sys
 import numpy as np
 import time
 import healpy as hp
 from astropy.io import fits
 from astropy.table import Table
 from dlnpyutils import utils as dln
-#from nsc_instcal_combine_cluster import readidstrdb
 import shutil
 import sqlite3
 from glob import glob
+import socket
+from argparse import ArgumentParser
 
 def querydb(dbfile,table='meas',cols='rowid,*',where=None):
     """ Query database table """
@@ -50,27 +52,19 @@ def measurement_update(expdir):
     lo = expdir.find('nsc/instcal/')
     dum = expdir[lo+12:]
     version = dum[0:dum.find('/')]
-    #NSC_ROOTDIRS,dldir,mssdir,localdir
     cmbdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/'
     edir = '/net/dl1/users/dnidever/nsc/instcal/'+version+'/'
     nside = 128
-    radeg = 180 / np.pi
 
     # Check if output file already exists
     base = os.path.basename(expdir)
-    #outfile = expdir+'/'+base+'_1_meas.fits'
-    #if file_test(outfile) eq 0 then begin
-    #  print,outfile,' NOT FOUND'
-    #  return
-    #endif
 
     print('Adding objectID for measurement catalogs for exposure = '+base)
 
     #  Load the exposure and metadata files
     metafile = expdir+'/'+base+'_meta.fits'
-    meta = fits.getdata(metafile,1)
+    meta = Table.read(metafile,1)
     nmeta = len(meta)
-    #chstr = fits.getdata(metafile,2)
     chstr = Table.read(metafile,2)
     #chstr['measfile'] = str(chstr['measfile'])
     nchips = len(chstr)
@@ -81,25 +75,17 @@ def measurement_update(expdir):
                           ('MAGERR_APER4', '>f4'), ('MAG_APER8', '>f4'), ('MAGERR_APER8', '>f4'), ('KRON_RADIUS', '>f4'), ('ASEMI', '>f4'), ('ASEMIERR', '>f4'),
                           ('BSEMI', '>f4'), ('BSEMIERR', '>f4'), ('THETA', '>f4'), ('THETAERR', '>f4'), ('FWHM', '>f4'), ('FLAGS', '>i2'), ('CLASS_STAR', '>f4')])
 
-    # Load the catalogs
-    #chstr = np.lib.recfunctions.append_fields(chstr,'meas_index',np.zeros(len(chstr),int),usemask=False,asrecarray=True)
-    #chstr = dln.addcatcols(chstr,np.dtype([('MEAS_INDEX',int)]))
-    chstr['MEAS_INDEX'] = 0
+    # Load and concatenate the meas catalogs
+    chstr['MEAS_INDEX'] = 0   # keep track of where each chip catalog starts
     count = 0
-    meas = None
+    meas = Table(data=np.zeros(int(np.sum(chstr['NMEAS'])),dtype=measdtype))
+    print('Loading and concatenating the chip measurement catalogs')
     for i in range(nchips):
-        #import pdb; pdb.set_trace()
-        cat1 = Table.read(chstr['MEASFILE'][i].strip(),1)
-        ncat1 = len(cat1)
-        if meas is None:
-            #dtype = cat1.dtype
-            meas = Table(data=np.zeros(int(np.sum(chstr['NMEAS'])),dtype=measdtype))
-        meas[count:count+ncat1] = cat1
+        meas1 = Table.read(chstr['MEASFILE'][i].strip(),1)   # load chip meas catalog
+        nmeas1 = len(meas1)
+        meas[count:count+nmeas1] = meas1
         chstr['MEAS_INDEX'][i] = count
-        count += ncat1
-    #meas['MEASID'] = meas['MEASID'
-    #import pdb; pdb.set_trace()  
-
+        count += nmeas1
     measid = np.char.array(meas['MEASID']).strip().decode()
     print(str(len(meas))+' measurements')
 
@@ -107,34 +93,18 @@ def measurement_update(expdir):
     #  remove any sources that weren't used
 
     # Figure out which healpix this figure overlaps
-
     pix = hp.ang2pix(nside,meas['RA'],meas['DEC'],lonlat=True)
-    #theta = (90-meas.dec)/radeg
-    #phi = meas.ra/radeg
-    #ANG2PIX_RING,nside,theta,phi,pix
     upix = np.unique(pix)
     npix = len(upix)
     print(str(npix)+' HEALPix to query')
 
-    # Load the healpix list
-    #listfile = localdir+'dnidever/nsc/instcal/'+version+'/nsc_instcal_combine_healpix_list.fits.gz'
-    #if file_test(listfile) eq 0 then begin
-    #  print,listfile,' NOT FOUND'
-    #  return
-    #endif
-    #healstr = MRDFITS(listfile,1,/silent)  # takes ~20s to load
-    #healstr.file = strtrim(healstr.file,2)
-    #healstr.base = strtrim(healstr.base,2)
-    #ind = where(healstr.base eq base,nind)  # takes ~2s
-    #upix = healstr[ind].pix
-
-    # Loop over the pixels
+    # Loop over the HEALPix pixels
     ntotmatch = 0
     for i in range(npix):
         fitsfile = cmbdir+'combine/'+str(int(upix[i])//1000)+'/'+str(upix[i])+'.fits.gz'
         dbfile = cmbdir+'combine/'+str(int(upix[i])//1000)+'/'+str(upix[i])+'_idstr.db'
         if os.path.exists(dbfile):
-            #import pdb; pdb.set_trace()
+            # Read meas id information from idstr database for this expoure
             idstr = readidstrdb(dbfile,where="exposure=='"+base+"'")
             nidstr = len(idstr)
             idstr_measid = np.char.array(idstr['measid']).strip()
@@ -146,8 +116,8 @@ def measurement_update(expdir):
                 ntotmatch += nmatch
             print(str(i+1)+' '+str(upix[i])+' '+str(nmatch))
         else:
-            print(str(i+1)+' '+dbfile+' NOT FOUND')
-            # Check if there high-resolution healpix idstr databases
+            print(str(i+1)+' '+dbfile+' NOT FOUND.  Checking for high-resolution database files.')
+            # Check if there are high-resolution healpix idstr databases
             hidbfiles = glob(cmbdir+'combine/'+str(int(upix[i])//1000)+'/'+str(upix[i])+'_n*_*_idstr.db')
             nhidbfiles = len(hidbfiles)
             if os.path.exists(fitsfile) & (nhidbfiles>0):
@@ -169,18 +139,10 @@ def measurement_update(expdir):
     # Only keep sources with an objectid
     ind,nind = dln.where(meas['OBJECTID'] == '')
     if nind > 0:
-        raise ValueError('some objects are missing IDs')
-    #if nind gt 0 then begin
-    #  print,'Keeping ',strtrim(nind,2),' of ',strtrim(ncat,2),' sources'
-    #  meas = meas[ind]
-    #endif else begin
-    #  print,'No sources to keep'
-    #  return
-    #endelse
+        raise ValueError(str(nind)+' measurements are missing OBJECTIDs')
 
-    import pdb; pdb.set_trace()
 
-    # Output
+    # Output the updated catalogs
     print('Updating measurement catalogs')
     for i in range(nchips):
         measfile1 = chstr['MEASFILE'][i].strip()
@@ -189,22 +151,42 @@ def measurement_update(expdir):
         meas1 = meas[lo:hi]
         meta1 = Table.read(measfile1,2)        # load the meta extensions
         # Copy as a backup
-        #if os.path.exists(measfile1+'.bak'): os.remove(measfile1+'.bak')
-        #shutil.copyfile(measfile1,measfile1+'.bak')
-        # meas1.write(measfile1,overwrite=True)  # first, measurement table
-        #  append other fits binary table
-        #hdulist = fits.open(measfile1)
-        #hdu = fits.table_to_hdu(meta1)        # second, catalog
-        #hdulist.append(hdu)
-        #hdulist.writeto(measfile1,overwrite=True)
-        #hdulist.close()
-
-        #MWRFITS,meas1,chstr[i].measfile,/create
-        #MWRFITS,meta1,chstr[i].measfile,/silent
+        if os.path.exists(measfile1+'.bak'): os.remove(measfile1+'.bak')
+        shutil.copyfile(measfile1,measfile1+'.bak')
+        # Write new catalog
+        meas1.write(measfile1,overwrite=True)  # first, measurement table
+        # append other fits binary table
+        hdulist = fits.open(measfile1)
+        hdu = fits.table_to_hdu(meta1)         # second, catalog
+        hdulist.append(hdu)
+        hdulist.writeto(measfile1,overwrite=True)
+        hdulist.close()
         # Create a file saying that the file was successfully updated.
-        #dln.writelines(hstr[i].measfile+'.updated','')
+        dln.writelines(measfile1+'.updated','')
+        # Delete backups
+        if os.path.exists(measfile1+'.bak'): os.remove(measfile1+'.bak')
 
     # Create a file saying that the files were updated okay.
-    #dln.writelines(expdir+'/'+base+'_meas.updated','')
+    dln.writelines(expdir+'/'+base+'_meas.updated','')
 
     print('dt = ',str(time.time()-t0)+' sec.')
+
+
+if __name__ == "__main__":
+    parser = ArgumentParser(description='Update NSC exposure measurement catalogs with OBJECTID.')
+    parser.add_argument('expdir', type=str, nargs=1, help='Exposure directory')
+    #parser.add_argument('-r','--redo', action='store_true', help='Redo this exposure catalog')
+    #parser.add_argument('-v','--verbose', action='store_true', help='Verbose output')
+    args = parser.parse_args()
+
+    hostname = socket.gethostname()
+    host = hostname.split('.')[0]
+    expdir = args.expdir[0]
+
+    # Check if the exposure has already been updated
+    base = os.path.basename(expdir)
+    if os.path.exists(expdir+'/'+base+'_meas.updated'):
+        print(expdir+' has already been updated')
+        sys.exit()
+
+    measurement_update(expdir)
