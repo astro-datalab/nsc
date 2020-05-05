@@ -107,14 +107,18 @@ def measurement_update(expdir):
             # Read meas id information from idstr database for this expoure
             idstr = readidstrdb(dbfile,where="exposure=='"+base+"'")
             nidstr = len(idstr)
-            idstr_measid = np.char.array(idstr['measid']).strip()
-            idstr_objectid = np.char.array(idstr['objectid']).strip()
-            ind1,ind2 = dln.match(idstr_measid,measid)
-            nmatch = len(ind1)
-            if nmatch>0:
-                meas['OBJECTID'][ind2] = idstr_objectid[ind1]
-                ntotmatch += nmatch
+            nmatch = 0
+            if nidstr>0:
+                idstr_measid = np.char.array(idstr['measid']).strip()
+                idstr_objectid = np.char.array(idstr['objectid']).strip()
+                ind1,ind2 = dln.match(idstr_measid,measid)
+                nmatch = len(ind1)
+                if nmatch>0:
+                    meas['OBJECTID'][ind2] = idstr_objectid[ind1]
+                    ntotmatch += nmatch
             print(str(i+1)+' '+str(upix[i])+' '+str(nmatch))
+
+            #import pdb; pdb.set_trace()
         else:
             print(str(i+1)+' '+dbfile+' NOT FOUND.  Checking for high-resolution database files.')
             # Check if there are high-resolution healpix idstr databases
@@ -137,10 +141,11 @@ def measurement_update(expdir):
                     print('  '+str(j+1)+' '+dbbase1+' '+str(upix[i])+' '+str(nmatch))
 
     # Only keep sources with an objectid
-    ind,nind = dln.where(meas['OBJECTID'] == '')
+    ind,nind = dln.where(np.char.array(meas['OBJECTID']).strip().decode() == '')
     if nind > 0:
         raise ValueError(str(nind)+' measurements are missing OBJECTIDs')
 
+    #import pdb; pdb.set_trace()
 
     # Output the updated catalogs
     print('Updating measurement catalogs')
@@ -165,6 +170,7 @@ def measurement_update(expdir):
         dln.writelines(measfile1+'.updated','')
         # Delete backups
         if os.path.exists(measfile1+'.bak'): os.remove(measfile1+'.bak')
+        #import pdb; pdb.set_trace()
 
     # Create a file saying that the files were updated okay.
     dln.writelines(expdir+'/'+base+'_meas.updated','')
