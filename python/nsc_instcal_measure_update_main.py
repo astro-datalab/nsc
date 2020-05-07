@@ -34,7 +34,8 @@ if __name__ == "__main__":
 
     # Inputs
     version = dln.first_el(args.version)
-    redo = args.redo
+    #redo = args.redo
+    redo = False
     nmulti = dln.first_el(args.nmulti)
     if args.hosts is not None:
         hosts = args.hosts[0].split(',')
@@ -112,16 +113,24 @@ if __name__ == "__main__":
     #rootLogger.info("redo = "+str(redo))
 
     # Exposures to run
-    listfile = basedir+'lists/nsc_instcal_combine_healpix_list.fits.gz'
     #listfile = basedir+'lists/nsc_instcal_combine_healpix_list.db'
+    #listfile = basedir+'lists/nsc_instcal_combine_healpix_list.fits.gz'
+    listfile = basedir+'lists/nsc_'+version+'_exposures.fits.gz'
     if inplistfile is None:
         rootLogger.info("Reading list from "+listfile)
 
         #hlist = dbutils.query(listfile,'hlist',cols='FILE')
         #nlist = len(hlist)
-        healstr = fits.getdata(listfile,1)
-        expdir = [os.path.dirname(f) for f in healstr['FILE']]
-        expdir = np.unique(expdir)
+        #healstr = fits.getdata(listfile,1)
+        #expdir = [os.path.dirname(f) for f in healstr['FILE']]
+        #expdir = np.unique(expdir)
+        liststr = fits.getdata(listfile,1)
+        expdir = liststr['EXPDIR']
+        # change /dl1/users/dnidever/ to /dl2/dnidever/
+        expdir = expdir.replace('/dl1/users/dnidever/','/dl2/dnidever/')
+        # Trim trailing /
+        #expdir = expdir.rstrip('/')  # this doesn't work for some reason
+        expdir = np.char.array([a.rstrip('/') for a in expdir])
         nexpdir = len(expdir)
     else:
         rootLogger.info("Reading list from "+inplistfile)        
@@ -131,18 +140,21 @@ if __name__ == "__main__":
     # Create the commands
     allexpdir = expdir.copy()
     allcmd = dln.strjoin("/home/dnidever/projects/noaosourcecatalog/python/nsc_instcal_measure_update.py ",allexpdir)
-    alldirs = np.zeros(npix,(np.str,200))
+    alldirs = np.zeros(nexpdir,(np.str,200))
     alldirs[:] = tmpdir
     nallcmd = len(allcmd)        
+
+    #import pdb; pdb.set_trace()
 
     # Check what's been done already
     if not redo:
         rootLogger.info("Checking if any have already been done")
         exists = np.zeros(dln.size(allexpdir),bool)+False
         for ip,p in enumerate(allexpdir):
-            base = os.path.basename(allexpdir[i])
-            outfile = allexpdir[i]+'/'+base+'.updated'
+            base = os.path.basename(allexpdir[ip])
+            outfile = allexpdir[ip]+'/'+base+'.updated'
             if os.path.exists(outfile): exists[ip]=True
+            if ip % 1000 == 0: print(str(ip)+' '+str(p))
         bd,nbd,gd,ngd = dln.where(exists,comp=True)
         if ngd==0:
             rootLogger.info('All exposures were previously updated. Nothing to run')
@@ -153,6 +165,8 @@ if __name__ == "__main__":
             allcmd = allcmd[gd]
             alldirs = alldirs[gd]
             nallcmd = len(allcmd)
+
+    import pdb; pdb.set_trace()
 
     rootLogger.info(str(nallcmd)+' exposures to process')
 
