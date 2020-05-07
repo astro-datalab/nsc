@@ -241,18 +241,19 @@ def measurement_update(expdir):
 if __name__ == "__main__":
     parser = ArgumentParser(description='Update NSC exposure measurement catalogs with OBJECTID.')
     parser.add_argument('expdir', type=str, nargs=1, help='Exposure directory')
-    #parser.add_argument('-r','--redo', action='store_true', help='Redo this exposure catalog')
+    parser.add_argument('-r','--redo', action='store_true', help='Redo this exposure catalog')
     #parser.add_argument('-v','--verbose', action='store_true', help='Verbose output')
     args = parser.parse_args()
 
     hostname = socket.gethostname()
     host = hostname.split('.')[0]
     expdir = args.expdir[0]
+    redo = args.redo
 
     # Check if the exposure has already been updated
     base = os.path.basename(expdir)
-    if os.path.exists(expdir+'/'+base+'_meas.updated'):
-        print(expdir+' has already been updated')
+    if (os.path.exists(expdir+'/'+base+'_meas.updated') & (not redo)):
+        print(expdir+' has already been updated and REDO not set')
         sys.exit()
 
     measurement_update(expdir)
