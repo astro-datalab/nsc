@@ -144,10 +144,10 @@ if __name__ == "__main__":
     alldirs[:] = tmpdir
     nallcmd = len(allcmd)        
 
-    #import pdb; pdb.set_trace()
-
     # Check what's been done already
-    if not redo:
+    check = False
+    #if not redo:
+    if check:
         rootLogger.info("Checking if any have already been done")
         exists = np.zeros(dln.size(allexpdir),bool)+False
         for ip,p in enumerate(allexpdir):
@@ -166,8 +166,6 @@ if __name__ == "__main__":
             alldirs = alldirs[gd]
             nallcmd = len(allcmd)
 
-    import pdb; pdb.set_trace()
-
     rootLogger.info(str(nallcmd)+' exposures to process')
 
     # RANDOMIZE
@@ -184,7 +182,7 @@ if __name__ == "__main__":
     for i in range(nhosts):
         if host==hosts[i]: torun=torun[i*nperhost:(i+1)*nperhost]
     ntorun = len(torun)
-    pix = allpix[torun]
+    expdir = allexpdir[torun]
     cmd = allcmd[torun]
     dirs = alldirs[torun]
     rootLogger.info('Running '+str(len(torun))+' on '+host)
@@ -192,12 +190,12 @@ if __name__ == "__main__":
     # Saving the structure of jobs to run
     runfile = basedir+'lists/nsc_instcal_measure_update_main.'+host+'.'+logtime+'_run.fits'
     rootLogger.info('Writing running information to '+runfile)
-    runstr = np.zeros(len(cmd),dtype=np.dtype([('pix',int),('host',(np.str,20))]))
-    runstr['pix'] = pix
+    runstr = np.zeros(len(cmd),dtype=np.dtype([('expdir',(np.str,200)),('host',(np.str,20))]))
+    runstr['expdir'] = expdir
     runstr['host'] = host
     Table(runstr).write(runfile)
 
-    # Now run the combination program on each healpix pixel
+    # Now run the measurement update program on the exposures
     import pdb; pdb.set_trace()
     a = input("Press RETURN to start")
     jobs = jd.job_daemon(cmd,dirs,hyperthread=True,prefix='nscmeasupd',nmulti=nmulti)
