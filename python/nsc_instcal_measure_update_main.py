@@ -24,7 +24,7 @@ if __name__ == "__main__":
     parser.add_argument('version', type=str, nargs=1, help='Version number')
     parser.add_argument('--hosts', type=str, nargs=1, help='Delimited list of hosts')
     parser.add_argument('-l','--list', type=str, nargs=1, default='', help='List of exposures to run')
-    parser.add_argument('-nm','--nmulti', type=int, nargs=1, default=15, help='Number of jobs')
+    parser.add_argument('-nm','--nmulti', type=int, nargs=1, default=12, help='Number of jobs')
     #parser.add_argument('-r','--redo', action='store_true', help='Redo this HEALPIX')
     args = parser.parse_args()
 
