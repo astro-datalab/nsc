@@ -15,6 +15,7 @@ import sqlite3
 from glob import glob
 import socket
 from argparse import ArgumentParser
+import logging
 
 def querydb(dbfile,table='meas',cols='rowid,*',where=None):
     """ Query database table """
@@ -47,6 +48,8 @@ def readidstrdb(dbfile,where=None):
 def measurement_update(expdir):
 
     t0 = time.time()
+    hostname = socket.gethostname()
+    host = hostname.split('.')[0]
 
     # Get version number from exposure directory
     lo = expdir.find('nsc/instcal/')
@@ -59,14 +62,48 @@ def measurement_update(expdir):
     # Check if output file already exists
     base = os.path.basename(expdir)
 
-    print('Adding objectID for measurement catalogs for exposure = '+base)
+    # Log file                                                                                                                                                                     
+    #------------------                                                                                                                                                            
+    # format is nsc_combine_main.DATETIME.log                                                                                                                                      
+    ltime = time.localtime()
+    # time.struct_time(tm_year=2019, tm_mon=7, tm_mday=22, tm_hour=0, tm_min=30, tm_sec=20, tm_wday=0, tm_yday=203, tm_isdst=1)                                                    
+    smonth = str(ltime[1])
+    if ltime[1]<10: smonth = '0'+smonth
+    sday = str(ltime[2])
+    if ltime[2]<10: sday = '0'+sday
+    syear = str(ltime[0])[2:]
+    shour = str(ltime[3])
+    if ltime[3]<10: shour='0'+shour
+    sminute = str(ltime[4])
+    if ltime[4]<10: sminute='0'+sminute
+    ssecond = str(int(ltime[5]))
+    if ltime[5]<10: ssecond='0'+ssecond
+    logtime = smonth+sday+syear+shour+sminute+ssecond
+    logfile = expdir+'/'+base+'_measure_update.'+logtime+'.log'
+    if os.path.exists(logfile): os.remove(logfile)
+
+    # Set up logging to screen and logfile                                                                                                                                         
+    logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
+    rootLogger = logging.getLogger()
+    fileHandler = logging.FileHandler(logfile)
+    fileHandler.setFormatter(logFormatter)
+    rootLogger.addHandler(fileHandler)
+    consoleHandler = logging.StreamHandler()
+    consoleHandler.setFormatter(logFormatter)
+    rootLogger.addHandler(consoleHandler)
+    rootLogger.setLevel(logging.NOTSET)
+
+    rootLogger.info('Adding objectID for measurement catalogs for exposure = '+base)
+    rootLogger.info("expdir = "+expdir)
+    rootLogger.info("host = "+host)
+    rootLogger.info(" ")
 
     #  Load the exposure and metadata files
     metafile = expdir+'/'+base+'_meta.fits'
     meta = Table.read(metafile,1)
     nmeta = len(meta)
     chstr = Table.read(metafile,2)
-    print('KLUDGE!!!  Changing /dl1 filenames to /dl2 filenames')
+    rootLogger.info('KLUDGE!!!  Changing /dl1 filenames to /dl2 filenames')
     cols = ['EXPDIR','FILENAME','MEASFILE']
     for c in cols:
         f = np.char.array(chstr[c]).decode()
@@ -84,7 +121,7 @@ def measurement_update(expdir):
     chstr['MEAS_INDEX'] = 0   # keep track of where each chip catalog starts
     count = 0
     meas = Table(data=np.zeros(int(np.sum(chstr['NMEAS'])),dtype=measdtype))
-    print('Loading and concatenating the chip measurement catalogs')
+    rootLogger.info('Loading and concatenating the chip measurement catalogs')
     for i in range(nchips):
         meas1 = Table.read(chstr['MEASFILE'][i].strip(),1)   # load chip meas catalog
         nmeas1 = len(meas1)
@@ -92,7 +129,8 @@ def measurement_update(expdir):
         chstr['MEAS_INDEX'][i] = count
         count += nmeas1
     measid = np.char.array(meas['MEASID']).strip().decode()
-    print(str(len(meas))+' measurements')
+    nmeas = len(meas)
+    rootLogger.info(str(nmeas)+' measurements')
 
     # Get the OBJECTID from the combined healpix file IDSTR structure
     #  remove any sources that weren't used
@@ -101,7 +139,7 @@ def measurement_update(expdir):
     pix = hp.ang2pix(nside,meas['RA'],meas['DEC'],lonlat=True)
     upix = np.unique(pix)
     npix = len(upix)
-    print(str(npix)+' HEALPix to query')
+    rootLogger.info(str(npix)+' HEALPix to query')
 
     # Loop over the HEALPix pixels
     ntotmatch = 0
@@ -121,15 +159,15 @@ def measurement_update(expdir):
                 if nmatch>0:
                     meas['OBJECTID'][ind2] = idstr_objectid[ind1]
                     ntotmatch += nmatch
-            print(str(i+1)+' '+str(upix[i])+' '+str(nmatch))
+            rootLogger.info(str(i+1)+' '+str(upix[i])+' '+str(nmatch))
 
         else:
-            print(str(i+1)+' '+dbfile+' NOT FOUND.  Checking for high-resolution database files.')
+            rootLogger.info(str(i+1)+' '+dbfile+' NOT FOUND.  Checking for high-resolution database files.')
             # Check if there are high-resolution healpix idstr databases
             hidbfiles = glob(cmbdir+'combine/'+str(int(upix[i])//1000)+'/'+str(upix[i])+'_n*_*_idstr.db')
             nhidbfiles = len(hidbfiles)
             if os.path.exists(fitsfile) & (nhidbfiles>0):
-                print('Found high-resolution HEALPix IDSTR files')
+                rootLogger.info('Found high-resolution HEALPix IDSTR files')
                 for j in range(nhidbfiles):
                     dbfile1 = hidbfiles[j]
                     dbbase1 = os.path.basename(dbfile1)
@@ -142,16 +180,22 @@ def measurement_update(expdir):
                     if nmatch>0:
                         meas['OBJECTID'][ind2] = idstr_objectid[ind1]
                         ntotmatch += nmatch
-                    print('  '+str(j+1)+' '+dbbase1+' '+str(upix[i])+' '+str(nmatch))
+                    rootLogger.info('  '+str(j+1)+' '+dbbase1+' '+str(upix[i])+' '+str(nmatch))
 
     # Only keep sources with an objectid
     ind,nind = dln.where(np.char.array(meas['OBJECTID']).strip().decode() == '')
-    if nind > 0:
-        raise ValueError(str(nind)+' measurements are missing OBJECTIDs')
+    # There can be missing/orphaned measurements at healpix boundaries in crowded
+    # regions when the DBSCAN eps is different.  But there should be very few of these.
+    # At this point, let's allow this to pass
+    if nind>0:
+        rootLogger.info('WARNING: '+str(nind)+' measurements are missing OBJECTIDs')
+    if ((nmeas>=20000) & (nind>20)) | ((nmeas<20000) & (nind>3)):
+        rootLogger.info('More missing OBJECTIDs than currently allowed.')
+        raise ValueError('More missing OBJECTIDs than currently allowed.')
 
 
     # Output the updated catalogs
-    print('Updating measurement catalogs')
+    rootLogger.info('Updating measurement catalogs')
     for i in range(nchips):
         measfile1 = chstr['MEASFILE'][i].strip()
         lo = chstr['MEAS_INDEX'][i]
@@ -191,7 +235,7 @@ def measurement_update(expdir):
     # Create a file saying that the files were updated okay.
     dln.writelines(expdir+'/'+base+'_meas.updated','')
 
-    print('dt = ',str(time.time()-t0)+' sec.')
+    rootLogger.info('dt = '+str(time.time()-t0)+' sec.')
 
 
 if __name__ == "__main__":
