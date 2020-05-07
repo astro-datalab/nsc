@@ -66,7 +66,12 @@ def measurement_update(expdir):
     meta = Table.read(metafile,1)
     nmeta = len(meta)
     chstr = Table.read(metafile,2)
-    #chstr['measfile'] = str(chstr['measfile'])
+    print('KLUDGE!!!  Changing /dl1 filenames to /dl2 filenames')
+    cols = ['EXPDIR','FILENAME','MEASFILE']
+    for c in cols:
+        f = np.char.array(chstr[c]).decode()
+        f = np.char.array(f).replace('/dl1/users/dnidever/','/dl2/dnidever/')
+        chstr[c] = f
     nchips = len(chstr)
 
     measdtype = np.dtype([('MEASID', 'S50'), ('OBJECTID', 'S50'), ('EXPOSURE', 'S50'), ('CCDNUM', '>i2'), ('FILTER', 'S2'), ('MJD', '>f8'), ('X', '>f4'),
@@ -118,7 +123,6 @@ def measurement_update(expdir):
                     ntotmatch += nmatch
             print(str(i+1)+' '+str(upix[i])+' '+str(nmatch))
 
-            #import pdb; pdb.set_trace()
         else:
             print(str(i+1)+' '+dbfile+' NOT FOUND.  Checking for high-resolution database files.')
             # Check if there are high-resolution healpix idstr databases
@@ -145,7 +149,6 @@ def measurement_update(expdir):
     if nind > 0:
         raise ValueError(str(nind)+' measurements are missing OBJECTIDs')
 
-    #import pdb; pdb.set_trace()
 
     # Output the updated catalogs
     print('Updating measurement catalogs')
@@ -155,6 +158,12 @@ def measurement_update(expdir):
         hi = lo+chstr['NMEAS'][i]
         meas1 = meas[lo:hi]
         meta1 = Table.read(measfile1,2)        # load the meta extensions
+        # 'KLUDGE!!!  Changing /dl1 filenames to /dl2 filenames')
+        cols = ['EXPDIR','FILENAME','MEASFILE']
+        for c in cols:
+            f = np.char.array(meta1[c]).decode()
+            f = np.char.array(f).replace('/dl1/users/dnidever/','/dl2/dnidever/')
+            meta1[c] = f
         # Copy as a backup
         if os.path.exists(measfile1+'.bak'): os.remove(measfile1+'.bak')
         shutil.copyfile(measfile1,measfile1+'.bak')
@@ -170,7 +179,14 @@ def measurement_update(expdir):
         dln.writelines(measfile1+'.updated','')
         # Delete backups
         if os.path.exists(measfile1+'.bak'): os.remove(measfile1+'.bak')
-        #import pdb; pdb.set_trace()
+
+    # Update the meta file as well, need to the /dl2 filenames
+    meta.write(metafile,overwrite=True)
+    hdulist = fits.open(metafile)
+    hdu = fits.table_to_hdu(chstr)
+    hdulist.append(hdu)
+    hdulist.writeto(metafile,overwrite=True)
+    hdulist.close()
 
     # Create a file saying that the files were updated okay.
     dln.writelines(expdir+'/'+base+'_meas.updated','')
