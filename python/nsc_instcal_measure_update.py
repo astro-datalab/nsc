@@ -16,6 +16,7 @@ from glob import glob
 import socket
 from argparse import ArgumentParser
 import logging
+import subprocess
 
 def querydb(dbfile,table='meas',cols='rowid,*',where=None):
     """ Query database table """
@@ -37,9 +38,9 @@ def querydb(dbfile,table='meas',cols='rowid,*',where=None):
 
 def readidstrdb(dbfile,where=None):
     """ Get data from IDSTR database"""
-    data = querydb(dbfile,table='idstr',cols='*',where=where)
+    data = querydb(dbfile,table='idstr',cols='measid,objectid',where=where)
     # Put in catalog
-    dtype_idstr = np.dtype([('measid',np.str,200),('exposure',np.str,200),('objectid',np.str,200),('objectindex',int)])
+    dtype_idstr = np.dtype([('measid',np.str,200),('objectid',np.str,200)])
     cat = np.zeros(len(data),dtype=dtype_idstr)
     cat[...] = data
     del data
@@ -62,11 +63,11 @@ def measurement_update(expdir):
     # Check if output file already exists
     base = os.path.basename(expdir)
 
-    # Log file                                                                                                                                                                     
-    #------------------                                                                                                                                                            
-    # format is nsc_combine_main.DATETIME.log                                                                                                                                      
+    # Log file
+    #------------------
+    # format is nsc_combine_main.DATETIME.log
     ltime = time.localtime()
-    # time.struct_time(tm_year=2019, tm_mon=7, tm_mday=22, tm_hour=0, tm_min=30, tm_sec=20, tm_wday=0, tm_yday=203, tm_isdst=1)                                                    
+    # time.struct_time(tm_year=2019, tm_mon=7, tm_mday=22, tm_hour=0, tm_min=30, tm_sec=20, tm_wday=0, tm_yday=203, tm_isdst=1)
     smonth = str(ltime[1])
     if ltime[1]<10: smonth = '0'+smonth
     sday = str(ltime[2])
@@ -82,7 +83,7 @@ def measurement_update(expdir):
     logfile = expdir+'/'+base+'_measure_update.'+logtime+'.log'
     if os.path.exists(logfile): os.remove(logfile)
 
-    # Set up logging to screen and logfile                                                                                                                                         
+    # Set up logging to screen and logfile
     logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
     rootLogger = logging.getLogger()
     fileHandler = logging.FileHandler(logfile)
@@ -143,23 +144,22 @@ def measurement_update(expdir):
 
     # Loop over the HEALPix pixels
     ntotmatch = 0
+    idstr_dtype = np.dtype([('measid',np.str,200),('objectid',np.str,200),('pix',int)])
+    idstr = np.zeros(nmeas,dtype=idstr_dtype)
+    cnt = 0
     for i in range(npix):
         fitsfile = cmbdir+'combine/'+str(int(upix[i])//1000)+'/'+str(upix[i])+'.fits.gz'
         dbfile = cmbdir+'combine/'+str(int(upix[i])//1000)+'/'+str(upix[i])+'_idstr.db'
         if os.path.exists(dbfile):
             # Read meas id information from idstr database for this expoure
-            idstr = readidstrdb(dbfile,where="exposure=='"+base+"'")
-            nidstr = len(idstr)
-            nmatch = 0
-            if nidstr>0:
-                idstr_measid = np.char.array(idstr['measid']).strip()
-                idstr_objectid = np.char.array(idstr['objectid']).strip()
-                ind1,ind2 = dln.match(idstr_measid,measid)
-                nmatch = len(ind1)
-                if nmatch>0:
-                    meas['OBJECTID'][ind2] = idstr_objectid[ind1]
-                    ntotmatch += nmatch
-            rootLogger.info(str(i+1)+' '+str(upix[i])+' '+str(nmatch))
+            idstr1 = readidstrdb(dbfile,where="exposure=='"+base+"'")
+            nidstr1 = len(idstr1)
+            if nidstr1>0:
+                idstr['measid'][cnt:cnt+nidstr1] = idstr1['measid']
+                idstr['objectid'][cnt:cnt+nidstr1] = idstr1['objectid']
+                idstr['pix'][cnt:cnt+nidstr1] = upix[i]
+                cnt += nidstr1
+            rootLogger.info(str(i+1)+' '+str(upix[i])+' '+str(nidstr1))
 
         else:
             rootLogger.info(str(i+1)+' '+dbfile+' NOT FOUND.  Checking for high-resolution database files.')
@@ -171,16 +171,28 @@ def measurement_update(expdir):
                 for j in range(nhidbfiles):
                     dbfile1 = hidbfiles[j]
                     dbbase1 = os.path.basename(dbfile1)
-                    idstr = readidstrdb(dbfile1,where="exposure=='"+base+"'")
-                    nidstr = len(idstr)
-                    idstr_measid = np.char.array(idstr['measid']).strip()
-                    idstr_objectid = np.char.array(idstr['objectid']).strip()
-                    ind1,ind2 = dln.match(idstr_measid,measid)
-                    nmatch = len(ind1)
-                    if nmatch>0:
-                        meas['OBJECTID'][ind2] = idstr_objectid[ind1]
-                        ntotmatch += nmatch
-                    rootLogger.info('  '+str(j+1)+' '+dbbase1+' '+str(upix[i])+' '+str(nmatch))
+                    idstr1 = readidstrdb(dbfile1,where="exposure=='"+base+"'")
+                    nidstr1 = len(idstr1)
+                    if nidstr1>0:
+                        idstr['measid'][cnt:cnt+nidstr1] = idstr1['measid']
+                        idstr['objectid'][cnt:cnt+nidstr1] = idstr1['objectid']
+                        idstr['pix'][cnt:cnt+nidstr1] = upix[i]
+                        cnt += nidstr1
+                    rootLogger.info('  '+str(j+1)+' '+dbbase1+' '+str(upix[i])+' '+str(nidstr1))
+
+    # Trim any leftover elements of IDSTR
+    if cnt<nmeas:
+        idstr = idstr[0:cnt]
+
+    # Now match them all up
+    rootLogger.info('Matching the measurements')
+    idstr_measid = np.char.array(idstr['measid']).strip()
+    idstr_objectid = np.char.array(idstr['objectid']).strip() 
+    ind1,ind2 = dln.match(idstr_measid,measid)
+    nmatch = len(ind1)
+    if nmatch>0:
+        meas['OBJECTID'][ind2] = idstr_objectid[ind1] 
+
 
     # Only keep sources with an objectid
     ind,nind = dln.where(np.char.array(meas['OBJECTID']).strip().decode() == '')
@@ -193,38 +205,47 @@ def measurement_update(expdir):
         rootLogger.info('More missing OBJECTIDs than currently allowed.')
         raise ValueError('More missing OBJECTIDs than currently allowed.')
 
-
     # Output the updated catalogs
-    rootLogger.info('Updating measurement catalogs')
-    for i in range(nchips):
-        measfile1 = chstr['MEASFILE'][i].strip()
-        lo = chstr['MEAS_INDEX'][i]
-        hi = lo+chstr['NMEAS'][i]
-        meas1 = meas[lo:hi]
-        meta1 = Table.read(measfile1,2)        # load the meta extensions
-        # 'KLUDGE!!!  Changing /dl1 filenames to /dl2 filenames')
-        cols = ['EXPDIR','FILENAME','MEASFILE']
-        for c in cols:
-            f = np.char.array(meta1[c]).decode()
-            f = np.char.array(f).replace('/dl1/users/dnidever/','/dl2/dnidever/')
-            meta1[c] = f
-        # Copy as a backup
-        if os.path.exists(measfile1+'.bak'): os.remove(measfile1+'.bak')
-        shutil.copyfile(measfile1,measfile1+'.bak')
-        # Write new catalog
-        meas1.write(measfile1,overwrite=True)  # first, measurement table
-        # append other fits binary table
-        hdulist = fits.open(measfile1)
-        hdu = fits.table_to_hdu(meta1)         # second, catalog
-        hdulist.append(hdu)
-        hdulist.writeto(measfile1,overwrite=True)
-        hdulist.close()
-        # Create a file saying that the file was successfully updated.
-        dln.writelines(measfile1+'.updated','')
-        # Delete backups
-        if os.path.exists(measfile1+'.bak'): os.remove(measfile1+'.bak')
+    #rootLogger.info('Updating measurement catalogs')
+    #for i in range(nchips):
+    #    measfile1 = chstr['MEASFILE'][i].strip()
+    #    lo = chstr['MEAS_INDEX'][i]
+    #    hi = lo+chstr['NMEAS'][i]
+    #    meas1 = meas[lo:hi]
+    #    meta1 = Table.read(measfile1,2)        # load the meta extensions
+    #    # 'KLUDGE!!!  Changing /dl1 filenames to /dl2 filenames')
+    #    cols = ['EXPDIR','FILENAME','MEASFILE']
+    #    for c in cols:
+    #        f = np.char.array(meta1[c]).decode()
+    #        f = np.char.array(f).replace('/dl1/users/dnidever/','/dl2/dnidever/')
+    #        meta1[c] = f
+    #    # Copy as a backup
+    #    if os.path.exists(measfile1+'.bak'): os.remove(measfile1+'.bak')
+    #    dum = shutil.move(measfile1,measfile1+'.bak')
+    #    # Write new catalog
+    #    #meas1.write(measfile1,overwrite=True)  # first, measurement table
+    #    # append other fits binary tabl
+    #    #hdulist = fits.open(measfile1)
+    #    rootLogger.info('Writing '+measfile1)
+    #    hdulist = fits.HDUList()
+    #    hdulist.append(fits.table_to_hdu(meas1))       # first, meas catalog
+    #    hdulist.append(fits.table_to_hdu(meta1))       # second, meta
+    #    hdulist.writeto(measfile1,overwrite=True)
+    #    hdulist.close()
+    #    # Create a file saying that the file was successfully updated.
+    #    dln.writelines(measfile1+'.updated','')
+    #    # Delete backups
+    #    if os.path.exists(measfile1+'.bak'): os.remove(measfile1+'.bak')
+
+    # Output the updated measurement catalog
+    #  Writing a single FITS file is much faster than many small ones
+    measfile = expdir+'/'+base+'_meas.fits'
+    meas.write(measfile,overwrite=True)
+    if os.path.exists(measfile+'.gz'): os.remove(measfile+'.gz')
+    ret = subprocess.call(['gzip',measfile])    # compress final catalog
 
     # Update the meta file as well, need to the /dl2 filenames
+    rootLogger.info('Updating meta file')
     meta.write(metafile,overwrite=True)
     hdulist = fits.open(metafile)
     hdu = fits.table_to_hdu(chstr)
