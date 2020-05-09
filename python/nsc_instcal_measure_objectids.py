@@ -92,6 +92,7 @@ def measurement_info(pix):
     print('Loading the data')
     idstr = readidstrdb(dbfile)
     # Need to do this in chunks if there are too many rows
+    
 
     # Get unique exposures
     exposure = np.char.array(idstr['exposure'])
@@ -113,15 +114,23 @@ def measurement_info(pix):
         eind = expindex['index'][expindex['lo'][e]:expindex['hi'][e]+1]
         idstr1 = idstr[eind]
         nidstr1 = len(idstr1)
-        # Just need measid,objectid
-        dt = np.dtype([('measid',np.str,200),('objectid',np.str,200)])
+        # Just need measid,objectid, and only the width that we need
+        mlen = np.max([len(m) for m in idstr1['measid']])
+        olen = np.max([len(o) for o in idstr1['objectid']])
+        dt = np.dtype([('measid',np.str,mlen),('objectid',np.str,olen)])
         new = np.zeros(nidstr1,dtype=dt)
         new['measid'] = idstr1['measid']
         new['objectid'] = idstr1['objectid']
         print(str(e+1)+' '+exposure1+' '+str(nidstr1))
+
+        # Put these files in expdir/idstr/ subdirectory!!
+
         # Write it out
         outfile = expdirs[e]+'/'+exposure1+'_objectid_list.fits'
+        #outfile = expdirs[e]+'/'+exposure1+'_objectid_list.npy'
         print('  Writing '+outfile)
+        #if os.path.exists(outfile): os.remove(outfile)
+        #np.save(outfile,new)   # not any faster
         Table(new).write(outfile,overwrite=True)
 
     print('dt = '+str(time.time()-t0)+' sec.')
