@@ -829,10 +829,8 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
             if buffdict is not None:
                 vra = chmeta['vra'][j]
                 vdec = chmeta['vdec'][j]
-                if (np.max(vra)-np.min(vra)) > 100:    # deal with RA=0 wrapround
-                    bd,nbd = dln.where(vra>180)
-                    if nbd>0: vra[bd] -= 360
-                if coords.doPolygonsOverlap(buffdict['ra'],buffdict['dec'],vra,vdec) is False:
+                vlon, vlat = coords.rotsphcen(vra,vdec,buffdict['cenra'],buffdict['cendec'],gnomic=True)
+                if coords.doPolygonsOverlap(buffdict['lon'],buffdict['lat'],vlon,vlat) is False:
                     if verbose: print('This chip does NOT overlap the HEALPix region+buffer')
                     inside = False
 
@@ -1717,6 +1715,7 @@ if __name__ == "__main__":
 
     # Created OBJECTID index in IDSTR database
     createindexdb(dbfile_idstr,'objectid',table='idstr',unique=False)
+    #createindexdb(dbfile_idstr,'exposure',table='idstr',unique=False)
 
     # Select Variables
     #  1) Construct fiducial magnitude (done in loop above)
