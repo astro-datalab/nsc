@@ -9,7 +9,7 @@ from astropy.utils.exceptions import AstropyWarning
 from astropy.table import Table, vstack, Column
 from astropy.time import Time
 import healpy as hp
-from dlnpyutils import utils as dln, coords, bindata, dbutils
+from dlnpyutils import utils as dln, coords, bindata, db
 import subprocess
 import time
 from argparse import ArgumentParser
@@ -939,6 +939,7 @@ def clusterdata(cat,ncat,dbfile=None):
         # Index RA and DEC
         createindexdb(dbfile,'ra',unique=False)
         createindexdb(dbfile,'dec',unique=False)
+        db.analyzetable(dbfile,'meas')
         # Subdivide
         nsub = int(np.ceil(ncat/100000))
         print(str(nsub)+' sub regions')
@@ -1171,7 +1172,7 @@ if __name__ == "__main__":
     # nside>128
     if nside > 128:
         # Find our pixel
-        hlist = dbutils.query(listfile,'hlist',where='PIX='+str(parentpix))
+        hlist = db.query(listfile,'hlist',where='PIX='+str(parentpix))
         nlist = len(hlist)
         if nlist == 0:
             print("No entries for Healpix pixel '"+str(parentpix)+"' in the list")
@@ -1181,7 +1182,7 @@ if __name__ == "__main__":
         #  so we can deal with the edge cases
         neipix = hp.get_all_neighbours(128,parentpix)
         for neip in neipix:
-            hlist1 = dbutils.query(listfile,'hlist',where='PIX='+str(neip))
+            hlist1 = db.query(listfile,'hlist',where='PIX='+str(neip))
             nhlist1 = len(hlist1)
             if nhlist1>0:
                 hlist1 = Table(hlist1)
@@ -1191,7 +1192,7 @@ if __name__ == "__main__":
     else:
         parentpix = pix
         # Find our pixel
-        hlist = dbutils.query(listfile,'hlist',where='PIX='+str(pix))
+        hlist = db.query(listfile,'hlist',where='PIX='+str(pix))
         nlist = len(hlist)
         if nlist == 0:
             print("No entries for Healpix pixel '"+str(pix)+"' in the list")
@@ -1201,7 +1202,7 @@ if __name__ == "__main__":
         #  so we can deal with the edge cases
         neipix = hp.get_all_neighbours(nside,pix)
         for neip in neipix:
-            hlist1 = dbutils.query(listfile,'hlist',where='PIX='+str(neip))
+            hlist1 = db.query(listfile,'hlist',where='PIX='+str(neip))
             nhlist1 = len(hlist1)
             if nhlist1>0:
                 hlist1 = Table(hlist1)
@@ -1715,7 +1716,9 @@ if __name__ == "__main__":
 
     # Created OBJECTID index in IDSTR database
     createindexdb(dbfile_idstr,'objectid',table='idstr',unique=False)
-    #createindexdb(dbfile_idstr,'exposure',table='idstr',unique=False)
+    createindexdb(dbfile_idstr,'exposure',table='idstr',unique=False)
+    db.analyzetable(dbfile_idstr,'idstr')
+
 
     # Select Variables
     #  1) Construct fiducial magnitude (done in loop above)
