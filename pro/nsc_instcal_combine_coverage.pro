@@ -45,20 +45,29 @@ mmhlat = minmax(hlat)
 ; this larger pixel
 QUERY_POLYGON,nside2,vertex,listpix,nlistpix
 
-; if not 1024 pixels
-if nlistpix lt 1024 then begin
-  print,'Less than 1024 healpix.  Growing the area slightly.'
-  hlon0 = hlon
-  hlat0 = hlat
-  hlon = 1.01*hlon
-  hlat = 1.01*hlat
-  hra0 = hra
-  hdec0 = hdec
-  ROTSPHCEN,hlon,hlat,hcenra,hcendec,hra,hdec,/reverse,/gnomic
-  vertex0 = vertex
-  ANG2VEC,hdec,hra,vertex,/astro
-  QUERY_POLYGON,nside2,vertex,listpix,nlistpix
-  if nlistpix lt 1024 then stop,'Still less than 1024 healpix'
+; Not 1024 pixels, use python
+if nlistpix ne 1024 then begin
+  print,'Not 1024 healpix.  Using python.'
+  listpix0 = listpix
+  ;; Use python code to get 4096 pixels
+  tempfile = MKTEMP('hp')
+  file_delete,tempfile+'.fits',/allow
+  step = 100
+  pylines = 'import healpy as hp; from astropy.io import fits; import numpy as np;'+$
+            'v=hp.pix2vec('+strtrim(nside,2)+','+strtrim(pix,2)+');'+$
+            'radius=hp.nside2resol('+strtrim(nside,2)+');'+$
+            'pix2=hp.query_disc('+strtrim(nside2,2)+',v,radius=2*radius);'+$
+            'theta,phi=hp.pix2ang('+strtrim(nside2,2)+',pix2);'+$
+            'pix1=hp.ang2pix('+strtrim(nside,2)+',theta,phi);'+$
+            'gd = (pix1 == '+strtrim(pix,2)+');'+$
+            'pix = pix2[gd];'+$
+            "fits.writeto('"+tempfile+".fits'"+',pix)'
+  writeline,tempfile,pylines
+  file_chmod,tempfile,'755'o
+  spawn,['python',tempfile],out,errout,/noshell
+  listpix = MRDFITS(tempfile+'.fits',0,/silent)
+  file_delete,[tempfile,tempfile+'.fits'],/allow
+  nlistpix = n_elements(listpix)
 endif
 
 ; Initialize the coverage structure
