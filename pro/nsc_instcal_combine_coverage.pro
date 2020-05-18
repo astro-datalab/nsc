@@ -45,6 +45,22 @@ mmhlat = minmax(hlat)
 ; this larger pixel
 QUERY_POLYGON,nside2,vertex,listpix,nlistpix
 
+; if not 1024 pixels
+if nlistpix lt 1024 then begin
+  print,'Less than 1024 healpix.  Growing the area slightly.'
+  hlon0 = hlon
+  hlat0 = hlat
+  hlon = 1.01*hlon
+  hlat = 1.01*hlat
+  hra0 = hra
+  hdec0 = hdec
+  ROTSPHCEN,hlon,hlat,hcenra,hcendec,hra,hdec,/reverse,/gnomic
+  vertex0 = vertex
+  ANG2VEC,hdec,hra,vertex,/astro
+  QUERY_POLYGON,nside2,vertex,listpix,nlistpix
+  if nlistpix lt 1024 then stop,'Still less than 1024 healpix'
+endif
+
 ; Initialize the coverage structure
 print,'Creating coverage structure for pixel ',strtrim(pix,2)
 covstr = replicate({pix:0L,pix128:long(pix),ra:0.0d0,dec:0.0d0,nobj:0L,coverage:0.0,nexp:0,ucoverage:0.0,unexp:0,udepth:-9999.0,gcoverage:0.0,gnexp:0,gdepth:-9999.0,$
