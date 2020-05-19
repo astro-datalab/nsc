@@ -1313,9 +1313,9 @@ if __name__ == "__main__":
                     print(outfile1+' EXISTS already and REDO not set')
                 else:
                     if redo is True:
-                        retcode = subprocess.call([__file__,str(pix1),version,'--nside',str(hinside),'-r'],shell=False)
+                        retcode = subprocess.call(['python',os.path.abspath(__file__),str(pix1),version,'--nside',str(hinside),'-r'],shell=False)
                     else:
-                        retcode = subprocess.call([__file__,str(pix1),version,'--nside',str(hinside)],shell=False)
+                        retcode = subprocess.call(['python',os.path.abspath(__file__),str(pix1),version,'--nside',str(hinside)],shell=False)
 
             # Load and concatenate all of the files
             print('Combining all of the object catalogs')
