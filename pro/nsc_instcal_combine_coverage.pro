@@ -45,6 +45,31 @@ mmhlat = minmax(hlat)
 ; this larger pixel
 QUERY_POLYGON,nside2,vertex,listpix,nlistpix
 
+; Not 1024 pixels, use python
+if nlistpix ne 1024 then begin
+  print,'Not 1024 healpix.  Using python.'
+  listpix0 = listpix
+  ;; Use python code to get 4096 pixels
+  tempfile = MKTEMP('hp')
+  file_delete,tempfile+'.fits',/allow
+  step = 100
+  pylines = 'import healpy as hp; from astropy.io import fits; import numpy as np;'+$
+            'v=hp.pix2vec('+strtrim(nside,2)+','+strtrim(pix,2)+');'+$
+            'radius=hp.nside2resol('+strtrim(nside,2)+');'+$
+            'pix2=hp.query_disc('+strtrim(nside2,2)+',v,radius=2*radius);'+$
+            'theta,phi=hp.pix2ang('+strtrim(nside2,2)+',pix2);'+$
+            'pix1=hp.ang2pix('+strtrim(nside,2)+',theta,phi);'+$
+            'gd = (pix1 == '+strtrim(pix,2)+');'+$
+            'pix = pix2[gd];'+$
+            "fits.writeto('"+tempfile+".fits'"+',pix)'
+  writeline,tempfile,pylines
+  file_chmod,tempfile,'755'o
+  spawn,['python',tempfile],out,errout,/noshell
+  listpix = MRDFITS(tempfile+'.fits',0,/silent)
+  file_delete,[tempfile,tempfile+'.fits'],/allow
+  nlistpix = n_elements(listpix)
+endif
+
 ; Initialize the coverage structure
 print,'Creating coverage structure for pixel ',strtrim(pix,2)
 covstr = replicate({pix:0L,pix128:long(pix),ra:0.0d0,dec:0.0d0,nobj:0L,coverage:0.0,nexp:0,ucoverage:0.0,unexp:0,udepth:-9999.0,gcoverage:0.0,gnexp:0,gdepth:-9999.0,$
