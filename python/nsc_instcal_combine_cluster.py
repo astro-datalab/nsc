@@ -9,7 +9,7 @@ from astropy.utils.exceptions import AstropyWarning
 from astropy.table import Table, vstack, Column
 from astropy.time import Time
 import healpy as hp
-from dlnpyutils import utils as dln, coords, bindata, db
+from dlnpyutils import utils as dln, coords, bindata, db, job_daemon as jd
 import subprocess
 import time
 from argparse import ArgumentParser
@@ -1092,6 +1092,8 @@ if __name__ == "__main__":
     parser.add_argument('-v','--verbose', action='store_true', help='Verbose output')
     parser.add_argument('-m','--multilevel', action='store_true', help='Break into smaller healpix')
     parser.add_argument('--outdir', type=str, default='', help='Output directory')
+    parser.add_argument('-nm','--nmulti', type=int, nargs=1, default=1, help='Number of jobs')
+
     args = parser.parse_args()
 
     t0 = time.time()
@@ -1106,10 +1108,12 @@ if __name__ == "__main__":
     nside = args.nside
     redo = args.redo
     multilevel = args.multilevel
+    nmulti = dln.first_el(args.nmulti)
     print('KLUDGE!!!  FORCING --MULTILEVEL')
     multilevel = True
     outdir = args.outdir
-
+    
+    tmpdir = '/tmp/'  # default
     # on thing/hulk use
     if (host == "thing") or (host == "hulk"):
         dir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"/"
@@ -1298,24 +1302,46 @@ if __name__ == "__main__":
             allpix = hp.query_polygon(hinside,np.transpose(vecbound))
             print('Pix = '+','.join(allpix.astype(str)))
             outfiles = []
+            # Check if any healpix need to be run/rerun
+            dopix = []
             for i in range(len(allpix)):
                 pix1 = allpix[i]
-                print('')
-                print('########### '+str(i+1)+' '+str(pix1)+' ###########')
-                print('')
                 # check the output file
                 outbase1 = str(parentpix)+'_n'+str(int(hinside))+'_'+str(pix1)
                 subdir1 = str(int(parentpix)//1000)    # use the thousands to create subdirectory grouping
                 outfile1 = outdir+'/'+subdir1+'/'+outbase1+'.fits.gz'
                 outfiles.append(outfile1)
+                if (os.path.exists(outfile1) is False) | redo:
+                    dopix.append(pix1)
+            print(str(len(dopix))+' nside='+str(hinside)+' healpix to run')
 
-                if os.path.exists(outfile1) & (not redo):
-                    print(outfile1+' EXISTS already and REDO not set')
+            # Some healpix to run
+            if len(dopix)>0:
+                # Single process, just use subprocess
+                if nmulti==1:
+                    for i in range(len(dopix)):
+                        pix1 = dopix[i]
+                        print('')
+                        print('########### '+str(i+1)+' '+str(pix1)+' ###########')
+                        print('')
+                        # check the output file
+                        outbase1 = str(parentpix)+'_n'+str(int(hinside))+'_'+str(pix1)
+                        subdir1 = str(int(parentpix)//1000)    # use the thousands to create subdirectory grouping
+                        outfile1 = outdir+'/'+subdir1+'/'+outbase1+'.fits.gz'
+                        if redo is True:
+                            retcode = subprocess.call(['python',os.path.abspath(__file__),str(pix1),version,'--nside',str(hinside),'-r'],shell=False)
+                        else:
+                            retcode = subprocess.call(['python',os.path.abspath(__file__),str(pix1),version,'--nside',str(hinside)],shell=False)
+                # Multiple parallel processes, Running job daemon
                 else:
-                    if redo is True:
-                        retcode = subprocess.call(['python',os.path.abspath(__file__),str(pix1),version,'--nside',str(hinside),'-r'],shell=False)
-                    else:
-                        retcode = subprocess.call(['python',os.path.abspath(__file__),str(pix1),version,'--nside',str(hinside)],shell=False)
+                    cmd = []
+                    for i in range(len(dopix)):
+                        cmd1 = os.path.abspath(__file__)+' '+str(dopix[i])+' '+version+' --nside '+str(hinside)
+                        if redo: cmd1 = cmd1+' -r'
+                        cmd.append(cmd1)
+                    dirs = np.zeros(len(dopix),(np.str,200))
+                    dirs[:] = tmpdir
+                    jobs = jd.job_daemon(cmd,dirs,hyperthread=True,prefix='nsccmb',nmulti=nmulti)
 
             # Load and concatenate all of the files
             print('Combining all of the object catalogs')
