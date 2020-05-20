@@ -702,6 +702,13 @@ def hybridcluster(cat):
     # DBSCAN does not deal with cos(dec), convert to a different projection
     cenra = np.mean(cat['RA'])
     cendec = np.mean(cat['DEC'])
+    # Deal with RA=0 wrap
+    if (np.max(cat['RA'])-np.min(cat['RA']))>100:
+        rr = cat['RA']
+        bb,nbb = dln.where(rr>180)
+        if nbb>0: rr[bb]-=360
+        cenra = np.mean(rr)
+        if cenra<0: cenra+=360
     lon,lat = coords.rotsphcen(cat['RA'],cat['DEC'],cenra,cendec,gnomic=True)
     X1 = np.column_stack((lon,lat))
     err = np.sqrt(cat['RAERR']**2+cat['DECERR']**2)
