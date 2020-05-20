@@ -45,8 +45,13 @@ mmhlat = minmax(hlat)
 ; this larger pixel
 QUERY_POLYGON,nside2,vertex,listpix,nlistpix
 
+; Check that they belong inside this healpix
+PIX2ANG_RING,nside2,listpix,listtheta,listphi
+ANG2PIX_RING,nside,listtheta,listphi,listpix1
+bdpix = where(listpix1 ne pix,nbdpix)
+
 ; Not 1024 pixels, use python
-if nlistpix ne 1024 then begin
+if (nlistpix ne 1024) or (nbdpix gt 0) then begin
   print,'Not 1024 healpix.  Using python.'
   listpix0 = listpix
   ;; Use python code to get 4096 pixels
