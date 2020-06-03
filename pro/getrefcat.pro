@@ -87,8 +87,8 @@ Endif else begin
     if refname eq 'TMASS' then begin
       tablename = 'twomass.psc'
       cols = 'designation,ra as raj2000,dec as dej2000,j_m as jmag,j_cmsig as e_jmag,h_m as hmag,h_cmsig as e_hmag,k_m as kmag,k_cmsig as e_kmag,ph_qual as qflg'
-      server = 'gp04.datalab.noao.edu'
-      ;server = 'gp01.datalab.noao.edu'
+      ;server = 'gp04.datalab.noao.edu'
+      server = 'gp01.datalab.noao.edu'
       ;;server = 'dldb1.sdm.noao.edu'
     endif
     racol = 'ra'
@@ -127,8 +127,8 @@ Endif else begin
     if refname eq 'ALLWISE' then begin
       tablename = 'allwise.source'
       cols = 'ra, dec, w1mpro as w1mag, w1sigmpro as e_w1mag, w2mpro as w2mag, w2sigmpro as e_w2mag'
-      server = 'gp04.datalab.noao.edu'
-      ;server = 'gp01.datalab.noao.edu'
+      ;server = 'gp04.datalab.noao.edu'
+      server = 'gp01.datalab.noao.edu'
     endif
     if refname eq 'ATLAS' then begin
       tablename = 'atlasrefcat2'
