@@ -15,6 +15,8 @@ from argparse import ArgumentParser
 def index_analyze_idstr(dbfile):
     """ Index and analyze idstr database."""
 
+    t0 = time.time()
+
     # Make sure it's a list
     if type(dbfile) is str: dbfile=[dbfile]
 
@@ -41,6 +43,8 @@ def index_analyze_idstr(dbfile):
                 db.createindex(dbfile1,'exposure',table='idstr',unique=False)
             print('Analyzing')
             db.analyzetable(dbfile1,'idstr')
+
+    print('dt = '+str(time.time()-t0)+' sec.')
 
 if __name__ == "__main__":
     parser = ArgumentParser(description='Index and analyze idstr database.')
