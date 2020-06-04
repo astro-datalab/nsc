@@ -7,6 +7,7 @@ import sys
 import numpy as np
 import time
 from dlnpyutils import utils as dln, db
+from astropy.io import fits
 import sqlite3
 import socket
 from argparse import ArgumentParser
@@ -15,7 +16,12 @@ from argparse import ArgumentParser
 def breakup_idstr(dbfile):
     """ Break-up idstr file into separate measid/objectid lists per exposure on /data0."""
 
-    t0 = time.time()
+    t00 = time.time()
+
+    outdir = '/data0/dnidever/nsc/instcal/v3/idstr/'
+
+    # Load the exposures table
+    expcat = fits.getdata('/net/dl2/dnidever/nsc/instcal/v3/lists/nsc_v3_exposure_table.fits.gz',1)
 
     # Make sure it's a list
     if type(dbfile) is str: dbfile=[dbfile]
@@ -24,73 +30,51 @@ def breakup_idstr(dbfile):
 
     # Loop over files
     for i,dbfile1 in enumerate(dbfile):
-        print(str(i)+' '+dbfile1)
+        print(str(i+1)+' '+dbfile1)
         if os.path.exists(dbfile1):
+            t0 = time.time()
             dbbase1 = os.path.basename(dbfile1)[0:-9]  # remove _idstr.db ending
             # Get existing index names for this database
             d = sqlite3.connect(dbfile1, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
             cur = d.cursor()
-            # Get number of rows
-            cur.execute('select count(*) from idstr')
-            nmeas = cur.fetchall()
-            nmeas = nmeas[0][0]
-            # Number of rows per exposure
-            #  on larger db files this can take ~20 sec
-            cur.execute('select exposure,count(measid) from idstr group by exposure')
-            data = cur.fetchall()
-            nexp = len(data)
-            dt = np.dtype([('exposure',np.str,50),('nmeas',int)])
-            expcat = np.zeros(nexp,dtype=dt)
-            expcat[...] = data
-            # Get minimum and maximum rowIDs
-            minrowid = cur.execute('select min(rowid) from idstr').fetchall()[0][0]
-            maxrowid = cur.execute('select max(rowid) from idstr').fetchall()[0][0]
-            # Number of groups
-            ngroups = int(np.ceil(nmeas/500000))
-            rowidpergroup = int(np.ceil((maxrowid-minrowid+1)/ngroups))+1
-            lastmaxrowid = minrowid-1
-            for i in range(ngroups):
-                #thisminrowid = i*rowidpergroup+minrowid
-                #thismaxrowid = (i+1)*rowidpergroup+minrowid
-                thisminrowid = lastmaxrowid+1
-                thismaxrowid = thisminrowid+rowidpergroup
-                if i<(ngroups-1):
-                    data = cur.execute('select rowid,measid,exposure,objectid from idstr where rowid>='+str(thisminrowid)+' and rowid<'+str(thismaxrowid)).fetchall()
-                else:
-                    # last one doesn't not upper limit
-                    data = cur.execute('select rowid,measid,exposure,objectid from idstr where rowid>='+str(thisminrowid)).fetchall()
-                rowid,measid,exposure,objectid = list(zip(*data))
-                eindex = dln.create_index(exposure)
-                # resort by when they appear
-                si = np.argsort(eindex['index'][eindex['lo']])
-                eindex['value'] = eindex['value'][si]
-                eindex['num'] = eindex['num'][si]
-                eindex['lo'] = eindex['lo'][si]
-                eindex['hi'] = eindex['hi'][si]
+            cmd = 'select measid,exposure,objectid from idstr'
+            t1 = time.time()
+            data = cur.execute(cmd).fetchall()
+            print('  '+str(len(data))+' rows read in %5.1f sec. ' % (time.time()-t1))
+            # Break up data into lists
+            measid,exposure,objectid = list(zip(*data))
+            measid = np.array(measid)
+            objectid = np.array(objectid)
+            exposure = np.array(exposure)
+            eindex = dln.create_index(exposure)
+            # Match exposures to exposure catalog
+            ind1,ind2 = dln.match(expcat['EXPOSURE'],eindex['value'])
+            # Loop over exposures and write output files
+            nexp = len(eindex['value'])
+            print('  '+str(nexp)+' exposures')
+            measid_maxlen = np.max(dln.strlen(measid))
+            objectid_maxlen = np.max(dln.strlen(objectid))
+            df = np.dtype([('measid',np.str,measid_maxlen+1),('objectid',np.str,objectid_maxlen+1)])
+            # Loop over the exposures and write out the files
+            for k in range(nexp):
+                if nexp>100:
+                    if k % 100 == 0: print('  '+str(k+1))
+                ind = eindex['index'][eindex['lo'][k]:eindex['hi'][k]+1]
+                cat = np.zeros(len(ind),dtype=df)
+                cat['measid'] = measid[ind]
+                cat['objectid'] = objectid[ind]
+                instcode = expcat['INSTRUMENT'][ind1[k]]
+                dateobs = expcat['DATEOBS'][ind1[k]]
+                night = dateobs[0:4]+dateobs[5:7]+dateobs[8:10]
+                if os.path.exists(outdir+instcode+'/'+night+'/'+eindex['value'][k]) is False:
+                    os.makedirs(outdir+instcode+'/'+night+'/'+eindex['value'][k])
+                outfile = outdir+instcode+'/'+night+'/'+eindex['value'][k]+'/'+eindex['value'][k]+'__'+dbbase1+'.npy'
+                np.save(outfile,cat)
+            print('  dt = %6.1f sec. ' % (time.time()-t0))
+        else:
+            print('  '+dbfile1+' NOT FOUND')
 
-                # Remove last exposure since it might have gotten split across the query breaks
-                #  not on last one
-                if i<(ngroups-1):
-                    old = eindex.copy()
-                    eindex = {'index':old['index'],'value':old['value'][0:-1],
-                              'num':old['num'][0:-1],'lo':old['lo'][0:-1],'hi':old['hi'][0:-1]}
-                    ## DOUBLE-CHECK THAT THIS WORKS!!!
-                    del old
-
-                rowid = np.array(rowid)
-                lastmaxrowid = np.max(rowid[eindex['index'][eindex['hi']]])
-                # Loop over exposures and write output files
-                nexp = len(eindex['value'])
-                df = np.dtype([('measid',np.str,100),('objectid',np.str,100)])
-                for j in range(nexp):
-                    ind = eindex['index'][eindex['lo'][j]:eindex['hi'][j]+1]
-                    cat = np.zeros(len(ind),dtype=df)
-                    cat['measid'] = res['measid'][ind]
-                    cat['objectid'] = res['objectid'][ind]
-                    outfile = '/data0/dnidever/nsc/instcal/v3/tmp/writetest/'+dbbase1+'_'+eindex['value'][j]+'.npy'
-                    np.save(outfile,cat)
-
-    print('dt = '+str(time.time()-t0)+' sec.')
+    print('dt = %6.1f sec.' % (time.time()-t00))
 
 if __name__ == "__main__":
     parser = ArgumentParser(description='Break up idstr into separate lists per exposure.')
