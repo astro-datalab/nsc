@@ -52,6 +52,11 @@ def exposure_update(exposure,redo=False):
         #outdir = edir
         outdir = expdir
 
+        # Check that the directory exists
+        if os.path.exists(expdir) is False:
+            print(expdir+' NOT FOUND')
+            continue
+
         # Check output file
         measfile = outdir+'/'+exp+'_meas.fits'
         if (os.path.exists(measfile+'.gz')) & (redo is False):
