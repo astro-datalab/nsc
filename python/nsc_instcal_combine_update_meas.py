@@ -49,7 +49,8 @@ def exposure_update(exposure,redo=False):
         night = dateobs[0:4]+dateobs[5:7]+dateobs[8:10]
         expdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/'+instcode+'/'+night+'/'+exp
         edir = iddir+instcode+'/'+night+'/'+exp+'/'   # local directory for ID files
-        outdir = edir
+        #outdir = edir
+        outdir = expdir
 
         # Check output file
         measfile = outdir+'/'+exp+'_meas.fits'
@@ -167,7 +168,8 @@ def exposure_update(exposure,redo=False):
             rootLogger.info('WARNING: '+str(nind)+' measurements are missing OBJECTIDs')
         if ((nmeas>=20000) & (nind>20)) | ((nmeas<20000) & (nind>3)):
             rootLogger.info('More missing OBJECTIDs than currently allowed.')
-            raise ValueError('More missing OBJECTIDs than currently allowed.')
+            dln.writelines(outdir+'/'+exp+'_meas.ERROR','')
+            continue
 
         # Output the updated measurement catalog
         #  Writing a single FITS file is much faster than many small ones
