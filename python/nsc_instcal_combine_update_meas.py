@@ -113,6 +113,11 @@ def exposure_update(exposure,redo=False):
             chstr[c] = f
         nchips = len(chstr)
 
+        # Get "good" chips, astrometrically calibrated
+        gdch,ngdch,bdch,nbdch = dln.where(chstr['NGAIAMATCH']>0,comp=True)
+        if nbdch>0:
+            rootLogger.info(str(nbdch)+' chips were not astrometrically calibrated')
+
         measdtype = np.dtype([('MEASID', 'S50'), ('OBJECTID', 'S50'), ('EXPOSURE', 'S50'), ('CCDNUM', '>i2'), ('FILTER', 'S2'), ('MJD', '>f8'), ('X', '>f4'),
                               ('Y', '>f4'), ('RA', '>f8'), ('RAERR', '>f4'), ('DEC', '>f8'), ('DECERR', '>f4'), ('MAG_AUTO', '>f4'), ('MAGERR_AUTO', '>f4'),
                               ('MAG_APER1', '>f4'), ('MAGERR_APER1', '>f4'), ('MAG_APER2', '>f4'), ('MAGERR_APER2', '>f4'), ('MAG_APER4', '>f4'),
@@ -120,15 +125,16 @@ def exposure_update(exposure,redo=False):
                               ('BSEMI', '>f4'), ('BSEMIERR', '>f4'), ('THETA', '>f4'), ('THETAERR', '>f4'), ('FWHM', '>f4'), ('FLAGS', '>i2'), ('CLASS_STAR', '>f4')])
 
         # Load and concatenate the meas catalogs
-        chstr['MEAS_INDEX'] = 0   # keep track of where each chip catalog starts
+        chstr['MEAS_INDEX'] = -1   # keep track of where each chip catalog starts
         count = 0
-        meas = Table(data=np.zeros(int(np.sum(chstr['NMEAS'])),dtype=measdtype))
+        meas = Table(data=np.zeros(int(np.sum(chstr['NMEAS'][gdch])),dtype=measdtype))
         rootLogger.info('Loading and concatenating the chip measurement catalogs')
-        for j in range(nchips):
-            meas1 = Table.read(chstr['MEASFILE'][j].strip(),1)   # load chip meas catalog
+        for j in range(ngdch):
+            jch = gdch[j]
+            meas1 = Table.read(chstr['MEASFILE'][jch].strip(),1)   # load chip meas catalog
             nmeas1 = len(meas1)
             meas[count:count+nmeas1] = meas1
-            chstr['MEAS_INDEX'][j] = count
+            chstr['MEAS_INDEX'][jch] = count
             count += nmeas1
         measid = np.char.array(meas['MEASID']).strip().decode()
         nmeas = len(meas)
@@ -197,7 +203,10 @@ def exposure_update(exposure,redo=False):
         # Create a file saying that the files were updated okay.
         #dln.writelines(expdir+'/'+exp+'_meas.updated','')
         dln.writelines(outdir+'/'+exp+'_meas.updated','')
-
+        # Remove meas.ERROR, if it exists
+        if os.path.exists(outdir+'/'+exp+'_meas.ERROR'):
+            os.remove(outdir+'/'+exp+'_meas.ERROR')
+        
         rootLogger.info('dt = '+str(time.time()-t0)+' sec.')
 
     print('dt = %6.1f sec.' % (time.time()-t00))
@@ -205,11 +214,13 @@ def exposure_update(exposure,redo=False):
 if __name__ == "__main__":
     parser = ArgumentParser(description='Update measid in exposure.')
     parser.add_argument('exposure', type=str, nargs=1, help='Exposure name')
+    parser.add_argument('-r','--redo', action='store_true', help='Redo this exposure')
     args = parser.parse_args()
 
     hostname = socket.gethostname()
     host = hostname.split('.')[0]
     exposure = args.exposure[0]
+    redo = args.redo
 
     # Input is a list
     if exposure[0]=='@':
@@ -221,4 +232,4 @@ if __name__ == "__main__":
             sys.exit()
 
     # Update the measurement files
-    exposure_update(exposure)
+    exposure_update(exposure,redo=redo)
