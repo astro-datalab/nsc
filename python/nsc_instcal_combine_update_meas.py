@@ -40,10 +40,11 @@ def exposure_update(exposure,redo=False):
     print('Updating measid for '+str(len(exposure))+' exposures')
 
     # Loop over files
-    for i,exp in enumerate(exposure):
+    for i in range(len(exposure)):
+        t0 = time.time()
+        exp = expcat['EXPOSURE'][eind1[i]]
         print(str(i+1)+' '+exp)
 
-        t0 = time.time()
         instcode = expcat['INSTRUMENT'][eind1[i]]
         dateobs = expcat['DATEOBS'][eind1[i]]
         night = dateobs[0:4]+dateobs[5:7]+dateobs[8:10]
