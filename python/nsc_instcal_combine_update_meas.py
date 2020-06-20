@@ -16,6 +16,7 @@ from argparse import ArgumentParser
 import logging
 from glob import glob
 import subprocess
+import healpy as hp
 
 def exposure_update(exposure,redo=False):
     """ Update the measurement table using the broken up measid/objectid lists."""
@@ -143,7 +144,26 @@ def exposure_update(exposure,redo=False):
 
 
         # Look for the id files
-        files = glob(edir+exp+'__*.npy')
+        allfiles = glob(edir+exp+'__*.npy')
+        # check for duplicates, single and split into high-res healpix idstr files
+        #  always use the split ones
+        base = [os.path.splitext(os.path.basename(f))[0] for f in allfiles]
+        hfile = [f.split('__')[-1] for f in base]
+        hh = [f.split('_')[0] for f in hfile]  # the healpix portion
+        hindex = dln.create_index(hh)
+        files = []
+        for j in range(len(hindex['value'])):
+            hpix1 = hindex['value'][j]
+            hind = hindex['index'][hindex['lo'][j]:hindex['hi'][j]+1]
+            files1 = np.array(allfiles)[hind]
+            # duplicates, use the split/hires ones
+            if hindex['num'][j]>1:
+                gd = dln.grep(files1,str(hpix1)+'_n',index=True)
+                if len(gd)==0:
+                    raise ValueError('Something is wrong with the idstr files, duplicates')
+                files += list(files1[gd])
+            else:
+                files += list(files1)
         nfiles = len(files)
         rootLogger.info(str(nfiles)+' ID files to load')
 
@@ -171,6 +191,9 @@ def exposure_update(exposure,redo=False):
         if nmatch>0:
             meas['OBJECTID'][ind2] = idcat['objectid'][ind1] 
 
+        if len(ind1) > len(measid):
+            print('There are duplicates!!')
+
         # Checking for missing objectid
         ind,nind = dln.where(np.char.array(meas['OBJECTID']).strip().decode() == '')
         # There can be missing/orphaned measurements at healpix boundaries in crowded
@@ -180,7 +203,15 @@ def exposure_update(exposure,redo=False):
             rootLogger.info('WARNING: '+str(nind)+' measurements are missing OBJECTIDs')
         if ((nmeas>=20000) & (nind>20)) | ((nmeas<20000) & (nind>3)):
             rootLogger.info('More missing OBJECTIDs than currently allowed.')
-            dln.writelines(outdir+'/'+exp+'_meas.ERROR','')
+            #import pdb; pdb.set_trace()
+            hpix = hp.ang2pix(128,meas['RA'][ind],meas['DEC'][ind],lonlat=True)
+            hindex = dln.create_index(hpix)
+            out = []
+            for i in range(len(hindex['value'])):
+                out.append(str(hindex['value'][i])+' ('+str(hindex['num'][i])+')')
+            rootLogger.info('healpix of missing measurements: '+', '.join(out))
+            outtxt = [str(nind)+' missing IDs','healpix of missing measurements: '+', '.join(out)]
+            dln.writelines(outdir+'/'+exp+'_meas.ERROR',outtxt)
             continue
 
         # Output the updated measurement catalog
