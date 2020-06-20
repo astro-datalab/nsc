@@ -38,8 +38,11 @@ def get_missingids(exposure):
     eind1,eind2 = dln.match(expcat['EXPOSURE'],exposure)
     
     nexp = len(exposure)
-    outstr = np.zeros(nexp,np.dtype([('exposure',(np.str,100)),('nmissing',int)]))
+    outstr = np.zeros(nexp,np.dtype([('exposure',(np.str,100)),('nmeas',int),('nmatches',int),('nduplicates',int),('nmissing',int)]))
     outstr['exposure'] = exposure
+    outstr['nmeas'] = -1
+    outstr['nmatches'] = -1
+    outstr['nduplicates'] = -1
     outstr['nmissing'] = -1
 
     # Loop over files
@@ -67,6 +70,33 @@ def get_missingids(exposure):
             logfile = logfile[0]
         # Read in logfile
         lines = dln.readlines(logfile)
+        # Number of measurements
+        measind = dln.grep(lines,'measurements',index=True)
+        if len(measind)>0:
+            line1 = lines[measind[0]]
+            lo = line1.find(']')
+            hi = line1.find('measurements')
+            nmeas = int(line1[lo+3:hi-1])
+            outstr['nmeas'][i] = nmeas
+        else:
+            nmeas = -1
+        # Number of matches
+        matchind = dln.grep(lines,'Matches for',index=True)
+        if len(matchind)>0:
+            line1 = lines[matchind[0]]
+            lo = line1.find('for')
+            hi = line1.find('measurements')
+            nmatches = int(line1[lo+4:hi-1])
+            outstr['nmatches'][i] = nmatches
+        else:
+            nmatches = -1
+        # Check for duplicates
+        if (len(measind)>0) & (len(matchind)>0):
+            ndup = np.maximum(nmatches-nmeas,0)
+            outstr['nduplicates'][i] = ndup
+        else:
+            ndup = -1
+        # Number of missing IDs
         badind = dln.grep(lines,'WARNING:',index=True)
         nbadind = len(badind)
         # Some missing objectids
@@ -75,10 +105,12 @@ def get_missingids(exposure):
             lo = badline.find('WARNING:')
             hi = badline.find('measurements')
             nmissing = int(badline[lo+9:hi-1])
-            print('  '+str(nmissing)+' missing')
             outstr['nmissing'][i] = nmissing
         else:
-            outstr['nmissing'][i] = 0
+            nmissing = 0
+            outstr['nmissing'][i] = nmissing
+
+        print('  Nmeas='+str(nmeas)+' Nmatches='+str(nmatches)+' Nduplicates='+str(ndup)+' Nmissing='+str(nmissing))
 
     return outstr
 
