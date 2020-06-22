@@ -39,7 +39,7 @@ def get_missingids(exposure):
     
     nexp = len(exposure)
     outstr = np.zeros(nexp,np.dtype([('exposure',(np.str,100)),('nmeas',int),('nmatches',int),('nduplicates',int),('nmissing',int)]))
-    outstr['exposure'] = exposure
+    #outstr['exposure'] = exposure
     outstr['nmeas'] = -1
     outstr['nmatches'] = -1
     outstr['nduplicates'] = -1
@@ -50,6 +50,7 @@ def get_missingids(exposure):
         t0 = time.time()
         exp = expcat['EXPOSURE'][eind1[i]]
         print(str(i+1)+' '+exp)
+        outstr['exposure'][i] = exp
 
         instcode = expcat['INSTRUMENT'][eind1[i]]
         dateobs = expcat['DATEOBS'][eind1[i]]
