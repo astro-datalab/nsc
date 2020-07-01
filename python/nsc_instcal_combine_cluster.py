@@ -826,8 +826,9 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
         for j in range(len(chmeta)):
             # Check that this chip was astrometrically calibrated
             #   and falls in to HEALPix region
-            if chmeta['ngaiamatch'][j] == 0:
-                if verbose: print('This chip was not astrometrically calibrate')
+            # Also check for issues with my astrometric corrections
+            if (chmeta['ngaiamatch'][j] == 0) | (np.max(np.abs(chmeta['ra_coef'][j]))>1) | (np.max(np.abs(chmeta['dec_coef'][j]))>1):
+                if verbose: print('This chip was not astrometrically calibrated or has astrometric issues')
 
             # Check that this overlaps the healpix region
             inside = True
