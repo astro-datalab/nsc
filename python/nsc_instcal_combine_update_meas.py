@@ -38,6 +38,10 @@ def exposure_update(exposure,redo=False):
     # Match exposures to exposure catalog
     eind1,eind2 = dln.match(expcat['EXPOSURE'],exposure)
 
+    if len(eind1)==0:
+        print('No exposures matched to exposure table')
+        sys.exit()
+
     print('Updating measid for '+str(len(exposure))+' exposures')
 
     # Loop over files
@@ -116,7 +120,19 @@ def exposure_update(exposure,redo=False):
         nchips = len(chstr)
 
         # Get "good" chips, astrometrically calibrated
-        gdch,ngdch,bdch,nbdch = dln.where(chstr['NGAIAMATCH']>0,comp=True)
+        astokay = np.zeros(nchips,bool)
+        for k in range(nchips):
+            # Check that this chip was astrometrically calibrated
+            #   and falls in to HEALPix region
+            # Also check for issues with my astrometric corrections
+            ra_coef = np.array([chstr['ra_coef1'][k],chstr['ra_coef2'][k],chstr['ra_coef3'][k],chstr['ra_coef4'][k]])
+            dec_coef = np.array([chstr['dec_coef1'][k],chstr['dec_coef2'][k],chstr['dec_coef3'][k],chstr['dec_coef4'][k]])
+            if (chstr['ngaiamatch'][k] == 0) |(np.max(np.abs(ra_coef))>1) | (np.max(np.abs(dec_coef))>1):
+                astokay[k] = False
+            else:
+                astokay[k] = True
+        #gdch,ngdch,bdch,nbdch = dln.where(chstr['NGAIAMATCH']>0,comp=True)
+        gdch,ngdch,bdch,nbdch = dln.where(astokay==True,comp=True)
         if nbdch>0:
             rootLogger.info(str(nbdch)+' chips were not astrometrically calibrated')
 
@@ -185,7 +201,9 @@ def exposure_update(exposure,redo=False):
         rootLogger.info('IDs for '+str(len(idcat))+' measurements')
 
         # Match up with measid
-        ind1,ind2 = dln.match(idcat['measid'],measid)
+        idcat_measid = np.char.array(idcat['measid']).strip()
+        if isinstance(idcat_measid[0],bytes): idcat_measid = idcat_measid.decode()
+        ind1,ind2 = dln.match(idcat_measid,measid)
         nmatch = len(ind1)
         rootLogger.info('Matches for '+str(nmatch)+' measurements')
         if nmatch>0:
