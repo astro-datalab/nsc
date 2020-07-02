@@ -125,9 +125,7 @@ def exposure_update(exposure,redo=False):
             # Check that this chip was astrometrically calibrated
             #   and falls in to HEALPix region
             # Also check for issues with my astrometric corrections
-            ra_coef = np.array([chstr['ra_coef1'][k],chstr['ra_coef2'][k],chstr['ra_coef3'][k],chstr['ra_coef4'][k]])
-            dec_coef = np.array([chstr['dec_coef1'][k],chstr['dec_coef2'][k],chstr['dec_coef3'][k],chstr['dec_coef4'][k]])
-            if (chstr['ngaiamatch'][k] == 0) |(np.max(np.abs(ra_coef))>1) | (np.max(np.abs(dec_coef))>1):
+            if (chstr['NGAIAMATCH'][k] == 0) |(np.max(np.abs(chstr['RACOEF'][k]))>1) | (np.max(np.abs(chstr['DECCOEF'][k]))>1):
                 astokay[k] = False
             else:
                 astokay[k] = True
@@ -209,7 +207,7 @@ def exposure_update(exposure,redo=False):
         if nmatch>0:
             meas['OBJECTID'][ind2] = idcat['objectid'][ind1] 
 
-        if len(ind1) > len(measid):
+        if (len(ind1) > len(measid)) | (len(idcat) > len(meas)):
             print('There are duplicates!!')
 
         # Checking for missing objectid
@@ -221,7 +219,6 @@ def exposure_update(exposure,redo=False):
             rootLogger.info('WARNING: '+str(nind)+' measurements are missing OBJECTIDs')
         if ((nmeas>=20000) & (nind>20)) | ((nmeas<20000) & (nind>3)):
             rootLogger.info('More missing OBJECTIDs than currently allowed.')
-            #import pdb; pdb.set_trace()
             hpix = hp.ang2pix(128,meas['RA'][ind],meas['DEC'][ind],lonlat=True)
             hindex = dln.create_index(hpix)
             out = []
