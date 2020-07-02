@@ -827,8 +827,10 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
             # Check that this chip was astrometrically calibrated
             #   and falls in to HEALPix region
             # Also check for issues with my astrometric corrections
+            astokay = True
             if (chmeta['ngaiamatch'][j] == 0) | (np.max(np.abs(chmeta['racoef'][j]))>1) | (np.max(np.abs(chmeta['deccoef'][j]))>1):
                 if verbose: print('This chip was not astrometrically calibrated or has astrometric issues')
+                astokay = False
 
             # Check that this overlaps the healpix region
             inside = True
@@ -847,7 +849,7 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                 print(chfile+' NOT FOUND')
 
             # Load this one
-            if (chfile_exists is True) and (inside is True) and (chmeta['ngaiamatch'][j]>1):
+            if (chfile_exists is True) and (inside is True) and (astokay is True):
                 # Load the chip-level catalog
                 cat1 = fits.getdata(chfile,1)
                 ncat1 = len(cat1)
