@@ -1502,6 +1502,15 @@ if __name__ == "__main__":
 
             dt = time.time()-t0
             print('dt = '+str(dt)+' sec.')
+
+            print('Breaking-up IDSTR information')
+            dbfiles_idstr = []
+            for i in range(len(allpix)):
+                outfile1 = outfiles[i]
+                dbfile_idstr1 = outfile1.replace('.fits.gz','_idstr.db')
+                dbfiles_idstr.append(dbfile_idstr1)
+            breakup_idstr(dbfiles_idstr)            
+
             sys.exit()
 
 
@@ -2007,5 +2016,6 @@ if __name__ == "__main__":
     gc.collect()
 
     # Breaking up idstr information
-    print('Breaking-up IDSTR information')
-    breakup_idstr(dbfile_idstr)
+    if nside==128:
+        print('Breaking-up IDSTR information')
+        breakup_idstr(dbfile_idstr)
