@@ -38,10 +38,13 @@ def get_missingids(exposure):
     eind1,eind2 = dln.match(expcat['EXPOSURE'],exposure)
     
     nexp = len(exposure)
-    outstr = np.zeros(nexp,np.dtype([('exposure',(np.str,100)),('nmeas',int),('nmatches',int),('nduplicates',int),('nmissing',int)]))
+    outstr = np.zeros(nexp,np.dtype([('exposure',(np.str,100)),('mtime',np.float64),('nmeas',int),
+                                     ('nids',int),('nmatches',int),('nduplicates',int),('nmissing',int)]))
     #outstr['exposure'] = exposure
+    outstr['mtime'] = -1
     outstr['nmeas'] = -1
     outstr['nmatches'] = -1
+    outstr['nids'] = -1
     outstr['nduplicates'] = -1
     outstr['nmissing'] = -1
 
@@ -69,6 +72,7 @@ def get_missingids(exposure):
             logfile = logfile[si[0]]
         else:
             logfile = logfile[0]
+        outstr['mtime'][i] = os.path.getmtime(logfile)
         # Read in logfile
         lines = dln.readlines(logfile)
         # Number of measurements
@@ -81,6 +85,16 @@ def get_missingids(exposure):
             outstr['nmeas'][i] = nmeas
         else:
             nmeas = -1
+        # Number in idcat, "IDs for XX measurements"
+        idsind = dln.grep(lines,'IDs for',index=True)
+        if len(idsind)>0:
+            line1 = lines[idsind[0]]
+            lo = line1.find('for')
+            hi = line1.find('measurements')
+            nids = int(line1[lo+4:hi-1])
+            outstr['nids'][i] = nids
+        else:
+            nids = -1        
         # Number of matches
         matchind = dln.grep(lines,'Matches for',index=True)
         if len(matchind)>0:
@@ -92,8 +106,10 @@ def get_missingids(exposure):
         else:
             nmatches = -1
         # Check for duplicates
-        if (len(measind)>0) & (len(matchind)>0):
-            ndup = np.maximum(nmatches-nmeas,0)
+        #if (len(measind)>0) & (len(matchind)>0):
+        #    ndup = np.maximum(nmatches-nmeas,0)
+        if (len(measind)>0) & (len(idsind)>0):
+            ndup = np.maximum(nids-nmeas,0)
             outstr['nduplicates'][i] = ndup
         else:
             ndup = -1
@@ -111,7 +127,7 @@ def get_missingids(exposure):
             nmissing = 0
             outstr['nmissing'][i] = nmissing
 
-        print('  Nmeas='+str(nmeas)+' Nmatches='+str(nmatches)+' Nduplicates='+str(ndup)+' Nmissing='+str(nmissing))
+        print('  Nmeas='+str(nmeas)+' Nids='+str(nids)+' Nmatches='+str(nmatches)+' Nduplicates='+str(ndup)+' Nmissing='+str(nmissing))
 
     return outstr
 
