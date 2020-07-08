@@ -37,6 +37,8 @@ def exposure_update(exposure,redo=False):
 
     # Match exposures to exposure catalog
     eind1,eind2 = dln.match(expcat['EXPOSURE'],exposure)
+    nmatch = len(eind1)
+    print(str(nmatch)+' matches for '+str(len(exposure))+' input exposures')
 
     if len(eind1)==0:
         print('No exposures matched to exposure table')
@@ -208,7 +210,7 @@ def exposure_update(exposure,redo=False):
             meas['OBJECTID'][ind2] = idcat['objectid'][ind1] 
 
         if (len(ind1) > len(measid)) | (len(idcat) > len(meas)):
-            print('There are duplicates!!')
+            rootLogger.info('There are '+str(len(idcat)-len(meas))+' duplicates!!')
 
         # Checking for missing objectid
         ind,nind = dln.where(np.char.array(meas['OBJECTID']).strip().decode() == '')
@@ -217,17 +219,17 @@ def exposure_update(exposure,redo=False):
         # At this point, let's allow this to pass
         if nind>0:
             rootLogger.info('WARNING: '+str(nind)+' measurements are missing OBJECTIDs')
-        if ((nmeas>=20000) & (nind>20)) | ((nmeas<20000) & (nind>3)):
-            rootLogger.info('More missing OBJECTIDs than currently allowed.')
-            hpix = hp.ang2pix(128,meas['RA'][ind],meas['DEC'][ind],lonlat=True)
-            hindex = dln.create_index(hpix)
-            out = []
-            for i in range(len(hindex['value'])):
-                out.append(str(hindex['value'][i])+' ('+str(hindex['num'][i])+')')
-            rootLogger.info('healpix of missing measurements: '+', '.join(out))
-            outtxt = [str(nind)+' missing IDs','healpix of missing measurements: '+', '.join(out)]
-            dln.writelines(outdir+'/'+exp+'_meas.ERROR',outtxt)
-            continue
+        #if ((nmeas>=20000) & (nind>20)) | ((nmeas<20000) & (nind>3)):
+        #    rootLogger.info('More missing OBJECTIDs than currently allowed.')
+        #    hpix = hp.ang2pix(128,meas['RA'][ind],meas['DEC'][ind],lonlat=True)
+        #    hindex = dln.create_index(hpix)
+        #    out = []
+        #    for i in range(len(hindex['value'])):
+        #        out.append(str(hindex['value'][i])+' ('+str(hindex['num'][i])+')')
+        #    rootLogger.info('healpix of missing measurements: '+', '.join(out))
+        #    outtxt = [str(nind)+' missing IDs','healpix of missing measurements: '+', '.join(out)]
+        #    dln.writelines(outdir+'/'+exp+'_meas.ERROR',outtxt)
+        #    continue
 
         # Output the updated measurement catalog
         #  Writing a single FITS file is much faster than many small ones
