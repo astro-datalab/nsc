@@ -67,7 +67,11 @@ def breakup_idstr(dbfile):
                 dateobs = expcat['DATEOBS'][ind1[k]]
                 night = dateobs[0:4]+dateobs[5:7]+dateobs[8:10]
                 if os.path.exists(outdir+instcode+'/'+night+'/'+eindex['value'][k]) is False:
-                    os.makedirs(outdir+instcode+'/'+night+'/'+eindex['value'][k])
+                    # Sometimes this crashes because another process is making the directory at the same time
+                    try:
+                        os.makedirs(outdir+instcode+'/'+night+'/'+eindex['value'][k])
+                    except:
+                        pass
                 outfile = outdir+instcode+'/'+night+'/'+eindex['value'][k]+'/'+eindex['value'][k]+'__'+dbbase1+'.npy'
                 np.save(outfile,cat)
             print('  dt = %6.1f sec. ' % (time.time()-t0))

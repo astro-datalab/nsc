@@ -1468,9 +1468,9 @@ if __name__ == "__main__":
                 ret = subprocess.call(['gzip',outfile1fits])    # compress final catalog
 
                 if allobj is None:
-                    allobj = obj1
+                    allobj = obj1.copy()
                 else:
-                    allobj = np.hstack((allobj,obj1))
+                    allobj = np.hstack((allobj,obj1.copy()))
                 nobjects.append(nobj1)
                 totobjects += nobj1
 
