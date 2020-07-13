@@ -149,7 +149,10 @@ def exposure_update(exposure,redo=False):
         rootLogger.info('Loading and concatenating the chip measurement catalogs')
         for j in range(ngdch):
             jch = gdch[j]
-            meas1 = Table.read(chstr['MEASFILE'][jch].strip(),1)   # load chip meas catalog
+            chfile = chstr['MEASFILE'][jch].strip()
+            if chfile=='': continue
+            #print(str(j+1)+' Loading '+chfile)
+            meas1 = Table.read(chfile,1)   # load chip meas catalog    
             nmeas1 = len(meas1)
             meas[count:count+nmeas1] = meas1
             chstr['MEAS_INDEX'][jch] = count
