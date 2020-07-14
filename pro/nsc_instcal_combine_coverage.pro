@@ -94,6 +94,13 @@ if file_test(objfile) eq 0 then begin
   goto,SAVEFILE
 endif
 
+;; Check that it's not blank
+head0 = headfits(objfile,exten=1,errmsg=errmsg)
+if errmsg ne '' then begin
+  print,objfile,' IS BLANK'
+  goto,SAVEFILE
+endif
+
 ; Load the list of exposures
 expstr = MRDFITS(objfile,1,/silent)
 nexpstr = n_elements(expstr)
