@@ -9,7 +9,7 @@ endif
 
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
-dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
+dir = dldir+'dnidever/nsc/instcal/'+version+'/'
 radeg = 180.0d0 / !dpi
 
 t0 = systime(1)
@@ -25,7 +25,7 @@ list.instrument = strtrim(list.instrument,2)
 list.filter = strtrim(list.filter,2)
 
 ;; Chip offsets
-chipoff = mrdfits(dldir+'users/dnidever/nsc/instcal/decam_chip_xyoff.fits',1)
+chipoff = mrdfits(dldir+'dnidever/nsc/instcal/decam_chip_xyoff.fits',1)
 
 ; Load all the summary/metadata files
 expstr = replicate({expdir:'',instrument:'',pix:0L,metafile:'',metadate:0LL,success:0,file:'',wtfile:'',maskfile:'',base:'',expnum:'',ra:0.0d0,dec:0.0d0,$
@@ -59,6 +59,8 @@ expstr[ind1].exptime = explist[ind2].exposure
 expstr[ind1].dateobs = explist[ind2].date_obs
 expstr[ind1].mjd = explist[ind2].mjd_obs
 expstr[ind1].plver = explist[ind2].plver
+;; change names from /dl1 to /dl2
+expstr.expdir = repstr(expstr.expdir,'/dl1/users/','/dl2/')
 
 ;; Match to MEAS SUMMARY FILE
 meas = mrdfits(dir+'lists/nsc_measure_summary.fits',1)
@@ -73,7 +75,7 @@ expstr[ind2].meas_chip1date = meas[ind1].chip1date
 expstr[ind2].meas_logdate = meas[ind1].logdate
 
 ;; Chip structure
-chstr = replicate({expdir:'',instrument:'',success:0,filename:'',ccdnum:0L,nsources:0L,cenra:999999.0d0,cendec:999999.0d0,$
+chstr = replicate({expdir:'',instrument:'',success:0,filename:'',ccdnum:0L,nsources:0L,nmeas:0L,cenra:999999.0d0,cendec:999999.0d0,$
                    ngaiamatch:0L,ngoodgaiamatch:0L,rarms:999999.0,rastderr:999999.0,racoef:dblarr(4),decrms:999999.0,$
                    decstderr:999999.0,deccoef:dblarr(4),vra:dblarr(4),vdec:dblarr(4),zpterm:999999.0,$
                    zptermerr:999999.0,nrefmatch:0L,depth95:99.99,depth10sig:99.99},nlist*61)
@@ -91,7 +93,8 @@ for i=0,nlist-1 do begin
   endcase
 
   metafile = expstr[i].expdir+'/'+base+'_meta.fits'
-  lo = strpos(metafile,'/dl1')
+  ;lo = strpos(metafile,'/dl1')
+  lo = strpos(metafile,'/dl2')
   metafile = dldir + strmid(metafile,lo+5)
   expstr[i].metafile = metafile
   if file_test(metafile) eq 1 then begin
@@ -187,7 +190,7 @@ for i=0,nlist-1 do begin
       endif
     endif
   endelse  ; no metafile
-stop
+;stop
 endfor
 ; Trim CHSTR structure
 chstr = chstr[0:chcnt-1]
