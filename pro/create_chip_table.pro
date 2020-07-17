@@ -10,9 +10,10 @@ endif
 ; Combine all of the data
 NSC_ROOTDIRS,dldir,mssdir,localdir,longhost
 host = first_el(strsplit(longhost,'.',/extract))
-dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
-if host eq 'nidevermacbookpro' then listdir=dldir else listdir = dir+'lists/'
-cmbdir = dir +'combine/'
+dir = dldir+'dnidever/nsc/instcal/'+version+'/'
+if host eq 'nidevermacbookpro' then listdir=dldir else listdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/lists/'
+;cmbdir = dir +'combine/'
+cmbdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combine/'
 
 ; exposures, EXPOSURE_mets.fits[1], nsc_calibrate_summary.fits
 ;     -use the nsc_healpix_list.fits file to figure out which exposures passed the cut
@@ -64,7 +65,7 @@ index = MRDFITS(listdir+'nsc_instcal_combine_healpix_list.fits.gz',2)
 ; I need to add the EXPSTR index number to the HEALSTR structure
 
 ; Final columns
-tags = ['instrument', 'exposure','expnum','ccdnum','ra','dec','dateobs','mjd','filter','exptime','airmass','nsources','fwhm','rarms','rastderr',$
+tags = ['instrument', 'exposure','expnum','ccdnum','ra','dec','dateobs','mjd','filter','exptime','airmass','nmeas','fwhm','rarms','rastderr',$
         'ra_coef1','ra_coef2','ra_coef3','ra_coef4','decrms','decstderr','dec_coef1','dec_coef2','dec_coef3','dec_coef4','ebv','vertex_ra1','vertex_ra2',$
         'vertex_ra3','vertex_ra4','vertex_dec1','vertex_dec2','vertex_dec3','vertex_dec4','ngaiamatch','zpterm','zptermerr','nrefmatch','chipzpterm',$
         'chipzptermerr','chipnrefmatch','depth95','depth10sig']
@@ -97,7 +98,9 @@ chipstr.vertex_dec4 = chsum.vdec[3]
 chipstr.chipzpterm = chsum.zpterm
 chipstr.chipzptermerr = chsum.zptermerr
 chipstr.chipnrefmatch = chsum.nrefmatch
-chipstr.nsources = 0
+;chipstr.nsources = 0
+
+;stop
 
 ; need exposure, expnum, filter, mjd, dateobs, ebv, fwhm, exptime, airmass
 
@@ -132,6 +135,25 @@ for i=0,nexpsum-1 do begin
   chipstr[chind].zptermerr = expsum[i].zptermerr
   chipstr[chind].nrefmatch = expsum[i].nrefmatch
 endfor
+
+stop
+
+; Cut out any chips with NO sources or bad astrometry
+racoefmax = max(abs([[chipstr.ra_coef1],[chipstr.ra_coef2],[chipstr.ra_coef3],[chipstr.ra_coef4]]),dim=2)
+deccoefmax = max(abs([[chipstr.dec_coef1],[chipstr.dec_coef2],[chipstr.dec_coef3],[chipstr.dec_coef4]]),dim=2)
+bdchip = where(chipstr.nmeas eq 0 or chipstr.ngaiamatch eq 0 or (racoefmax gt 1 or deccoefmax gt 1),nbdchip)
+print,strtrim(nbdchip,2),' chips with NO measurements or bad astrometry'
+; 163548
+REMOVE,bdexp,chipstr
+
+; save the final file
+;MWRFITS,chipstr,dir+'lists/nsc_'+version+'_chip_table.fits',/create
+;spawn,['gzip','-f',dir+'lists/nsc_'+version+'_chip_table.fits'],/noshell
+
+stop
+
+
+
 
 ; Load all of the CHIPSUM files
 chipsumfiles = FILE_SEARCH(cmbdir+'chipsum/*/*_chipsum.fits',count=nchipsumfiles)
@@ -200,7 +222,7 @@ print,strtrim(nbdchip,2),' chips with NO sources'
 ;REMOVE,bdexp,chipstr
 
 ; save the final file
-;MWRFITS,chipstr,dir+'lists/nsc_instcal_chip.fits',/create
+;MWRFITS,chipstr,dir+'lists/nsc_'+version+'_chip_table.fits',/create
 
 stop
 
