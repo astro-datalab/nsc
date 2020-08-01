@@ -10,9 +10,10 @@ endif
 ; Combine all of the data
 NSC_ROOTDIRS,dldir,mssdir,localdir,longhost
 host = first_el(strsplit(longhost,'.',/extract))
-dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
-if host eq 'nidevermacbookpro' then listdir=dldir else listdir = dir+'lists/'
-cmbdir = dir +'combine/'
+dir = dldir+'dnidever/nsc/instcal/'+version+'/'
+if host eq 'nidevermacbookpro' then listdir=dldir else listdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/lists/'
+;cmbdir = dir +'combine/'
+cmbdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combine/'
 
 ; exposures, EXPOSURE_mets.fits[1], nsc_calibrate_summary.fits
 ;     -use the nsc_healpix_list.fits file to figure out which exposures passed the cut
@@ -29,14 +30,15 @@ b = where(strmid(sexpdir,0,4) ne '/net',nb)
 if nb gt 0 then sexpdir[b]='/net'+sexpdir[b]
 
 ; Load the final list of combine exposures
-healstr = MRDFITS(listdir+'nsc_instcal_combine_healpix_list.fits',1)
+healstr = MRDFITS(listdir+'nsc_instcal_combine_healpix_list.fits.gz',1)
 healstr.file = strtrim(healstr.file,2)
 healstr.base = strtrim(healstr.base,2)
-index = MRDFITS(listdir+'nsc_instcal_combine_healpix_list.fits',2)
+index = MRDFITS(listdir+'nsc_instcal_combine_healpix_list.fits.gz',2)
 ; Get unique exposure
 ui = uniq(healstr.file,sort(healstr.file))
 uhstr = healstr[ui]
 hexpdir = file_dirname(uhstr.file)+'/'
+hexpdir = repstr(hexpdir,'/dl1/users/','/dl2/')
 b = where(strmid(hexpdir,0,4) ne '/net',nb)
 if nb gt 0 then hexpdir[b]='/net'+hexpdir[b]
 
@@ -49,7 +51,7 @@ nexp = nmatch
 
 
 ; Final columns
-tags = ['instrument', 'exposure','expnum','ra','dec','dateobs','mjd','filter','exptime','airmass','nsources','fwhm','nchips','rarms','rastderr',$
+tags = ['instrument', 'exposure','expnum','ra','dec','dateobs','mjd','filter','exptime','airmass','nmeas','fwhm','nchips','rarms','rastderr',$
         'decrms','decstderr','ebv','ngaiamatch','zptype','zpterm','zptermerr','zptermsig','nrefmatch','depth95','depth10sig']
 types = [7,7,3,5,5,7,5,7,4,4,3,4,2,4,4,4,4,4,3,2,4,4,4,3,4,4]
 ; ngoodgaiamatch, ngoodrefmatch
@@ -59,7 +61,31 @@ for i=1,n_elements(tags)-1 do schema=create_struct(schema,tags[i],fix('',type=ty
 expstr = REPLICATE(schema,nexp)
 STRUCT_ASSIGN,fsum,expstr       ; copy over information
 expstr.exposure = fsum.base
-expstr.nsources = 0
+;expstr.nsources = 0
+
+
+;; Update the number of chips from the chips table
+;; this takes care of chips that have no measurements or bad
+;; astrometry
+chipstr = mrdfits(listdir+'/nsc_'+version+'_chip_table.fits.gz',1)
+chipstr.exposure = strtrim(chipstr.exposure,2)
+expindex = create_index(chipstr.exposure)
+MATCH,expstr.exposure,expindex.value,ind1,ind2,/sort,count=nmatch
+expstr[ind1].nchips = expindex.num[ind2]
+;; Update NMEAS and NGAIAMATCH
+for i=0,n_elements(expstr)-1 do begin
+  ind = expindex.index[expindex.lo[ind2[i]]:expindex.hi[ind2[i]]]
+  expstr[ind1[i]].nmeas = total(chipstr[ind].nmeas,/int)
+  expstr[ind1[i]].ngaiamatch = total(chipstr[ind].ngaiamatch,/int)
+endfor
+
+
+;mwrfits,expstr,listdir+'/nsc_'+version+'_exposure_table.fits',/create
+;spawn,['gzip','-f',listdir+'/nsc_'+version+'_exposure_table.fits'],/noshell
+
+stop
+
+
 
 ; Get list of pix for each exposure
 indhealstr = l64indgen(n_elements(healstr))
