@@ -18,101 +18,140 @@ import logging
 from glob import glob
 import subprocess
 import healpy as hp
+import tempfile
+import psycopg2 as pq
+
+def get_meas(pix):
+    """ Get the measurements for a particular healpix."""
+    # objid, ra, raerr, dec, decerr, mjd
+
+    connection = pq.connect(user="dlquery",host="db01.datalab.noao.edu",
+                            password="",port = "5432",database = "tapdb")
+    cur = connection.cursor()
+
+    cmd = """SELECT m.objectid,m.ra,m.raerr,m.dec,m.decerr,m.mjd from nsc_dr2.meas as m join
+             nsc_dr2.object as obj on m.objectid=obj.objectid where obj.pix={0};""".format(pix)
+
+    cur.execute(cmd)
+    data = cur.fetchall()
+    # Convert to numpy structured array
+    dtype = np.dtype([('objectid',np.str,50),('ra',np.float64),('raerr',float),
+                      ('dec',np.float64),('decerr',float),('mjd',np.float64)])
+    meas = np.zeros(len(data),dtype=dtype)
+    meas[...] = data
+    del(data)
+
+    cur.close()
+    connection.close()
+
+    return meas
+
 
 def fix_pms(pix):
-    """ Correct the proper motions in the healpix object catalogs."""
+    """ Correct the proper motions in the healpix object catalog."""
 
     t00 = time.time()
     hostname = socket.gethostname()
     host = hostname.split('.')[0]
 
     version = 'v3'
+    radeg = np.float64(180.00) / np.pi
 
-    # Make sure it's a list
-    if type(pix) is str: pix=[pix]
+    hdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combine/'+str(int(pix)//1000)+'/'
+    objfile = hdir+str(pix)+'.fits.gz'
+    outfile = hdir+str(pix)+'_pmcorr.fits'
+    
+    print('Correcting proper motions for '+str(pix))
 
-    print('Correcting PMs for '+str(len(pix))+' HEALPix')
+    # Check that the object file exists
+    if os.path.exists(objfile) is False:
+        print(objfile+' NOT FOUND')
+        return
 
-    # Loop over files
-    for i in range(len(pix)):
-        t0 = time.time()
-        pix1 = pix[i]
-        print(str(i+1)+' '+str(pix1))
+    # Check fixed file  
+    if os.path.exists(outfile+'.gz') == True:
+        print(str(pix)+' already fixed')
+        return
 
-        hdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combin/'+str(int(pix1)//1000))+'/'
-        objfile = hdir+str(pix1)+'.fits.gz'
+    # Load the object file
+    meta = fits.getdata(objfile,1)
+    obj = fits.getdata(objfile,2)
+    nobj = len(obj)
+    print(str(nobj)+' objects')
 
-        # Check that the object file exists
-        if os.path.exists(objfile) is False:
-            print(objfile+' NOT FOUND')
-            return
+    # Get the measurements
+    meas = get_meas(pix)
+    nmeas = len(meas)
+    print('Retrieved '+str(nmeas)+' measurements')
 
-        # Check fixed file
-        fixedfile = hdir+str(pix1)+'.fixed'
-        if os.path.exists(fixedfile) is True:
-            print(str(pix1)+' already fixed')
-            continue
+    idindex = dln.create_index(meas['objectid'])
+    # Not all matched
+    if len(idindex['value']) != nobj:
+        print('Number of unique OBJECTIDs in object and meas catalogs do not match')
+        return
+    ind1,ind2 = dln.match(obj['objectid'],idindex['value'])
+    # Not all matched
+    if len(ind1) != nobj:
+        print('Some objects are missing measurements')
+        return
+    # sort by object index
+    si = np.argsort(ind1)
+    ind1 = ind1[si]
+    ind2 = ind2[si]
 
-        # Copy the object file to a temporary file while we're working on it
-        tempfile = objfile = hdir+str(pix1)+'_temp.fits.gz'
-        if os.path.exists(tempfile): os.remove(tempfile)
-        shutil.copyfile(objfile,tempfile)
+    # Loop over
+    for i in range(nobj):
+        if (i % 1000)==0: print(i)
+        # Calculate the proper motions
+        mind = idindex['index'][idindex['lo'][ind2[i]]:idindex['hi'][ind2[i]]+1]
+        cat1 = meas[mind]
+        ncat1 = len(cat1)
+        if ncat1>1:
+            raerr = np.array(cat1['raerr']*1e3,np.float64)    # milli arcsec
+            ra = np.array(cat1['ra'],np.float64)
+            ra -= np.mean(ra)
+            ra *= 3600*1e3 * np.cos(obj['dec'][i]/radeg)     # convert to true angle, milli arcsec
+            t = cat1['mjd'].copy()
+            t -= np.mean(t)
+            t /= 365.2425                          # convert to year
+            # Calculate robust slope
+            try:
+                pmra, pmraerr = dln.robust_slope(t,ra,raerr,reweight=True)
+            except:
+                print('problem')
+                import pdb; pdb.set_trace()
+            obj['pmra'][i] = pmra                 # mas/yr
+            obj['pmraerr'][i] = pmraerr           # mas/yr
 
-        # Load the object file
-        meta = fits.getdata(objfile,1)
-        obj = fits.getdata(objfile,2)
-        nobj = len(obj)
+            decerr = np.array(cat1['decerr']*1e3,np.float64)   # milli arcsec
+            dec = np.array(cat1['dec'],np.float64)
+            dec -= np.mean(dec)
+            dec *= 3600*1e3                         # convert to milli arcsec
+            # Calculate robust slope
+            try:
+                pmdec, pmdecerr = dln.robust_slope(t,dec,decerr,reweight=True)
+            except:
+                print('problem')
+                import pdb; pdb.set_trace()
+            obj['pmdec'][i] = pmdec               # mas/yr
+            obj['pmdecerr'][i] = pmdecerr         # mas/yr
 
-        # Save the current PM values
-        dtype = np.dtype([('objid',np.str,100),('pmra',float),('pmraerr',float)),('pmdec',float),('pmdecerr',float)])
-        old = np.zeros(nobj,dtype)
-        old['objid'] = obj['objid']
-        old['pmra'] = obj['pmra']
-        old['pmraerr'] = obj['pmraerr']
-        old['pmdec'] = obj['pmdec']
-        old['pmdecerr'] = obj['pmdecerr']
-
-        # Correct the proper motions
-        #  negative values are 1.05612245
-        #  positive values are 0.94387755
-
-        # Save the old pms
-        oldfile = hdir+str(pix1)+'_oldpms.fits'
-        print('Saving old PMs to '+oldfile)
-        Table(old).write(oldfile)
-
-        # Save the new version of obj
-        # Write the output file
-        outfile = hdir+str(pix1)+'.fits'
-        print('Writing combined catalog to '+outfile)
-        if os.path.exists(outfile): os.remove(outfile)
-        Table(meta).write(outfile)               # first, summary table
-        #  append other fits binary tables
-        hdulist = fits.open(outfile)
-        hdu = fits.table_to_hdu(Table(obj))        # second, catalog
-        hdulist.append(hdu)
-        hdulist.writeto(outfile,overwrite=True)
-        hdulist.close()
-        if os.path.exists(outfile+'.gz'): os.remove(outfile+'.gz')
-        ret = subprocess.call(['gzip',outfile])    # compress final catalog
-
-        # Check that the output file looks okay, has the right extensiosn and Nrows
-        hd1 = fits.getheader(outfile+'.gz',1)
-        hd2 = fits.getheader(outfile+'.gz',2)
-        # Problems
-        if hd2['NAXIS2'] != nobj:
-            print('problem with output file.  Restoring original file')
-            os.remove(objfile)
-            shutil.move(tempfile,objfile)
-        # Everything okay
-        else:
-            # Delete temporary file
-            os.remove(tempfile)
-            # Write fixed file
-            dln.touch(fixedfile)
-
+    # Save the new version of obj
+    # Write the output file
+    print('Writing combined catalog to '+outfile)
+    if os.path.exists(outfile): os.remove(outfile)
+    Table(meta).write(outfile)               # first, summary table
+    #  append other fits binary tables
+    hdulist = fits.open(outfile)
+    hdu = fits.table_to_hdu(Table(obj))        # second, catalog
+    hdulist.append(hdu)
+    hdulist.writeto(outfile,overwrite=True)
+    hdulist.close()
+    if os.path.exists(outfile+'.gz'): os.remove(outfile+'.gz')
+    ret = subprocess.call(['gzip',outfile])    # compress final catalog
 
     print('dt = %6.1f sec.' % (time.time()-t00))
+
 
 if __name__ == "__main__":
     parser = ArgumentParser(description='Fix pms in healpix object catalogs.')
@@ -133,4 +172,10 @@ if __name__ == "__main__":
             sys.exit()
 
     # Fix the pms in healpix object catalogs
-    fix_pms(pix)
+    if type(pix) is not list: pix=[pix]
+    npix = len(pix)
+    print('Correcting PMs for '+str(npix)+' HEALPix')
+    for i in range(len(pix)):
+        fix_pms(pix[i])
+
+
