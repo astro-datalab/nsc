@@ -20,7 +20,7 @@ import subprocess
 import healpy as hp
 #import tempfile
 import psycopg2 as pq
-import psutil
+#import psutil
 
 def get_meas(pix,nside=128):
     """ Get the measurements for a particular healpix."""
@@ -148,12 +148,12 @@ def fix_pms(pix):
     obj = Table.read(objfile,2)
     nobj = len(obj)
     print(str(nobj)+' objects with '+str(np.sum(obj['ndet']))+' measurements')
-    print('KLUDGE!!! MAKING COPY OF OBJ!!!')
-    orig = obj.copy()
+    #print('KLUDGE!!! MAKING COPY OF OBJ!!!')
+    #orig = obj.copy()
 
-    v = psutil.virtual_memory()
-    process = psutil.Process(os.getpid())
-    print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
+    #v = psutil.virtual_memory()
+    #process = psutil.Process(os.getpid())
+    #print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
 
     # Break up into subregions
     totmeas = np.sum(obj['ndet'])
@@ -180,10 +180,13 @@ def fix_pms(pix):
         # Get the measurements
         meas = get_meas(pix1,nside=hinside)
         nmeas = len(meas)
+        if nmeas==0:
+            print('No measurements in this subregion')
+            continue
 
-        v = psutil.virtual_memory()
-        process = psutil.Process(os.getpid())
-        print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
+        #v = psutil.virtual_memory()
+        #process = psutil.Process(os.getpid())
+        #print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
 
         # Get the objects within this subpixel
         objind, = np.where(objpix==pix1)
@@ -202,10 +205,14 @@ def fix_pms(pix):
             print(str(len(obj1))+' objects in this sub healpix but only measurements for '+str(len(ind1)))
             #print('Some objects are missing measurements')
             #return
+        # Ensure they are arrays
+        ind1 = np.atleast_1d(ind1)
+        ind2 = np.atleast_1d(ind2)
         # sort by object index
         si = np.argsort(ind1)
-        ind1 = ind1[si]
-        ind2 = ind2[si]
+        if len(ind1)>1:
+            ind1 = ind1[si]
+            ind2 = ind2[si]
 
         # Loop over
         ndet1 = np.zeros(nobj1,int)
