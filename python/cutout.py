@@ -13,9 +13,10 @@ from dlnpyutils import utils, coords
 import subprocess
 import time
 from argparse import ArgumentParser
-import socket
-from dustmaps.sfd import SFDQuery
-from astropy.coordinates import SkyCoord
+#import socket
+#from dustmaps.sfd import SFDQuery
+#from astropy.coordinates import SkyCoord
+from dl import queryClient as qc
 
 #def cutout(exposure,ccdnum,ra=None,dec=None,fov=None):
 #    """ Get an NSC cutout."""
@@ -65,6 +66,11 @@ def cutout(im,xcen,ycen,size=51,missing=0.0):
 
     return cutout
 
+def cutoutfig(im,meas,outfile):
+    """ Make a figure of an image."""
+
+    pass
+
 def meascutout(meas,size=51):
     """ Input the measurements and create cutouts. """
 
@@ -100,6 +106,11 @@ def meascutout(meas,size=51):
 
         # exposure_ccdnum, filter, MJD, delta_MJD, mag
 
+def objcutouts(objid):
+    """ Make cutouts for all the measurements of one object."""
+
+    
+    meas = qc.query(sql="select * from nsc_dr2.meas where objectid='%'" % objid,fmt='table',profile='db01')
 
 if __name__ == "__main__":
     parser = ArgumentParser(description='Fix pms in healpix object catalogs.')
