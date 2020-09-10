@@ -24,9 +24,9 @@ def astrometryfunc(x, Delta1, Delta2, PMra, PMdec, pi):
     # x: input list of central RA and DEC positions and array of MJDs
     # Delta1: initial dRA position
     # Delta2: initial dDEC position
-    # PMra: proper motion in RA (mas/yr)
-    # PMdec: proper motion in DEC (mas/yr)
-    # pi: parallax (mas)
+    # PMra: proper motion in RA (arcsec/yr)
+    # PMdec: proper motion in DEC (arcsec/yr)
+    # pi: parallax (arcsec)
     
     ra0, dec0, mjds = x
     n = len(mjds)
@@ -102,9 +102,9 @@ def plotfit(cat,pars,cov,savefig=None):
     plt.xlim(xr)
     plt.ylim(yr)
     perr = np.sqrt(np.diag(cov))
-    plt.annotate(r'$\mu_\alpha$ = %5.3f $\pm$ %5.3f mas/yr' % (pars[2],perr[2]) + '\n' +
-                 r'$\mu_\delta$ = %5.3f $\pm$ %5.3f mas/yr' % (pars[3],perr[3]) + '\n' + 
-                 r'$\pi$ = %5.3f $\pm$ %5.3f mas' % (pars[4],perr[4]),
+    plt.annotate(r'$\mu_\alpha$ = %5.3f $\pm$ %5.3f mas/yr' % (pars[2]*1e3,perr[2]*1e3) + '\n' +
+                 r'$\mu_\delta$ = %5.3f $\pm$ %5.3f mas/yr' % (pars[3]*1e3,perr[3]*1e3) + '\n' + 
+                 r'$\pi$ = %5.3f $\pm$ %5.3f mas' % (pars[4]*1e3,perr[4]*1e3),
                  xy=(xr[0]+0.05*dln.valrange(xr),yr[1]-0.20*dln.valrange(yr)),ha='left')
     if savefig is not None:
         plt.savefig(savefig)
