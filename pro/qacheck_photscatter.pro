@@ -1,4 +1,4 @@
-pro qacheck_photscatter,pix,redo=redo
+pro qacheck_photscatter,pix,redo=redo,version=version
 
 ; Measure photometric scatter for all band in healpix fields
 
@@ -7,8 +7,9 @@ t0 = systime(1)
 ; Combine all the exposures that fall in this healpix pixel
 if n_elements(nside) eq 0 then nside = 128
 NSC_ROOTDIRS,dldir,mssdir,localdir
-if n_elements(version) eq 0 then version='v2'
-dir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
+dldir = '/net/dl2/'
+if n_elements(version) eq 0 then version='v3'
+dir = dldir+'dnidever/nsc/instcal/'+version+'/'
 outdir = dir+'combine/'
 radeg = 180.0d0 / !dpi
 
