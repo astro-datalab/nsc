@@ -521,6 +521,7 @@ def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average'):
         
         # Step 4. Break up into bins and save to temporary file
         tid,tfile = tempfile.mkstemp(prefix="timage",dir="/tmp")
+        os.close(tid)  # close open file
         tbase = os.path.basename(tfile)
         timfile = "/tmp/"+tbase+"_flx.fits"
         twtfile = "/tmp/"+tbase+"_wt.fits"

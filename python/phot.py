@@ -1517,6 +1517,7 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
 
     # Make temporary short filenames to DAOPHOT can handle them
     tid,tfile = tempfile.mkstemp(prefix="tcoo",dir=".")
+    os.close(tid)   # close open file
     tbase = os.path.basename(tfile)
     timfile = tbase+".fits"
     toptfile = tbase+".opt"
@@ -1674,6 +1675,7 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
 
     # Make temporary short filenames to DAOPHOT can handle them
     tid,tfile = tempfile.mkstemp(prefix="tap",dir=".")
+    os.close(tid)   # close open file
     tbase = os.path.basename(tfile)
     timfile = tbase+".fits"
     cooext = os.path.splitext(coofile)[1]
@@ -1864,6 +1866,7 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
 
     # Make temporary short filenames to DAOPHOT can handle them
     tid,tfile = tempfile.mkstemp(prefix="tlst",dir=".")
+    os.close(tid)  # close open file
     tbase = os.path.basename(tfile)
     timfile = tbase+".fits"
     toptfile = tbase+".opt"
@@ -2019,6 +2022,7 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
 
     # Make temporary short filenames to DAOPHOT can handle them
     tid,tfile = tempfile.mkstemp(prefix="tpsf",dir=".")
+    os.close(tid)  # close open file
     tbase = os.path.basename(tfile)
     timfile = tbase+".fits"
     toptfile = tbase+".opt"
@@ -2198,6 +2202,7 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
 
     # Make temporary short filenames to DAOPHOT can handle them
     tid,tfile = tempfile.mkstemp(prefix="tsubnei",dir=".")
+    os.close(tid)   # close open file
     tbase = os.path.basename(tfile)
     timfile = tbase+".fits"
     toptfile = tbase+".opt"
@@ -2539,6 +2544,7 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
 
     # Make temporary short filenames to DAOPHOT can handle them
     tid,tfile = tempfile.mkstemp(prefix="tals",dir=".")
+    os.close(tid)  # close open file
     tbase = os.path.basename(tfile)
     timfile = tbase+".fits"
     toptfile = tbase+".als.opt"
@@ -2694,6 +2700,7 @@ def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=Non
 
     # Make temporary short filenames to DAOPHOT can handle them
     tid,tfile = tempfile.mkstemp(prefix="tcoo",dir=".")
+    os.close(tid)   # close open file
     tbase = os.path.basename(tfile)
     tphotfile = tbase+".ap"
     taperfile = tbase+".opt"
