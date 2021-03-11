@@ -37,7 +37,7 @@ from glob import glob
 #    ccdnum = expstr['ccdnum'][ind]
 #    im,head = fits.getdata(fluxfile,ccdnum,header=True)
 
-def cutout(im,xcen,ycen,size=51,missing=0.0):
+def cutout(im,xcen,ycen,size=101,missing=0.0):
     """ Make a cutout from an image."""
 
     # Make the plot
@@ -94,7 +94,7 @@ def cutoutfig(im,meas,figfile):
 
 
 
-def meascutout(meas,obj,size=51):
+def meascutout(meas,obj,size=101):
     """ Input the measurements and create cutouts. """
 
     expstr = fits.getdata('/net/dl2/dnidever/nsc/instcal/v3/lists/nsc_v3_exposures.fits.gz',1)
@@ -143,7 +143,7 @@ def meascutout(meas,obj,size=51):
         # exposure_ccdnum, filter, MJD, delta_MJD, mag
         print(str(i+1)+' '+meas['exposure'][ind2[i]]+' '+str(ccdnum[i])+' '+str(meas['x'][ind2[i]])+' '+str(meas['y'][ind2[i]])+' '+str(meas['mag_auto'][ind2[i]]))
 
-        figdir = '/net/dl2/dnidever/nsc/instcal/v3/hpm/'
+        figdir = '/net/dl2/dnidever/nsc/instcal/v3/hpm2/'
         figfile = figdir
         figfile += '%s_%04d_%s_%02d.jpg' % (str(obj['objectid'][0]),i+1,meas['exposure'][ind2[i]],ccdnum[i])
         figfiles.append(figfile)
@@ -200,7 +200,6 @@ def meascutout(meas,obj,size=51):
 
 def objcutouts(objid):
     """ Make cutouts for all the measurements of one object."""
-
     
     obj = qc.query(sql="select * from nsc_dr2.object where objectid='%s'" % objid,fmt='table',profile='db01')
     meas = qc.query(sql="select * from nsc_dr2.meas where objectid='%s'" % objid,fmt='table',profile='db01')
@@ -210,21 +209,25 @@ def objcutouts(objid):
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser(description='Fix pms in healpix object catalogs.')
-    parser.add_argument('exposure', type=str, nargs=1, help='Exposure name')
-    parser.add_argument('ra', type=str, nargs=1, default='', help='Right Ascension (deg)')
-    parser.add_argument('dec', type=str, nargs=1, default='', help='Declination (deg)')
-    parser.add_argument('fov', type=str, nargs=1, default='', help='Field of View (deg)')
+    parser = ArgumentParser('Make cutout animated gif for one object.')
+    parser.add_argument('objid', type=str, nargs='*', help='Exposure name')
+    #parser.add_argument('fov', type=str, nargs=1, default='', help='Field of View (deg)')
     args = parser.parse_args()
+    objid = args.objid
 
-    hostname = socket.gethostname()
-    host = hostname.split('.')[0]
-    exposure = args.exposure[0]
-    ra = args.ra[0]
-    if ra=='': ra=None
-    dec = args.dec[0]
-    if dec=='': dec=None
-    fov = args.fov[0]
-    if fov=='': fov=None
+    if len(args.objid)==1:
+        if os.path.exists(objid):
+            objid = dln.readlines(objid)
+            nobj = dln.size(objid)
+    else:        
+        nobj = len(args.objid)
 
-    
+    if type(objid) is not list: objid=[objid]
+
+    for i in range(nobj):
+        print(str(i+1)+' '+objid[i])
+        try:
+            objcutouts(objid[i])
+        except Exception as e:
+            print('Failed on '+objid[i]+' '+str(e))
+            traceback.print_exc()
