@@ -21,6 +21,7 @@ from dl import queryClient as qc
 import matplotlib
 import matplotlib.pyplot as plt 
 from glob import glob
+import traceback
 
 #def cutout(exposure,ccdnum,ra=None,dec=None,fov=None):
 #    """ Get an NSC cutout."""
@@ -101,7 +102,7 @@ def meascutout(meas,obj,size=101):
     #expstr = fits.getdata('/net/dl2/dnidever/nsc/instcal/v3/lists/nsc_v3_exposure.fits.gz',1)                                                              
     decam = Table.read('/home/dnidever/projects/delvered/data/decam.txt',format='ascii')
 
-    objid = obj['objectid'][0]
+    objid = obj['id'][0]
 
     # Sort by MJD
     si = np.argsort(meas['mjd'])
@@ -145,7 +146,7 @@ def meascutout(meas,obj,size=101):
 
         figdir = '/net/dl2/dnidever/nsc/instcal/v3/hpm2/'
         figfile = figdir
-        figfile += '%s_%04d_%s_%02d.jpg' % (str(obj['objectid'][0]),i+1,meas['exposure'][ind2[i]],ccdnum[i])
+        figfile += '%s_%04d_%s_%02d.jpg' % (str(obj['id'][0]),i+1,meas['exposure'][ind2[i]],ccdnum[i])
         figfiles.append(figfile)
         matplotlib.use('Agg')
         plt.rcParams.update({'font.size': 11})
@@ -201,7 +202,7 @@ def meascutout(meas,obj,size=101):
 def objcutouts(objid):
     """ Make cutouts for all the measurements of one object."""
     
-    obj = qc.query(sql="select * from nsc_dr2.object where objectid='%s'" % objid,fmt='table',profile='db01')
+    obj = qc.query(sql="select * from nsc_dr2.object where id='%s'" % objid,fmt='table',profile='db01')
     meas = qc.query(sql="select * from nsc_dr2.meas where objectid='%s'" % objid,fmt='table',profile='db01')
     nmeas = len(meas)
     print(str(nmeas)+' measurements for '+objid)
@@ -214,9 +215,10 @@ if __name__ == "__main__":
     #parser.add_argument('fov', type=str, nargs=1, default='', help='Field of View (deg)')
     args = parser.parse_args()
     objid = args.objid
+    nobj = len(args.objid)
 
     if len(args.objid)==1:
-        if os.path.exists(objid):
+        if os.path.exists(objid[0]):
             objid = dln.readlines(objid)
             nobj = dln.size(objid)
     else:        
