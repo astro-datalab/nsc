@@ -125,6 +125,7 @@ def meascutout(meas,obj,size=10):
     npix = round(size/pixscale)
     if npix % 2 ==0:  # must be odd
         npix += 1
+    hpix = npix//2  # center of image
     wref.wcs.ctype = ['RA---TAN','DEC--TAN']
     wref.wcs.crval = [obj['ra'][0],obj['dec'][0]]
     wref.wcs.crpix = [npix//2,npix//2]
@@ -153,8 +154,21 @@ def meascutout(meas,obj,size=10):
             im,head = fits.getdata(fluxfile[i],ccdnum[i],header=True)
             mim,mhead = fits.getdata(maskfile[i],ccdnum[i],header=True)
 
+        # Get chip-level information
+        exposure = os.path.basename(fluxfile[i])[0:-8]  # remove fits.fz
+        chres = qc.query(sql="select * from nsc_dr2.chip where exposure='"+exposure+"' and ccdnum="+str(ccdnum[i]),fmt='table')
 
         w = WCS(head)
+        # RA/DEC correction for the object
+        lon = obj['ra'][0]-chres['ra'][0]
+        lat = obj['dec'][0]-chres['dec'][0]
+        racorr = chres['ra_coef1'][0] + chres['ra_coef2'][0]*lon + chres['ra_coef3'][0]*lon*lat + chres['ra_coef4'][0]*lat
+        deccorr = chres['dec_coef1'][0] + chres['dec_coef2'][0]*lon + chres['dec_coef3'][0]*lon*lat + chres['dec_coef4'][0]*lat
+        # apply these offsets to the header WCS CRVAL
+        w.wcs.crval += [racorr,deccorr]
+        head['CRVAL1'] += racorr
+        head['CRVAL2'] += deccorr
+
         # Object X/Y position
         xobj,yobj = w.all_world2pix(obj['ra'],obj['dec'],0)
         # Get the cutout
@@ -173,8 +187,11 @@ def meascutout(meas,obj,size=10):
         smim1 = dln.gsmooth(im,1.5)
         hdu = fits.PrimaryHDU(smim1,head)
         cutim, footprint = reproject_interp(hdu, refheader, order='bicubic')  # biquadratic
-        xr = [0,npix-1]
-        yr = [0,npix-1]
+        cutim[footprint==0] = np.nanmedian(im[~badmask])   # set out-of-bounds to background
+        #xr = [0,npix-1]
+        #yr = [0,npix-1]
+        xr = [-hpix*pixscale,hpix*pixscale]
+        yr = [-hpix*pixscale,hpix*pixscale]
 
         # exposure_ccdnum, filter, MJD, delta_MJD, mag
         print(str(i+1)+' '+meas['exposure'][ind2[i]]+' '+str(ccdnum[i])+' '+str(meas['x'][ind2[i]])+' '+str(meas['y'][ind2[i]])+' '+str(meas['mag_auto'][ind2[i]]))
@@ -200,21 +217,21 @@ def meascutout(meas,obj,size=10):
         lmed = np.nanmedian(bigim)
         vmin = lmed-8*sig  # 3*sig
         vmax = lmed+12*sig  # 5*sig
-        #plt.imshow(cutim,origin='lower',aspect='auto',interpolation='none',extent=(xr[0],xr[1],yr[0],yr[1]),
-        #           vmin=vmin,vmax=vmax,cmap='Greys')   # viridis, Greys, jet
-        plt.imshow(cutim,origin='lower',aspect='auto',interpolation='none',
+        plt.imshow(cutim,origin='lower',aspect='auto',interpolation='none',extent=(xr[0],xr[1],yr[0],yr[1]),
                    vmin=vmin,vmax=vmax,cmap='viridis')   # viridis, Greys, jet
+        #plt.imshow(cutim,origin='lower',aspect='auto',interpolation='none',
+        #           vmin=vmin,vmax=vmax,cmap='viridis')   # viridis, Greys, jet
         #plt.colorbar()
 
         # show one vertical, one horizontal line pointing to the center but offset
         # then a small dot on the meas position
         # 13, 8
-        plt.plot([npix//2,npix//2],[npix//2-0.066*npix,npix//2-0.041*npix],c='white',alpha=0.8)
-        plt.plot([npix//2-0.066*npix,npix//2-0.041*npix],[npix//2,npix//2],c='white',alpha=0.8)
+        plt.plot(np.array([0,0]),np.array([-0.066*npix,-0.041*npix])*pixscale,c='white',alpha=0.8)
+        plt.plot(np.array([-0.066*npix,-0.041*npix])*pixscale,np.array([0,0]),c='white',alpha=0.8)
 
         # Meas X/Y position
         xmeas,ymeas = wref.all_world2pix(meas['ra'][ind2[i]],meas['dec'][ind2[i]],0)
-        plt.scatter([xmeas],[ymeas],c='r',marker='.',s=10)
+        plt.scatter([(xmeas-hpix)*pixscale],[(ymeas-hpix)*pixscale],c='r',marker='.',s=10)
         #plt.scatter([xmeas],[ymeas],c='r',marker='+',s=100)
         #plt.scatter([xcen],[ycen],c='r',marker='+',s=100)
         # Object X/Y position
@@ -223,17 +240,19 @@ def meascutout(meas,obj,size=10):
         #plt.scatter(xobj,yobj,marker='o',s=200,facecolors='none',edgecolors='y',linewidth=3)
         #plt.scatter(xobj,yobj,c='y',marker='+',s=100)
         #leg = ax.legend(loc='upper left', frameon=False)
+        plt.xlabel(r'$\Delta$ RA (arcsec)')
+        plt.ylabel(r'$\Delta$ DEC (arcsec)')
         #plt.xlabel('X')
         #plt.ylabel('Y')
         #plt.xlim(xr)
         #plt.ylim(yr)
         #ax.annotate(r'S/N=%5.1f',xy=(np.mean(xr), yr[0]+dln.valrange(yr)*0.05),ha='center')
-        co = 'lightgray' #'white' # blue
+        co = 'white' #'lightgray' # blue
         ax.annotate('%s  %02d  %s  %6.1f  ' % (meas['exposure'][ind2[i]],ccdnum[i],meas['filter'][ind2[i]],expstr['exptime'][ind1[i]]),
                     xy=(np.mean(xr), yr[0]+dln.valrange(yr)*0.05),ha='center',color=co)
-        ax.annotate('%10.5f  %10.5f  ' % (meas['mjd'][ind2[i]],meas['mjd'][ind2[i]]-np.min(meas['mjd'])),
+        ax.annotate('%10.2f  %10.2f  ' % (meas['mjd'][ind2[i]],meas['mjd'][ind2[i]]-np.min(meas['mjd'])),
                     xy=(xr[0]+dln.valrange(xr)*0.05, yr[1]-dln.valrange(yr)*0.05),ha='left',color=co)
-        ax.annotate('%5.2f +/- %4.2f' % (meas['mag_auto'][ind2[i]], meas['magerr_auto'][ind2[i]]),
+        ax.annotate('%s = %5.2f +/- %4.2f' % (meas['filter'][ind2[i]], meas['mag_auto'][ind2[i]], meas['magerr_auto'][ind2[i]]),
                     xy=(xr[1]-dln.valrange(xr)*0.05, yr[1]-dln.valrange(yr)*0.05),ha='right',color=co)
         plt.savefig(figfile)
         print('Cutout written to '+figfile)
@@ -256,7 +275,7 @@ def objcutouts(objid):
     meas = qc.query(sql="select * from nsc_dr2.meas where objectid='%s'" % objid,fmt='table',profile='db01')
     nmeas = len(meas)
     print(str(nmeas)+' measurements for '+objid)
-    meascutout(meas,obj,size=51)
+    meascutout(meas,obj,size=40)
 
 
 if __name__ == "__main__":
