@@ -22,6 +22,7 @@ import matplotlib
 import matplotlib.pyplot as plt 
 from glob import glob
 import traceback
+from reproject import reproject_interp
 
 #def cutout(exposure,ccdnum,ra=None,dec=None,fov=None):
 #    """ Get an NSC cutout."""
@@ -95,7 +96,7 @@ def cutoutfig(im,meas,figfile):
 
 
 
-def meascutout(meas,obj,size=101):
+def meascutout(meas,obj,size=30):
     """ Input the measurements and create cutouts. """
 
     expstr = fits.getdata('/net/dl2/dnidever/nsc/instcal/v3/lists/nsc_v3_exposures.fits.gz',1)
@@ -117,6 +118,23 @@ def meascutout(meas,obj,size=101):
     si = np.argsort(ind2)
     ind1 = ind1[si]
     ind2 = ind2[si]
+
+    # Create the reference WCS
+    wref = WCS(naxis=2)
+    pixscale = 0.26   # DECam, "/pix
+    npix = round(size/pixscale)
+    if npix % 2 ==0:  # must be odd
+        npix += 1
+    wref.wcs.ctype = ['RA---TAN','DEC--TAN']
+    wref.wcs.crval = [obj['ra'][0],obj['dec'][0]]
+    wref.wcs.crpix = [npix//2,npix//2]
+    wref.wcs.cd = np.array([[pixscale/3600.0, 0.0],[0.0, pixscale/3600]])
+    wref.array_shape = (npix,npix)
+    refheader = wref.to_header()
+    refheader['NAXIS'] = 2
+    refheader['NAXIS1'] = npix
+    refheader['NAXIS2'] = npix
+
     # Load the data
     instrument = expstr['instrument'][ind1]
     fluxfile = expstr['file'][ind1]
@@ -138,8 +156,14 @@ def meascutout(meas,obj,size=101):
         ycen = meas['y'][ind2[i]]-1
         smim = dln.gsmooth(im,2)
         # use the object coords for centering
-        cutim,xr,yr = cutout(smim,xobj,yobj,51)
+        cutim,xr,yr = cutout(smim,xobj,yobj,size)
         #cutim,xr,yr = cutout(smim,xcen,ycen,51)
+
+        import pdb; pdb.set_trace()
+
+        # Create a common TAN WCS that each image gets interpoled onto!!!
+        #hdu1 = fits.open(fluxfile[i],extname=extname)
+        #array, footprint = reproject_interp(hdu1, refheader)
 
         # exposure_ccdnum, filter, MJD, delta_MJD, mag
         print(str(i+1)+' '+meas['exposure'][ind2[i]]+' '+str(ccdnum[i])+' '+str(meas['x'][ind2[i]])+' '+str(meas['y'][ind2[i]])+' '+str(meas['mag_auto'][ind2[i]]))
@@ -206,7 +230,7 @@ def objcutouts(objid):
     meas = qc.query(sql="select * from nsc_dr2.meas where objectid='%s'" % objid,fmt='table',profile='db01')
     nmeas = len(meas)
     print(str(nmeas)+' measurements for '+objid)
-    meascutout(meas,obj)
+    meascutout(meas,obj,size=51)
 
 
 if __name__ == "__main__":
