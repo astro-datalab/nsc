@@ -96,7 +96,7 @@ def cutoutfig(im,meas,figfile):
 
 
 
-def meascutout(meas,obj,size=30):
+def meascutout(meas,obj,size=10):
     """ Input the measurements and create cutouts. """
 
     expstr = fits.getdata('/net/dl2/dnidever/nsc/instcal/v3/lists/nsc_v3_exposures.fits.gz',1)
@@ -139,6 +139,8 @@ def meascutout(meas,obj,size=30):
     instrument = expstr['instrument'][ind1]
     fluxfile = expstr['file'][ind1]
     fluxfile = fluxfile.replace('/net/mss1/','/mss1/')  # for thing/hulk
+    maskfile = expstr['maskfile'][ind1]
+    maskfile = maskfile.replace('/net/mss1/','/mss1/')  # for thing/hulk
     ccdnum = meas['ccdnum'][ind2]
     figfiles = []
     for i in range(nind):
@@ -146,8 +148,12 @@ def meascutout(meas,obj,size=30):
             dind, = np.where(decam['CCDNUM']==ccdnum[i])
             extname = decam['NAME'][dind[0]]
             im,head = fits.getdata(fluxfile[i],header=True,extname=extname)
+            mim,mhead = fits.getdata(maskfile[i],header=True,extname=extname)
         else:
             im,head = fits.getdata(fluxfile[i],ccdnum[i],header=True)
+            mim,mhead = fits.getdata(maskfile[i],ccdnum[i],header=True)
+
+
         w = WCS(head)
         # Object X/Y position
         xobj,yobj = w.all_world2pix(obj['ra'],obj['dec'],0)
@@ -156,14 +162,19 @@ def meascutout(meas,obj,size=30):
         ycen = meas['y'][ind2[i]]-1
         smim = dln.gsmooth(im,2)
         # use the object coords for centering
-        cutim,xr,yr = cutout(smim,xobj,yobj,size)
-        #cutim,xr,yr = cutout(smim,xcen,ycen,51)
+        #cutim,xr,yr = cutout(smim,xobj,yobj,size)
 
-        import pdb; pdb.set_trace()
+        # Mask the bad pixels
+        badmask = (mim>0)
+        im[badmask] = np.nanmedian(im[~badmask])
 
         # Create a common TAN WCS that each image gets interpoled onto!!!
         #hdu1 = fits.open(fluxfile[i],extname=extname)
-        #array, footprint = reproject_interp(hdu1, refheader)
+        smim1 = dln.gsmooth(im,1.5)
+        hdu = fits.PrimaryHDU(smim1,head)
+        cutim, footprint = reproject_interp(hdu, refheader, order='bicubic')  # biquadratic
+        xr = [0,npix-1]
+        yr = [0,npix-1]
 
         # exposure_ccdnum, filter, MJD, delta_MJD, mag
         print(str(i+1)+' '+meas['exposure'][ind2[i]]+' '+str(ccdnum[i])+' '+str(meas['x'][ind2[i]])+' '+str(meas['y'][ind2[i]])+' '+str(meas['mag_auto'][ind2[i]]))
@@ -178,37 +189,52 @@ def meascutout(meas,obj,size=30):
         fig = plt.gcf()   # get current graphics window                                                                  
         fig.clf()         # clear  
 
-        figsize = 6.0
-        ax = fig.subplots()
-        fig.set_figheight(figsize*0.8)
+        figsize = 8.0 #6.0
+        ax = fig.subplots()  # projection=wcs
+        #fig.set_figheight(figsize*0.8)
+        fig.set_figheight(figsize)
         fig.set_figwidth(figsize)
         med = np.nanmedian(smim)
         sig = dln.mad(smim)
         bigim,xr2,yr2 = cutout(smim,xcen,ycen,151,missing=med)
         lmed = np.nanmedian(bigim)
-        vmin = lmed-3*sig
-        vmax = lmed+5*sig
-        plt.imshow(cutim,origin='lower',aspect='auto',interpolation='none',extent=(xr[0],xr[1],yr[0],yr[1]),
-                   vmin=vmin,vmax=vmax,cmap='Greys')   # viridis, Greys, jet
-        plt.colorbar()
+        vmin = lmed-8*sig  # 3*sig
+        vmax = lmed+12*sig  # 5*sig
+        #plt.imshow(cutim,origin='lower',aspect='auto',interpolation='none',extent=(xr[0],xr[1],yr[0],yr[1]),
+        #           vmin=vmin,vmax=vmax,cmap='Greys')   # viridis, Greys, jet
+        plt.imshow(cutim,origin='lower',aspect='auto',interpolation='none',
+                   vmin=vmin,vmax=vmax,cmap='viridis')   # viridis, Greys, jet
+        #plt.colorbar()
+
+        # show one vertical, one horizontal line pointing to the center but offset
+        # then a small dot on the meas position
+        # 13, 8
+        plt.plot([npix//2,npix//2],[npix//2-0.066*npix,npix//2-0.041*npix],c='white',alpha=0.8)
+        plt.plot([npix//2-0.066*npix,npix//2-0.041*npix],[npix//2,npix//2],c='white',alpha=0.8)
+
         # Meas X/Y position
-        plt.scatter([xcen],[ycen],c='r',marker='+',s=100)
+        xmeas,ymeas = wref.all_world2pix(meas['ra'][ind2[i]],meas['dec'][ind2[i]],0)
+        plt.scatter([xmeas],[ymeas],c='r',marker='.',s=10)
+        #plt.scatter([xmeas],[ymeas],c='r',marker='+',s=100)
+        #plt.scatter([xcen],[ycen],c='r',marker='+',s=100)
         # Object X/Y position
         #xobj,yobj = w.all_world2pix(obj['ra'],obj['dec'],0)
+        xobj,yobj = wref.all_world2pix(obj['ra'],obj['dec'],0)
         #plt.scatter(xobj,yobj,marker='o',s=200,facecolors='none',edgecolors='y',linewidth=3)
-        plt.scatter(xobj,yobj,c='y',marker='+',s=100)
+        #plt.scatter(xobj,yobj,c='y',marker='+',s=100)
         #leg = ax.legend(loc='upper left', frameon=False)
-        plt.xlabel('X')
-        plt.ylabel('Y')
+        #plt.xlabel('X')
+        #plt.ylabel('Y')
         #plt.xlim(xr)
         #plt.ylim(yr)
         #ax.annotate(r'S/N=%5.1f',xy=(np.mean(xr), yr[0]+dln.valrange(yr)*0.05),ha='center')
+        co = 'lightgray' #'white' # blue
         ax.annotate('%s  %02d  %s  %6.1f  ' % (meas['exposure'][ind2[i]],ccdnum[i],meas['filter'][ind2[i]],expstr['exptime'][ind1[i]]),
-                    xy=(np.mean(xr), yr[0]+dln.valrange(yr)*0.05),ha='center',color='blue')
+                    xy=(np.mean(xr), yr[0]+dln.valrange(yr)*0.05),ha='center',color=co)
         ax.annotate('%10.5f  %10.5f  ' % (meas['mjd'][ind2[i]],meas['mjd'][ind2[i]]-np.min(meas['mjd'])),
-                    xy=(xr[0]+dln.valrange(xr)*0.05, yr[1]-dln.valrange(yr)*0.05),ha='left',color='blue')
+                    xy=(xr[0]+dln.valrange(xr)*0.05, yr[1]-dln.valrange(yr)*0.05),ha='left',color=co)
         ax.annotate('%5.2f +/- %4.2f' % (meas['mag_auto'][ind2[i]], meas['magerr_auto'][ind2[i]]),
-                    xy=(xr[1]-dln.valrange(xr)*0.05, yr[1]-dln.valrange(yr)*0.05),ha='right',color='blue')
+                    xy=(xr[1]-dln.valrange(xr)*0.05, yr[1]-dln.valrange(yr)*0.05),ha='right',color=co)
         plt.savefig(figfile)
         print('Cutout written to '+figfile)
 
