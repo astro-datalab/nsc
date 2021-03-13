@@ -94,7 +94,27 @@ def cutoutfig(im,meas,figfile):
     ax.annotate(r'S/N=%5.1f',xy=(np.mean(xr), yr[0]+dln.valrange(yr)*0.05),ha='center')
     plt.save(figfile)
 
+def getfitsext(filename,extname,header=True):
+    """ Get FITS extension by name."""
 
+    try:
+        out = fits.getdata(filename,header=header,extname=extname)        
+
+    # Sometimes getdata throws an error and says it can't find the extension but it is there
+    except:
+        hdu = fits.open(filename)
+        extnames = []
+        nhdu = len(hdu)
+        for i in range(nhdu):
+            extnames.append(hdu[i].header.get('extname'))
+        gd, = np.where(np.char.array(extnames).astype(str)==extname)
+        ngd = len(gd)
+        if ngd==0:
+            raise ValueError('Extension '+extname+' not found in '+filename)
+        ext = gd[0]
+        out = fits.getdata(filename,ext,header=header)
+
+    return out
 
 def meascutout(meas,obj,size=10):
     """ Input the measurements and create cutouts. """
@@ -145,14 +165,20 @@ def meascutout(meas,obj,size=10):
     ccdnum = meas['ccdnum'][ind2]
     figfiles = []
     for i in range(nind):
-        if instrument[i]=='c4d':
-            dind, = np.where(decam['CCDNUM']==ccdnum[i])
-            extname = decam['NAME'][dind[0]]
-            im,head = fits.getdata(fluxfile[i],header=True,extname=extname)
-            mim,mhead = fits.getdata(maskfile[i],header=True,extname=extname)
-        else:
-            im,head = fits.getdata(fluxfile[i],ccdnum[i],header=True)
-            mim,mhead = fits.getdata(maskfile[i],ccdnum[i],header=True)
+        try:
+            if instrument[i]=='c4d':
+                dind, = np.where(decam['CCDNUM']==ccdnum[i])
+                extname = decam['NAME'][dind[0]]
+                im,head = getfitsext(fluxfile[i],extname,header=True)
+                mim,mhead = getfitsext(maskfile[i],extname,header=True)
+                #im,head = fits.getdata(fluxfile[i],header=True,extname=extname)
+                #mim,mhead = fits.getdata(maskfile[i],header=True,extname=extname)
+            else:
+                im,head = fits.getdata(fluxfile[i],ccdnum[i],header=True)
+                mim,mhead = fits.getdata(maskfile[i],ccdnum[i],header=True)
+        except:
+            print('error')
+            import pdb; pdb.set_trace()
 
         # Get chip-level information
         exposure = os.path.basename(fluxfile[i])[0:-8]  # remove fits.fz
@@ -196,7 +222,7 @@ def meascutout(meas,obj,size=10):
         # exposure_ccdnum, filter, MJD, delta_MJD, mag
         print(str(i+1)+' '+meas['exposure'][ind2[i]]+' '+str(ccdnum[i])+' '+str(meas['x'][ind2[i]])+' '+str(meas['y'][ind2[i]])+' '+str(meas['mag_auto'][ind2[i]]))
 
-        figdir = '/net/dl2/dnidever/nsc/instcal/v3/hpm2/'
+        figdir = '/net/dl2/dnidever/nsc/instcal/v3/hpm2/cutouts/'
         figfile = figdir
         figfile += '%s_%04d_%s_%02d.jpg' % (str(obj['id'][0]),i+1,meas['exposure'][ind2[i]],ccdnum[i])
         figfiles.append(figfile)
