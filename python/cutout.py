@@ -289,7 +289,8 @@ def meascutout(meas,obj,size=10):
     animfile = figdir+str(objid)+'_cutouts.gif'
     print('Creating animated gif '+animfile)
     if os.path.exists(animfile): os.remove(animfile)
-    ret = subprocess.run('convert -delay 100 '+figdir+str(objid)+'_*.jpg '+animfile,shell=True)
+    #ret = subprocess.run('convert -delay 100 '+figdir+str(objid)+'_*.jpg '+animfile,shell=True)
+    ret = subprocess.run('convert -delay 100 '+' '.join(figfiles)+' '+animfile,shell=True)
     #import pdb; pdb.set_trace()
 
 
