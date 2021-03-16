@@ -116,7 +116,7 @@ def getfitsext(filename,extname,header=True):
 
     return out
 
-def meascutout(meas,obj,size=10):
+def meascutout(meas,obj,size=10,outdir='./'):
     """ Input the measurements and create cutouts. """
 
     expstr = fits.getdata('/net/dl2/dnidever/nsc/instcal/v3/lists/nsc_v3_exposures.fits.gz',1)
@@ -222,8 +222,8 @@ def meascutout(meas,obj,size=10):
         # exposure_ccdnum, filter, MJD, delta_MJD, mag
         print(str(i+1)+' '+meas['exposure'][ind2[i]]+' '+str(ccdnum[i])+' '+str(meas['x'][ind2[i]])+' '+str(meas['y'][ind2[i]])+' '+str(meas['mag_auto'][ind2[i]]))
 
-        figdir = '/net/dl2/dnidever/nsc/instcal/v3/hpm2/cutouts/'
-        figfile = figdir
+        #figdir = '/net/dl2/dnidever/nsc/instcal/v3/hpm2/cutouts/'
+        figfile = outdir
         figfile += '%s_%04d_%s_%02d.jpg' % (str(obj['id'][0]),i+1,meas['exposure'][ind2[i]],ccdnum[i])
         figfiles.append(figfile)
         matplotlib.use('Agg')
@@ -286,7 +286,7 @@ def meascutout(meas,obj,size=10):
         #import pdb; pdb.set_trace()
 
     # Make the animated gif
-    animfile = figdir+str(objid)+'_cutouts.gif'
+    animfile = outdir+str(objid)+'_cutouts.gif'
     print('Creating animated gif '+animfile)
     if os.path.exists(animfile): os.remove(animfile)
     #ret = subprocess.run('convert -delay 100 '+figdir+str(objid)+'_*.jpg '+animfile,shell=True)
@@ -295,23 +295,28 @@ def meascutout(meas,obj,size=10):
 
 
 
-def objcutouts(objid):
+def objcutouts(objid,size=40,outdir='./'):
     """ Make cutouts for all the measurements of one object."""
     
     obj = qc.query(sql="select * from nsc_dr2.object where id='%s'" % objid,fmt='table',profile='db01')
     meas = qc.query(sql="select * from nsc_dr2.meas where objectid='%s'" % objid,fmt='table',profile='db01')
     nmeas = len(meas)
     print(str(nmeas)+' measurements for '+objid)
-    meascutout(meas,obj,size=40)
+    meascutout(meas,obj,size=size,outdir=outdir)
 
 
 if __name__ == "__main__":
     parser = ArgumentParser('Make cutout animated gif for one object.')
     parser.add_argument('objid', type=str, nargs='*', help='Exposure name')
-    #parser.add_argument('fov', type=str, nargs=1, default='', help='Field of View (deg)')
+    parser.add_argument('--fov', type=str, nargs=1, default=40, help='Field of View (arcsec)')
+    parser.add_argument('--outdir', type=str, nargs=1, default='', help='Output directory')
     args = parser.parse_args()
     objid = args.objid
     nobj = len(args.objid)
+    fov = float(dln.first_el(args.fov))
+    outdir = dln.first_el(args.outdir)
+    if outdir=='':
+        outdir = '/net/dl2/dnidever/nsc/instcal/v3/hpm2/cutouts/'
 
     if len(args.objid)==1:
         if os.path.exists(objid[0]):
@@ -325,7 +330,7 @@ if __name__ == "__main__":
     for i in range(nobj):
         print(str(i+1)+' '+objid[i])
         try:
-            objcutouts(objid[i])
+            objcutouts(objid[i],size=fov,outdir=outdir)
         except Exception as e:
             print('Failed on '+objid[i]+' '+str(e))
             traceback.print_exc()
