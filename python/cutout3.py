@@ -415,7 +415,7 @@ def meascutout(meas,obj,size=10,outdir='./'):
     #ret = subprocess.run('convert -delay 100 '+figdir+str(objid)+'_*.jpg '+animfile,shell=True)
     ret = subprocess.run('convert -delay 20 '+' '.join(figfiles)+' '+animfile,shell=True)
     #import pdb; pdb.set_trace()
-    #dln.remove(figfiles)
+    dln.remove(figfiles)
 
 
 def objcutouts(objid,size=40,outdir='./'):
