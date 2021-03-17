@@ -345,15 +345,15 @@ def meascutout(meas,obj,size=10,outdir='./'):
         # Progress bar
         frameratio = (i+1)/float(nind)
         timeratio = (meas['mjd'][ind2[i]]-np.min(meas['mjd']))/dln.valrange(meas['mjd'])
-        #ratio = frameratio
-        ratio = timeratio
+        ratio = frameratio
+        #ratio = timeratio
         print('ratio = '+str(100*ratio))
         barim = np.zeros((100,100),int)
-        ind = dln.limit(round(ratio*100),1,100)
+        ind = dln.limit(round(ratio*100),1,99)
         barim[:,0:ind] = 1
         ax[1].imshow(barim.T,origin='lower',aspect='auto',cmap='Greys')
-        ax[1].set_xlabel('%7.1f' % (meas['mjd'][ind2[i]]-np.min(meas['mjd'])))
-        #ax[1].set_xlabel('%d/%d' % (i+1,nind))
+        #ax[1].set_xlabel('%7.1f' % (meas['mjd'][ind2[i]]-np.min(meas['mjd'])))
+        ax[1].set_xlabel('%d/%d' % (i+1,nind))
         ax[1].axes.xaxis.set_ticks([])
         #ax[1].axes.xaxis.set_visible(False)
         ax[1].axes.yaxis.set_visible(False)
