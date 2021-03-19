@@ -196,9 +196,10 @@ def meascutout(meas,obj,size=10,outdir='./'):
         racorr = chres['ra_coef1'][0] + chres['ra_coef2'][0]*lon + chres['ra_coef3'][0]*lon*lat + chres['ra_coef4'][0]*lat
         deccorr = chres['dec_coef1'][0] + chres['dec_coef2'][0]*lon + chres['dec_coef3'][0]*lon*lat + chres['dec_coef4'][0]*lat
         # apply these offsets to the header WCS CRVAL
-        w.wcs.crval += [racorr,deccorr]
-        head['CRVAL1'] += racorr
-        head['CRVAL2'] += deccorr
+        #w.wcs.crval += [racorr,deccorr]
+        #head['CRVAL1'] += racorr
+        #head['CRVAL2'] += deccorr
+        print(racorr,deccorr)
 
         # Object X/Y position
         xobj,yobj = w.all_world2pix(obj['ra'],obj['dec'],0)
@@ -329,6 +330,8 @@ def meascutout(meas,obj,size=10,outdir='./'):
         #leg = ax.legend(loc='upper left', frameon=False)
         ax[0].set_xlabel(r'$\Delta$ RA (arcsec)')
         ax[0].set_ylabel(r'$\Delta$ DEC (arcsec)')
+        ax[0].set_xlim((xr[1],xr[0]))  # sky right
+        ax[0].set_ylim(yr)
         #plt.xlabel('X')
         #plt.ylabel('Y')
         #plt.xlim(xr)
@@ -349,7 +352,7 @@ def meascutout(meas,obj,size=10,outdir='./'):
         ratio = timeratio
         print('ratio = '+str(100*ratio))
         barim = np.zeros((100,100),int)
-        ind = dln.limit(round(ratio*100),1,99)
+        ind = dln.limit(int(round(ratio*100)),1,99)
         barim[:,0:ind] = 1
         ax[1].imshow(barim.T,origin='lower',aspect='auto',cmap='Greys')
         ax[1].set_xlabel('%7.1f \n days' % (meas['mjd'][ind2[i]]-np.min(meas['mjd'])))
@@ -397,8 +400,8 @@ def meascutout(meas,obj,size=10,outdir='./'):
     #plt.scatter((xmeas-hpix)*pixscale,(ymeas-hpix)*pixscale,c='r',marker='+',s=30)
     ax[0].set_xlabel(r'$\Delta$ RA (arcsec)')
     ax[0].set_ylabel(r'$\Delta$ DEC (arcsec)')
-    #ax[0].set_xlim(xr)
-    #ax[0].set_ylim(yr)
+    ax[0].set_xlim((xr[1],xr[0]))   # sky -right
+    ax[0].set_ylim(yr)
     ax[1].axis('off')
     plt.savefig(figfile)
     # Make four copies
@@ -440,7 +443,7 @@ if __name__ == "__main__":
     fov = float(dln.first_el(args.fov))
     outdir = dln.first_el(args.outdir)
     if outdir=='':
-        outdir = '/net/dl2/dnidever/nsc/instcal/v3/hpm2/cutouts/'
+        outdir = '/net/dl2/dnidever/nsc/instcal/v3/hpm2/cutouts2/'
 
     if len(args.objid)==1:
         if os.path.exists(objid[0]):

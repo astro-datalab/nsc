@@ -18,7 +18,7 @@ from time import perf_counter
 from argparse import ArgumentParser
 
 
-outdir = '/net/dl2/dnidever/nsc/instcal/v3/hpm2/'
+outdir = '/net/dl2/dnidever/nsc/instcal/v3/hpm2/4panel/'
 
 def make_4panelplot(idv):
     matplotlib.use('Agg')
@@ -130,6 +130,7 @@ def make_4panelplot(idv):
     plt.ylabel("Magnitude")
 
     outfile = outdir+idv+'.png'
+    #outfile = outdir+idv+'_4panel.png'
     print('Saving figure to '+outfile)
     plt.savefig(outfile,bbox_inches='tight')
     #plt.close(fig)
@@ -148,13 +149,14 @@ if __name__ == "__main__":
     parser.add_argument('objid', type=str, nargs='*', help='Object IDs')
     args = parser.parse_args()
     objid = args.objid
+    nobj = dln.size(objid)
 
-    if len(args.objid)==1:
-        if os.path.exists(objid):
-            objid = dln.readlines(objid)
+    if nobj==1:
+        if os.path.exists(objid[0]):
+            listfile = objid[0]
+            print('Reading '+listfile)
+            objid = dln.readlines(listfile)
             nobj = dln.size(objid)
-    else:        
-        nobj = len(args.objid)
 
     if type(objid) is not list: objid=[objid]
 

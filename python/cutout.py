@@ -270,8 +270,8 @@ def meascutout(meas,obj,size=10,outdir='./'):
         plt.ylabel(r'$\Delta$ DEC (arcsec)')
         #plt.xlabel('X')
         #plt.ylabel('Y')
-        #plt.xlim(xr)
-        #plt.ylim(yr)
+        plt.xlim((xr[1],xr[0]))   # sky right
+        plt.ylim(yr)
         #ax.annotate(r'S/N=%5.1f',xy=(np.mean(xr), yr[0]+dln.valrange(yr)*0.05),ha='center')
         co = 'white' #'lightgray' # blue
         ax.annotate('%s  %02d  %s  %6.1f  ' % (meas['exposure'][ind2[i]],ccdnum[i],meas['filter'][ind2[i]],expstr['exptime'][ind1[i]]),
