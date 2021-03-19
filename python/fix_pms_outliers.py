@@ -45,8 +45,8 @@ def fix_pms(objectid):
     ngd = len(gd)
     nbd = nmeas-ngd
     print('bad measurements '+str(nbd))
-    if nbd==0:
-        return None
+    #if nbd==0:
+    #    return None
     meas = meas[gd]
 
     raerr = np.array(meas['raerr']*1e3,np.float64)    # milli arcsec
@@ -58,7 +58,11 @@ def fix_pms(objectid):
     t /= 365.2425                          # convert to year
     # Calculate robust slope
     try:
-        pmra, pmraerr = dln.robust_slope(t,ra,raerr,reweight=True)
+        #pmra, pmraerr = dln.robust_slope(t,ra,raerr,reweight=True)
+        pmra_coef, pmra_coeferr = dln.poly_fit(t,ra,1,sigma=raerr,robust=True,error=True)
+        pmra = pmra_coef[0]
+        pmraerr = pmra_coeferr[0]
+        rasig = dln.mad(ra-dln.poly(t,pmra_coef))
     except:
         print('problem')
         import pdb; pdb.set_trace()
@@ -69,12 +73,16 @@ def fix_pms(objectid):
     dec *= 3600*1e3                         # convert to milli arcsec
     # Calculate robust slope
     try:
-        pmdec, pmdecerr = dln.robust_slope(t,dec,decerr,reweight=True)
+        #pmdec, pmdecerr = dln.robust_slope(t,dec,decerr,reweight=True)
+        pmdec_coef, pmdec_coeferr = dln.poly_fit(t,dec,1,sigma=decerr,robust=True,error=True)
+        pmdec = pmdec_coef[0]
+        pmdecerr = pmdec_coeferr[0]
+        decsig = dln.mad(dec-dln.poly(t,pmdec_coef))
     except:
         print('problem')
         import pdb; pdb.set_trace()
 
-    out = [pmra,pmraerr,pmdec,pmdecerr]
+    out = [pmra,pmraerr,rasig,pmdec,pmdecerr,decsig]
 
     return out
 
@@ -100,7 +108,6 @@ if __name__ == "__main__":
     colnames = cat.colnames
     for n in colnames:
         cat[n].name = n.lower()
-    print(cat.colnames)
     objectid = cat['id'].data
     nobj = len(objectid)
 
@@ -109,6 +116,8 @@ if __name__ == "__main__":
     cat['old_pmraerr'] = cat['pmraerr'].copy()
     cat['old_pmdec'] = cat['pmdec'].copy()
     cat['old_pmdecerr'] = cat['pmdecerr'].copy()
+    cat['rasig'] = 999999.
+    cat['decsig'] = 999999.
 
 
     # Fix the pms in healpix object catalogs
@@ -118,12 +127,13 @@ if __name__ == "__main__":
         out = fix_pms(objid)
         if out is not None:
             print('  OLD: %10.2f %10.2f' % (cat['pmra'][i],cat['pmdec'][i]))
-            print('  NEW: %10.2f %10.2f' % (out[0],out[2]))
+            print('  NEW: %10.2f %10.2f' % (out[0],out[3]))
             cat['pmra'][i] = out[0]
             cat['pmraerr'][i] = out[1]
-            cat['pmdec'][i] = out[2]
-            cat['pmdecerr'][i] = out[3]
-
+            cat['rasig'][i] = out[2]
+            cat['pmdec'][i] = out[3]
+            cat['pmdecerr'][i] = out[4]
+            cat['decsig'][i] = out[5]
 
     # Save the corrected file
     print('Saving corrected file to '+outfile)

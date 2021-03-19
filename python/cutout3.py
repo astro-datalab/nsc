@@ -117,7 +117,7 @@ def getfitsext(filename,extname,header=True):
 
     return out
 
-def meascutout(meas,obj,size=10,outdir='./'):
+def meascutout(meas,obj,size=10,outdir='./',domask=True):
     """ Input the measurements and create cutouts. """
 
     expstr = fits.getdata('/net/dl2/dnidever/nsc/instcal/v3/lists/nsc_v3_exposures.fits.gz',1)
@@ -159,6 +159,7 @@ def meascutout(meas,obj,size=10,outdir='./'):
 
     # Load the data
     instrument = expstr['instrument'][ind1]
+    plver = expstr['plver'][ind1]
     fluxfile = expstr['file'][ind1]
     fluxfile = fluxfile.replace('/net/mss1/','/mss1/')  # for thing/hulk
     maskfile = expstr['maskfile'][ind1]
@@ -170,6 +171,8 @@ def meascutout(meas,obj,size=10,outdir='./'):
     cutimarr = np.zeros((npix,npix,nind),float)
     for i in range(nind):
     #for i in range(3):
+        instcode = instrument[i]
+        plver1 = plver[i]
         try:
             if instrument[i]=='c4d':
                 dind, = np.where(decam['CCDNUM']==ccdnum[i])
@@ -184,6 +187,22 @@ def meascutout(meas,obj,size=10,outdir='./'):
         except:
             print('error')
             import pdb; pdb.set_trace()
+
+        # Turn the mask from integer to bitmask
+        if ((instcode=='c4d') & (plver1>='V3.5.0')) | (instcode=='k4m') | (instcode=='ksb'):
+            omim = mim.copy()
+            mim *= 0
+            nonzero = (omim>0)
+            mim[nonzero] = 2**((omim-1)[nonzero])    # This takes about 1 sec 
+        # Fix the DECam Pre-V3.5.0 masks
+        if (instcode=='c4d') & (plver1<'V3.5.0'):
+            omim = mim.copy()
+            mim *= 0     # re-initialize
+            mim += (np.bitwise_and(omim,1)==1) * 1    # bad pixels
+            mim += (np.bitwise_and(omim,2)==2) * 4    # saturated
+            mim += (np.bitwise_and(omim,4)==4) * 32   # interpolated
+            mim += (np.bitwise_and(omim,16)==16) * 16  # cosmic ray
+            mim += (np.bitwise_and(omim,64)==64) * 8   # bleed trail
 
         # Get chip-level information
         exposure = os.path.basename(fluxfile[i])[0:-8]  # remove fits.fz
@@ -211,8 +230,11 @@ def meascutout(meas,obj,size=10,outdir='./'):
         #cutim,xr,yr = cutout(smim,xobj,yobj,size)
 
         # Mask the bad pixels
-        badmask = (mim>0)
-        im[badmask] = np.nanmedian(im[~badmask])
+        if domask==True:
+            badmask = (mim>0)
+            im[badmask] = np.nanmedian(im[~badmask])
+        else:
+            badmask = (im<0)
 
         # Create a common TAN WCS that each image gets interpoled onto!!!
         #hdu1 = fits.open(fluxfile[i],extname=extname)
@@ -422,14 +444,14 @@ def meascutout(meas,obj,size=10,outdir='./'):
     dln.remove(figfiles)
 
 
-def objcutouts(objid,size=40,outdir='./'):
+def objcutouts(objid,size=40,outdir='./',domask=True):
     """ Make cutouts for all the measurements of one object."""
     
     obj = qc.query(sql="select * from nsc_dr2.object where id='%s'" % objid,fmt='table',profile='db01')
     meas = qc.query(sql="select * from nsc_dr2.meas where objectid='%s'" % objid,fmt='table',profile='db01')
     nmeas = len(meas)
     print(str(nmeas)+' measurements for '+objid)
-    meascutout(meas,obj,size=size,outdir=outdir)
+    meascutout(meas,obj,size=size,outdir=outdir,domask=domask)
 
 
 if __name__ == "__main__":
