@@ -41,7 +41,8 @@ def make_4panelplot(idv):
     cendec = np.mean(meas["dec"])
     mag = meas["mag_auto"]
     filters = meas["filter"]
-    colors = ["b", "g", "r", "c", "y"]
+    #colors = ["b", "g", "r", "c", "y"]
+    colordict = {'u':'c', 'g':'b', 'r':'g', 'i':'y', 'z':'orange', 'Y':'r', 'VR':'purple'}
     ra = meas["ra"]
     raerr = meas['raerr']
     dra = ra - cenra
@@ -67,6 +68,13 @@ def make_4panelplot(idv):
     mag = mag[goodind]
     meandra = np.mean(dra)
     meanddec = np.mean(ddec)
+
+    # Unique filters
+    # put them in this order [u,g,r,i,z,Y,VR]
+    ufilter = []
+    for filt in ['u','g','r','i','z','Y','VR']:
+        if filt in filters:
+            ufilter.append(filt)
     
     # ra dec plot
     plt.subplot(2,2,1)
@@ -86,9 +94,10 @@ def make_4panelplot(idv):
     plt.subplot(2,2,2)
     plt.errorbar(mjd, dra, yerr=raerr, fmt='none', ecolor='lightgray', elinewidth=1, capsize=0, alpha=0.5, zorder=0)
     count = 0
-    for fil in np.unique(filters):
+    for fil in ufilter:
         filind = np.where(filters == fil)
-        plt.scatter(mjd[filind], dra[filind], c = colors[count], label = fil, s = size, zorder=1)
+        #plt.scatter(mjd[filind], dra[filind], c = colors[count], label = fil, s = size, zorder=1)
+        plt.scatter(mjd[filind], dra[filind], c = colordict[fil], label = fil, s = size, zorder=1)
         count+=1
     plt.legend()
     diffmjd = max(mjd) - min(mjd)
@@ -103,9 +112,9 @@ def make_4panelplot(idv):
     plt.subplot(2,2,4)
     plt.errorbar(mjd, ddec, yerr=decerr, fmt='none', ecolor='lightgray', elinewidth=1, capsize=0, alpha=0.5, zorder=0)
     count = 0
-    for fil in np.unique(filters):
+    for fil in ufilter:
         filind = np.where(filters == fil)
-        plt.scatter(mjd[filind], ddec[filind], c = colors[count], label = fil, s = size, zorder=1)
+        plt.scatter(mjd[filind], ddec[filind], c = colordict[fil], label = fil, s = size, zorder=1)
         count+=1
     plt.legend()
     plt.xlim(min(mjd) - diffmjd/4,  max(mjd) + diffmjd/4)
@@ -118,9 +127,9 @@ def make_4panelplot(idv):
     #magtime
     plt.subplot(2,2,3)
     count = 0
-    for fil in np.unique(filters):
+    for fil in ufilter:
         filind = np.where(filters == fil)
-        plt.scatter(mjd[filind], mag[filind], c = colors[count], label = fil, s = size)
+        plt.scatter(mjd[filind], mag[filind], c = colordict[fil], label = fil, s = size)
         count+=1
     plt.legend()
     diffmag = max(mag) - min(mag)
