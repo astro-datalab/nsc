@@ -436,10 +436,18 @@ def meascutout(meas,obj,size=10,outdir='./',domask=True):
 
     # Make the animated gif
     animfile = outdir+str(objid)+'_cutouts.gif'
-    print('Creating animated gif '+animfile)
     if os.path.exists(animfile): os.remove(animfile)
+    # put list of files in a separate file
+    listfile = outdir+str(objid)+'_cutouts.lst'
+    if os.path.exists(listfile): os.remove(listfile)
+    dln.writelines(listfile,figfiles)
+    delay = dln.scale(nind,[20,1000],[20,1])
+    delay = int(np.round(dln.limit(delay,1,20)))
+    print('delay = '+str(delay))
+    print('Creating animated gif '+animfile)
     #ret = subprocess.run('convert -delay 100 '+figdir+str(objid)+'_*.jpg '+animfile,shell=True)
-    ret = subprocess.run('convert -delay 20 '+' '.join(figfiles)+' '+animfile,shell=True)
+    #ret = subprocess.run('convert -delay 20 '+' '.join(figfiles)+' '+animfile,shell=True)
+    ret = subprocess.run('convert @'+listfile+' -delay '+str(delay)+' '+animfile,shell=True)
     #import pdb; pdb.set_trace()
     dln.remove(figfiles)
 
