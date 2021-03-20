@@ -36,6 +36,7 @@ def fix_pms(objectid):
 
     meas = qc.query(sql="select * from nsc_dr2.meas where objectid='"+objectid+"'",fmt='table')
     nmeas = len(meas)
+    print('  '+str(nmeas))
     mnra = np.median(meas['ra'].data)
     mndec = np.median(meas['dec'].data)
 
@@ -53,12 +54,16 @@ def fix_pms(objectid):
     ra = np.array(meas['ra'],np.float64)
     ra -= np.mean(ra)
     ra *= 3600*1e3 * np.cos(mndec/radeg)     # convert to true angle, milli arcsec
-    t = meas['mjd'].copy()
+    t = np.array(meas['mjd'].copy())
     t -= np.mean(t)
     t /= 365.2425                          # convert to year
     # Calculate robust slope
     try:
         #pmra, pmraerr = dln.robust_slope(t,ra,raerr,reweight=True)
+
+        # LADfit
+        pmra_ladcoef, absdev = dln.ladfit(t,ra)
+        pmra_lad = pmra_ladcoef[1]
 
         # Run RANSAC
         ransac = linear_model.RANSACRegressor()
@@ -71,20 +76,21 @@ def fix_pms(objectid):
 
         # Robust, weighted linear with with INLIERS
         #pmra_coef, pmra_coeferr = dln.poly_fit(t[gdmask],ra[gdmask],1,sigma=raerr[gdmask],robust=True,error=True)
-        pmra_coef, pmra_coeferr = dln.poly_fit(t,ra,1,sigma=raerr,robust=True,error=True)
-        pmra = pmra_coef[0]
-        pmraerr = pmra_coeferr[0]
-        radiff = ra-dln.poly(t,pmra_coef)
+        #pmra_coef, pmra_coeferr = dln.poly_fit(t,ra,1,sigma=raerr,robust=True,error=True)
+        #pmra = pmra_coef[0]
+        #pmraerr = pmra_coeferr[0]
+        #radiff = ra-dln.poly(t,pmra_coef)
+        radiff = ra-t*pmra_lad
         radiff -= np.median(radiff)
         rasig = dln.mad(radiff)
         # Reject outliers
         gdsig = (np.abs(radiff) < 2.5*rasig) | (np.abs(radiff) < 2.5*raerr)
         print('  '+str(nmeas-np.sum(gdsig))+' 2.5*sigma clip outliers rejected')
-        if np.sum(gdsig) < nmeas:
-            pmra_coef, pmra_coeferr = dln.poly_fit(t[gdsig],ra[gdsig],1,sigma=raerr[gdsig],robust=True,error=True)
-            pmra = pmra_coef[0]
-            pmraerr = pmra_coeferr[0]
-            rasig = dln.mad(ra-dln.poly(t,pmra_coef))
+        #if np.sum(gdsig) < nmeas:
+        pmra_coef, pmra_coeferr = dln.poly_fit(t[gdsig],ra[gdsig],1,sigma=raerr[gdsig],robust=True,error=True)
+        pmra = pmra_coef[0]
+        pmraerr = pmra_coeferr[0]
+        rasig = dln.mad(ra-dln.poly(t,pmra_coef))
     except:
         print('problem')
         import pdb; pdb.set_trace()
@@ -97,6 +103,10 @@ def fix_pms(objectid):
     try:
         #pmdec, pmdecerr = dln.robust_slope(t,dec,decerr,reweight=True)
 
+        # LADfit
+        pmdec_ladcoef, absdev = dln.ladfit(t,dec)
+        pmdec_lad = pmdec_ladcoef[1]
+
         # Run RANSAC
         ransac = linear_model.RANSACRegressor()
         ransac.fit(t.reshape(-1,1), dec)
@@ -108,26 +118,32 @@ def fix_pms(objectid):
 
         # Robust, weighted linear with with INLIERS
         #pmdec_coef, pmdec_coeferr = dln.poly_fit(t[gdmask],dec[gdmask],1,sigma=decerr[gdmask],robust=True,error=True)
-        pmdec_coef, pmdec_coeferr = dln.poly_fit(t,dec,1,sigma=decerr,robust=True,error=True)
-        pmdec = pmdec_coef[0]
-        pmdecerr = pmdec_coeferr[0]
-        decdiff = dec-dln.poly(t,pmdec_coef)
+        #pmdec_coef, pmdec_coeferr = dln.poly_fit(t,dec,1,sigma=decerr,robust=True,error=True)
+        #pmdec = pmdec_coef[0]
+        #pmdecerr = pmdec_coeferr[0]
+        #decdiff = dec-dln.poly(t,pmdec_coef)
+        decdiff = dec-t*pmdec_lad
         decdiff -= np.median(decdiff)
         decsig = dln.mad(decdiff)
         # Reject outliers
         gdsig = (np.abs(decdiff) < 2.5*decsig) | (np.abs(decdiff) < 2.5*decerr)
         print('  '+str(nmeas-np.sum(gdsig))+' 2.5*sigma clip outliers rejected')
-        if np.sum(gdsig) < nmeas:
-            pmdec_coef, pmdec_coeferr = dln.poly_fit(t[gdsig],dec[gdsig],1,sigma=decerr[gdsig],robust=True,error=True)
-            pmdec = pmdec_coef[0]
-            pmdecerr = pmdec_coeferr[0]
-            decsig = dln.mad(dec-dln.poly(t,pmdec_coef))            
+        #if np.sum(gdsig) < nmeas:
+        pmdec_coef, pmdec_coeferr = dln.poly_fit(t[gdsig],dec[gdsig],1,sigma=decerr[gdsig],robust=True,error=True)
+        pmdec = pmdec_coef[0]
+        pmdecerr = pmdec_coeferr[0]
+        decsig = dln.mad(dec-dln.poly(t,pmdec_coef))            
 
     except:
         print('problem')
         import pdb; pdb.set_trace()
 
-    out = [pmra,pmraerr,pmra_ransac,rasig,pmdec,pmdecerr,pmdec_ransac,decsig]
+    out = np.array([pmra,pmraerr,pmra_ransac,pmra_lad,rasig,pmdec,pmdecerr,pmdec_ransac,pmdec_lad,decsig])
+
+    #print(out[[0,2,3]])
+    #print(out[[5,7,8]])
+
+    #import pdb; pdb.set_trace()
 
     return out
 
@@ -163,27 +179,35 @@ if __name__ == "__main__":
     cat['old_pmdecerr'] = cat['pmdecerr'].copy()
     cat['pmra_ransac'] = 999999.
     cat['pmdec_ransac'] = 999999.
+    cat['pmra_lad'] = 999999.
+    cat['pmdec_lad'] = 999999.
     cat['rasig'] = 999999.
     cat['decsig'] = 999999.
 
 
     # Fix the pms in healpix object catalogs
     for i in range(nobj):
-        objid = objectid[i].astype(str).strip()
-        print(str(i+1)+' '+objid)
-        out = fix_pms(objid)
-        if out is not None:
-            print('  OLD:    %10.2f %10.2f' % (cat['pmra'][i],cat['pmdec'][i]))
-            print('  NEW:    %10.2f %10.2f' % (out[0],out[4]))
-            print('  RANSAC: %10.2f %10.2f' % (out[2],out[6]))
-            cat['pmra'][i] = out[0]
-            cat['pmraerr'][i] = out[1]
-            cat['pmra_ransac'][i] = out[2]
-            cat['rasig'][i] = out[3]
-            cat['pmdec'][i] = out[4]
-            cat['pmdecerr'][i] = out[5]
-            cat['pmdec_ransac'][i] = out[6]
-            cat['decsig'][i] = out[7]
+        try:
+            objid = objectid[i].astype(str).strip()
+            print(str(i+1)+' '+objid)
+            out = fix_pms(objid)
+            if out is not None:
+                print('  OLD:    %10.2f %10.2f' % (cat['pmra'][i],cat['pmdec'][i]))
+                print('  NEW:    %10.2f %10.2f' % (out[0],out[5]))
+                print('  RANSAC: %10.2f %10.2f' % (out[2],out[7]))
+                print('  LAD:    %10.2f %10.2f' % (out[3],out[8]))
+                cat['pmra'][i] = out[0]
+                cat['pmraerr'][i] = out[1]
+                cat['pmra_ransac'][i] = out[2]
+                cat['pmra_lad'][i] = out[3]
+                cat['rasig'][i] = out[4]
+                cat['pmdec'][i] = out[5]
+                cat['pmdecerr'][i] = out[6]
+                cat['pmdec_ransac'][i] = out[7]
+                cat['pmdec_lad'][i] = out[8]
+                cat['decsig'][i] = out[9]
+        except:
+            print('problem with '+objectid[i])
 
     # Save the corrected file
     print('Saving corrected file to '+outfile)
