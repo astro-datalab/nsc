@@ -137,4 +137,4 @@ if __name__ == "__main__":
 
     # Save the corrected file
     print('Saving corrected file to '+outfile)
-    cat.write(outfile)
+    cat.write(outfile,overwrite=True)
