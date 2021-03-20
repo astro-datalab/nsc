@@ -363,9 +363,11 @@ def meascutout(meas,obj,size=10,outdir='./',domask=True):
         ax[0].annotate('%s  %02d  %s  %6.1f  ' % (meas['exposure'][ind2[i]],ccdnum[i],meas['filter'][ind2[i]],expstr['exptime'][ind1[i]]),
                        xy=(np.mean(xr), yr[0]+dln.valrange(yr)*0.05),ha='center',color=co)
         ax[0].annotate('%10.2f    $\Delta$t=%7.2f  ' % (meas['mjd'][ind2[i]],meas['mjd'][ind2[i]]-np.min(meas['mjd'])),
-                       xy=(xr[0]+dln.valrange(xr)*0.05, yr[1]-dln.valrange(yr)*0.05),ha='left',color=co)
+                       xy=(xr[1]-dln.valrange(xr)*0.05, yr[1]-dln.valrange(yr)*0.05),ha='left',color=co)
+        #               xy=(xr[0]+dln.valrange(xr)*0.05, yr[1]-dln.valrange(yr)*0.05),ha='left',color=co)
         ax[0].annotate('%s = %5.2f +/- %4.2f' % (meas['filter'][ind2[i]], meas['mag_auto'][ind2[i]], meas['magerr_auto'][ind2[i]]),
-                       xy=(xr[1]-dln.valrange(xr)*0.05, yr[1]-dln.valrange(yr)*0.05),ha='right',color=co)
+                       xy=(xr[0]+dln.valrange(xr)*0.05, yr[1]-dln.valrange(yr)*0.05),ha='right',color=co)
+        #               xy=(xr[1]-dln.valrange(xr)*0.05, yr[1]-dln.valrange(yr)*0.05),ha='right',color=co)
 
         # Progress bar
         frameratio = (i+1)/float(nind)
