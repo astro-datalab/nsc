@@ -140,6 +140,25 @@ def meascutout(meas,obj,size=10,outdir='./',domask=True):
     ind1 = ind1[si]
     ind2 = ind2[si]
 
+    # Make cut on FWHM
+    # maybe only use values for 0.5*fwhm_chip to 1.5*fwhm_chip
+    sql = "select chip.* from nsc_dr2.chip as chip join nsc_dr2.meas as meas on chip.exposure=meas.exposure and chip.ccdnum=meas.ccdnum"
+    sql += " where meas.objectid='"+objid+"'"
+    chip = qc.query(sql=sql,fmt='table')
+    ind3,ind4 = dln.match(chip['exposure'],meas['exposure'])
+    si = np.argsort(ind4)   # sort by input meas catalog
+    ind3 = ind3[si]
+    ind4 = ind4[si]
+    chip = chip[ind3]
+    meas = meas[ind4]
+    gdfwhm, = np.where((meas['fwhm'] > 0.2*chip['fwhm']) & (meas['fwhm'] < 2.0*chip['fwhm']))
+    if len(gdfwhm)==0:
+        print('All measurements have bad FWHM values')
+        return
+    if len(gdfwhm) < len(meas):
+        print('Removing '+str(len(meas)-len(gdfwhm))+' measurements with bad FWHM values')
+        meas = meas[gdfwhm]
+
     # Create the reference WCS
     wref = WCS(naxis=2)
     pixscale = 0.26   # DECam, "/pix
