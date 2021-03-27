@@ -130,16 +130,6 @@ def meascutout(meas,obj,size=10,outdir='./',domask=True):
     si = np.argsort(meas['mjd'])
     meas = meas[si]
 
-    ind1,ind2 = dln.match(expstr['base'],meas['exposure'])
-    nind = len(ind1)
-    if nind==0:
-        print('No matches')
-        return
-    # Sort by input meas catalog
-    si = np.argsort(ind2)
-    ind1 = ind1[si]
-    ind2 = ind2[si]
-
     # Make cut on FWHM
     # maybe only use values for 0.5*fwhm_chip to 1.5*fwhm_chip
     sql = "select chip.* from nsc_dr2.chip as chip join nsc_dr2.meas as meas on chip.exposure=meas.exposure and chip.ccdnum=meas.ccdnum"
@@ -158,6 +148,16 @@ def meascutout(meas,obj,size=10,outdir='./',domask=True):
     if len(gdfwhm) < len(meas):
         print('Removing '+str(len(meas)-len(gdfwhm))+' measurements with bad FWHM values')
         meas = meas[gdfwhm]
+
+    ind1,ind2 = dln.match(expstr['base'],meas['exposure'])
+    nind = len(ind1)
+    if nind==0:
+        print('No matches')
+        return
+    # Sort by input meas catalog
+    si = np.argsort(ind2)
+    ind1 = ind1[si]
+    ind2 = ind2[si]
 
     # Create the reference WCS
     wref = WCS(naxis=2)
