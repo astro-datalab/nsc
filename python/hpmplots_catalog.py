@@ -13,24 +13,25 @@ from dlnpyutils import utils as dln, coords
 #from functions.dlnpyutils import coords
 #import functions.parallax as parallax
 from astropy.table import Table
+from astropy.io import fits
 import random
 from time import perf_counter 
 from argparse import ArgumentParser
+import traceback
 
-
-outdir = '/net/dl2/dnidever/nsc/instcal/v3/hpm2/4panel/'
-
-def make_4panelplot(idv):
+def make_4panelplot(obj,outdir):
     matplotlib.use('Agg')
     #params = {'tex.usetex': True}
     #plt.rcParams.update(params)
     #plt.rc(usetex = True)
 
+    idv = obj['id']
+
     #gather all data used
     dataselect = "select mjd,ra,dec,mag_auto,raerr,decerr,filter from nsc_dr2.meas where objectid='" + idv + "'"
     meas = qc.query(sql=dataselect,fmt='table',profile='db01')
     #obj = qc.query(sql="select id,pmra,pmdec from nsc_dr2.object where id='"+ idv +"'",fmt='table',profile='db01')
-    obj = qc.query(sql="select id,pmra,pmdec from nsc_dr2.object where id='"+ idv +"'",fmt='table')
+    #obj = qc.query(sql="select id,pmra,pmdec from nsc_dr2.object where id='"+ idv +"'",fmt='table')
 
     # Make cut on FWHM
     # maybe only use values for 0.5*fwhm_chip to 1.5*fwhm_chip
@@ -174,24 +175,21 @@ def make_4panelplot(idv):
 # Main command-line program
 if __name__ == "__main__":
     parser = ArgumentParser(description='Make diagnostic HPM plots')
-    parser.add_argument('objid', type=str, nargs='*', help='Object IDs')
+    parser.add_argument('catfile', type=str, nargs=1, help='Catalog file')
+    parser.add_argument('--outdir', type=str, nargs=1, default='',help='Output directory')
     args = parser.parse_args()
-    objid = args.objid
-    nobj = dln.size(objid)
+    catfile = args.catfile[0]
+    outdir = dln.first_el(args.outdir)
+    if outdir=='':
+        outdir = '/net/dl2/dnidever/nsc/instcal/v3/hpm2/4panel/'
 
-    if nobj==1:
-        if os.path.exists(objid[0]):
-            listfile = objid[0]
-            print('Reading '+listfile)
-            objid = dln.readlines(listfile)
-            nobj = dln.size(objid)
+    cat = fits.getdata(catfile,1)
+    ncat = len(cat)
 
-    if type(objid) is not list: objid=[objid]
-
-    for i in range(nobj):
-        print(str(i+1)+' '+objid[i])
+    for i in range(ncat):
+        print(str(i+1)+' '+cat['id'][i])
         try:
-            make_4panelplot(objid[i])
+            make_4panelplot(cat[i],outdir)
         except Exception as e:
-            print('Failed on '+objid[i]+' '+str(e))
+            print('Failed on '+cat['id'][i]+' '+str(e))
             traceback.print_exc()
