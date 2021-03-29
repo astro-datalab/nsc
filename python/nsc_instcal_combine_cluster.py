@@ -1699,6 +1699,10 @@ if __name__ == "__main__":
             obj['mjd'][i] = cat1['MJD']
             obj['deltamjd'][i] = 0
 
+        # Check for negative RA values
+        if obj['ra'][i] < 0:
+            obj['ra'][i] += 360
+
         # Mean proper motion and errors
         if ncat1>1:
             raerr = np.array(cat1['RAERR']*1e3,np.float64)    # milli arcsec
