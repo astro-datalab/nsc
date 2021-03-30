@@ -113,7 +113,8 @@ def fix_pms(objectid):
         rasig = dln.mad(ra-dln.poly(t,pmra_coef))
     except:
         print('problem')
-        import pdb; pdb.set_trace()
+        #import pdb; pdb.set_trace()
+        return np.append(np.zeros(10,float)+np.nan, np.zeros(2,int))
 
     decerr = np.array(meas['decerr']*1e3,np.float64)   # milli arcsec
     dec = np.array(meas['dec'],np.float64)
@@ -156,9 +157,11 @@ def fix_pms(objectid):
 
     except:
         print('problem')
-        import pdb; pdb.set_trace()
+        #import pdb; pdb.set_trace()
+        return np.append(np.zeros(10,float)+np.nan, np.zeros(2,int))
 
-    out = np.array([pmra,pmraerr,pmra_ransac,pmra_lad,rasig,pmdec,pmdecerr,pmdec_ransac,pmdec_lad,decsig])
+    deltamjd = np.max(meas['mjd'])-np.min(meas['mjd'])
+    out = np.array([pmra,pmraerr,pmra_ransac,pmra_lad,rasig,pmdec,pmdecerr,pmdec_ransac,pmdec_lad,decsig,nmeas,deltamjd])
 
     #print(out[[0,2,3]])
     #print(out[[5,7,8]])
@@ -182,7 +185,11 @@ if __name__ == "__main__":
     catfile = args.catfile[0]
     outdir = os.path.dirname(catfile)
     outbase = os.path.basename(catfile)
-    outfile = outdir+'/'+outbase.replace('.fits.gz','_corrected.fits')
+    if outbase.endswith('.fits.gz'):
+        outfile = outdir+'/'+outbase.replace('.fits.gz','_corrected.fits')
+    else:
+        outfile = outdir+'/'+outbase.replace('.fits','_corrected.fits')
+    print('output file = '+outfile)
 
     cat = Table.read(catfile)
     # make sure column names are lowercase
@@ -226,6 +233,8 @@ if __name__ == "__main__":
                 cat['pmdec_ransac'][i] = out[7]
                 cat['pmdec_lad'][i] = out[8]
                 cat['decsig'][i] = out[9]
+                cat['ndet'][i] = out[10]
+                cat['deltamjd'][i] = out[11]
         except:
             print('problem with '+objectid[i])
 
