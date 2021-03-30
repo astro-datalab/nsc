@@ -28,7 +28,7 @@ def make_4panelplot(obj,outdir):
     idv = obj['id']
 
     #gather all data used
-    dataselect = "select mjd,ra,dec,mag_auto,raerr,decerr,filter from nsc_dr2.meas where objectid='" + idv + "'"
+    dataselect = "select mjd,ra,dec,mag_auto,raerr,decerr,filter,fwhm,exposure from nsc_dr2.meas where objectid='" + idv + "'"
     meas = qc.query(sql=dataselect,fmt='table',profile='db01')
     #obj = qc.query(sql="select id,pmra,pmdec from nsc_dr2.object where id='"+ idv +"'",fmt='table',profile='db01')
     #obj = qc.query(sql="select id,pmra,pmdec from nsc_dr2.object where id='"+ idv +"'",fmt='table')

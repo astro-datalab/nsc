@@ -488,11 +488,13 @@ if __name__ == "__main__":
     parser.add_argument('objid', type=str, nargs='*', help='Exposure name')
     parser.add_argument('--fov', type=str, nargs=1, default=40, help='Field of View (arcsec)')
     parser.add_argument('--outdir', type=str, nargs=1, default='', help='Output directory')
+    parser.add_argument('--clobber', action='store_true', help='Overwrite existing files')
     args = parser.parse_args()
     objid = args.objid
     nobj = len(args.objid)
     fov = float(dln.first_el(args.fov))
     outdir = dln.first_el(args.outdir)
+    clobber = args.clobber
     if outdir=='':
         outdir = '/net/dl2/dnidever/nsc/instcal/v3/hpm2/cutouts2/'
 
@@ -507,6 +509,12 @@ if __name__ == "__main__":
 
     for i in range(nobj):
         print(str(i+1)+' '+objid[i])
+
+        animfile = outdir+str(objid)+'_cutouts.gif'
+        if os.path.exists(animfile) and ~clobber:
+            print(animfile+' already exists and clobber is not set')
+            continue
+
         try:
             objcutouts(objid[i],size=fov,outdir=outdir)
         except Exception as e:
