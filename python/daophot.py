@@ -55,15 +55,9 @@ def rdpsf(psffile):
     lines = dln.readlines(psffile)
     nlines = len(lines)
     line1 = lines[0]
-    label = line1[1:9].strip()  # A8
-    npsf = int(line1[9:15])  # I5
-    npar = int(line1[14:20])  # I5
-    nexp = int(line1[19:25])  # I5
-    nfrac = int(line1[24:30])  # I5
-    psfmag = float(line1[29:39])  # F9.3
-    bright = float(line1[38:54])  # F15.3
-    xpsf = float(line1[53:63])  # F9.1
-    ypsf = float(line1[62:])  # F9.1
+    fmt = '(1X, A8, 4I5, F9.3, F15.3, 2F9.1)'
+    label,npsf,npar,nexp,nfrac,psfmag,bright,xpsf,ypsf = dln.fread(line1,fmt)
+    label = label.strip()
     header = {'label':label, 'npsf':npsf, 'npar':npar, 'nexp':nexp, 'nfrac':nfrac,
               'psfmag':psfmag, 'bright':bright, 'xpsf':xpsf, 'ypsf':ypsf}
     
@@ -92,6 +86,7 @@ def rdpsf(psffile):
     #         END DO
     #      END IF
     nterm = nexp + nfrac
+    header['nterm'] = nterm
     if nterm>=1:
         # Put all of the data into one long array
         bigline = ''
@@ -121,9 +116,9 @@ class PSF:
     
     def __init__(self,header,par,psf):
         # Initalize the psf object
-        header = header
-        par = par
-        psf = psf
+        self.header = header
+        self.par = par
+        self.psf = psf
 
     def call(self,x,y,mag,full=False,deriv=False,origin=0):
         """ Create a PSF image."""
