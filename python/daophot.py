@@ -228,7 +228,7 @@ def erf(xin,x0,beta):
     return f,dfdx,dfdbet
 
 
-def profile_gaussian(dx,dy,par,term,ideriv=0):
+def profile_gaussian(dx,dy,par,ideriv=False):
     """ GAUSSIAN PSF analytical profile."""
 
     # dx/dy can be scalars or 1D arrays
@@ -253,20 +253,22 @@ def profile_gaussian(dx,dy,par,term,ideriv=0):
     #            TERM(2) = (DHDSY-ERFY/PAR(2))*ERFX/P1P2
     #         END IF
     #C
+    n = dln.size(dx)
     p1p2 = par[0]*par[1]
-    erfx = scipy.special.erf(dx,0.0,par[0],dhdxc, dhdsx)
-    erfy = scipy.special.erf(dy,0.0,par[1],dhdyc, dhdsy)    
+    erfx,dhdxc,dhdsx = erf(dx,0.0,par[0])
+    erfy,dhdyc,dhdsy = erf(dy,0.0,par[1])  
     profil = erfx*erfy/p1p2
     dhdxc *= erfy/p1p2
     dhdyc *= erfx/p1p2
-    if ideriv>0:
-        term[0] = (dhdsx-erfx/par[0])*erfy/p1p2
-        term[1] = (dhdsy-erfy/par[1])*erfx/p1p2
+    term = np.zeros((2,n),float)    
+    if ideriv==True:
+        term[0,:] = (dhdsx-erfx/par[0])*erfy/p1p2
+        term[1,:] = (dhdsy-erfy/par[1])*erfx/p1p2
 
-    return (profil,dhdxc,dhdxy,term)
+    return (profil,dhdxc,dhdyc,term)
     
     
-def profile_moffat15(dx,dy,par,term,ideriv=0):
+def profile_moffat15(dx,dy,par,ideriv=False):
     """ MOFFAT beta=1.5 PSF analytical profile."""
 
     #      ELSE IF (IPSTYP .EQ. 2) THEN
@@ -355,7 +357,7 @@ def profile_moffat15(dx,dy,par,term,ideriv=0):
         p4fod = par[3]*alpha*profil/denom
         dhdxc = p4fod*(2.0*dx/p1sq + dy*par[2])
         dhdyc = p4fod*(2.0*dy/p2sq + dx*par[2])        
-        if (ideriv>0):
+        if (ideriv==True):
             term[0] = (2.0*p4fod*dx**2/p1sq-profil)/par[0]
             term[1] = (2.0*p4fod*dy**2/p2sq-profil)/par[1]
             term[2] = -p4fod*dy
@@ -402,7 +404,7 @@ def profile_moffat15(dx,dy,par,term,ideriv=0):
 
     return (profil,dhdxc,dhdxy,term)
     
-def profile_moffat25(dx,dy,par,term,ideriv=0):
+def profile_moffat25(dx,dy,par,ideriv=False):
     """ MOFFAT beta=2.5 PSF analytical profile."""
 
     #      ELSE IF (IPSTYP .EQ. 3) THEN
@@ -498,7 +500,7 @@ def profile_moffat25(dx,dy,par,term,ideriv=0):
 
     return (profil,dhdxc,dhdxy,term)
     
-def profile_moffat35(dx,dy,par,term,ideriv=0):
+def profile_moffat35(dx,dy,par,ideriv=False):
     """ MOFFAT beta=3.5 PSF analytical profile."""
 
     #      ELSE IF (IPSTYP .EQ. 4) THEN
@@ -594,7 +596,7 @@ def profile_moffat35(dx,dy,par,term,ideriv=0):
 
     return (profil,dhdxc,dhdxy,term)
     
-def profile_lorentz(dx,dy,par,term,ideriv=0):
+def profile_lorentz(dx,dy,par,ideriv=False):
     """ LORENTZ PSF analytical profile."""
     
     #      ELSE IF (IPSTYP .EQ. 5) THEN
@@ -666,7 +668,7 @@ def profile_lorentz(dx,dy,par,term,ideriv=0):
 
     return (profil,dhdxc,dhdxy,term)
     
-def profile_penny1(dx,dy,par,term,ideriv=0):
+def profile_penny1(dx,dy,par,ideriv=False):
     """ PENNY1 PSF analytical profile."""
        
     #      ELSE IF (IPSTYP .EQ. 6) THEN
@@ -766,7 +768,7 @@ def profile_penny1(dx,dy,par,term,ideriv=0):
 
     return (profil,dhdxc,dhdxy,term)
     
-def profile_penny2(dx,dy,par,term,ideriv=0):
+def profile_penny2(dx,dy,par,ideriv=False):
     """ PENNY2 PSF analytical profile."""
 
     #      ELSE IF (IPSTYP .EQ. 7) THEN
@@ -876,7 +878,7 @@ def profile_penny2(dx,dy,par,term,ideriv=0):
 
     return (profil,dhdxc,dhdxy,term)
 
-def profile(ipstyp,dx,dy,par,ideriv=0):
+def profile(ipstyp,dx,dy,par,ideriv=False):
     """ PSF analytical profile."""
 
     #C#######################################################################
@@ -932,9 +934,209 @@ def profile(ipstyp,dx,dy,par,ideriv=0):
     profdict = {1:profile_gaussian, 2:profile_moffat15, 3:profile_moffat25,
                 4:profile_moffat35, 5:profile_lorentz, 6:profile_penny1,
                 7:profile_penny2}
-    out = profdict[ipstyp](dx,dy,par,dhdxc,dhdyc,term,ideriv)
+    out = profdict[ipstyp](dx,dy,par,ideriv)
     # returns (profil,dhdxc,dhdxy,term)
     return out
+
+
+def bicubic(f, nbox, dx, dy):
+    """
+    Perform bicubic interpolation in a grid of values.
+    And return the derivatives wrt x and y.
+    """
+
+    #C
+    #      REAL FUNCTION  BICUBC  (F, NBOX, DX, DY, DFDX, DFDY)
+    #C
+    #C Perform a type of bicubic interpolation in a grid of values.
+    #C For a point located DX, DY distant from the corner of the grid
+    #C (defined to be 1,1), return both the interpolated value and
+    #C its first derivatives with respect to x and y.
+    #C
+    #      IMPLICIT NONE
+    #      INTEGER NBOX
+    #      REAL F(NBOX,NBOX), TEMP(4), DFDXT(4)
+    #C
+    #      REAL DX, DY, DFDX, DFDY, C1, C2, C3, C4
+    #      INTEGER JY
+    #C
+    #C By construction, the point at which we want to estimate the function
+    #C will lie between the second and third columns, and between the second
+    #C and third rows of F, at a distance of (DX,DY) from the (2,2) element
+    #C of F.
+    #C
+    #      DO JY=1,4
+    #         C1 = 0.5*(F(3,JY)-F(1,JY))
+    #         C4 = F(3,JY) - F(2,JY) - C1
+    #         C2 = 3.*C4 - 0.5*(F(4,JY)-F(2,JY)) + C1
+    #         C3 = C4 - C2
+    #         C4 = DX*C3
+    #         TEMP(JY) = DX*(DX*(C4+C2)+C1)+F(2,JY)
+    #         DFDXT(JY)= DX*(C4*3.+2.*C2)+C1
+    #      END DO
+    #      C1 = 0.5*(TEMP(3)-TEMP(1))
+    #      C4 = TEMP(3) - TEMP(2) - C1
+    #      C2 = 3.*C4 - 0.5*(TEMP(4)-TEMP(2)) + C1
+    #      C3 = C4 - C2
+    #      C4 = DY*C3
+    #      BICUBC = DY*(DY*(C4+C2)+C1)+TEMP(2)
+    #      DFDY = DY*(C4*3.+2.*C2)+C1
+    #      C1 = 0.5*(DFDXT(3)-DFDXT(1))
+    #      C4 = DFDXT(3) - DFDXT(2) - C1
+    #      C2 = 3.*C4 - 0.5*(DFDXT(4)-DFDXT(2)) + C1
+    #      C3 = C4 - C2
+    #      DFDX = DY*(DY*(DY*C3+C2)+C1)+DFDXT(2)
+    #      RETURN
+    #      END
+
+    temp = np.zeros(4,float)
+    
+    for jy in range(4):
+        c1 = 0.5*(f[2,jy]-f[0,jy])
+        c4 = f[2,jy] - f[1,jy] - c1
+        c2 = 3.0*c4 - 0.5*(f[3,jy]-f[1,jy]) + c1
+        c3 = c4 - c2
+        c4 = dx*c3
+        temp[jy] = dx*(dx*(c4+c2)+c1)+f[1,jy]
+        dfdxt[jy] = dx*(c4*3.0+2.0*c2)+c1
+    c1 = 0.5*(temp[2]-temp[0])
+    c4 = temp[2] - temp[1] - c1
+    c2 = 3.0*c4 - 0.5*(temp[3]-temp[1]) + c1
+    c3 = c4 - c2
+    c4 = dy*c3
+    bicubic = dy*(dy*(c4+c2)+c1)+temp[1]
+    dfdy = dy*(c4*3.0+2.0*c2)+c1
+    c1 = 0.5*(dfdxt[2]-dfdxt[0])
+    c4 = dfdxt[2] - dfdxt[1] - c1
+    c2 = 3.0*c4 - 0.5*(dfdxt[3]-dfdxt[1]) + c1
+    c3 = c4 - c2
+    dfdx = dy*(dy*(dy*c3+c2)+c1)+dfdxt[1]
+    
+    return bicubic, dfdx, dfdy
+
+
+def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltadx,deltay,dvdxc,dvdyc):
+    """ Evaluate the PSF for a point."""
+    #    C
+    #      REAL FUNCTION  USEPSF  (IPSTYP, DX, DY, BRIGHT, PAR, PSF, 
+    #     .     NPSF, NPAR, NEXP, NFRAC, DELTAX, DELTAY, DVDXC, DVDYC)
+    #C
+    #C Evaluate the PSF for a point distant DX, DY from the center of a
+    #C star located at relative frame coordinates DELTAX, DELTAY.
+    #C
+    #      IMPLICIT NONE
+    #      INTEGER MAXPSF, MAXPAR, MAXEXP
+    #      PARAMETER (MAXPSF=207, MAXPAR=6, MAXEXP=10)
+    #C
+    #      REAL PAR(*), PSF(MAXPSF,MAXPSF,*), JUNK(MAXEXP)
+    #C
+    #      REAL PROFIL, BICUBC
+    #C
+    #      REAL MIDDLE, BRIGHT, DVDXC, DVDYC, DELTAX, DELTAY, XX, YY
+    #      REAL DX, DY, CORR, DFDX, DFDY
+    #      INTEGER K, LX, LY, IPSTYP
+    #      INTEGER NFRAC, NTERM, NPSF, NEXP, NPAR
+    #C
+    #      NTERM = NEXP + NFRAC
+    #      USEPSF = BRIGHT*PROFIL(IPSTYP, DX, DY, PAR, DVDXC, DVDYC, 
+    #     .     JUNK, 0)
+    #      DVDXC = BRIGHT*DVDXC
+    #      DVDYC = BRIGHT*DVDYC
+    #      IF (NTERM .LT. 0) RETURN
+    #      MIDDLE = (NPSF+1)/2
+
+    nterm = nexp + nfrac
+    usepsf,dvdxc,dvdyc,junk = bright*profile(ipstyp,dx,dy,par)
+    dvdxc *= bright
+    dvdyc *= bright
+    if nterm<0:
+        return usepsf
+
+    middle = npsf//2
+
+    #C
+    #C The PSF look-up tables are centered at (MIDDLE, MIDDLE).
+    #C
+    #      IF (NEXP .GE. 0) THEN
+    #         JUNK(1) = 1.
+    #         IF (NEXP .GE. 2) THEN
+    #            JUNK(2) = DELTAX
+    #            JUNK(3) = DELTAY
+    #            IF (NEXP .GE. 4) THEN
+    #               JUNK(4) = 1.5*DELTAX**2-0.5
+    #               JUNK(5) = DELTAX*DELTAY
+    #               JUNK(6) = 1.5*DELTAY**2-0.5
+    #               IF (NEXP .GE. 7) THEN
+    #                  JUNK(7) = DELTAX*(5.*JUNK(4)-2.)/3.
+    #                  JUNK(8) = JUNK(4)*DELTAY
+    #                  JUNK(9) = DELTAX*JUNK(6)
+    #                  JUNK(10) = DELTAY*(5.*JUNK(6)-2.)/3.
+    #               END IF
+    #            END IF
+    #         END IF
+    #      END IF
+    #C
+
+    if (nexp >= 0):
+        junk[0] = 1
+        if (nexp >= 2):
+            junk[1] = deltax
+            junk[2] = deltay
+            if (nexp >= 4):
+                junk[3] = 1.5*deltax**2-0.5
+                junk[4] = deltax*deltay
+                junk[5] = 1.5*deltay**2-0.5
+                if (nexp >= 7):
+                    junk[6] = deltax*(5.0*junk[3]-2.0)/3.
+                    junk[7] = junk[3]*deltay
+                    junk[8] = deltax*junk[5]
+                    junk[9] = deltay*(5.0*junk[5]-2.0)/3.      
+
+    
+    #C     IF (NFRAC .GT. 0) THEN
+    #C        J = NEXP+1
+    #C        JUNK(J) = -2.*(DX - REAL(NINT(DX)))
+    #C        J = J+1
+    #C        JUNK(J) = -2.*(DY - REAL(NINT(DY)))
+    #C        J = J+1
+    #C        JUNK(J) = 1.5*JUNK(J-2)**2 - 0.5
+    #C        J = J+1
+    #C        JUNK(J) = JUNK(J-3)*JUNK(J-2)
+    #C        J = J+1
+    #C        JUNK(J) = 1.5*JUNK(J-3)**2 - 0.5
+    #C     END IF
+    #      XX = 2.*DX+MIDDLE
+    #      LX = INT(XX)
+    #      YY = 2.*DY+MIDDLE
+    #      LY = INT(YY)
+
+    xx = 2.0*dx+middle
+    lx = int(xx)
+    yy = 2.0*dy+middle
+    lx = int(yy)
+
+    #C
+    #C This point in the stellar profile lies between columns LX and LX+1,
+    #C and between rows LY and LY+1 in the look-up tables.
+    #C
+    #      DO K=1,NTERM
+    #         CORR = BICUBC(PSF(LX-1,LY-1,K), MAXPSF, 
+    #     .        XX-REAL(LX), YY-REAL(LY), DFDX, DFDY)
+    #         USEPSF = USEPSF + JUNK(K)*CORR
+    #         DVDXC = DVDXC-JUNK(K)*DFDX
+    #         DVDYC = DVDYC-JUNK(K)*DFDY
+    #      END DO
+    #      RETURN
+    #      END
+    #C
+
+    for k in range(nterm):
+        corr, dfdx, dfdy = bicubic(psf[lx-1,ly-1,k], maxpsf, xx-float(lx),yy-float(ly))
+        usepsf += junk[k]*corr
+        dvdxc -= junk[k]*dfdx
+        dvdxy -= junk[k]*dfdy        
+    
+    return usepsf
 
 
 def psfnparam(ipstyp, fwhm, maxpar):
