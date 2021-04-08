@@ -304,6 +304,13 @@ def profile_moffat15(dx,dy,par,ideriv=False):
     #         P1P2 = PAR(1)*PAR(2)
     #         XY = DX*DY
 
+    n = dln.size(dx)
+    profil = np.zeros(n,float)
+    dhdxc = np.zeros(n,float)
+    dhdyc = np.zeros(n,float)
+    term = np.zeros((4,n),float)    
+
+    
     alpha = 0.5874011
     talpha = 1.1748021
     p1sq = par[0]**2
@@ -315,13 +322,15 @@ def profile_moffat15(dx,dy,par,ideriv=False):
     #         DENOM = 1. + ALPHA*(DX**2/P1SQ + DY**2/P2SQ + XY*PAR(3))
 
     denom = 1.0 + alpha*(dx**2/p1sq + dy**2/p2sq + dxy*par[2])
-    if denom>5e6:
-        return (None,None,None,None)
+    #if denom>5e6:
+    #    return (profil,dhdxc,dhdyc,term)
+    gd = (denom<=5e6)
     
     #         IF (DENOM .GT. 5.E6) RETURN
     #         FUNC = 1. / (P1P2 * DENOM**PAR(4))
 
-    func = 1.0 / (p1p2*denom**par[3])
+    func = np.zeros(n,float)
+    func[gd] = 1.0 / (p1p2*denom[gd]**par[3])
     
     #         IF (FUNC .GE. 0.046) THEN
     #            NPT = 4
@@ -361,7 +370,7 @@ def profile_moffat15(dx,dy,par,ideriv=False):
             term[0] = (2.0*p4fod*dx**2/p1sq-profil)/par[0]
             term[1] = (2.0*p4fod*dy**2/p2sq-profil)/par[1]
             term[2] = -p4fod*dy
-            term[3] = profil*(1.0/(par[3]-1.0)-log10(denom))   # log or log10???
+            term[3] = profil*(1.0/(par[3]-1.0)-np.log10(denom))   # log or log10???
         return (profil,dhdxc,dhdyxc,term)
     else:
         return (profil,dhdxc,dhdyxc,term)
@@ -373,7 +382,10 @@ def profile_moffat15(dx,dy,par,ideriv=False):
     #         END DO
     #C
 
-
+    for ix in range(npt):
+        x[ix] = dx+datad[ix,npt-1]
+        xsq[ix] = x[ix]**2
+        p1xsq[ix] = xsq[ix]/p1sq
     
     #         DO IY=1,NPT
     #            Y = DY+D(IY,NPT)
@@ -402,8 +414,30 @@ def profile_moffat15(dx,dy,par,ideriv=False):
     #         END DO
     #C
 
-    return (profil,dhdxc,dhdxy,term)
+    for iy in range(npt):
+        y = dy+datad[iy,npt-1]
+        ysq = y**2
+        p2ysq = ysq/p2sq
+        for ix in range(npt):
+            wt = dataw[iy,npt-1]*dataw[ix,npt-1]
+            xy = x[ix]*y
+            denom = 1.0 + alpha*(p1xsq[ix] + p2ysq + xy*par[2])
+            func = (par[3]-1.0) / (p1p2 * denom**par[3]))
+            p4fod = par[3]*alpha*func/denom
+            wp4fod = wt*p4fod
+            wf = wt*func
+            profil = profil + wf
+            dhdxc = dhdxc + wp4fod*(2.0*x[ix]/p1sq + y*par[2])
+            dhdyc = dhdyc + wp4fod*(2.0*y/p2sq + x[ix]*par[2])
+            if ideriv==True:
+                term[0] += (2.0*wp4fod*p1xsq[ix]-wf)/par[0]
+                term[1] += (2.0*wp4fod*p2ysq-wf)/par[1]
+                term[2] += -wp4fod/xy
+                term[3] += wf*(1.0/(par[3]-1.0)-np.log10(denom))
     
+    return (profil,dhdxc,dhdxy,term)
+
+
 def profile_moffat25(dx,dy,par,ideriv=False):
     """ MOFFAT beta=2.5 PSF analytical profile."""
 
