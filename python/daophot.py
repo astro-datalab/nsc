@@ -831,14 +831,53 @@ def profile_lorentz(dx,dy,par,ideriv=False):
     #C
     #C PAR(1) is the HWHM in x at y = 0.
     #C
+
+    n = dln.size(dx)
+    if n>1:
+        profil = np.zeros(n,float)
+        dhdxc = np.zeros(n,float)
+        dhdyc = np.zeros(n,float)
+        term = np.zeros((3,n),float)    
+        for i in range(n):
+            profil1,dhdxc1,dhdyc1,term1 = profile_lorentz(dx[i],dy[i],par,ideriv=ideriv)
+            profil[i] = profil1
+            dhdxc[i] = dhdxc1
+            dhdyc[i] = dhdyc1
+            term[:,i] = term1
+        return profil,dhdxc,dhdyc,term
+
+    
+    profil = 0.0
+    dhdxc = 0.0
+    dhdyc = 0.0
+    term = np.zeros(3,float)
+    x = np.zeros(4,float)
+    xsq = np.zeros(4,float)
+    p1xsq = np.zeros(4,float)
+
+    
     #         P1SQ = PAR(1)**2
     #         P2SQ = PAR(2)**2
     #         P1P2 = PAR(1)*PAR(2)
     #         XY = DX*DY
     #C
+
+    p1sq = par[0]**2
+    p2sq = par[1]**2
+    p1p2 = par[0]*par[1]
+    xy = dx*dy
+    
     #         DENOM = 1. + DX**2/P1SQ + DY**2/P2SQ + XY*PAR(3)
     #         IF (DENOM .GT. 1.E10) RETURN
+
+    denom = 1.0 + dx**2/p1sq + dy**2/p2sq + xy*par[2]
+    if denom>1e10:
+        return (profil,dhdxc,dhdyc,term)
+    
     #         FUNC = 1. / DENOM
+
+    func = 1.0 / denom
+
     #         IF (FUNC .GE. 0.046) THEN
     #            NPT = 4
     #         ELSE IF (FUNC .GE. 0.0022) THEN
@@ -860,12 +899,38 @@ def profile_lorentz(dx,dy,par,ideriv=False):
     #            RETURN
     #         END IF
     #C
+
+    if (func >= 0.046):
+        npt = 4
+    elif (func >= 0.0022):
+        npt = 3
+    elif (func >= 0.0001):
+        npt = 2
+    elif (func >= 1e-10):
+        profil = func
+        wfsq = func**2
+        dhdxc = wfsq*(2.0*dx/p1sq + dy*par[2])
+        dhdyc = wfsq*(2.0*dy/p2sq + dx*par[2])
+        if (ideriv==True):
+            term[0] = wfsq*(2.0*dx**2/p1sq)/par[0]
+            term[1] = wfsq*(2.0*dy**2/p2sq)/par[1]
+            term[2] = -wfsq*xy
+        return (profil,dhdxc,dhdyc,term)
+    else:
+        return (profil,dhdxc,dhdyc,term)
+    
     #         DO IX=1,NPT
     #            X(IX) = DX+D(IX,NPT)
     #            XSQ(IX) = X(IX)**2
     #            P1XSQ(IX) = XSQ(IX)/P1SQ
     #         END DO
     #C
+
+    for ix in range(npt):
+        x[ix] = dx+PROFILE_DATAD[ix,npt-1]
+        xsq[ix] = x[ix]**2
+        p1xsq[ix] = xsq[ix]/p1sq
+    
     #         DO IY=1,NPT
     #            Y = DY+D(IY,NPT)
     #            YSQ = Y**2
@@ -889,6 +954,25 @@ def profile_lorentz(dx,dy,par,ideriv=False):
     #         END DO
     #C
 
+    for iy in range(npt):
+        y = dy+PROFILE_DATAD[iy,npt-1]
+        ysq = y**2
+        p2ysq = ysq/p2sq
+        for ix in range(npt):
+            wt = PROFILE_DATAW[iy,npt-1]*PROFILE_DATAW[ix,npt-1]
+            xy = x[ix]*y
+            denom = 1.0 + p1xsq[ix] + p2ysq + xy*par[2]
+            func = 1.0 / denom
+            wf = wt*func
+            wfsq = wf*func
+            profil = profil + wf
+            dhdxc = dhdxc + wfsq*(2.0*x[ix]/p1sq + y*par[2])
+            dhdyc = dhdyc + wfsq*(2.0*y/p2sq + x[ix]*par[2])
+            if ideriv==True:
+                term[0] += wfsq*(2.0*p1xsq[ix])/par[0]
+                term[1] += wfsq*(2.0*p2ysq)/par[1]
+                term[2] += -wfsq/xy
+    
     return (profil,dhdxc,dhdyc,term)
     
 def profile_penny1(dx,dy,par,ideriv=False):
@@ -899,13 +983,48 @@ def profile_penny1(dx,dy,par,ideriv=False):
     #C Penny function --- Gaussian core plus Lorentzian wings.  The Lorentzian 
     #C is elongated along the x or y axis, the Gaussian may be tilted.
     #C
+
+    n = dln.size(dx)
+    if n>1:
+        profil = np.zeros(n,float)
+        dhdxc = np.zeros(n,float)
+        dhdyc = np.zeros(n,float)
+        term = np.zeros((4,n),float)    
+        for i in range(n):
+            profil1,dhdxc1,dhdyc1,term1 = profile_penny1(dx[i],dy[i],par,ideriv=ideriv)
+            profil[i] = profil1
+            dhdxc[i] = dhdxc1
+            dhdyc[i] = dhdyc1
+            term[:,i] = term1
+        return profil,dhdxc,dhdyc,term
+
+    
+    profil = 0.0
+    dhdxc = 0.0
+    dhdyc = 0.0
+    term = np.zeros(4,float)
+    x = np.zeros(4,float)
+    xsq = np.zeros(4,float)
+    p1xsq = np.zeros(4,float)
+
     #         P1SQ = PAR(1)**2
     #         P2SQ = PAR(2)**2
     #         ONEMP3 = 1.-PAR(3)
     #         XY = DX*DY
+
+    p1sq = par[0]**2
+    p2sq = par[1]**2
+    onemp3 = 1.0-par[2]
+    xy = dx*dy
+    
     #C
     #         RSQ = DX**2/P1SQ + DY**2/P2SQ
     #         IF (RSQ .GT. 1.E10) RETURN
+
+    rsq = dx**2/p1sq + dy**2/p2sq
+    if rsq>1e10:
+        return (profil,dhdxc,dhdyc,term)
+    
     #C
     #         F = 1./(1.+RSQ)
     #         RSQ = RSQ + XY*PAR(4)
@@ -917,6 +1036,16 @@ def profile_penny1(dx,dy,par,ideriv=False):
     #            FUNC = ONEMP3*F
     #         END IF
     #C
+
+    f = 1.0/(1.0+rsq)
+    rsq += xy*par[3]
+    if rsq<34.0:
+        e = np.exp(-0.6931472*rsq)
+        func = par[2]*e + onemp3*f
+    else:
+        e = 0.0
+        func = onemp3*f
+    
     #         IF (FUNC .GE. 0.046) THEN
     #            NPT = 4
     #         ELSE IF (FUNC .GE. 0.0022) THEN
@@ -946,11 +1075,44 @@ def profile_penny1(dx,dy,par,ideriv=False):
     #            RETURN
     #         END IF
     #C
+
+    if (func >= 0.046):
+        npt = 4
+    elif (func >= 0.0022):
+        npt = 3
+    elif (func >= 0.0001):
+        npt = 2
+    elif (func >= 1e-10):
+        profil = func
+        dfby = onemp3*f**2
+        deby = 0.6931472*par[2]*e
+        dbyx0 = 2.0*dx/p1sq
+        dbyy0 = 2.0*dy/p2sq
+        dhdxc = deby*(dbyx0 + dy*par[3]) + dfby*dbyx0
+        dhdyc = deby*(dbyy0 + dx*par[3]) + dfby*dbyy0
+        if (ideriv==True):
+            dbyx0 = dbyx0*dx/par[0]
+            dbyy0 = dbyy0*dy/par[1]
+            dfby += deby
+            term[0] = dfby * dbyx0
+            term[1] = dfby * dbyy0
+            term[2] = e - f
+            term[3] = -deby * xy / (0.5 - np.abs(par[3]))
+        return (profil,dhdxc,dhdyc,term)
+    else:
+        return (profil,dhdxc,dhdyc,term)
+
+    
     #         DO IX=1,NPT
     #            X(IX) = DX+D(IX,NPT)
     #            P1XSQ(IX) = X(IX)/P1SQ
     #         END DO
     #C
+
+    for ix in range(npt):
+        x[ix] = dx+PROFILE_DATAD[ix,npt-1]
+        p1xsq[ix] = x[ix]/p1sq
+    
     #         DO IY=1,NPT
     #            Y = DY+D(IY,NPT)
     #            P2YSQ = Y/P2SQ
@@ -989,6 +1151,37 @@ def profile_penny1(dx,dy,par,ideriv=False):
     #         END DO
     #C
 
+    for iy in range(npt):
+        y = dy+PROFILE_DATAD[iy,npt-1]
+        p2ysq = y/p2sq
+        for ix in range(npt):
+            wt = PROFILE_DATAW[iy,npt-1]*PROFILE_DATAW[ix,npt-1]
+            xy = x[ix]*y
+            rsq = p1xsq[ix]*x[ix] + p2ysq*y
+            f = 1.0/(1.0+rsq)
+            rsq += xy*par[3]
+            if rsq<34.0:
+                e = np.exp(-0.6931472*rsq)
+                func = par[2]*e + onemp3*f
+                deby = 0.6931472*wt*par[2]*e
+            else:
+                e = 0.0
+                func = onemp3*f
+                deby = 0.0
+            profil = profil + wt*func
+            dfby = wt*onemp3*f**2
+            dbyx0 = 2.0*p1xsq[ix]
+            dbyy0 = 2.0*p2ysq
+            dhdxc += deby*(dbyx0 + dy*par[3]) + dfby*dbyx0
+            dhdyc += deby*(dbyy0 + dx*par[3]) + dfby*dbyy0
+            if ideriv==True:
+                dbyx0 = dbyx0*dx/par[0]
+                dbyy0 = dbyy0*dy/par[1]
+                term[0] += (dfby+deby)*dbyx0
+                term[1] += (dfby+deby)*dbyy0
+                term[2] += wt*(e-f)
+                term[3] += -deby*xy
+    
     return (profil,dhdxc,dhdyc,term)
     
 def profile_penny2(dx,dy,par,ideriv=False):
@@ -1000,16 +1193,52 @@ def profile_penny2(dx,dy,par,ideriv=False):
     #C The Lorentzian and Gaussian may be tilted in different
     #C directions.
     #C
+
+    n = dln.size(dx)
+    if n>1:
+        profil = np.zeros(n,float)
+        dhdxc = np.zeros(n,float)
+        dhdyc = np.zeros(n,float)
+        term = np.zeros((5,n),float)    
+        for i in range(n):
+            profil1,dhdxc1,dhdyc1,term1 = profile_penny2(dx[i],dy[i],par,ideriv=ideriv)
+            profil[i] = profil1
+            dhdxc[i] = dhdxc1
+            dhdyc[i] = dhdyc1
+            term[:,i] = term1
+        return profil,dhdxc,dhdyc,term
+
+    
+    profil = 0.0
+    dhdxc = 0.0
+    dhdyc = 0.0
+    term = np.zeros(5,float)
+    x = np.zeros(4,float)
+    xsq = np.zeros(4,float)
+    p1xsq = np.zeros(4,float)
+
     #         P1SQ = PAR(1)**2
     #         P2SQ = PAR(2)**2
     #         ONEMP3 = 1.-PAR(3)
     #         XY = DX*DY
     #C
+
+    p1sq = par[0]**2
+    p2sq = par[1]**2
+    onemp3 = 1.0-par[2]
+    xy = dx*dy
+    
     #         RSQ = DX**2/P1SQ + DY**2/P2SQ
     #         DFBY = RSQ + PAR(5)*XY
     #         IF (DFBY .GT. 1.E10) RETURN
+
+    rsq = dx**2/p1sq + dy**2/p2sq
+    dfby = rsq + par[4]*xy
+    if rsq>1e10:
+        return (profil,dhdxc,dhdyc,term)
+    
     #         F = 1./(1.+DFBY)
-    #C
+    #C    
     #         DEBY = RSQ + PAR(4)*XY
     #         IF (DEBY .LT. 34.) THEN
     #            E = EXP(-0.6931472*DEBY)
@@ -1018,6 +1247,15 @@ def profile_penny2(dx,dy,par,ideriv=False):
     #         END IF
     #C
     #         FUNC = PAR(3)*E + ONEMP3*F
+    
+    f = 1.0/(1.0+dfby)
+    deby = rsq + par[3]*xy
+    if deby<34.0:
+        e = np.exp(-0.6931472*deby)
+    else:
+        e = 0.0
+    func = par[2]*e + onemp3*f
+        
     #         IF (FUNC .GE. 0.046) THEN
     #            NPT = 4
     #         ELSE IF (FUNC .GE. 0.0022) THEN
@@ -1049,11 +1287,44 @@ def profile_penny2(dx,dy,par,ideriv=False):
     #            RETURN
     #         END IF
     #C
+
+    if (func >= 0.046):
+        npt = 4
+    elif (func >= 0.0022):
+        npt = 3
+    elif (func >= 0.0001):
+        npt = 2
+    elif (func >= 1e-10):
+        profil = func
+        dfby = onemp3*f**2
+        deby = 0.6931472*par[2]*e
+        dbyx0 = 2.0*dx/p1sq
+        dbyy0 = 2.0*dy/p2sq
+        dhdxc = deby*(dbyx0 + dy*par[3]) + dfby*(dbyx0 + dy*par[4])
+        dhdyc = deby*(dbyy0 + dx*par[3]) + dfby*(dbyy0 + dx*par[4])
+        if (ideriv==True):
+            dbyx0 = dbyx0*dx/par[0]
+            dbyy0 = dbyy0*dy/par[1]
+            term[4] = -dfby * xy
+            dfby += deby
+            term[0] = dfby * dbyx0
+            term[1] = dfby * dbyy0
+            term[2] = e - f
+            term[3] = -deby * xy 
+        return (profil,dhdxc,dhdyc,term)
+    else:
+        return (profil,dhdxc,dhdyc,term)
+    
     #         DO IX=1,NPT
     #            X(IX) = DX+D(IX,NPT)
     #            P1XSQ(IX) = X(IX)/P1SQ
     #         END DO
     #C
+
+    for ix in range(npt):
+        x[ix] = dx+PROFILE_DATAD[ix,npt-1]
+        p1xsq[ix] = x[ix]/p1sq
+    
     #         DO IY=1,NPT
     #            Y = DY+D(IY,NPT)
     #            P2YSQ = Y/P2SQ
@@ -1099,6 +1370,42 @@ def profile_penny2(dx,dy,par,ideriv=False):
     #            END DO
     #         END DO
 
+    for iy in range(npt):
+        y = dy+PROFILE_DATAD[iy,npt-1]
+        p2ysq = y/p2sq
+        for ix in range(npt):
+            wt = PROFILE_DATAW[iy,npt-1]*PROFILE_DATAW[ix,npt-1]
+            xy = x[ix]*y
+            rsq = p1xsq[ix]*x[ix] + p2ysq*y
+            f = rsq + par[4]*xy
+            if f <= -1:
+                f = 0.0
+            else:
+                f = 1.0/(1.0+f)
+            deby = rsq + par[3]*xy
+            if deby<34.0:
+                e = np.exp(-0.6931472*deby)
+                func = par[2]*e + onemp3*f
+                deby = 0.6931472*wt*par[2]*e
+            else:
+                e = 0.0
+                func = onemp3*f
+                deby = 0.0
+            profil = profil + wt*func
+            dfby = wt*onemp3*f**2
+            dbyx0 = 2.0*p1xsq[ix]
+            dbyy0 = 2.0*p2ysq
+            dhdxc = deby*(dbyx0 + dy*par[3]) + dfby*(dbyx0 + dy*par[4])
+            dhdyc = deby*(dbyy0 + dx*par[3]) + dfby*(dbyy0 + dx*par[4])
+            if ideriv==True:
+                dbyx0 = dbyx0*dx/par[0]
+                dbyy0 = dbyy0*dy/par[1]
+                term[0] += (dfby+deby)*dbyx0
+                term[1] += (dfby+deby)*dbyy0
+                term[2] += wt*(e-f)
+                term[3] += -deby*xy
+                term[4] += -dfby*xy                
+    
     return (profil,dhdxc,dhdyc,term)
 
 def profile(ipstyp,dx,dy,par,ideriv=False):
