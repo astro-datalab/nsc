@@ -305,11 +305,27 @@ def profile_moffat15(dx,dy,par,ideriv=False):
     #         XY = DX*DY
 
     n = dln.size(dx)
-    profil = np.zeros(n,float)
-    dhdxc = np.zeros(n,float)
-    dhdyc = np.zeros(n,float)
-    term = np.zeros((4,n),float)    
+    if n>1:
+        profil = np.zeros(n,float)
+        dhdxc = np.zeros(n,float)
+        dhdyc = np.zeros(n,float)
+        term = np.zeros((4,n),float)    
+        for i in range(n):
+            profil1,dhdxc1,dhdyc1,term1 = profile_moffat15(dx[i],dy[i],par,ideriv=ideriv)
+            profil[i] = profil1
+            dhdxc[i] = dhdxc1
+            dhdyc[i] = dhdyc1
+            term[:,i] = term1
+        return profil,dhdxc,dhdyc,term
 
+    
+    profil = 0.0
+    dhdxc = 0.0
+    dhdyc = 0.0
+    term = np.zeros(4,float)
+    x = np.zeros(4,float)
+    xsq = np.zeros(4,float)
+    p1xsq = np.zeros(4,float)
     
     alpha = 0.5874011
     talpha = 1.1748021
@@ -320,17 +336,15 @@ def profile_moffat15(dx,dy,par,ideriv=False):
     
     #C
     #         DENOM = 1. + ALPHA*(DX**2/P1SQ + DY**2/P2SQ + XY*PAR(3))
-
-    denom = 1.0 + alpha*(dx**2/p1sq + dy**2/p2sq + dxy*par[2])
-    #if denom>5e6:
-    #    return (profil,dhdxc,dhdyc,term)
-    gd = (denom<=5e6)
-    
     #         IF (DENOM .GT. 5.E6) RETURN
+    
+    denom = 1.0 + alpha*(dx**2/p1sq + dy**2/p2sq + xy*par[2])
+    if denom>5e6:
+        return (profil,dhdxc,dhdyc,term)
+    
     #         FUNC = 1. / (P1P2 * DENOM**PAR(4))
 
-    func = np.zeros(n,float)
-    func[gd] = 1.0 / (p1p2*denom[gd]**par[3])
+    func = 1.0 / (p1p2*denom**par[3])
     
     #         IF (FUNC .GE. 0.046) THEN
     #            NPT = 4
@@ -370,10 +384,10 @@ def profile_moffat15(dx,dy,par,ideriv=False):
             term[0] = (2.0*p4fod*dx**2/p1sq-profil)/par[0]
             term[1] = (2.0*p4fod*dy**2/p2sq-profil)/par[1]
             term[2] = -p4fod*dy
-            term[3] = profil*(1.0/(par[3]-1.0)-np.log10(denom))   # log or log10???
-        return (profil,dhdxc,dhdyxc,term)
+            term[3] = profil*(1.0/(par[3]-1.0)-np.log(denom))
+        return (profil,dhdxc,dhdyc,term)
     else:
-        return (profil,dhdxc,dhdyxc,term)
+        return (profil,dhdxc,dhdyc,term)
     
     #         DO IX=1,NPT
     #            X(IX) = DX+D(IX,NPT)
@@ -383,7 +397,7 @@ def profile_moffat15(dx,dy,par,ideriv=False):
     #C
 
     for ix in range(npt):
-        x[ix] = dx+datad[ix,npt-1]
+        x[ix] = dx+PROFILE_DATAD[ix,npt-1]
         xsq[ix] = x[ix]**2
         p1xsq[ix] = xsq[ix]/p1sq
     
@@ -415,14 +429,14 @@ def profile_moffat15(dx,dy,par,ideriv=False):
     #C
 
     for iy in range(npt):
-        y = dy+datad[iy,npt-1]
+        y = dy+PROFILE_DATAD[iy,npt-1]
         ysq = y**2
         p2ysq = ysq/p2sq
         for ix in range(npt):
-            wt = dataw[iy,npt-1]*dataw[ix,npt-1]
+            wt = PROFILE_DATAW[iy,npt-1]*PROFILE_DATAW[ix,npt-1]
             xy = x[ix]*y
             denom = 1.0 + alpha*(p1xsq[ix] + p2ysq + xy*par[2])
-            func = (par[3]-1.0) / (p1p2 * denom**par[3]))
+            func = (par[3]-1.0) / (p1p2 * denom**par[3])
             p4fod = par[3]*alpha*func/denom
             wp4fod = wt*p4fod
             wf = wt*func
@@ -433,9 +447,9 @@ def profile_moffat15(dx,dy,par,ideriv=False):
                 term[0] += (2.0*wp4fod*p1xsq[ix]-wf)/par[0]
                 term[1] += (2.0*wp4fod*p2ysq-wf)/par[1]
                 term[2] += -wp4fod/xy
-                term[3] += wf*(1.0/(par[3]-1.0)-np.log10(denom))
+                term[3] += wf*(1.0/(par[3]-1.0)-np.log(denom))
     
-    return (profil,dhdxc,dhdxy,term)
+    return (profil,dhdxc,dhdyc,term)
 
 
 def profile_moffat25(dx,dy,par,ideriv=False):
@@ -473,10 +487,50 @@ def profile_moffat25(dx,dy,par,ideriv=False):
     #         P2SQ = PAR(2)**2
     #         P1P2 = PAR(1)*PAR(2)
     #         XY = DX*DY
+
+    n = dln.size(dx)
+    if n>1:
+        profil = np.zeros(n,float)
+        dhdxc = np.zeros(n,float)
+        dhdyc = np.zeros(n,float)
+        term = np.zeros((4,n),float)    
+        for i in range(n):
+            profil1,dhdxc1,dhdyc1,term1 = profile_moffat25(dx[i],dy[i],par,ideriv=ideriv)
+            profil[i] = profil1
+            dhdxc[i] = dhdxc1
+            dhdyc[i] = dhdyc1
+            term[:,i] = term1
+        return profil,dhdxc,dhdyc,term
+
+    
+    profil = 0.0
+    dhdxc = 0.0
+    dhdyc = 0.0
+    term = np.zeros(4,float)
+    x = np.zeros(4,float)
+    xsq = np.zeros(4,float)
+    p1xsq = np.zeros(4,float)
+    
+    alpha = 0.3195079
+    talpha = 0.6390158
+    p1sq = par[0]**2
+    p2sq = par[1]**2
+    p1p2 = par[0]*par[1]
+    xy = dx*dy
+
+
     #C
     #         DENOM = 1. + ALPHA*(DX**2/P1SQ + DY**2/P2SQ + XY*PAR(3))
     #         IF (DENOM .GT. 1.E4) RETURN
+
+    denom = 1.0 + alpha*(dx**2/p1sq + dy**2/p2sq + xy*par[2])
+    if denom>1e4:
+        return (profil,dhdxc,dhdyc,term)
+
     #         FUNC = 1. / (P1P2 * DENOM**PAR(4))
+
+    func = 1.0 / (p1p2*denom**par[3])
+
     #         IF (FUNC .GE. 0.046) THEN
     #            NPT = 4
     #         ELSE IF (FUNC .GE. 0.0022) THEN
@@ -499,12 +553,39 @@ def profile_moffat25(dx,dy,par,ideriv=False):
     #            RETURN
     #         END IF
     #C
+
+    if (func >= 0.046):
+        npt = 4
+    elif (func >= 0.0022):
+        npt = 3
+    elif (func >= 0.0001):
+        npt = 2
+    elif (func >= 1e-10):
+        profil = (par[3]-1.0)*func
+        p4fod = par[3]*alpha*profil/denom
+        dhdxc = p4fod*(2.0*dx/p1sq + dy*par[2])
+        dhdyc = p4fod*(2.0*dy/p2sq + dx*par[2])        
+        if (ideriv==True):
+            term[0] = (2.0*p4fod*dx**2/p1sq-profil)/par[0]
+            term[1] = (2.0*p4fod*dy**2/p2sq-profil)/par[1]
+            term[2] = -p4fod*dy
+            term[3] = profil*(1.0/(par[3]-1.0)-np.log(denom))
+        return (profil,dhdxc,dhdyc,term)
+    else:
+        return (profil,dhdxc,dhdyc,term)
+    
     #         DO IX=1,NPT
     #            X(IX) = DX+D(IX,NPT)
     #            XSQ(IX) = X(IX)**2
     #            P1XSQ(IX) = XSQ(IX)/P1SQ
     #         END DO
     #C
+
+    for ix in range(npt):
+        x[ix] = dx+PROFILE_DATAD[ix,npt-1]
+        xsq[ix] = x[ix]**2
+        p1xsq[ix] = xsq[ix]/p1sq
+    
     #         DO IY=1,NPT
     #            Y = DY+D(IY,NPT)
     #            YSQ = Y**2
@@ -532,7 +613,28 @@ def profile_moffat25(dx,dy,par,ideriv=False):
     #         END DO
     #C
 
-    return (profil,dhdxc,dhdxy,term)
+    for iy in range(npt):
+        y = dy+PROFILE_DATAD[iy,npt-1]
+        ysq = y**2
+        p2ysq = ysq/p2sq
+        for ix in range(npt):
+            wt = PROFILE_DATAW[iy,npt-1]*PROFILE_DATAW[ix,npt-1]
+            xy = x[ix]*y
+            denom = 1.0 + alpha*(p1xsq[ix] + p2ysq + xy*par[2])
+            func = (par[3]-1.0) / (p1p2 * denom**par[3])
+            p4fod = par[3]*alpha*func/denom
+            wp4fod = wt*p4fod
+            wf = wt*func
+            profil = profil + wf
+            dhdxc = dhdxc + wp4fod*(2.0*x[ix]/p1sq + y*par[2])
+            dhdyc = dhdyc + wp4fod*(2.0*y/p2sq + x[ix]*par[2])
+            if ideriv==True:
+                term[0] += (2.0*wp4fod*p1xsq[ix]-wf)/par[0]
+                term[1] += (2.0*wp4fod*p2ysq-wf)/par[1]
+                term[2] += -wp4fod/xy
+                term[3] += wf*(1.0/(par[3]-1.0)-np.log(denom))
+    
+    return (profil,dhdxc,dhdyc,term)
     
 def profile_moffat35(dx,dy,par,ideriv=False):
     """ MOFFAT beta=3.5 PSF analytical profile."""
@@ -569,10 +671,49 @@ def profile_moffat35(dx,dy,par,ideriv=False):
     #         P2SQ = PAR(2)**2
     #         P1P2 = PAR(1)*PAR(2)
     #         XY = DX*DY
+
+    n = dln.size(dx)
+    if n>1:
+        profil = np.zeros(n,float)
+        dhdxc = np.zeros(n,float)
+        dhdyc = np.zeros(n,float)
+        term = np.zeros((4,n),float)    
+        for i in range(n):
+            profil1,dhdxc1,dhdyc1,term1 = profile_moffat35(dx[i],dy[i],par,ideriv=ideriv)
+            profil[i] = profil1
+            dhdxc[i] = dhdxc1
+            dhdyc[i] = dhdyc1
+            term[:,i] = term1
+        return profil,dhdxc,dhdyc,term
+
+    
+    profil = 0.0
+    dhdxc = 0.0
+    dhdyc = 0.0
+    term = np.zeros(4,float)
+    x = np.zeros(4,float)
+    xsq = np.zeros(4,float)
+    p1xsq = np.zeros(4,float)
+    
+    alpha = 0.2190137
+    talpha = 0.4380273
+    p1sq = par[0]**2
+    p2sq = par[1]**2
+    p1p2 = par[0]*par[1]
+    xy = dx*dy
+    
     #C
     #         DENOM = 1. + ALPHA*(DX**2/P1SQ + DY**2/P2SQ + XY*PAR(3))
     #         IF (DENOM .GT. 1.E4) RETURN
+    
+    denom = 1.0 + alpha*(dx**2/p1sq + dy**2/p2sq + xy*par[2])
+    if denom>1e4:
+        return (profil,dhdxc,dhdyc,term)
+    
     #         FUNC = 1. / (P1P2 * DENOM**PAR(4))
+
+    func = 1.0 / (p1p2*denom**par[3])
+    
     #         IF (FUNC .GE. 0.046) THEN
     #            NPT = 4
     #         ELSE IF (FUNC .GE. 0.0022) THEN
@@ -595,12 +736,39 @@ def profile_moffat35(dx,dy,par,ideriv=False):
     #            RETURN
     #         END IF
     #C
+
+    if (func >= 0.046):
+        npt = 4
+    elif (func >= 0.0022):
+        npt = 3
+    elif (func >= 0.0001):
+        npt = 2
+    elif (func >= 1e-10):
+        profil = (par[3]-1.0)*func
+        p4fod = par[3]*alpha*profil/denom
+        dhdxc = p4fod*(2.0*dx/p1sq + dy*par[2])
+        dhdyc = p4fod*(2.0*dy/p2sq + dx*par[2])        
+        if (ideriv==True):
+            term[0] = (2.0*p4fod*dx**2/p1sq-profil)/par[0]
+            term[1] = (2.0*p4fod*dy**2/p2sq-profil)/par[1]
+            term[2] = -p4fod*dy
+            term[3] = profil*(1.0/(par[3]-1.0)-np.log(denom))
+        return (profil,dhdxc,dhdyc,term)
+    else:
+        return (profil,dhdxc,dhdyc,term)
+    
     #         DO IX=1,NPT
     #            X(IX) = DX+D(IX,NPT)
     #            XSQ(IX) = X(IX)**2
     #            P1XSQ(IX) = XSQ(IX)/P1SQ
     #         END DO
     #C
+
+    for ix in range(npt):
+        x[ix] = dx+PROFILE_DATAD[ix,npt-1]
+        xsq[ix] = x[ix]**2
+        p1xsq[ix] = xsq[ix]/p1sq
+
     #         DO IY=1,NPT
     #            Y = DY+D(IY,NPT)
     #            YSQ = Y**2
@@ -628,7 +796,28 @@ def profile_moffat35(dx,dy,par,ideriv=False):
     #         END DO
     #C
 
-    return (profil,dhdxc,dhdxy,term)
+    for iy in range(npt):
+        y = dy+PROFILE_DATAD[iy,npt-1]
+        ysq = y**2
+        p2ysq = ysq/p2sq
+        for ix in range(npt):
+            wt = PROFILE_DATAW[iy,npt-1]*PROFILE_DATAW[ix,npt-1]
+            xy = x[ix]*y
+            denom = 1.0 + alpha*(p1xsq[ix] + p2ysq + xy*par[2])
+            func = (par[3]-1.0) / (p1p2 * denom**par[3])
+            p4fod = par[3]*alpha*func/denom
+            wp4fod = wt*p4fod
+            wf = wt*func
+            profil = profil + wf
+            dhdxc = dhdxc + wp4fod*(2.0*x[ix]/p1sq + y*par[2])
+            dhdyc = dhdyc + wp4fod*(2.0*y/p2sq + x[ix]*par[2])
+            if ideriv==True:
+                term[0] += (2.0*wp4fod*p1xsq[ix]-wf)/par[0]
+                term[1] += (2.0*wp4fod*p2ysq-wf)/par[1]
+                term[2] += -wp4fod/xy
+                term[3] += wf*(1.0/(par[3]-1.0)-np.log(denom))
+    
+    return (profil,dhdxc,dhdyc,term)
     
 def profile_lorentz(dx,dy,par,ideriv=False):
     """ LORENTZ PSF analytical profile."""
@@ -700,7 +889,7 @@ def profile_lorentz(dx,dy,par,ideriv=False):
     #         END DO
     #C
 
-    return (profil,dhdxc,dhdxy,term)
+    return (profil,dhdxc,dhdyc,term)
     
 def profile_penny1(dx,dy,par,ideriv=False):
     """ PENNY1 PSF analytical profile."""
@@ -800,7 +989,7 @@ def profile_penny1(dx,dy,par,ideriv=False):
     #         END DO
     #C
 
-    return (profil,dhdxc,dhdxy,term)
+    return (profil,dhdxc,dhdyc,term)
     
 def profile_penny2(dx,dy,par,ideriv=False):
     """ PENNY2 PSF analytical profile."""
@@ -910,7 +1099,7 @@ def profile_penny2(dx,dy,par,ideriv=False):
     #            END DO
     #         END DO
 
-    return (profil,dhdxc,dhdxy,term)
+    return (profil,dhdxc,dhdyc,term)
 
 def profile(ipstyp,dx,dy,par,ideriv=False):
     """ PSF analytical profile."""
