@@ -1690,7 +1690,7 @@ def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay):
     return upsf,dvdxc,dvdyc
 
 
-def psfnparam(ipstyp, fwhm, maxpar):
+def psfnparam(ipstyp, fwhm):
     #INTEGER FUNCTION  NPARAM  (IPSTYP, FWHM, LABEL, PAR, MAXPAR)
     #CHARACTER*8 LABEL
     #INTEGER MAXPAR
@@ -1698,6 +1698,7 @@ def psfnparam(ipstyp, fwhm, maxpar):
     #PAR(1) = FWHM/2.
     #PAR(2) = PAR(1)
 
+    maxpar = 5
     par = np.zeros(maxpar,float)
     par[0] = fwhm/2
     par[1] = fwhm/2
@@ -1819,23 +1820,25 @@ def rdpsf(psffile):
     header = {'label':label, 'ipstyp':ipstyp, 'npsf':npsf, 'npar':npar, 'nexp':nexp,
               'nfrac':nfrac, 'psfmag':psfmag, 'bright':bright, 'xpsf':xpsf, 'ypsf':ypsf}
     
-    # Checking something here, maybe that the parameters are okay
-    # I think this checks the that number of parameters is correct for the label
     #      DO IPSTYP=1,MAXTYP
     #         I = NPARAM(IPSTYP, 1., CHECK, PAR, MAXPAR)
     #         IF ((LABEL .EQ. CHECK) .AND. (I .EQ. NPAR)) GO TO 1100
     #      END DO
     #      CALL STUPID ('Inappropriate PSF: '//LABEL)
 
-
+    # Check that the number of input parameters is correct for this PSF type
+    # and initial PSF with some extra parameters
+    nparcheck,par,label = psfnparam(ipstyp, 1.0)
+    if nparcheck != npar:
+        raise ValueError('Inappropriate PSF: '+label)
+    
     # Read in the parameters
     # 1100 READ (3,301,IOSTAT=ISTAT) (PAR(I), I=1,NPAR)
     #  301 FORMAT (1X, 6E13.6)
     line1 = lines[1]
-    par = np.zeros(npar,float)
     for i in range(npar):
         par[i] = float(line1[1+i*13:1+(i+1)*13])
-    
+        
     # Read in the data
     #      NTERM = NEXP+NFRAC
     #      IF (NTERM .GE. 1) THEN
@@ -1863,7 +1866,9 @@ def rdpsf(psffile):
             psf[:,:,k] = numbers1.reshape(npsf,npsf)
 
         # plt.imshow(psf[:,:,0],origin='lower',aspect='auto')   
-
+    else:
+        psf = None
+        
     # header, par, psf
     return (header, par, psf)
         
@@ -1880,10 +1885,12 @@ class PSF:
         self.par = par
         self.psf = psf
 
-    def __call__(self,x,y,mag,full=False,deriv=False,origin=0):
+    def __call__(self,x,y,mag,psfradius=None,full=False,deriv=False,origin=0):
         """ Create a PSF image."""
 
-        # CHECK ADDSTAR.F
+        if psfradius is not None:
+            if psfradius < 1:
+                raise ValueError('psfradius must be >= 1')
 
         # have option to return the derivative
 
@@ -1898,6 +1905,11 @@ class PSF:
                                   self.header['nexp'],self.header['nfrac'],x,y)
         upsf2 = upsf.reshape(npix,npix)
 
+        # Impose the psf radius
+        if psfradius is not None:
+            print('Impose psfradius')
+            import pdf; pdf.set_trace()
+        
         # Scale it with the magnitude
         # from addstar.f line 196
         scale = 10.0**(0.4*(self.header['psfmag']-mag))
