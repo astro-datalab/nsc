@@ -1814,8 +1814,10 @@ def rdpsf(psffile):
     fmt = '(1X, A8, 4I5, F9.3, F15.3, 2F9.1)'
     label,npsf,npar,nexp,nfrac,psfmag,bright,xpsf,ypsf = dln.fread(line1,fmt)
     label = label.strip()
-    header = {'label':label, 'npsf':npsf, 'npar':npar, 'nexp':nexp, 'nfrac':nfrac,
-              'psfmag':psfmag, 'bright':bright, 'xpsf':xpsf, 'ypsf':ypsf}
+    ipstyp = {'GAUSSIAN':1, 'MOFFAT15':2, 'MOFFAT25':3, 'MOFFAT35':4,
+              'LORENTZ':5, 'PENNY1':6, 'PENNY2':7}[label]
+    header = {'label':label, 'ipstyp':ipstyp, 'npsf':npsf, 'npar':npar, 'nexp':nexp,
+              'nfrac':nfrac, 'psfmag':psfmag, 'bright':bright, 'xpsf':xpsf, 'ypsf':ypsf}
     
     # Checking something here, maybe that the parameters are okay
     # I think this checks the that number of parameters is correct for the label
@@ -1878,12 +1880,30 @@ class PSF:
         self.par = par
         self.psf = psf
 
-    def call(self,x,y,mag,full=False,deriv=False,origin=0):
+    def __call__(self,x,y,mag,full=False,deriv=False,origin=0):
         """ Create a PSF image."""
 
         # CHECK ADDSTAR.F
 
         # have option to return the derivative
+
+        npix = 51
+        dx = np.arange(npix)-npix//2
+        dx2 = np.repeat(dx,npix).reshape(npix,npix)
+        dy = np.arange(npix)-npix//2
+        dy2 = np.repeat(dy,npix).reshape(npix,npix).T
+
+        upsf,dvdxc,dvdyc = usepsf(self.header['ipstyp'],dx2.flatten(),dy2.flatten(),self.header['bright'],
+                                  self.par,self.psf,self.header['npsf'],self.header['npar'],
+                                  self.header['nexp'],self.header['nfrac'],x,y)
+        upsf2 = upsf.reshape(npix,npix)
+
+        # Scale it with the magnitude
+        # from addstar.f line 196
+        scale = 10.0**(0.4*(self.header['psfmag']-mag))
+        
+        return upsf2*scale
+        
         
     def __str__(self):
         pass
