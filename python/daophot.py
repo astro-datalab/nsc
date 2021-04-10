@@ -1469,7 +1469,7 @@ def profile(ipstyp,dx,dy,par,ideriv=False):
     return out
 
 
-def bicubic(f, nbox, dx, dy):
+def bicubic(f, dx, dy):
     """
     Perform bicubic interpolation in a grid of values.
     And return the derivatives wrt x and y.
@@ -1520,6 +1520,7 @@ def bicubic(f, nbox, dx, dy):
     #      END
 
     temp = np.zeros(4,float)
+    dfdxt = np.zeros(4,float)    
     
     for jy in range(4):
         c1 = 0.5*(f[2,jy]-f[0,jy])
@@ -1545,7 +1546,7 @@ def bicubic(f, nbox, dx, dy):
     return bicubic, dfdx, dfdy
 
 
-def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltadx,deltay,dvdxc,dvdyc):
+def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay):
     """ Evaluate the PSF for a point."""
     #    C
     #      REAL FUNCTION  USEPSF  (IPSTYP, DX, DY, BRIGHT, PAR, PSF, 
@@ -1575,15 +1576,32 @@ def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltadx,deltay,dvdxc
     #      IF (NTERM .LT. 0) RETURN
     #      MIDDLE = (NPSF+1)/2
 
-    nterm = nexp + nfrac
-    usepsf,dvdxc,dvdyc,junk = bright*profile(ipstyp,dx,dy,par)
+    maxpsf = 207
+    maxpar = 6
+    maxexp = 10
+    
+    n = dln.size(dx)
+    if n>1:
+        upsf = np.zeros(n,float)
+        dvdxc = np.zeros(n,float)
+        dvdyc = np.zeros(n,float)
+        for i in range(n):
+            upsf1,dvdxc1,dvdyc1 = usepsf(ipstyp,dx[i],dy[i],bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay)
+            upsf[i] = upsf1
+            dvdxc[i] = dvdxc1
+            dvdyc[i] = dvdyc1
+        return upsf,dvdxc,dvdyc
+
+    nterm = nexp + nfrac    
+    upsf,dvdxc,dvdyc,junk = profile(ipstyp,dx,dy,par)
+    upsf *= bright
     dvdxc *= bright
     dvdyc *= bright
     if nterm<0:
-        return usepsf
+        return upsf,dvdxc,dvdyc
 
     middle = npsf//2
-
+    
     #C
     #C The PSF look-up tables are centered at (MIDDLE, MIDDLE).
     #C
@@ -1607,6 +1625,7 @@ def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltadx,deltay,dvdxc
     #      END IF
     #C
 
+    junk = np.zeros(10,float)
     if (nexp >= 0):
         junk[0] = 1
         if (nexp >= 2):
@@ -1622,7 +1641,7 @@ def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltadx,deltay,dvdxc
                     junk[8] = deltax*junk[5]
                     junk[9] = deltay*(5.0*junk[5]-2.0)/3.      
 
-    
+                    
     #C     IF (NFRAC .GT. 0) THEN
     #C        J = NEXP+1
     #C        JUNK(J) = -2.*(DX - REAL(NINT(DX)))
@@ -1643,7 +1662,7 @@ def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltadx,deltay,dvdxc
     xx = 2.0*dx+middle
     lx = int(xx)
     yy = 2.0*dy+middle
-    lx = int(yy)
+    ly = int(yy)
 
     #C
     #C This point in the stellar profile lies between columns LX and LX+1,
@@ -1660,13 +1679,15 @@ def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltadx,deltay,dvdxc
     #      END
     #C
 
+    dvdxc = 0.0
+    dvdyc = 0.0
     for k in range(nterm):
-        corr, dfdx, dfdy = bicubic(psf[lx-1,ly-1,k], maxpsf, xx-float(lx),yy-float(ly))
-        usepsf += junk[k]*corr
+        corr, dfdx, dfdy = bicubic(psf[lx-1:,ly-1:,k], xx-float(lx), yy-float(ly))
+        upsf += junk[k]*corr
         dvdxc -= junk[k]*dfdx
-        dvdxy -= junk[k]*dfdy        
+        dvdyc -= junk[k]*dfdy        
     
-    return usepsf
+    return upsf,dvdxc,dvdyc
 
 
 def psfnparam(ipstyp, fwhm, maxpar):
