@@ -1871,6 +1871,7 @@ def rdpsf(psffile):
     #return (ipstyp, par, maxpar, npar, psf, maxpsf, maxexp, npsf, nexp, nfrac, psfmag, bright, xpsf, ypsf)
 
 def numinpvals(inpvals):
+    """ Helper function to get the number of input values."""
     if (type(inpvals) is list) or (type(inpvals) is tuple):
         listoflists = False
         if (type(inpvals[0]) is list) or (type(inpvals[0]) is tuple):
@@ -1883,8 +1884,12 @@ def numinpvals(inpvals):
         nstars = len(inpvals)
     return nstars
         
-def getinputvals(inpvals,i):
+def getinpvals(inpvals,i):
+    """ Helper function get the next input values."""
     if type(inpvals) is list or type(inpvals) is tuple:
+        listoflists = False
+        if (type(inpvals[0]) is list) or (type(inpvals[0]) is tuple):
+            listoflists = True
         if listoflists:
             x,y,mag = inpvals[i]
         else:
