@@ -1870,8 +1870,32 @@ def rdpsf(psffile):
         
     #return (ipstyp, par, maxpar, npar, psf, maxpsf, maxexp, npsf, nexp, nfrac, psfmag, bright, xpsf, ypsf)
 
-    
-    
+def numinpvals(inpvals):
+    if (type(inpvals) is list) or (type(inpvals) is tuple):
+        listoflists = False
+        if (type(inpvals[0]) is list) or (type(inpvals[0]) is tuple):
+            listoflists = True
+        if listoflists:
+            nstars = len(inpvals)
+        else:
+            nstars = 1
+    else:
+        nstars = len(inpvals)
+    return nstars
+        
+def getinputvals(inpvals,i):
+    if type(inpvals) is list or type(inpvals) is tuple:
+        if listoflists:
+            x,y,mag = inpvals[i]
+        else:
+            x,y,mag = inpvals
+    else:
+        x = inpvals['x'][i]
+        y = inpvals['y'][i]
+        mag = inpvals['mag'][i]  
+    return x,y,mag
+        
+        
 class PSF:
     """ DAOPHOT PSF class."""
     
@@ -1884,18 +1908,7 @@ class PSF:
     def __call__(self,inpvals,full=False,deriv=False,origin=0):
         """ Create a PSF image."""
 
-        # have option to return the derivative
-
-        if (type(inpvals) is list) or (type(inpvals) is tuple):
-            listoflists = False
-            if (type(inpvals[0]) is list) or (type(inpvals[0]) is tuple):
-                listoflists = True
-            if listoflists:
-                nstars = len(inpvals)
-            else:
-                nstars = 1
-        else:
-            nstars = len(inpvals)
+        nstars = numinpvals(inpvals)
 
         # Full is True if nstars>1
         if nstars>1:
@@ -1909,19 +1922,10 @@ class PSF:
             nxfull = int(self.header['xpsf']*2+1)
             nyfull = int(self.header['ypsf']*2+1)
             image = np.zeros((nxfull,nyfull),float)
-
             
         # Loop over stars
         for i in range(nstars):
-            if type(inpvals) is list or type(inpvals) is tuple:
-                if listoflists:
-                    x,y,mag = inpvals[i]
-                else:
-                    x,y,mag = inpvals
-            else:
-                x = inpvals['x'][i]
-                y = inpvals['y'][i]
-                mag = inpvals['mag'][i]                
+            x,y,mag = getinpvals(inpvals,i)
                 
             # Scale x/y values
             # addstar.f line 190-191
