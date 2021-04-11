@@ -1881,50 +1881,109 @@ class PSF:
         self.par = par
         self.psf = psf
 
-    def __call__(self,x,y,mag,full=False,deriv=False,origin=0):
+    def __call__(self,inpvals,full=False,deriv=False,origin=0):
         """ Create a PSF image."""
 
         # have option to return the derivative
 
-        # Scale x/y values
-        # addstar.f line 190-191
-        deltax = (x-1.0)/self.header['xpsf'] - 1.0
-        deltay = (y-1.0)/self.header['ypsf'] - 1.0        
-        
-        # PSF radius
-        # addstar.f line 74
-        psfradius = (float(self.header['npsf']-1)/2.0 - 1.0)/2.
-        
-        npix = 2*int(psfradius)-1
-        dx = np.arange(npix)-npix//2
-        dx2 = np.repeat(dx,npix).reshape(npix,npix)
-        dy = np.arange(npix)-npix//2
-        dy2 = np.repeat(dy,npix).reshape(npix,npix).T
-
-        upsf,dvdxc,dvdyc = usepsf(self.header['ipstyp'],dx2.flatten(),dy2.flatten(),self.header['bright'],
-                                  self.par,self.psf,self.header['npsf'],self.header['npar'],
-                                  self.header['nexp'],self.header['nfrac'],deltax,deltay)
-        upsf = upsf.reshape(npix,npix)
-        dvdxc = dvdxc.reshape(npix,npix)
-        dvdyc = dvdyc.reshape(npix,npix)        
-
-        # Impose the psf radius
-        # addstar.f line 74
-        psfradius = (float(self.header['npsf']-1)/2.0 - 1.0)/2.
-        rad = np.sqrt(dx2**2+dy2**2)
-        upsf[rad>psfradius] = 0.0
-        
-        # Scale it with the magnitude
-        # from addstar.f line 196
-        scale = 10.0**(0.4*(self.header['psfmag']-mag))
-        upsf *= scale
-        
-        # No derivatives
-        if deriv is False:
-            return upsf
+        if (type(inpvals) is list) or (type(inpvals) is tuple):
+            listoflists = False
+            if (type(inpvals[0]) is list) or (type(inpvals[0]) is tuple):
+                listoflists = True
+            if listoflists:
+                nstars = len(inpvals)
+            else:
+                nstars = 1
         else:
-            return upsf,dvdxc,dvdyc
+            nstars = len(inpvals)
+
+        # Full is True if nstars>1
+        if nstars>1:
+            full = True
+
+        # Full image
+        if full is True:
+            # psf.f line 477+478
+            # XMID = REAL(NCOL-1)/2.  # same as XPSF
+            # YMID = REAL(NROW-1)/2.  # same as YPSF
+            nxfull = int(self.header['xpsf']*2+1)
+            nyfull = int(self.header['ypsf']*2+1)
+            image = np.zeros((nxfull,nyfull),float)
+
+            
+        # Loop over stars
+        for i in range(nstars):
+            if type(inpvals) is list or type(inpvals) is tuple:
+                if listoflists:
+                    x,y,mag = inpvals[i]
+                else:
+                    x,y,mag = inpvals
+            else:
+                x = inpvals['x'][i]
+                y = inpvals['y'][i]
+                mag = inpvals['mag'][i]                
+                
+            # Scale x/y values
+            # addstar.f line 190-191
+            deltax = (x-1.0)/self.header['xpsf'] - 1.0
+            deltay = (y-1.0)/self.header['ypsf'] - 1.0        
         
+            # PSF radius
+            # addstar.f line 74
+            psfradius = (float(self.header['npsf']-1)/2.0 - 1.0)/2.
+        
+            npix = 2*int(psfradius)-1
+            if full is False:
+                dx = np.arange(npix)-npix//2
+                dx2 = np.repeat(dx,npix).reshape(npix,npix)
+                dy = np.arange(npix)-npix//2
+                dy2 = np.repeat(dy,npix).reshape(npix,npix).T
+                nxpix = npix
+                nypix = npix
+            else:
+                x0 = int(np.maximum(np.round(x)-npix//2,0))
+                x1 = int(np.minimum(np.round(x)+npix//2,nxfull-1))
+                dx = np.arange(x0,x1+1).astype(float)-x
+                nxpix = len(dx)
+                y0 = int(np.maximum(np.round(y)-npix//2,0))
+                y1 = int(np.minimum(np.round(y)+npix//2,nyfull-1))
+                dy = np.arange(y0,y1+1).astype(float)-y
+                nypix = len(dy)
+                dx2 = np.repeat(dx,nypix).reshape(nxpix,nypix)
+                dy2 = np.repeat(dy,nxpix).reshape(nypix,nxpix).T
+                
+            upsf,dvdxc,dvdyc = usepsf(self.header['ipstyp'],dx2.flatten(),dy2.flatten(),self.header['bright'],
+                                      self.par,self.psf,self.header['npsf'],self.header['npar'],
+                                      self.header['nexp'],self.header['nfrac'],deltax,deltay)
+            upsf = upsf.reshape(nxpix,nypix)
+            dvdxc = dvdxc.reshape(nxpix,nypix)
+            dvdyc = dvdyc.reshape(nxpix,nypix)        
+
+            # Impose the psf radius
+            # addstar.f line 74
+            psfradius = (float(self.header['npsf']-1)/2.0 - 1.0)/2.
+            rad = np.sqrt(dx2**2+dy2**2)
+            upsf[rad>psfradius] = 0.0
+        
+            # Scale it with the magnitude
+            # from addstar.f line 196
+            scale = 10.0**(0.4*(self.header['psfmag']-mag))
+            upsf *= scale
+
+            # Add to full image
+            if full is True:
+                image[x0:x1+1,y0:y1+1] += upsf
+            
+            # Single, return now
+            else:
+                # No derivatives
+                if deriv is False:
+                    return upsf
+                else:
+                    return upsf,dvdxc,dvdyc
+
+        return image
+            
         
     def __str__(self):
         pass
