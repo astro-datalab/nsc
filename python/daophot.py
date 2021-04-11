@@ -1907,8 +1907,8 @@ class PSF:
 
         # Impose the psf radius
         if psfradius is not None:
-            print('Impose psfradius')
-            import pdf; pdf.set_trace()
+            rad = np.sqrt(dx2**2+dy2**2)
+            upsf2[rad>psfradius] = 0.0
         
         # Scale it with the magnitude
         # from addstar.f line 196
