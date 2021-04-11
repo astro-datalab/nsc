@@ -1817,6 +1817,22 @@ def rdpsf(psffile):
               'LORENTZ':5, 'PENNY1':6, 'PENNY2':7}[label]
     header = {'label':label, 'ipstyp':ipstyp, 'npsf':npsf, 'npar':npar, 'nexp':nexp,
               'nfrac':nfrac, 'psfmag':psfmag, 'bright':bright, 'xpsf':xpsf, 'ypsf':ypsf}
+
+    # Add some other values
+    #----------------------
+    # PSF radius
+    # addstar.f line 74
+    psfradius = (float(header['npsf']-1)/2.0 - 1.0)/2.
+    header['psfradius'] = psfradius
+    
+    # psf.f line 477+478
+    # XMID = REAL(NCOL-1)/2.  # same as XPSF
+    # YMID = REAL(NROW-1)/2.  # same as YPSF
+    ncol = int(header['xpsf']*2+1)
+    nrow = int(header['ypsf']*2+1)
+    header['ncol'] = ncol
+    header['nrow'] = nrow    
+    
     
     #      DO IPSTYP=1,MAXTYP
     #         I = NPARAM(IPSTYP, 1., CHECK, PAR, MAXPAR)
@@ -1899,7 +1915,8 @@ def getinpvals(inpvals,i):
         y = inpvals['y'][i]
         mag = inpvals['mag'][i]  
     return x,y,mag
-        
+
+
         
 class PSF:
     """ DAOPHOT PSF class."""
@@ -1910,39 +1927,49 @@ class PSF:
         self.par = par
         self.psf = psf
 
-    def __call__(self,inpvals,full=False,deriv=False,origin=0):
+    def __call__(self,inpvals,xy=None,full=False,deriv=False,origin=0):
         """ Create a PSF image."""
 
         nstars = numinpvals(inpvals)
 
-        # Full is True if nstars>1
+        # Multiple stars
+        #---------------
         if nstars>1:
-            full = True
+            # Initialize the output image
+            ncol = self.header['ncol']
+            nrow = self.header['nrow']            
+            image = np.zeros((ncol,nrow),float)
+            # Loop over stars
+            for i in range(nstars):
+                x,y,mag = getinpvals(inpvals,i)
+                # Get the PSF image for this star
+                xy = self._getxyranges(x,y)  # get X/Y ranges
+                upsf = self((x,y,mag),xy=xy)                
+                # Add to full image
+                image[xy[0][0]:xy[0][1]+1,xy[1][0]:xy[1][1]+1] += upsf
+            return image
 
+        
+        # Single star PSF
+        #----------------
+        x,y,mag = getinpvals(inpvals,0)
+        
         # Full image
         if full is True:
-            # psf.f line 477+478
-            # XMID = REAL(NCOL-1)/2.  # same as XPSF
-            # YMID = REAL(NROW-1)/2.  # same as YPSF
-            nxfull = int(self.header['xpsf']*2+1)
-            nyfull = int(self.header['ypsf']*2+1)
-            image = np.zeros((nxfull,nyfull),float)
-            
-        # Loop over stars
-        for i in range(nstars):
-            x,y,mag = getinpvals(inpvals,i)
+            ncol = self.header['ncol']
+            nrow = self.header['nrow']
+            image = np.zeros((ncol,nrow),float)
                 
-            # Scale x/y values
-            # addstar.f line 190-191
-            deltax = (x-1.0)/self.header['xpsf'] - 1.0
-            deltay = (y-1.0)/self.header['ypsf'] - 1.0        
+        # Scale x/y values
+        # addstar.f line 190-191
+        deltax = (x-1.0)/self.header['xpsf'] - 1.0
+        deltay = (y-1.0)/self.header['ypsf'] - 1.0        
         
-            # PSF radius
-            # addstar.f line 74
-            psfradius = (float(self.header['npsf']-1)/2.0 - 1.0)/2.
-        
-            npix = 2*int(psfradius)-1
-            if full is False:
+        # X/Y pixel ranges
+        psfradius = self.header['psfradius']        
+        npix = 2*int(psfradius)-1
+        if full is False:
+            if xy is None:
                 dx = np.arange(npix)-npix//2
                 dx2 = np.repeat(dx,npix).reshape(npix,npix)
                 dy = np.arange(npix)-npix//2
@@ -1950,48 +1977,52 @@ class PSF:
                 nxpix = npix
                 nypix = npix
             else:
-                x0 = int(np.maximum(np.round(x)-npix//2,0))
-                x1 = int(np.minimum(np.round(x)+npix//2,nxfull-1))
+                x0,x1 = xy[0]
+                y0,y1 = xy[1]
                 dx = np.arange(x0,x1+1).astype(float)-x
                 nxpix = len(dx)
-                y0 = int(np.maximum(np.round(y)-npix//2,0))
-                y1 = int(np.minimum(np.round(y)+npix//2,nyfull-1))
                 dy = np.arange(y0,y1+1).astype(float)-y
                 nypix = len(dy)
                 dx2 = np.repeat(dx,nypix).reshape(nxpix,nypix)
-                dy2 = np.repeat(dy,nxpix).reshape(nypix,nxpix).T
+                dy2 = np.repeat(dy,nxpix).reshape(nypix,nxpix).T                    
+        else:
+            xy = self._getxyranges(x,y)            
+            x0,x1 = xy[0]
+            dx = np.arange(x0,x1+1).astype(float)-x
+            nxpix = len(dx)
+            y0,y1 = xy[1]
+            dy = np.arange(y0,y1+1).astype(float)-y
+            nypix = len(dy)
+            dx2 = np.repeat(dx,nypix).reshape(nxpix,nypix)
+            dy2 = np.repeat(dy,nxpix).reshape(nypix,nxpix).T
                 
-            upsf,dvdxc,dvdyc = usepsf(self.header['ipstyp'],dx2.flatten(),dy2.flatten(),self.header['bright'],
-                                      self.par,self.psf,self.header['npsf'],self.header['npar'],
-                                      self.header['nexp'],self.header['nfrac'],deltax,deltay)
-            upsf = upsf.reshape(nxpix,nypix)
-            dvdxc = dvdxc.reshape(nxpix,nypix)
-            dvdyc = dvdyc.reshape(nxpix,nypix)        
+        upsf,dvdxc,dvdyc = usepsf(self.header['ipstyp'],dx2.flatten(),dy2.flatten(),self.header['bright'],
+                                  self.par,self.psf,self.header['npsf'],self.header['npar'],
+                                  self.header['nexp'],self.header['nfrac'],deltax,deltay)
+        upsf = upsf.reshape(nxpix,nypix)
+        dvdxc = dvdxc.reshape(nxpix,nypix)
+        dvdyc = dvdyc.reshape(nxpix,nypix)        
 
-            # Impose the psf radius
-            # addstar.f line 74
-            psfradius = (float(self.header['npsf']-1)/2.0 - 1.0)/2.
-            rad = np.sqrt(dx2**2+dy2**2)
-            upsf[rad>psfradius] = 0.0
+        # Impose the psf radius
+        rad = np.sqrt(dx2**2+dy2**2)
+        upsf[rad>psfradius] = 0.0
         
-            # Scale it with the magnitude
-            # from addstar.f line 196
-            scale = 10.0**(0.4*(self.header['psfmag']-mag))
-            upsf *= scale
+        # Scale it with the magnitude
+        # from addstar.f line 196
+        scale = 10.0**(0.4*(self.header['psfmag']-mag))
+        upsf *= scale
 
-            # Add to full image
-            if full is True:
-                image[x0:x1+1,y0:y1+1] += upsf
-            
-            # Single, return now
+        # Single PSF
+        if full is False:
+            # No derivatives
+            if deriv is False:
+                return upsf
             else:
-                # No derivatives
-                if deriv is False:
-                    return upsf
-                else:
-                    return upsf,dvdxc,dvdyc
-
-        return image
+                return upsf,dvdxc,dvdyc
+        else:
+            # Add to full image
+            image[x0:x1+1,y0:y0+1] = upsf
+            return image
             
         
     def __str__(self):
@@ -2012,4 +2043,15 @@ class PSF:
         """ Write the PSF to a file."""
         pass
 
+    def _getxyranges(self,x,y):
+        psfradius = self.header['psfradius']        
+        npix = 2*int(psfradius)-1
+        ncol = self.header['ncol']
+        nrow = self.header['nrow']        
+        x0 = int(np.maximum(np.round(x)-npix//2,0))
+        x1 = int(np.minimum(np.round(x)+npix//2,ncol-1))
+        y0 = int(np.maximum(np.round(y)-npix//2,0))
+        y1 = int(np.minimum(np.round(y)+npix//2,nrow-1))
+        xy = ((x0,x1),(y0,y1))
+        return xy
 
