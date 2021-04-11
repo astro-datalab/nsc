@@ -1679,8 +1679,6 @@ def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay):
     #      END
     #C
 
-    dvdxc = 0.0
-    dvdyc = 0.0
     for k in range(nterm):
         corr, dfdx, dfdy = bicubic(psf[lx-1:,ly-1:,k], xx-float(lx), yy-float(ly))
         upsf += junk[k]*corr
@@ -1752,7 +1750,7 @@ def psfnparam(ipstyp, fwhm):
     #   PAR(3) = 0.75
     #   PAR(4) = 0.0
     #   LABEL = 'PENNY1  '
-    elif (ipstyp==5):
+    elif (ipstyp==6):
         nparam = 4
         par[2] = 0.75
         par[3] = 0.0
@@ -1763,7 +1761,7 @@ def psfnparam(ipstyp, fwhm):
     #   PAR(4) = 0.0
     #   PAR(5) = 0.0
     #   LABEL = 'PENNY2  '
-    elif (ipstyp==6):
+    elif (ipstyp==7):
         nparam = 5
         par[2] = 0.75
         par[3] = 0.0
@@ -1863,9 +1861,7 @@ def rdpsf(psffile):
         n2 = npsf*npsf
         for k in range(nterm):
             numbers1 = numbers[k*n2:(k+1)*n2]
-            psf[:,:,k] = numbers1.reshape(npsf,npsf)
-
-        # plt.imshow(psf[:,:,0],origin='lower',aspect='auto')   
+            psf[:,:,k] = numbers1.reshape(npsf,npsf).T
     else:
         psf = None
         
@@ -1885,16 +1881,21 @@ class PSF:
         self.par = par
         self.psf = psf
 
-    def __call__(self,x,y,mag,psfradius=None,full=False,deriv=False,origin=0):
+    def __call__(self,x,y,mag,full=False,deriv=False,origin=0):
         """ Create a PSF image."""
-
-        if psfradius is not None:
-            if psfradius < 1:
-                raise ValueError('psfradius must be >= 1')
 
         # have option to return the derivative
 
-        npix = 51
+        # Scale x/y values
+        # addstar.f line 190-191
+        deltax = (x-1.0)/self.header['xpsf'] - 1.0
+        deltay = (y-1.0)/self.header['ypsf'] - 1.0        
+        
+        # PSF radius
+        # addstar.f line 74
+        psfradius = (float(self.header['npsf']-1)/2.0 - 1.0)/2.
+        
+        npix = 2*int(psfradius)-1
         dx = np.arange(npix)-npix//2
         dx2 = np.repeat(dx,npix).reshape(npix,npix)
         dy = np.arange(npix)-npix//2
@@ -1902,19 +1903,27 @@ class PSF:
 
         upsf,dvdxc,dvdyc = usepsf(self.header['ipstyp'],dx2.flatten(),dy2.flatten(),self.header['bright'],
                                   self.par,self.psf,self.header['npsf'],self.header['npar'],
-                                  self.header['nexp'],self.header['nfrac'],x,y)
-        upsf2 = upsf.reshape(npix,npix)
+                                  self.header['nexp'],self.header['nfrac'],deltax,deltay)
+        upsf = upsf.reshape(npix,npix)
+        dvdxc = dvdxc.reshape(npix,npix)
+        dvdyc = dvdyc.reshape(npix,npix)        
 
         # Impose the psf radius
-        if psfradius is not None:
-            rad = np.sqrt(dx2**2+dy2**2)
-            upsf2[rad>psfradius] = 0.0
+        # addstar.f line 74
+        psfradius = (float(self.header['npsf']-1)/2.0 - 1.0)/2.
+        rad = np.sqrt(dx2**2+dy2**2)
+        upsf[rad>psfradius] = 0.0
         
         # Scale it with the magnitude
         # from addstar.f line 196
         scale = 10.0**(0.4*(self.header['psfmag']-mag))
+        upsf *= scale
         
-        return upsf2*scale
+        # No derivatives
+        if deriv is False:
+            return upsf
+        else:
+            return upsf,dvdxc,dvdyc
         
         
     def __str__(self):
