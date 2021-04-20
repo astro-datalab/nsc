@@ -228,7 +228,7 @@ def erf(xin,x0,beta):
     return f,dfdx,dfdbet
 
 
-def profile_gaussian(dx,dy,par,ideriv=False):
+def profile_gaussian(dx,dy,par,ideriv=False,binned=True):
     """ GAUSSIAN PSF analytical profile."""
 
     # dx/dy can be scalars or 1D arrays
@@ -266,14 +266,42 @@ def profile_gaussian(dx,dy,par,ideriv=False):
         term[1,:] = (dhdsy-erfy/par[1])*erfx/p1p2
 
     return (profil,dhdxc,dhdyc,term)
-    
-    
-def profile_moffat15(dx,dy,par,ideriv=False):
-    """ MOFFAT beta=1.5 PSF analytical profile."""
 
-    #      ELSE IF (IPSTYP .EQ. 2) THEN
-    #C
-    #C MOFFAT function   BETA = 1.5
+
+def vecbin_moffat(alpha,par,x,y,wt,ideriv):
+    # This performs the vectorized version of the binned MOFFAT15/25/35 functions
+    # The only differences between the three is the alpha input value
+    # x, y and wt should be (2,2,n), or (3,3,n) or (4,4,n)
+    # where the first two dimensions are the oversampling of the X and Y dimensions
+    p1sq = par[0]**2
+    p2sq = par[1]**2
+    p1p2 = par[0]*par[1]
+    nx,ny,n = x.shape
+    term = np.zeros((4,n),float)
+    xsq = x**2
+    p1xsq = xsq/p1sq
+    ysq = y**2
+    p2ysq = ysq/p2sq
+    xy = x*y
+    denom = 1.0 + alpha*(p1xsq + p2ysq + xy*par[2])
+    func = (par[3]-1.0) / (p1p2 * denom**par[3])
+    p4fod = par[3]*alpha*func/denom
+    wp4fod = wt*p4fod
+    wf = wt*func
+    profil = np.sum(np.sum(wf,axis=0),axis=0)
+    dhdxc = np.sum(np.sum(wp4fod*(2.0*x/p1sq + y*par[2]),axis=0),axis=0)
+    dhdyc = np.sum(np.sum(wp4fod*(2.0*y/p2sq + x*par[2]),axis=0),axis=0)
+    if ideriv==True:
+        term[0,:] = np.sum(np.sum((2.0*wp4fod*p1xsq-wf)/par[0],axis=0),axis=0)
+        term[1,:] = np.sum(np.sum((2.0*wp4fod*p2ysq-wf)/par[1],axis=0),axis=0)
+        term[2,:] = np.sum(np.sum(-wp4fod/xy,axis=0),axis=0)
+        term[3,:] = np.sum(np.sum(wf*(1.0/(par[3]-1.0)-np.log(denom)),axis=0),axis=0)
+    return profil,dhdxc,dhdyc,term
+
+def profile_moffat(dx,dy,par,beta,ideriv=False,binned=True):
+    """ MOFFAT PSF analytical profile."""
+
+    #C MOFFAT function   BETA can be  1.5, 2.5 or 3.5
     #C
     #C                            BETA-1
     #C F = --------------------------------------------------------
@@ -286,540 +314,117 @@ def profile_moffat15(dx,dy,par,ideriv=False):
     #C             2**(1/BETA) - 1 = (PAR(1)/Ax)**2
     #C
     #C             Ax**2 = PAR(1)**2/[2**(1/BETA) - 1]
-    #C
-    #C When BETA = 1.5, Ax**2 = 1.7024144 * PAR(1)**2
-    #C
-    #C Hence, let us use
-    #C
-    #C                                  1
-    #C F = ---------------------------------------------------------------
-    #C     P(1)*P(2)*{1+0.5874011*[(X/P(1))**2+(Y/P(2))**2+(XY*P(3))]**1.5
-    #C 
-    #C neglecting a constant of proportionality.
-    #C
-    #         ALPHA = 0.5874011
-    #         TALPHA = 1.1748021
-    #         P1SQ = PAR(1)**2
-    #         P2SQ = PAR(2)**2
-    #         P1P2 = PAR(1)*PAR(2)
-    #         XY = DX*DY
 
     n = dln.size(dx)
-    if n>1:
-        profil = np.zeros(n,float)
-        dhdxc = np.zeros(n,float)
-        dhdyc = np.zeros(n,float)
-        term = np.zeros((4,n),float)    
-        for i in range(n):
-            profil1,dhdxc1,dhdyc1,term1 = profile_moffat15(dx[i],dy[i],par,ideriv=ideriv)
-            profil[i] = profil1
-            dhdxc[i] = dhdxc1
-            dhdyc[i] = dhdyc1
-            term[:,i] = term1
-        return profil,dhdxc,dhdyc,term
+    profil = np.zeros(n,float)
+    dhdxc = np.zeros(n,float)
+    dhdyc = np.zeros(n,float)
+    term = np.zeros((4,n),float)
 
-    
-    profil = 0.0
-    dhdxc = 0.0
-    dhdyc = 0.0
-    term = np.zeros(4,float)
-    x = np.zeros(4,float)
-    xsq = np.zeros(4,float)
-    p1xsq = np.zeros(4,float)
-    
-    alpha = 0.5874011
-    talpha = 1.1748021
+    if beta==1.5:
+        alpha = 0.5874011
+    elif beta==2.5:
+        alpha = 0.3195079
+    elif beta==3.5:
+        alpha = 0.2190137
+    else:
+        raise ValueError('Beta can only be 1.5, 2.5, or 3.5')
+        
     p1sq = par[0]**2
     p2sq = par[1]**2
     p1p2 = par[0]*par[1]
-    xy = dx*dy
-    
-    #C
-    #         DENOM = 1. + ALPHA*(DX**2/P1SQ + DY**2/P2SQ + XY*PAR(3))
-    #         IF (DENOM .GT. 5.E6) RETURN
-    
-    denom = 1.0 + alpha*(dx**2/p1sq + dy**2/p2sq + xy*par[2])
-    if denom>5e6:
-        return (profil,dhdxc,dhdyc,term)
-    
-    #         FUNC = 1. / (P1P2 * DENOM**PAR(4))
 
+    xy = dx*dy
+    denom = 1.0 + alpha*(dx**2/p1sq + dy**2/p2sq + xy*par[2])
     func = 1.0 / (p1p2*denom**par[3])
     
-    #         IF (FUNC .GE. 0.046) THEN
-    #            NPT = 4
-    #         ELSE IF (FUNC .GE. 0.0022) THEN
-    #            NPT = 3
-    #         ELSE IF (FUNC .GE. 0.0001) THEN
-    #            NPT = 2
-    #         ELSE IF (FUNC .GE. 1.E-10) THEN
-    #            PROFIL = (PAR(4) - 1.) * FUNC
-    #            P4FOD = PAR(4)*ALPHA*PROFIL/DENOM
-    #            DHDXC = P4FOD*(2.*DX/P1SQ + DY*PAR(3))
-    #            DHDYC = P4FOD*(2.*DY/P2SQ + DX*PAR(3))
-    #            IF (IDERIV .GT. 0) THEN
-    #               TERM(1) = (2.*P4FOD*DX**2/P1SQ-PROFIL)/PAR(1)
-    #               TERM(2) = (2.*P4FOD*DY**2/P2SQ-PROFIL)/PAR(2)
-    #               TERM(3) = - P4FOD*XY
-    #C              TERM(4) = PROFIL*(1./(PAR(4)-1.)-ALOG(DENOM))
-    #            END IF
-    #            RETURN
-    #         ELSE
-    #            RETURN
-    #         END IF
-    #C
-
-    if (func >= 0.046):
-        npt = 4
-    elif (func >= 0.0022):
-        npt = 3
-    elif (func >= 0.0001):
-        npt = 2
-    elif (func >= 1e-10):
+    # No binning
+    if binned is False:
         profil = (par[3]-1.0)*func
         p4fod = par[3]*alpha*profil/denom
         dhdxc = p4fod*(2.0*dx/p1sq + dy*par[2])
         dhdyc = p4fod*(2.0*dy/p2sq + dx*par[2])        
         if (ideriv==True):
-            term[0] = (2.0*p4fod*dx**2/p1sq-profil)/par[0]
-            term[1] = (2.0*p4fod*dy**2/p2sq-profil)/par[1]
-            term[2] = -p4fod*dy
-            term[3] = profil*(1.0/(par[3]-1.0)-np.log(denom))
+            term[0,:] = (2.0*p4fod*dx**2/p1sq-profil)/par[0]
+            term[1,:] = (2.0*p4fod*dy**2/p2sq-profil)/par[1]
+            term[2,:] = -p4fod*dy
+            term[3,:] = profil*(1.0/(par[3]-1.0)-np.log(denom))
         return (profil,dhdxc,dhdyc,term)
-    else:
-        return (profil,dhdxc,dhdyc,term)
-    
-    #         DO IX=1,NPT
-    #            X(IX) = DX+D(IX,NPT)
-    #            XSQ(IX) = X(IX)**2
-    #            P1XSQ(IX) = XSQ(IX)/P1SQ
-    #         END DO
-    #C
+            
+    # Figure out the binned oversampling, 1-4 pixels
+    npt = np.zeros(n,int)-1
+    ind4, = np.where((denom<=5e6) & (func >= 0.046))
+    nind4 = len(ind4)
+    if nind4>0: npt[ind4] = 4
+    ind3, = np.where((denom<=5e6) & (func >= 0.0022) & (func < 0.046))
+    nind3 = len(ind3)
+    if nind3>0: npt[ind3] = 3
+    ind2, = np.where((denom<=5e6) & (func >= 0.0001) & (func < 0.0022))
+    nind2 = len(ind2)
+    if nind2>0: npt[ind2] = 2
+    ind1, = np.where((denom<=5e6) & (func >= 1e-10)  & (func < 0.0001))
+    nind1 = len(ind1)
+    if nind1>0: npt[ind1] = 1
+    ind0, = np.where(denom>5e6)
+    nind0 = len(ind0)
+    if nind0>0: npt[ind1] = 0    
 
-    for ix in range(npt):
-        x[ix] = dx+PROFILE_DATAD[ix,npt-1]
-        xsq[ix] = x[ix]**2
-        p1xsq[ix] = xsq[ix]/p1sq
-    
-    #         DO IY=1,NPT
-    #            Y = DY+D(IY,NPT)
-    #            YSQ = Y**2
-    #            P2YSQ = YSQ/P2SQ
-    #            DO IX=1,NPT
-    #               WT = W(IY,NPT)*W(IX,NPT)
-    #               XY=X(IX)*Y
-    #               DENOM = 1. + ALPHA*(P1XSQ(IX) + P2YSQ + XY*PAR(3))
-    #               FUNC = (PAR(4) - 1.) / (P1P2 * DENOM**PAR(4))
-    #               P4FOD = PAR(4)*ALPHA*FUNC/DENOM
-    #               WP4FOD = WT*P4FOD
-    #               WF = WT*FUNC
-    #               PROFIL = PROFIL + WF
-    #               DHDXC = DHDXC + WP4FOD*(2.*X(IX)/P1SQ + Y*PAR(3))
-    #               DHDYC = DHDYC + WP4FOD*(2.*Y/P2SQ + X(IX)*PAR(3))
-    #               IF (IDERIV .GT. 0) THEN
-    #                  TERM(1) = TERM(1) + 
-    #     .                     (2.*WP4FOD*P1XSQ(IX)-WF)/PAR(1)
-    #                  TERM(2) = TERM(2) + 
-    #     .                     (2.*WP4FOD*P2YSQ-WF)/PAR(2)
-    #                  TERM(3) = TERM(3) - WP4FOD*XY
-    #C                 TERM(4) = TERM(4) + WF*(1./(PAR(4)-1.)-ALOG(DENOM))
-    #               END IF
-    #            END DO
-    #         END DO
-    #C
 
-    for iy in range(npt):
-        y = dy+PROFILE_DATAD[iy,npt-1]
-        ysq = y**2
-        p2ysq = ysq/p2sq
-        for ix in range(npt):
-            wt = PROFILE_DATAW[iy,npt-1]*PROFILE_DATAW[ix,npt-1]
-            xy = x[ix]*y
-            denom = 1.0 + alpha*(p1xsq[ix] + p2ysq + xy*par[2])
-            func = (par[3]-1.0) / (p1p2 * denom**par[3])
-            p4fod = par[3]*alpha*func/denom
-            wp4fod = wt*p4fod
-            wf = wt*func
-            profil = profil + wf
-            dhdxc = dhdxc + wp4fod*(2.0*x[ix]/p1sq + y*par[2])
-            dhdyc = dhdyc + wp4fod*(2.0*y/p2sq + x[ix]*par[2])
-            if ideriv==True:
-                term[0] += (2.0*wp4fod*p1xsq[ix]-wf)/par[0]
-                term[1] += (2.0*wp4fod*p2ysq-wf)/par[1]
-                term[2] += -wp4fod/xy
-                term[3] += wf*(1.0/(par[3]-1.0)-np.log(denom))
-    
+    if nind1>0:
+        profil[ind1] = (par[3]-1.0)*func[ind1]
+        p4fod = par[3]*alpha*profil[ind1]/denom[ind1]
+        dhdxc[ind1] = p4fod*(2.0*dx[ind1]/p1sq + dy[ind1]*par[2])
+        dhdyc[ind1] = p4fod*(2.0*dy[ind1]/p2sq + dx[ind1]*par[2])        
+        if (ideriv==True):
+            term[0,ind1] = (2.0*p4fod*dx[ind1]**2/p1sq-profil[ind1])/par[0]
+            term[1,ind1] = (2.0*p4fod*dy[ind1]**2/p2sq-profil[ind1])/par[1]
+            term[2,ind1] = -p4fod*dy[ind1]
+            term[3,ind1] = profil[ind1]*(1.0/(par[3]-1.0)-np.log(denom[ind1]))
+
+    for pt in np.arange(3)+2:
+        ind, = np.where(npt==pt)
+        if len(ind)>0:
+            datad2 = np.tile(PROFILE_DATAD[0:pt,pt-1],(pt,1))
+            x = np.tile(dx[ind],(pt,pt,1)) + np.tile(datad2.T,(len(ind),1,1)).T
+            y = np.tile(dy[ind],(pt,pt,1)) + np.tile(datad2,(len(ind),1,1)).T
+            wt = np.tile(np.outer(PROFILE_DATAW[0:pt,pt-1],PROFILE_DATAW[0:pt,pt-1]),(len(ind),1,1)).T          
+            profil1,dhdxc1,dhdyc1,term1 = vecbin_moffat(alpha,par,x,y,wt,ideriv)
+            profil[ind] = profil1
+            dhdxc[ind] = dhdxc1
+            dhdyc[ind] = dhdyc1        
+            term[:,ind] = term1
+
     return (profil,dhdxc,dhdyc,term)
 
 
-def profile_moffat25(dx,dy,par,ideriv=False):
-    """ MOFFAT beta=2.5 PSF analytical profile."""
-
-    #      ELSE IF (IPSTYP .EQ. 3) THEN
-    #C
-    #C MOFFAT function  BETA = 2.5
-    #C
-    #C                            BETA-1
-    #C F = --------------------------------------------------------
-    #C      Ax * Ay * [1 + (X/Ax)**2 + (Y/Ay)**2 + (XY*Axy)]**BETA
-    #C
-    #C PAR(1) is the HWHM in x at y = 0: 
-    #C
-    #C             1/2 = 1/[1 + (PAR(1)/Ax)**2]**BETA
-    #C so
-    #C             2**(1/BETA) - 1 = (PAR(1)/Ax)**2
-    #C
-    #C             Ax**2 = PAR(1)**2/[2**(1/BETA) - 1]
-    #C
-    #C When BETA = 2.5, Ax**2 = 3.129813 * PAR(1)**2
-    #C
-    #C Hence, let us use
-    #C
-    #C                                  1
-    #C F = ---------------------------------------------------------------
-    #C     P(1)*P(2)*{1+0.3195079*[(X/P(1))**2+(Y/P(2))**2+(XY*P(3))]**2.5
-    #C 
-    #C neglecting a constant of proportionality.
-    #C
-    #         ALPHA = 0.3195079
-    #         TALPHA = 0.6390158
-    #         P1SQ = PAR(1)**2
-    #         P2SQ = PAR(2)**2
-    #         P1P2 = PAR(1)*PAR(2)
-    #         XY = DX*DY
-
-    n = dln.size(dx)
-    if n>1:
-        profil = np.zeros(n,float)
-        dhdxc = np.zeros(n,float)
-        dhdyc = np.zeros(n,float)
-        term = np.zeros((4,n),float)    
-        for i in range(n):
-            profil1,dhdxc1,dhdyc1,term1 = profile_moffat25(dx[i],dy[i],par,ideriv=ideriv)
-            profil[i] = profil1
-            dhdxc[i] = dhdxc1
-            dhdyc[i] = dhdyc1
-            term[:,i] = term1
-        return profil,dhdxc,dhdyc,term
-
-    
-    profil = 0.0
-    dhdxc = 0.0
-    dhdyc = 0.0
-    term = np.zeros(4,float)
-    x = np.zeros(4,float)
-    xsq = np.zeros(4,float)
-    p1xsq = np.zeros(4,float)
-    
-    alpha = 0.3195079
-    talpha = 0.6390158
+def vecbin_lorentz(par,x,y,wt,ideriv):
+    # This performs the vectorized version of the binned LORENTZ function
+    # x, y and wt should be (2,2,n), or (3,3,n) or (4,4,n)
+    # where the first two dimensions are the oversampling of the X and Y dimensions
     p1sq = par[0]**2
     p2sq = par[1]**2
     p1p2 = par[0]*par[1]
-    xy = dx*dy
+    nx,ny,n = x.shape
+    term = np.zeros((3,n),float)
+    xsq = x**2
+    p1xsq = xsq/p1sq
+    ysq = y**2
+    p2ysq = ysq/p2sq
+    xy = x*y
+    denom = 1.0 + p1xsq + p2ysq + xy*par[2]
+    func = 1.0 / denom
+    wf = wt*func
+    wfsq = wf*func
+    profil = np.sum(np.sum(wf,axis=0),axis=0)
+    dhdxc = np.sum(np.sum(wfsq*(2.0*x/p1sq + y*par[2]),axis=0),axis=0)
+    dhdyc = np.sum(np.sum(wfsq*(2.0*y/p2sq + x*par[2]),axis=0),axis=0)
+    if ideriv==True:
+        term[0,:] = np.sum(np.sum(wfsq*(2.0*p1xsq)/par[0],axis=0),axis=0)
+        term[1,:] = np.sum(np.sum(wfsq*(2.0*p2ysq)/par[1],axis=0),axis=0)
+        term[2,:] = np.sum(np.sum(-wfsq/xy,axis=0),axis=0)
+    return profil,dhdxc,dhdyc,term
 
-
-    #C
-    #         DENOM = 1. + ALPHA*(DX**2/P1SQ + DY**2/P2SQ + XY*PAR(3))
-    #         IF (DENOM .GT. 1.E4) RETURN
-
-    denom = 1.0 + alpha*(dx**2/p1sq + dy**2/p2sq + xy*par[2])
-    if denom>1e4:
-        return (profil,dhdxc,dhdyc,term)
-
-    #         FUNC = 1. / (P1P2 * DENOM**PAR(4))
-
-    func = 1.0 / (p1p2*denom**par[3])
-
-    #         IF (FUNC .GE. 0.046) THEN
-    #            NPT = 4
-    #         ELSE IF (FUNC .GE. 0.0022) THEN
-    #            NPT = 3
-    #         ELSE IF (FUNC .GE. 0.0001) THEN
-    #            NPT = 2
-    #         ELSE IF (FUNC .GE. 1.E-10) THEN
-    #            PROFIL = (PAR(4) - 1.) * FUNC
-    #            P4FOD = PAR(4)*ALPHA*PROFIL/DENOM
-    #            DHDXC = P4FOD*(2.*DX/P1SQ + DY*PAR(3))
-    #            DHDYC = P4FOD*(2.*DY/P2SQ + DX*PAR(3))
-    #            IF (IDERIV .GT. 0) THEN
-    #               TERM(1) = (2.*P4FOD*DX**2/P1SQ-PROFIL)/PAR(1)
-    #               TERM(2) = (2.*P4FOD*DY**2/P2SQ-PROFIL)/PAR(2)
-    #               TERM(3) = - P4FOD*XY
-    #C              TERM(4) = PROFIL*(1./(PAR(4)-1.)-ALOG(DENOM))
-    #            END IF
-    #            RETURN
-    #         ELSE
-    #            RETURN
-    #         END IF
-    #C
-
-    if (func >= 0.046):
-        npt = 4
-    elif (func >= 0.0022):
-        npt = 3
-    elif (func >= 0.0001):
-        npt = 2
-    elif (func >= 1e-10):
-        profil = (par[3]-1.0)*func
-        p4fod = par[3]*alpha*profil/denom
-        dhdxc = p4fod*(2.0*dx/p1sq + dy*par[2])
-        dhdyc = p4fod*(2.0*dy/p2sq + dx*par[2])        
-        if (ideriv==True):
-            term[0] = (2.0*p4fod*dx**2/p1sq-profil)/par[0]
-            term[1] = (2.0*p4fod*dy**2/p2sq-profil)/par[1]
-            term[2] = -p4fod*dy
-            term[3] = profil*(1.0/(par[3]-1.0)-np.log(denom))
-        return (profil,dhdxc,dhdyc,term)
-    else:
-        return (profil,dhdxc,dhdyc,term)
-    
-    #         DO IX=1,NPT
-    #            X(IX) = DX+D(IX,NPT)
-    #            XSQ(IX) = X(IX)**2
-    #            P1XSQ(IX) = XSQ(IX)/P1SQ
-    #         END DO
-    #C
-
-    for ix in range(npt):
-        x[ix] = dx+PROFILE_DATAD[ix,npt-1]
-        xsq[ix] = x[ix]**2
-        p1xsq[ix] = xsq[ix]/p1sq
-    
-    #         DO IY=1,NPT
-    #            Y = DY+D(IY,NPT)
-    #            YSQ = Y**2
-    #            P2YSQ = YSQ/P2SQ
-    #            DO IX=1,NPT
-    #               WT = W(IY,NPT)*W(IX,NPT)
-    #               XY=X(IX)*Y
-    #               DENOM = 1. + ALPHA*(P1XSQ(IX) + P2YSQ + XY*PAR(3))
-    #               FUNC = (PAR(4) - 1.) / (P1P2 * DENOM**PAR(4))
-    #               P4FOD = PAR(4)*ALPHA*FUNC/DENOM
-    #               WP4FOD = WT*P4FOD
-    #               WF = WT*FUNC
-    #               PROFIL = PROFIL + WF
-    #               DHDXC = DHDXC + WP4FOD*(2.*X(IX)/P1SQ + Y*PAR(3))
-    #               DHDYC = DHDYC + WP4FOD*(2.*Y/P2SQ + X(IX)*PAR(3))
-    #               IF (IDERIV .GT. 0) THEN
-    #                  TERM(1) = TERM(1) + 
-    #     .                     (2.*WP4FOD*P1XSQ(IX)-WF)/PAR(1)
-    #                  TERM(2) = TERM(2) + 
-    #     .                     (2.*WP4FOD*P2YSQ-WF)/PAR(2)
-    #                  TERM(3) = TERM(3) - WP4FOD*XY
-    #C                 TERM(4) = TERM(4) + WF*(1./(PAR(4)-1.)-ALOG(DENOM))
-    #               END IF
-    #            END DO
-    #         END DO
-    #C
-
-    for iy in range(npt):
-        y = dy+PROFILE_DATAD[iy,npt-1]
-        ysq = y**2
-        p2ysq = ysq/p2sq
-        for ix in range(npt):
-            wt = PROFILE_DATAW[iy,npt-1]*PROFILE_DATAW[ix,npt-1]
-            xy = x[ix]*y
-            denom = 1.0 + alpha*(p1xsq[ix] + p2ysq + xy*par[2])
-            func = (par[3]-1.0) / (p1p2 * denom**par[3])
-            p4fod = par[3]*alpha*func/denom
-            wp4fod = wt*p4fod
-            wf = wt*func
-            profil = profil + wf
-            dhdxc = dhdxc + wp4fod*(2.0*x[ix]/p1sq + y*par[2])
-            dhdyc = dhdyc + wp4fod*(2.0*y/p2sq + x[ix]*par[2])
-            if ideriv==True:
-                term[0] += (2.0*wp4fod*p1xsq[ix]-wf)/par[0]
-                term[1] += (2.0*wp4fod*p2ysq-wf)/par[1]
-                term[2] += -wp4fod/xy
-                term[3] += wf*(1.0/(par[3]-1.0)-np.log(denom))
-    
-    return (profil,dhdxc,dhdyc,term)
-    
-def profile_moffat35(dx,dy,par,ideriv=False):
-    """ MOFFAT beta=3.5 PSF analytical profile."""
-
-    #      ELSE IF (IPSTYP .EQ. 4) THEN
-    #C
-    #C MOFFAT function  BETA = 3.5
-    #C
-    #C                            BETA-1
-    #C F = --------------------------------------------------------
-    #C      Ax * Ay * [1 + (X/Ax)**2 + (Y/Ay)**2 + (XY*Axy)]**BETA
-    #C
-    #C PAR(1) is the HWHM in x at y = 0: 
-    #C
-    #C             1/2 = 1/[1 + (PAR(1)/Ax)**2]**BETA
-    #C so
-    #C             2**(1/BETA) - 1 = (PAR(1)/Ax)**2
-    #C
-    #C             Ax**2 = PAR(1)**2/[2**(1/BETA) - 1]
-    #C
-    #C When BETA = 2.5, Ax**2 = 4.56593 * PAR(1)**2
-    #C
-    #C Hence, let us use
-    #C
-    #C                                  1
-    #C F = ---------------------------------------------------------------
-    #C     P(1)*P(2)*{1+0.2190137*[(X/P(1))**2+(Y/P(2))**2+(XY*P(3))]**2.5
-    #C 
-    #C neglecting a constant of proportionality.
-    #C
-    #         ALPHA = 0.2190137
-    #         TALPHA = 0.4380273
-    #         P1SQ = PAR(1)**2
-    #         P2SQ = PAR(2)**2
-    #         P1P2 = PAR(1)*PAR(2)
-    #         XY = DX*DY
-
-    n = dln.size(dx)
-    if n>1:
-        profil = np.zeros(n,float)
-        dhdxc = np.zeros(n,float)
-        dhdyc = np.zeros(n,float)
-        term = np.zeros((4,n),float)    
-        for i in range(n):
-            profil1,dhdxc1,dhdyc1,term1 = profile_moffat35(dx[i],dy[i],par,ideriv=ideriv)
-            profil[i] = profil1
-            dhdxc[i] = dhdxc1
-            dhdyc[i] = dhdyc1
-            term[:,i] = term1
-        return profil,dhdxc,dhdyc,term
-
-    
-    profil = 0.0
-    dhdxc = 0.0
-    dhdyc = 0.0
-    term = np.zeros(4,float)
-    x = np.zeros(4,float)
-    xsq = np.zeros(4,float)
-    p1xsq = np.zeros(4,float)
-    
-    alpha = 0.2190137
-    talpha = 0.4380273
-    p1sq = par[0]**2
-    p2sq = par[1]**2
-    p1p2 = par[0]*par[1]
-    xy = dx*dy
-    
-    #C
-    #         DENOM = 1. + ALPHA*(DX**2/P1SQ + DY**2/P2SQ + XY*PAR(3))
-    #         IF (DENOM .GT. 1.E4) RETURN
-    
-    denom = 1.0 + alpha*(dx**2/p1sq + dy**2/p2sq + xy*par[2])
-    if denom>1e4:
-        return (profil,dhdxc,dhdyc,term)
-    
-    #         FUNC = 1. / (P1P2 * DENOM**PAR(4))
-
-    func = 1.0 / (p1p2*denom**par[3])
-    
-    #         IF (FUNC .GE. 0.046) THEN
-    #            NPT = 4
-    #         ELSE IF (FUNC .GE. 0.0022) THEN
-    #            NPT = 3
-    #         ELSE IF (FUNC .GE. 0.0001) THEN
-    #            NPT = 2
-    #         ELSE IF (FUNC .GE. 1.E-10) THEN
-    #            PROFIL = (PAR(4) - 1.) * FUNC
-    #            P4FOD = PAR(4)*ALPHA*PROFIL/DENOM
-    #            DHDXC = P4FOD*(2.*DX/P1SQ + DY*PAR(3))
-    #            DHDYC = P4FOD*(2.*DY/P2SQ + DX*PAR(3))
-    #            IF (IDERIV .GT. 0) THEN
-    #               TERM(1) = (2.*P4FOD*DX**2/P1SQ-PROFIL)/PAR(1)
-    #               TERM(2) = (2.*P4FOD*DY**2/P2SQ-PROFIL)/PAR(2)
-    #               TERM(3) = - P4FOD*XY
-    #C              TERM(4) = PROFIL*(1./(PAR(4)-1.)-ALOG(DENOM))
-    #            END IF
-    #            RETURN
-    #         ELSE
-    #            RETURN
-    #         END IF
-    #C
-
-    if (func >= 0.046):
-        npt = 4
-    elif (func >= 0.0022):
-        npt = 3
-    elif (func >= 0.0001):
-        npt = 2
-    elif (func >= 1e-10):
-        profil = (par[3]-1.0)*func
-        p4fod = par[3]*alpha*profil/denom
-        dhdxc = p4fod*(2.0*dx/p1sq + dy*par[2])
-        dhdyc = p4fod*(2.0*dy/p2sq + dx*par[2])        
-        if (ideriv==True):
-            term[0] = (2.0*p4fod*dx**2/p1sq-profil)/par[0]
-            term[1] = (2.0*p4fod*dy**2/p2sq-profil)/par[1]
-            term[2] = -p4fod*dy
-            term[3] = profil*(1.0/(par[3]-1.0)-np.log(denom))
-        return (profil,dhdxc,dhdyc,term)
-    else:
-        return (profil,dhdxc,dhdyc,term)
-    
-    #         DO IX=1,NPT
-    #            X(IX) = DX+D(IX,NPT)
-    #            XSQ(IX) = X(IX)**2
-    #            P1XSQ(IX) = XSQ(IX)/P1SQ
-    #         END DO
-    #C
-
-    for ix in range(npt):
-        x[ix] = dx+PROFILE_DATAD[ix,npt-1]
-        xsq[ix] = x[ix]**2
-        p1xsq[ix] = xsq[ix]/p1sq
-
-    #         DO IY=1,NPT
-    #            Y = DY+D(IY,NPT)
-    #            YSQ = Y**2
-    #            P2YSQ = YSQ/P2SQ
-    #            DO IX=1,NPT
-    #               WT = W(IY,NPT)*W(IX,NPT)
-    #               XY=X(IX)*Y
-    #               DENOM = 1. + ALPHA*(P1XSQ(IX) + P2YSQ + XY*PAR(3))
-    #               FUNC = (PAR(4) - 1.) / (P1P2 * DENOM**PAR(4))
-    #               P4FOD = PAR(4)*ALPHA*FUNC/DENOM
-    #               WP4FOD = WT*P4FOD
-    #               WF = WT*FUNC
-    #               PROFIL = PROFIL + WF
-    #               DHDXC = DHDXC + WP4FOD*(2.*X(IX)/P1SQ + Y*PAR(3))
-    #               DHDYC = DHDYC + WP4FOD*(2.*Y/P2SQ + X(IX)*PAR(3))
-    #               IF (IDERIV .GT. 0) THEN
-    #                  TERM(1) = TERM(1) + 
-    #     .                     (2.*WP4FOD*P1XSQ(IX)-WF)/PAR(1)
-    #                  TERM(2) = TERM(2) + 
-    #     .                     (2.*WP4FOD*P2YSQ-WF)/PAR(2)
-    #                  TERM(3) = TERM(3) - WP4FOD*XY
-    #C                 TERM(4) = TERM(4) + WF*(1./(PAR(4)-1.)-ALOG(DENOM))
-    #               END IF
-    #            END DO
-    #         END DO
-    #C
-
-    for iy in range(npt):
-        y = dy+PROFILE_DATAD[iy,npt-1]
-        ysq = y**2
-        p2ysq = ysq/p2sq
-        for ix in range(npt):
-            wt = PROFILE_DATAW[iy,npt-1]*PROFILE_DATAW[ix,npt-1]
-            xy = x[ix]*y
-            denom = 1.0 + alpha*(p1xsq[ix] + p2ysq + xy*par[2])
-            func = (par[3]-1.0) / (p1p2 * denom**par[3])
-            p4fod = par[3]*alpha*func/denom
-            wp4fod = wt*p4fod
-            wf = wt*func
-            profil = profil + wf
-            dhdxc = dhdxc + wp4fod*(2.0*x[ix]/p1sq + y*par[2])
-            dhdyc = dhdyc + wp4fod*(2.0*y/p2sq + x[ix]*par[2])
-            if ideriv==True:
-                term[0] += (2.0*wp4fod*p1xsq[ix]-wf)/par[0]
-                term[1] += (2.0*wp4fod*p2ysq-wf)/par[1]
-                term[2] += -wp4fod/xy
-                term[3] += wf*(1.0/(par[3]-1.0)-np.log(denom))
-    
-    return (profil,dhdxc,dhdyc,term)
-    
-def profile_lorentz(dx,dy,par,ideriv=False):
+def profile_lorentz(dx,dy,par,ideriv=False,binned=True):
     """ LORENTZ PSF analytical profile."""
     
     #      ELSE IF (IPSTYP .EQ. 5) THEN
@@ -833,149 +438,119 @@ def profile_lorentz(dx,dy,par,ideriv=False):
     #C
 
     n = dln.size(dx)
-    if n>1:
-        profil = np.zeros(n,float)
-        dhdxc = np.zeros(n,float)
-        dhdyc = np.zeros(n,float)
-        term = np.zeros((3,n),float)    
-        for i in range(n):
-            profil1,dhdxc1,dhdyc1,term1 = profile_lorentz(dx[i],dy[i],par,ideriv=ideriv)
-            profil[i] = profil1
-            dhdxc[i] = dhdxc1
-            dhdyc[i] = dhdyc1
-            term[:,i] = term1
-        return profil,dhdxc,dhdyc,term
-
-    
-    profil = 0.0
-    dhdxc = 0.0
-    dhdyc = 0.0
-    term = np.zeros(3,float)
-    x = np.zeros(4,float)
-    xsq = np.zeros(4,float)
-    p1xsq = np.zeros(4,float)
-
-    
-    #         P1SQ = PAR(1)**2
-    #         P2SQ = PAR(2)**2
-    #         P1P2 = PAR(1)*PAR(2)
-    #         XY = DX*DY
-    #C
+    profil = np.zeros(n,float)
+    dhdxc = np.zeros(n,float)
+    dhdyc = np.zeros(n,float)
+    term = np.zeros((3,n),float)
 
     p1sq = par[0]**2
     p2sq = par[1]**2
     p1p2 = par[0]*par[1]
+
     xy = dx*dy
-    
-    #         DENOM = 1. + DX**2/P1SQ + DY**2/P2SQ + XY*PAR(3)
-    #         IF (DENOM .GT. 1.E10) RETURN
-
     denom = 1.0 + dx**2/p1sq + dy**2/p2sq + xy*par[2]
-    if denom>1e10:
-        return (profil,dhdxc,dhdyc,term)
-    
-    #         FUNC = 1. / DENOM
-
     func = 1.0 / denom
-
-    #         IF (FUNC .GE. 0.046) THEN
-    #            NPT = 4
-    #         ELSE IF (FUNC .GE. 0.0022) THEN
-    #            NPT = 3
-    #         ELSE IF (FUNC .GE. 0.0001) THEN
-    #            NPT = 2
-    #         ELSE IF (FUNC .GE. 1.E-10) THEN
-    #            PROFIL = FUNC
-    #            WFSQ = FUNC**2
-    #            DHDXC = WFSQ*(2.*DX/P1SQ + DY*PAR(3))
-    #            DHDYC = WFSQ*(2.*DY/P2SQ + DX*PAR(3))
-    #            IF (IDERIV .GT. 0) THEN
-    #               TERM(1) = WFSQ*(2.*DX**2/P1SQ)/PAR(1)
-    #               TERM(2) = WFSQ*(2.*DY**2/P2SQ)/PAR(2)
-    #               TERM(3) = - WFSQ*XY
-    #            END IF
-    #            RETURN
-    #         ELSE
-    #            RETURN
-    #         END IF
-    #C
-
-    if (func >= 0.046):
-        npt = 4
-    elif (func >= 0.0022):
-        npt = 3
-    elif (func >= 0.0001):
-        npt = 2
-    elif (func >= 1e-10):
+    
+    # No binning
+    if binned is False:
         profil = func
         wfsq = func**2
         dhdxc = wfsq*(2.0*dx/p1sq + dy*par[2])
         dhdyc = wfsq*(2.0*dy/p2sq + dx*par[2])
         if (ideriv==True):
-            term[0] = wfsq*(2.0*dx**2/p1sq)/par[0]
-            term[1] = wfsq*(2.0*dy**2/p2sq)/par[1]
-            term[2] = -wfsq*xy
+            term[0,:] = wfsq*(2.0*dx**2/p1sq)/par[0]
+            term[1,:] = wfsq*(2.0*dy**2/p2sq)/par[1]
+            term[2,:] = -wfsq*xy
         return (profil,dhdxc,dhdyc,term)
-    else:
-        return (profil,dhdxc,dhdyc,term)
-    
-    #         DO IX=1,NPT
-    #            X(IX) = DX+D(IX,NPT)
-    #            XSQ(IX) = X(IX)**2
-    #            P1XSQ(IX) = XSQ(IX)/P1SQ
-    #         END DO
-    #C
+            
+    # Figure out the binned oversampling, 1-4 pixels
+    npt = np.zeros(n,int)-1
+    ind4, = np.where((denom<=1e10) & (func >= 0.046))
+    nind4 = len(ind4)
+    if nind4>0: npt[ind4] = 4
+    ind3, = np.where((denom<=1e10) & (func >= 0.0022) & (func < 0.046))
+    nind3 = len(ind3)
+    if nind3>0: npt[ind3] = 3
+    ind2, = np.where((denom<=1e10) & (func >= 0.0001) & (func < 0.0022))
+    nind2 = len(ind2)
+    if nind2>0: npt[ind2] = 2
+    ind1, = np.where((denom<=1e10) & (func >= 1e-10)  & (func < 0.0001))
+    nind1 = len(ind1)
+    if nind1>0: npt[ind1] = 1
+    ind0, = np.where(denom>1e10)
+    nind0 = len(ind0)
+    if nind0>0: npt[ind1] = 0    
 
-    for ix in range(npt):
-        x[ix] = dx+PROFILE_DATAD[ix,npt-1]
-        xsq[ix] = x[ix]**2
-        p1xsq[ix] = xsq[ix]/p1sq
-    
-    #         DO IY=1,NPT
-    #            Y = DY+D(IY,NPT)
-    #            YSQ = Y**2
-    #            P2YSQ = YSQ/P2SQ
-    #            DO IX=1,NPT
-    #               WT = W(IY,NPT)*W(IX,NPT)
-    #               XY=X(IX)*Y
-    #               DENOM = 1. + P1XSQ(IX) + P2YSQ + XY*PAR(3)
-    #               FUNC = 1. / DENOM
-    #               WF = WT*FUNC
-    #               WFSQ = WF*FUNC
-    #               PROFIL = PROFIL + WF
-    #               DHDXC = DHDXC + WFSQ*(2.*X(IX)/P1SQ + Y*PAR(3))
-    #               DHDYC = DHDYC + WFSQ*(2.*Y/P2SQ + X(IX)*PAR(3))
-    #               IF (IDERIV .GT. 0) THEN
-    #                  TERM(1) = TERM(1) + WFSQ*(2.*P1XSQ(IX))/PAR(1)
-    #                  TERM(2) = TERM(2) + WFSQ*(2.*P2YSQ)/PAR(2)
-    #                  TERM(3) = TERM(3) - WFSQ*XY
-    #               END IF
-    #            END DO
-    #         END DO
-    #C
 
-    for iy in range(npt):
-        y = dy+PROFILE_DATAD[iy,npt-1]
-        ysq = y**2
-        p2ysq = ysq/p2sq
-        for ix in range(npt):
-            wt = PROFILE_DATAW[iy,npt-1]*PROFILE_DATAW[ix,npt-1]
-            xy = x[ix]*y
-            denom = 1.0 + p1xsq[ix] + p2ysq + xy*par[2]
-            func = 1.0 / denom
-            wf = wt*func
-            wfsq = wf*func
-            profil = profil + wf
-            dhdxc = dhdxc + wfsq*(2.0*x[ix]/p1sq + y*par[2])
-            dhdyc = dhdyc + wfsq*(2.0*y/p2sq + x[ix]*par[2])
-            if ideriv==True:
-                term[0] += wfsq*(2.0*p1xsq[ix])/par[0]
-                term[1] += wfsq*(2.0*p2ysq)/par[1]
-                term[2] += -wfsq/xy
-    
+    if nind1>0:
+        profil[ind1] = func[ind1]
+        wfsq = func[ind1]**2
+        dhdxc = wfsq*(2.0*dx[ind1]/p1sq + dy[ind1]*par[2])
+        dhdyc = wfsq*(2.0*dy[ind1]/p2sq + dx[ind1]*par[2])
+        if (ideriv==True):
+            term[0,:] = wfsq*(2.0*dx[ind1]**2/p1sq)/par[0]
+            term[1,:] = wfsq*(2.0*dy[ind1]**2/p2sq)/par[1]
+            term[2,:] = -wfsq*xy[ind1]
+
+    for pt in np.arange(3)+2:
+        ind, = np.where(npt==pt)
+        if len(ind)>0:
+            datad2 = np.tile(PROFILE_DATAD[0:pt,pt-1],(pt,1))
+            x = np.tile(dx[ind],(pt,pt,1)) + np.tile(datad2.T,(len(ind),1,1)).T
+            y = np.tile(dy[ind],(pt,pt,1)) + np.tile(datad2,(len(ind),1,1)).T
+            wt = np.tile(np.outer(PROFILE_DATAW[0:pt,pt-1],PROFILE_DATAW[0:pt,pt-1]),(len(ind),1,1)).T          
+            profil1,dhdxc1,dhdyc1,term1 = vecbin_lorentz(par,x,y,wt,ideriv)
+            profil[ind] = profil1
+            dhdxc[ind] = dhdxc1
+            dhdyc[ind] = dhdyc1        
+            term[:,ind] = term1
+
     return (profil,dhdxc,dhdyc,term)
-    
-def profile_penny1(dx,dy,par,ideriv=False):
+
+
+def vecbin_penny1(par,dx,dy,x,y,wt,ideriv):
+    # This performs the vectorized version of the binned PENNY1 function
+    # dx, dy, x, y and wt should be (2,2,n), or (3,3,n) or (4,4,n)
+    # where the first two dimensions are the oversampling of the X and Y dimensions
+    p1sq = par[0]**2
+    p2sq = par[1]**2
+    onemp3 = 1.0-par[2]
+    nx,ny,n = x.shape
+    term = np.zeros((4,n),float)
+    p1xsq = x/p1sq
+    p2ysq = y/p2sq
+    xy = x*y
+    rsq = p1xsq*x + p2ysq*y
+    f = 1.0/(1.0+rsq)
+    rsq += xy*par[3]
+    e = np.zeros((nx,ny,n),float)
+    func = np.zeros((nx,ny,n),float)
+    deby = np.zeros((nx,ny,n),float)        
+    low = (rsq<34.0)
+    if np.sum(low)>0:
+        e[low] = np.exp(-0.6931472*rsq[low])
+        func[low] = par[2]*e[low] + onemp3*f[low]
+        deby[low] = 0.6931472*wt[low]*par[2]*e[low]
+    if np.sum(~low)>0:
+        #e[~low] = 0.0     # already zero
+        func[~low] = onemp3*f[~low]
+        #deby[~low] = 0.0  # already zero
+    profil = np.sum(np.sum(wt*func,axis=0),axis=0)
+    dfby = wt*onemp3*f**2
+    dbyx0 = 2.0*p1xsq
+    dbyy0 = 2.0*p2ysq
+    dhdxc = np.sum(np.sum(deby*(dbyx0+dy*par[3])+dfby*dbyx0,axis=0),axis=0)
+    dhdyc = np.sum(np.sum(deby*(dbyy0+dx*par[3])+dfby*dbyy0,axis=0),axis=0)
+    if ideriv==True:
+        dbyx0 = dbyx0*dx/par[0]
+        dbyy0 = dbyy0*dy/par[1]
+        term[0,:] = np.sum(np.sum((dfby+deby)*dbyx0,axis=0),axis=0)
+        term[1,:] = np.sum(np.sum((dfby+deby)*dbyy0,axis=0),axis=0)
+        term[2,:] = np.sum(np.sum(wt*(e-f),axis=0),axis=0)
+        term[3,:] = np.sum(np.sum(-deby*xy,axis=0),axis=0)
+    return profil,dhdxc,dhdyc,term
+
+def profile_penny1(dx,dy,par,ideriv=False,binned=True):
     """ PENNY1 PSF analytical profile."""
        
     #      ELSE IF (IPSTYP .EQ. 6) THEN
@@ -985,104 +560,31 @@ def profile_penny1(dx,dy,par,ideriv=False):
     #C
 
     n = dln.size(dx)
-    if n>1:
-        profil = np.zeros(n,float)
-        dhdxc = np.zeros(n,float)
-        dhdyc = np.zeros(n,float)
-        term = np.zeros((4,n),float)    
-        for i in range(n):
-            profil1,dhdxc1,dhdyc1,term1 = profile_penny1(dx[i],dy[i],par,ideriv=ideriv)
-            profil[i] = profil1
-            dhdxc[i] = dhdxc1
-            dhdyc[i] = dhdyc1
-            term[:,i] = term1
-        return profil,dhdxc,dhdyc,term
-
-    
-    profil = 0.0
-    dhdxc = 0.0
-    dhdyc = 0.0
-    term = np.zeros(4,float)
-    x = np.zeros(4,float)
-    xsq = np.zeros(4,float)
-    p1xsq = np.zeros(4,float)
-
-    #         P1SQ = PAR(1)**2
-    #         P2SQ = PAR(2)**2
-    #         ONEMP3 = 1.-PAR(3)
-    #         XY = DX*DY
+    profil = np.zeros(n,float)
+    dhdxc = np.zeros(n,float)
+    dhdyc = np.zeros(n,float)
+    term = np.zeros((4,n),float)
 
     p1sq = par[0]**2
     p2sq = par[1]**2
     onemp3 = 1.0-par[2]
     xy = dx*dy
-    
-    #C
-    #         RSQ = DX**2/P1SQ + DY**2/P2SQ
-    #         IF (RSQ .GT. 1.E10) RETURN
-
     rsq = dx**2/p1sq + dy**2/p2sq
-    if rsq>1e10:
-        return (profil,dhdxc,dhdyc,term)
-    
-    #C
-    #         F = 1./(1.+RSQ)
-    #         RSQ = RSQ + XY*PAR(4)
-    #         IF (RSQ .LT. 34.) THEN
-    #            E = EXP(-0.6931472*RSQ)
-    #            FUNC = PAR(3)*E + ONEMP3*F
-    #         ELSE
-    #            E = 0.
-    #            FUNC = ONEMP3*F
-    #         END IF
-    #C
 
     f = 1.0/(1.0+rsq)
     rsq += xy*par[3]
-    if rsq<34.0:
-        e = np.exp(-0.6931472*rsq)
-        func = par[2]*e + onemp3*f
-    else:
-        e = 0.0
-        func = onemp3*f
+    e = np.zeros(n,float)
+    func = np.zeros(n,float)    
+    low = (rsq<34.0)
+    if np.sum(low)>0:
+        e[low] = np.exp(-0.6931472*rsq[low])
+        func[low] = par[2]*e[low] + onemp3*f[low]
+    if np.sum(~low)>0:
+        e[~low] = 0.0
+        func[~low] = onemp3*f[~low]
     
-    #         IF (FUNC .GE. 0.046) THEN
-    #            NPT = 4
-    #         ELSE IF (FUNC .GE. 0.0022) THEN
-    #            NPT = 3
-    #         ELSE IF (FUNC .GE. 0.0001) THEN
-    #            NPT = 2
-    #         ELSE IF (FUNC .GE. 1.E-10) THEN
-    #            PROFIL = FUNC
-    #            DFBY = ONEMP3*F**2
-    #            DEBY = 0.6931472*PAR(3)*E
-    #            DBYX0 = 2.*DX/P1SQ
-    #            DBYY0 = 2.*DY/P2SQ
-    #            DHDXC = DEBY*(DBYX0 + DY*PAR(4)) + DFBY*DBYX0
-    #            DHDYC = DEBY*(DBYY0 + DX*PAR(4)) + DFBY*DBYY0
-    #            IF (IDERIV .GT. 0) THEN
-    #               DBYX0 = DBYX0*DX/PAR(1)
-    #               DBYY0 = DBYY0*DY/PAR(2)
-    #               DFBY = DFBY + DEBY
-    #               TERM(1) = DFBY * DBYX0
-    #               TERM(2) = DFBY * DBYY0
-    #               TERM(3) = E - F
-    #               TERM(4) = - DEBY * XY
-    #     .              / (0.5 - ABS(PAR(4)))
-    #            END IF
-    #            RETURN
-    #         ELSE
-    #            RETURN
-    #         END IF
-    #C
-
-    if (func >= 0.046):
-        npt = 4
-    elif (func >= 0.0022):
-        npt = 3
-    elif (func >= 0.0001):
-        npt = 2
-    elif (func >= 1e-10):
+    # No binning
+    if binned is False:
         profil = func
         dfby = onemp3*f**2
         deby = 0.6931472*par[2]*e
@@ -1094,97 +596,116 @@ def profile_penny1(dx,dy,par,ideriv=False):
             dbyx0 = dbyx0*dx/par[0]
             dbyy0 = dbyy0*dy/par[1]
             dfby += deby
-            term[0] = dfby * dbyx0
-            term[1] = dfby * dbyy0
-            term[2] = e - f
-            term[3] = -deby * xy / (0.5 - np.abs(par[3]))
+            term[0,:] = dfby * dbyx0
+            term[1,:] = dfby * dbyy0
+            term[2,:] = e - f
+            term[3,:] = -deby * xy / (0.5 - np.abs(par[3]))
         return (profil,dhdxc,dhdyc,term)
-    else:
-        return (profil,dhdxc,dhdyc,term)
+            
+    # Figure out the binned oversampling, 1-4 pixels
+    npt = np.zeros(n,int)-1
+    ind4, = np.where((rsq<=1e10) & (func >= 0.046))
+    nind4 = len(ind4)
+    if nind4>0: npt[ind4] = 4
+    ind3, = np.where((rsq<=1e10) & (func >= 0.0022) & (func < 0.046))
+    nind3 = len(ind3)
+    if nind3>0: npt[ind3] = 3
+    ind2, = np.where((rsq<=1e10) & (func >= 0.0001) & (func < 0.0022))
+    nind2 = len(ind2)
+    if nind2>0: npt[ind2] = 2
+    ind1, = np.where((rsq<=1e10) & (func >= 1e-10)  & (func < 0.0001))
+    nind1 = len(ind1)
+    if nind1>0: npt[ind1] = 1
+    ind0, = np.where(rsq>1e10)
+    nind0 = len(ind0)
+    if nind0>0: npt[ind1] = 0    
 
-    
-    #         DO IX=1,NPT
-    #            X(IX) = DX+D(IX,NPT)
-    #            P1XSQ(IX) = X(IX)/P1SQ
-    #         END DO
-    #C
 
-    for ix in range(npt):
-        x[ix] = dx+PROFILE_DATAD[ix,npt-1]
-        p1xsq[ix] = x[ix]/p1sq
-    
-    #         DO IY=1,NPT
-    #            Y = DY+D(IY,NPT)
-    #            P2YSQ = Y/P2SQ
-    #            DO IX=1,NPT
-    #               WT = W(IY,NPT)*W(IX,NPT)
-    #               XY = X(IX)*Y
-    #               RSQ = P1XSQ(IX)*X(IX) + P2YSQ*Y
-    #               F = 1./(1.+RSQ)
-    #               RSQ = RSQ + XY*PAR(4)
-    #               IF (RSQ .LT. 34.) THEN
-    #                  E = EXP(-0.6931472*RSQ)
-    #                  FUNC = PAR(3)*E + ONEMP3*F
-    #                  DEBY = 0.6931472*WT*PAR(3)*E
-    #               ELSE
-    #                  E = 0.
-    #                  FUNC = ONEMP3*F
-    #                  DEBY = 0.
-    #               END IF
-    #               PROFIL = PROFIL + WT*FUNC
-    #               DFBY = WT*ONEMP3*F**2
-    #               DBYX0 = 2.*P1XSQ(IX)
-    #               DBYY0 = 2.*P2YSQ
-    #               DHDXC = DHDXC + 
-    #     .              DEBY*(DBYX0 + DY*PAR(4)) + DFBY*DBYX0
-    #               DHDYC = DHDYC +
-    #     .              DEBY*(DBYY0 + DX*PAR(4)) + DFBY*DBYY0
-    #               IF (IDERIV .GT. 0) THEN
-    #                  DBYX0 = DBYX0*DX/PAR(1)
-    #                  DBYY0 = DBYY0*DY/PAR(2)
-    #                  TERM(1) = TERM(1) + (DFBY+DEBY)*DBYX0
-    #                  TERM(2) = TERM(2) + (DFBY+DEBY)*DBYY0
-    #                  TERM(3) = TERM(3) + WT*(E-F)
-    #                  TERM(4) = TERM(4) - DEBY * XY
-    #               END IF
-    #            END DO
-    #         END DO
-    #C
+    if nind1>0:
+        profil[ind1] = func[ind1]
+        dfby = onemp3*f[ind1]**2
+        deby = 0.6931472*par[2]*e[ind1]
+        dbyx0 = 2.0*dx[ind1]/p1sq
+        dbyy0 = 2.0*dy[ind1]/p2sq
+        dhdxc = deby*(dbyx0 + dy[ind1]*par[3]) + dfby*dbyx0
+        dhdyc = deby*(dbyy0 + dx[ind1]*par[3]) + dfby*dbyy0
+        if (ideriv==True):
+            dbyx0 = dbyx0*dx[ind1]/par[0]
+            dbyy0 = dbyy0*dy[ind1]/par[1]
+            dfby += deby
+            term[0,:] = dfby * dbyx0
+            term[1,:] = dfby * dbyy0
+            term[2,:] = e[ind1] - f[ind1]
+            term[3,:] = -deby * xy[ind1] / (0.5 - np.abs(par[3]))
 
-    for iy in range(npt):
-        y = dy+PROFILE_DATAD[iy,npt-1]
-        p2ysq = y/p2sq
-        for ix in range(npt):
-            wt = PROFILE_DATAW[iy,npt-1]*PROFILE_DATAW[ix,npt-1]
-            xy = x[ix]*y
-            rsq = p1xsq[ix]*x[ix] + p2ysq*y
-            f = 1.0/(1.0+rsq)
-            rsq += xy*par[3]
-            if rsq<34.0:
-                e = np.exp(-0.6931472*rsq)
-                func = par[2]*e + onemp3*f
-                deby = 0.6931472*wt*par[2]*e
-            else:
-                e = 0.0
-                func = onemp3*f
-                deby = 0.0
-            profil = profil + wt*func
-            dfby = wt*onemp3*f**2
-            dbyx0 = 2.0*p1xsq[ix]
-            dbyy0 = 2.0*p2ysq
-            dhdxc += deby*(dbyx0 + dy*par[3]) + dfby*dbyx0
-            dhdyc += deby*(dbyy0 + dx*par[3]) + dfby*dbyy0
-            if ideriv==True:
-                dbyx0 = dbyx0*dx/par[0]
-                dbyy0 = dbyy0*dy/par[1]
-                term[0] += (dfby+deby)*dbyx0
-                term[1] += (dfby+deby)*dbyy0
-                term[2] += wt*(e-f)
-                term[3] += -deby*xy
-    
+
+    for pt in np.arange(3)+2:
+        ind, = np.where(npt==pt)
+        if len(ind)>0:
+            datad2 = np.tile(PROFILE_DATAD[0:pt,pt-1],(pt,1))
+            dx2 = np.tile(dx[ind],(pt,pt,1))
+            dy2 = np.tile(dy[ind],(pt,pt,1))
+            x = dx2 + np.tile(datad2.T,(len(ind),1,1)).T
+            y = dy2 + np.tile(datad2,(len(ind),1,1)).T
+            wt = np.tile(np.outer(PROFILE_DATAW[0:pt,pt-1],PROFILE_DATAW[0:pt,pt-1]),(len(ind),1,1)).T          
+            profil1,dhdxc1,dhdyc1,term1 = vecbin_penny1(par,dx2,dy2,x,y,wt,ideriv)
+            profil[ind] = profil1
+            dhdxc[ind] = dhdxc1
+            dhdyc[ind] = dhdyc1        
+            term[:,ind] = term1
+
     return (profil,dhdxc,dhdyc,term)
-    
-def profile_penny2(dx,dy,par,ideriv=False):
+
+
+def vecbin_penny2(par,dx,dy,x,y,wt,ideriv):
+    # This performs the vectorized version of the binned PENNY2 function
+    # dx, dy, x, y and wt should be (2,2,n), or (3,3,n) or (4,4,n)
+    # where the first two dimensions are the oversampling of the X and Y dimensions
+    p1sq = par[0]**2
+    p2sq = par[1]**2
+    onemp3 = 1.0-par[2]
+    nx,ny,n = x.shape
+    term = np.zeros((5,n),float)
+    p1xsq = x/p1sq
+    p2ysq = y/p2sq
+    xy = x*y
+    rsq = p1xsq*x + p2ysq*y
+    f = rsq + par[4]*xy
+    low = (f<=-1)
+    if np.sum(low)>0:
+        f[low] = 0.0
+    if np.sum(~low)>0:
+        f[~low] = 1.0/(1.0+f[~low])
+    deby = rsq + par[3]*xy
+    e = np.zeros((nx,ny,n),float)
+    func = np.zeros((nx,ny,n),float)    
+    low = (deby<34.0)
+    if np.sum(low)>0:
+        e[low] = np.exp(-0.6931472*deby[low])
+        func[low] = par[2]*e[low] + onemp3*f[low]
+        deby[low] = 0.6931472*wt[low]*par[2]*e[low]
+    if np.sum(~low)>0:
+        #e[~low] = 0.0            # already zero
+        func[~low] = onemp3*f[~low]
+        #deby[~low] = 0.0         $ already zero
+    profil = np.sum(np.sum(wt*func,axis=0),axis=0)
+
+    dfby = wt*onemp3*f**2
+    dbyx0 = 2.0*p1xsq
+    dbyy0 = 2.0*p2ysq
+    dhdxc = np.sum(np.sum(deby*(dbyx0+dy*par[3])+dfby*(dbyx0+dy*par[4]),axis=0),axis=0)
+    dhdyc = np.sum(np.sum(deby*(dbyy0+dx*par[3])+dfby*(dbyy0+dx*par[4]),axis=0),axis=0)
+    if ideriv==True:
+        dbyx0 = dbyx0*dx/par[0]
+        dbyy0 = dbyy0*dy/par[1]
+        term[0,:] = np.sum(np.sum((dfby+deby)*dbyx0,axis=0),axis=0)
+        term[1,:] = np.sum(np.sum((dfby+deby)*dbyy0,axis=0),axis=0)
+        term[2,:] = np.sum(np.sum(wt*(e-f),axis=0),axis=0)
+        term[3,:] = np.sum(np.sum(-deby*xy,axis=0),axis=0)
+        term[4,:] = np.sum(np.sum(-dfby*xy,axis=0),axis=0)
+    return profil,dhdxc,dhdyc,term
+
+def profile_penny2(dx,dy,par,ideriv=False,binned=True):
     """ PENNY2 PSF analytical profile."""
 
     #      ELSE IF (IPSTYP .EQ. 7) THEN
@@ -1195,106 +716,31 @@ def profile_penny2(dx,dy,par,ideriv=False):
     #C
 
     n = dln.size(dx)
-    if n>1:
-        profil = np.zeros(n,float)
-        dhdxc = np.zeros(n,float)
-        dhdyc = np.zeros(n,float)
-        term = np.zeros((5,n),float)    
-        for i in range(n):
-            profil1,dhdxc1,dhdyc1,term1 = profile_penny2(dx[i],dy[i],par,ideriv=ideriv)
-            profil[i] = profil1
-            dhdxc[i] = dhdxc1
-            dhdyc[i] = dhdyc1
-            term[:,i] = term1
-        return profil,dhdxc,dhdyc,term
-
-    
-    profil = 0.0
-    dhdxc = 0.0
-    dhdyc = 0.0
-    term = np.zeros(5,float)
-    x = np.zeros(4,float)
-    xsq = np.zeros(4,float)
-    p1xsq = np.zeros(4,float)
-
-    #         P1SQ = PAR(1)**2
-    #         P2SQ = PAR(2)**2
-    #         ONEMP3 = 1.-PAR(3)
-    #         XY = DX*DY
-    #C
+    profil = np.zeros(n,float)
+    dhdxc = np.zeros(n,float)
+    dhdyc = np.zeros(n,float)
+    term = np.zeros((5,n),float)
 
     p1sq = par[0]**2
     p2sq = par[1]**2
     onemp3 = 1.0-par[2]
     xy = dx*dy
-    
-    #         RSQ = DX**2/P1SQ + DY**2/P2SQ
-    #         DFBY = RSQ + PAR(5)*XY
-    #         IF (DFBY .GT. 1.E10) RETURN
-
     rsq = dx**2/p1sq + dy**2/p2sq
     dfby = rsq + par[4]*xy
-    if rsq>1e10:
-        return (profil,dhdxc,dhdyc,term)
-    
-    #         F = 1./(1.+DFBY)
-    #C    
-    #         DEBY = RSQ + PAR(4)*XY
-    #         IF (DEBY .LT. 34.) THEN
-    #            E = EXP(-0.6931472*DEBY)
-    #         ELSE
-    #            E = 0.
-    #         END IF
-    #C
-    #         FUNC = PAR(3)*E + ONEMP3*F
-    
     f = 1.0/(1.0+dfby)
     deby = rsq + par[3]*xy
-    if deby<34.0:
-        e = np.exp(-0.6931472*deby)
-    else:
-        e = 0.0
-    func = par[2]*e + onemp3*f
-        
-    #         IF (FUNC .GE. 0.046) THEN
-    #            NPT = 4
-    #         ELSE IF (FUNC .GE. 0.0022) THEN
-    #            NPT = 3
-    #         ELSE IF (FUNC .GE. 0.0001) THEN
-    #            NPT = 2
-    #         ELSE IF (FUNC .GE. 1.E-10) THEN
-    #            PROFIL = FUNC
-    #            DFBY = ONEMP3*F**2
-    #            DEBY = 0.6931472*PAR(3)*E
-    #            DBYX0 = 2.*DX/P1SQ
-    #            DBYY0 = 2.*DY/P2SQ
-    #            DHDXC = DEBY*(DBYX0 + DY*PAR(4)) + 
-    #     .              DFBY*(DBYX0 + DY*PAR(5))
-    #            DHDYC = DEBY*(DBYY0 + DX*PAR(4)) + 
-    #     .              DFBY*(DBYY0 + DX*PAR(5))
-    #            IF (IDERIV .GT. 0) THEN
-    #               DBYX0 = DBYX0*DX/PAR(1)
-    #               DBYY0 = DBYY0*DY/PAR(2)
-    #               TERM(5) = -DFBY * XY
-    #               DFBY = DFBY + DEBY
-    #               TERM(1) = DFBY * DBYX0
-    #               TERM(2) = DFBY * DBYY0
-    #               TERM(3) = E - F
-    #               TERM(4) = - DEBY * XY
-    #            END IF
-    #            RETURN
-    #         ELSE
-    #            RETURN
-    #         END IF
-    #C
 
-    if (func >= 0.046):
-        npt = 4
-    elif (func >= 0.0022):
-        npt = 3
-    elif (func >= 0.0001):
-        npt = 2
-    elif (func >= 1e-10):
+    e = np.zeros(n,float)
+    low = (deby<34.0)
+    if np.sum(low)>0:
+        e[low] = np.exp(-0.6931472*deby[low])
+    #if np.sum(~low)>0:  # already zero
+    #    e[~low] = 0.0
+    func = par[2]*e + onemp3*f
+
+    
+    # No binning
+    if binned is False:
         profil = func
         dfby = onemp3*f**2
         deby = 0.6931472*par[2]*e
@@ -1305,110 +751,70 @@ def profile_penny2(dx,dy,par,ideriv=False):
         if (ideriv==True):
             dbyx0 = dbyx0*dx/par[0]
             dbyy0 = dbyy0*dy/par[1]
-            term[4] = -dfby * xy
+            term[4,:] = -dfby * xy
             dfby += deby
-            term[0] = dfby * dbyx0
-            term[1] = dfby * dbyy0
-            term[2] = e - f
-            term[3] = -deby * xy 
+            term[0,:] = dfby * dbyx0
+            term[1,:] = dfby * dbyy0
+            term[2,:] = e - f
+            term[3,:] = -deby * xy 
         return (profil,dhdxc,dhdyc,term)
-    else:
-        return (profil,dhdxc,dhdyc,term)
-    
-    #         DO IX=1,NPT
-    #            X(IX) = DX+D(IX,NPT)
-    #            P1XSQ(IX) = X(IX)/P1SQ
-    #         END DO
-    #C
+            
+    # Figure out the binned oversampling, 1-4 pixels
+    npt = np.zeros(n,int)-1
+    ind4, = np.where((rsq<=1e10) & (func >= 0.046))
+    nind4 = len(ind4)
+    if nind4>0: npt[ind4] = 4
+    ind3, = np.where((rsq<=1e10) & (func >= 0.0022) & (func < 0.046))
+    nind3 = len(ind3)
+    if nind3>0: npt[ind3] = 3
+    ind2, = np.where((rsq<=1e10) & (func >= 0.0001) & (func < 0.0022))
+    nind2 = len(ind2)
+    if nind2>0: npt[ind2] = 2
+    ind1, = np.where((rsq<=1e10) & (func >= 1e-10)  & (func < 0.0001))
+    nind1 = len(ind1)
+    if nind1>0: npt[ind1] = 1
+    ind0, = np.where(rsq>1e10)
+    nind0 = len(ind0)
+    if nind0>0: npt[ind1] = 0    
 
-    for ix in range(npt):
-        x[ix] = dx+PROFILE_DATAD[ix,npt-1]
-        p1xsq[ix] = x[ix]/p1sq
-    
-    #         DO IY=1,NPT
-    #            Y = DY+D(IY,NPT)
-    #            P2YSQ = Y/P2SQ
-    #            DO IX=1,NPT
-    #               WT = W(IY,NPT)*W(IX,NPT)
-    #               XY = X(IX)*Y
-    #               RSQ = P1XSQ(IX)*X(IX) + P2YSQ*Y
-    #               F = RSQ + PAR(5)*XY
-    #               IF (F .LE. -1.) THEN
-    #                  F = 0.
-    #               ELSE
-    #                  F = 1./(1.+F)
-    #               END IF
-    #               DEBY = RSQ + PAR(4)*XY
-    #               IF (DEBY .LT. 34.) THEN
-    #                  E = EXP(-0.6931472*DEBY)
-    #                  FUNC = PAR(3)*E + ONEMP3*F
-    #                  DEBY = 0.6931472*WT*PAR(3)*E
-    #               ELSE
-    #                  E = 0.
-    #                  FUNC = ONEMP3*F
-    #                  DEBY = 0.
-    #               END IF
-    #               PROFIL = PROFIL + WT*FUNC
-    #               DFBY = WT*ONEMP3*F**2
-    #               DBYX0 = 2.*P1XSQ(IX)
-    #               DBYY0 = 2.*P2YSQ
-    #               DHDXC = DHDXC + 
-    #     .              DEBY*(DBYX0 + DY*PAR(4)) + 
-    #     .              DFBY*(DBYX0 + DY*PAR(5))
-    #               DHDYC = DHDYC +
-    #     .              DEBY*(DBYY0 + DX*PAR(4)) + 
-    #     .              DFBY*(DBYY0 + DX*PAR(5))
-    #               IF (IDERIV .GT. 0) THEN
-    #                  DBYX0 = DBYX0*DX/PAR(1)
-    #                  DBYY0 = DBYY0*DY/PAR(2)
-    #                  TERM(1) = TERM(1) + (DFBY+DEBY)*DBYX0
-    #                  TERM(2) = TERM(2) + (DFBY+DEBY)*DBYY0
-    #                  TERM(3) = TERM(3) + WT*(E-F)
-    #                  TERM(4) = TERM(4) - DEBY * XY
-    #                  TERM(5) = TERM(5) - DFBY * XY
-    #               END IF
-    #            END DO
-    #         END DO
 
-    for iy in range(npt):
-        y = dy+PROFILE_DATAD[iy,npt-1]
-        p2ysq = y/p2sq
-        for ix in range(npt):
-            wt = PROFILE_DATAW[iy,npt-1]*PROFILE_DATAW[ix,npt-1]
-            xy = x[ix]*y
-            rsq = p1xsq[ix]*x[ix] + p2ysq*y
-            f = rsq + par[4]*xy
-            if f <= -1:
-                f = 0.0
-            else:
-                f = 1.0/(1.0+f)
-            deby = rsq + par[3]*xy
-            if deby<34.0:
-                e = np.exp(-0.6931472*deby)
-                func = par[2]*e + onemp3*f
-                deby = 0.6931472*wt*par[2]*e
-            else:
-                e = 0.0
-                func = onemp3*f
-                deby = 0.0
-            profil = profil + wt*func
-            dfby = wt*onemp3*f**2
-            dbyx0 = 2.0*p1xsq[ix]
-            dbyy0 = 2.0*p2ysq
-            dhdxc = deby*(dbyx0 + dy*par[3]) + dfby*(dbyx0 + dy*par[4])
-            dhdyc = deby*(dbyy0 + dx*par[3]) + dfby*(dbyy0 + dx*par[4])
-            if ideriv==True:
-                dbyx0 = dbyx0*dx/par[0]
-                dbyy0 = dbyy0*dy/par[1]
-                term[0] += (dfby+deby)*dbyx0
-                term[1] += (dfby+deby)*dbyy0
-                term[2] += wt*(e-f)
-                term[3] += -deby*xy
-                term[4] += -dfby*xy                
-    
+    if nind1>0:
+        profil[ind1] = func[ind1]
+        dfby = onemp3*f[ind1]**2
+        deby = 0.6931472*par[2]*e[ind1]
+        dbyx0 = 2.0*dx[ind1]/p1sq
+        dbyy0 = 2.0*dy[ind1]/p2sq
+        dhdxc = deby*(dbyx0 + dy[ind1]*par[3]) + dfby*(dbyx0 + dy[ind1]*par[4])
+        dhdyc = deby*(dbyy0 + dx[ind1]*par[3]) + dfby*(dbyy0 + dx[ind1]*par[4])
+        if (ideriv==True):
+            dbyx0 = dbyx0*dx[ind1]/par[0]
+            dbyy0 = dbyy0*dy[ind1]/par[1]
+            term[4,:] = -dfby * xy[ind1]
+            dfby += deby
+            term[0,:] = dfby * dbyx0
+            term[1,:] = dfby * dbyy0
+            term[2,:] = e[ind1] - f[ind1]
+            term[3,:] = -deby * xy[ind1]
+
+    for pt in np.arange(3)+2:
+        ind, = np.where(npt==pt)
+        if len(ind)>0:
+            datad2 = np.tile(PROFILE_DATAD[0:pt,pt-1],(pt,1))
+            dx2 = np.tile(dx[ind],(pt,pt,1))
+            dy2 = np.tile(dy[ind],(pt,pt,1))
+            x = dx2 + np.tile(datad2.T,(len(ind),1,1)).T
+            y = dy2 + np.tile(datad2,(len(ind),1,1)).T
+            wt = np.tile(np.outer(PROFILE_DATAW[0:pt,pt-1],PROFILE_DATAW[0:pt,pt-1]),(len(ind),1,1)).T          
+            profil1,dhdxc1,dhdyc1,term1 = vecbin_penny2(par,dx2,dy2,x,y,wt,ideriv)
+            profil[ind] = profil1
+            dhdxc[ind] = dhdxc1
+            dhdyc[ind] = dhdyc1        
+            term[:,ind] = term1
+
     return (profil,dhdxc,dhdyc,term)
 
-def profile(ipstyp,dx,dy,par,ideriv=False):
+
+def profile(ipstyp,dx,dy,par,ideriv=False,binned=True):
     """ PSF analytical profile."""
 
     #C#######################################################################
@@ -1460,11 +866,18 @@ def profile(ipstyp,dx,dy,par,ideriv=False):
 
     maxpar = len(par)
     term = np.zeros(maxpar,float)
+
+    # Moffat
+    if ipstyp>=2 and ipstyp<=4:
+        beta = {2:1.5, 3:2.5, 4:3.5}[ipstyp]
+        out = profile_moffat(dx,dy,par,beta,ideriv=ideriv,binned=binned)
+        return out
     
+    # Other functions
     profdict = {1:profile_gaussian, 2:profile_moffat15, 3:profile_moffat25,
                 4:profile_moffat35, 5:profile_lorentz, 6:profile_penny1,
                 7:profile_penny2}
-    out = profdict[ipstyp](dx,dy,par,ideriv)
+    out = profdict[ipstyp](dx,dy,par,ideriv=ideriv,binned=binned)
     # returns (profil,dhdxc,dhdxy,term)
     return out
 
@@ -1546,7 +959,7 @@ def bicubic(f, dx, dy):
     return bicubic, dfdx, dfdy
 
 
-def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay):
+def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay,binned=True):
     """ Evaluate the PSF for a point."""
     #    C
     #      REAL FUNCTION  USEPSF  (IPSTYP, DX, DY, BRIGHT, PAR, PSF, 
@@ -1581,26 +994,28 @@ def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay):
     maxexp = 10
     
     n = dln.size(dx)
-    if n>1:
-        upsf = np.zeros(n,float)
-        dvdxc = np.zeros(n,float)
-        dvdyc = np.zeros(n,float)
-        for i in range(n):
-            upsf1,dvdxc1,dvdyc1 = usepsf(ipstyp,dx[i],dy[i],bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay)
-            upsf[i] = upsf1
-            dvdxc[i] = dvdxc1
-            dvdyc[i] = dvdyc1
-        return upsf,dvdxc,dvdyc
+    #if n>1:
+    #    upsf = np.zeros(n,float)
+    #    dvdxc = np.zeros(n,float)
+    #    dvdyc = np.zeros(n,float)
+    #    for i in range(n):
+    #        upsf1,dvdxc1,dvdyc1 = usepsf(ipstyp,dx[i],dy[i],bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay,binned=binned)
+    #        upsf[i] = upsf1
+    #        dvdxc[i] = dvdxc1
+    #        dvdyc[i] = dvdyc1
+    #    return upsf,dvdxc,dvdyc
 
     nterm = nexp + nfrac    
-    upsf,dvdxc,dvdyc,junk = profile(ipstyp,dx,dy,par)
+    upsf,dvdxc,dvdyc,junk = profile(ipstyp,dx,dy,par,binned=binned)
     upsf *= bright
     dvdxc *= bright
     dvdyc *= bright
-    if nterm<0:
+    if nterm<0 or psf is None:
         return upsf,dvdxc,dvdyc
 
     middle = npsf//2
+
+    import pdb; pdb.set_trace()
     
     #C
     #C The PSF look-up tables are centered at (MIDDLE, MIDDLE).
@@ -1816,7 +1231,8 @@ def rdpsf(psffile):
     ipstyp = {'GAUSSIAN':1, 'MOFFAT15':2, 'MOFFAT25':3, 'MOFFAT35':4,
               'LORENTZ':5, 'PENNY1':6, 'PENNY2':7}[label]
     header = {'label':label, 'ipstyp':ipstyp, 'npsf':npsf, 'npar':npar, 'nexp':nexp,
-              'nfrac':nfrac, 'psfmag':psfmag, 'bright':bright, 'xpsf':xpsf, 'ypsf':ypsf}
+              'nfrac':nfrac, 'psfmag':psfmag, 'bright':bright, 'xpsf':xpsf, 'ypsf':ypsf,
+              'binned':1}
 
     # Add some other values
     #----------------------
@@ -1927,7 +1343,7 @@ class PSF:
         self.par = par
         self.psf = psf
 
-    def __call__(self,inpvals,xy=None,full=False,deriv=False,origin=0):
+    def __call__(self,inpvals,xy=None,full=False,deriv=False,origin=0,binned=None):
         """ Create a PSF image."""
 
         nstars = numinpvals(inpvals)
@@ -1944,7 +1360,7 @@ class PSF:
                 x,y,mag = getinpvals(inpvals,i)
                 # Get the PSF image for this star
                 xy = self._getxyranges(x,y)  # get X/Y ranges
-                upsf = self((x,y,mag),xy=xy)                
+                upsf = self((x,y,mag),xy=xy,deriv=deriv,origin=origin,binned=binned)
                 # Add to full image
                 image[xy[0][0]:xy[0][1]+1,xy[1][0]:xy[1][1]+1] += upsf
             return image
@@ -1995,10 +1411,13 @@ class PSF:
             nypix = len(dy)
             dx2 = np.repeat(dx,nypix).reshape(nxpix,nypix)
             dy2 = np.repeat(dy,nxpix).reshape(nypix,nxpix).T
-                
+
+        if binned is None:
+            binned = self.header['binned']
         upsf,dvdxc,dvdyc = usepsf(self.header['ipstyp'],dx2.flatten(),dy2.flatten(),self.header['bright'],
                                   self.par,self.psf,self.header['npsf'],self.header['npar'],
-                                  self.header['nexp'],self.header['nfrac'],deltax,deltay)
+                                  self.header['nexp'],self.header['nfrac'],deltax,deltay,
+                                  binned=binned)
         upsf = upsf.reshape(nxpix,nypix)
         dvdxc = dvdxc.reshape(nxpix,nypix)
         dvdyc = dvdyc.reshape(nxpix,nypix)        
