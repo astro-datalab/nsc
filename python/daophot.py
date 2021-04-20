@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import pylab
 from scipy.signal import argrelmin
 import scipy.ndimage.filters as filters
+from scipy.interpolate import interp2d, RectBivariateSpline
 import time
 from dlnpyutils import utils as dln
 
@@ -959,7 +960,8 @@ def bicubic(f, dx, dy):
     return bicubic, dfdx, dfdy
 
 
-def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay,binned=True):
+def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay,
+           ideriv=True,binned=True):
     """ Evaluate the PSF for a point."""
     #    C
     #      REAL FUNCTION  USEPSF  (IPSTYP, DX, DY, BRIGHT, PAR, PSF, 
@@ -994,19 +996,8 @@ def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay,binned
     maxexp = 10
     
     n = dln.size(dx)
-    #if n>1:
-    #    upsf = np.zeros(n,float)
-    #    dvdxc = np.zeros(n,float)
-    #    dvdyc = np.zeros(n,float)
-    #    for i in range(n):
-    #        upsf1,dvdxc1,dvdyc1 = usepsf(ipstyp,dx[i],dy[i],bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay,binned=binned)
-    #        upsf[i] = upsf1
-    #        dvdxc[i] = dvdxc1
-    #        dvdyc[i] = dvdyc1
-    #    return upsf,dvdxc,dvdyc
-
     nterm = nexp + nfrac    
-    upsf,dvdxc,dvdyc,junk = profile(ipstyp,dx,dy,par,binned=binned)
+    upsf,dvdxc,dvdyc,junk = profile(ipstyp,dx,dy,par,ideriv=ideriv,binned=binned)
     upsf *= bright
     dvdxc *= bright
     dvdyc *= bright
@@ -1015,30 +1006,7 @@ def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay,binned
 
     middle = npsf//2
 
-    import pdb; pdb.set_trace()
-    
-    #C
     #C The PSF look-up tables are centered at (MIDDLE, MIDDLE).
-    #C
-    #      IF (NEXP .GE. 0) THEN
-    #         JUNK(1) = 1.
-    #         IF (NEXP .GE. 2) THEN
-    #            JUNK(2) = DELTAX
-    #            JUNK(3) = DELTAY
-    #            IF (NEXP .GE. 4) THEN
-    #               JUNK(4) = 1.5*DELTAX**2-0.5
-    #               JUNK(5) = DELTAX*DELTAY
-    #               JUNK(6) = 1.5*DELTAY**2-0.5
-    #               IF (NEXP .GE. 7) THEN
-    #                  JUNK(7) = DELTAX*(5.*JUNK(4)-2.)/3.
-    #                  JUNK(8) = JUNK(4)*DELTAY
-    #                  JUNK(9) = DELTAX*JUNK(6)
-    #                  JUNK(10) = DELTAY*(5.*JUNK(6)-2.)/3.
-    #               END IF
-    #            END IF
-    #         END IF
-    #      END IF
-    #C
 
     junk = np.zeros(10,float)
     if (nexp >= 0):
@@ -1056,28 +1024,15 @@ def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay,binned
                     junk[8] = deltax*junk[5]
                     junk[9] = deltay*(5.0*junk[5]-2.0)/3.      
 
-                    
-    #C     IF (NFRAC .GT. 0) THEN
-    #C        J = NEXP+1
-    #C        JUNK(J) = -2.*(DX - REAL(NINT(DX)))
-    #C        J = J+1
-    #C        JUNK(J) = -2.*(DY - REAL(NINT(DY)))
-    #C        J = J+1
-    #C        JUNK(J) = 1.5*JUNK(J-2)**2 - 0.5
-    #C        J = J+1
-    #C        JUNK(J) = JUNK(J-3)*JUNK(J-2)
-    #C        J = J+1
-    #C        JUNK(J) = 1.5*JUNK(J-3)**2 - 0.5
-    #C     END IF
     #      XX = 2.*DX+MIDDLE
     #      LX = INT(XX)
     #      YY = 2.*DY+MIDDLE
     #      LY = INT(YY)
 
     xx = 2.0*dx+middle
-    lx = int(xx)
+    lx = np.array(xx).astype(int)
     yy = 2.0*dy+middle
-    ly = int(yy)
+    ly = np.array(yy).astype(int)
 
     #C
     #C This point in the stellar profile lies between columns LX and LX+1,
@@ -1094,11 +1049,21 @@ def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay,binned
     #      END
     #C
 
+    
     for k in range(nterm):
-        corr, dfdx, dfdy = bicubic(psf[lx-1:,ly-1:,k], xx-float(lx), yy-float(ly))
+        f_psf = RectBivariateSpline(np.arange(npsf), np.arange(npsf), psf[:,:,k],kx=3,ky=3,s=0)
+        #f_psf = interp2d(np.arange(npsf), np.arange(npsf), psf[:,:,k],kind='cubic')
+        corr = f_psf(xx,yy,grid=False)
         upsf += junk[k]*corr
-        dvdxc -= junk[k]*dfdx
-        dvdyc -= junk[k]*dfdy        
+        if ideriv is True:
+            dfdx = f_psf(xx,yy,dx=1,grid=False)
+            dfdy = f_psf(xx,yy,dy=1,grid=False)
+            dvdxc -= junk[k]*dfdx
+            dvdyc -= junk[k]*dfdy                    
+        #corr, dfdx, dfdy = bicubic(psf[lx-1:,ly-1:,k], xx-float(lx), yy-float(ly))
+        #upsf += junk[k]*corr
+        #dvdxc -= junk[k]*dfdx
+        #dvdyc -= junk[k]*dfdy        
     
     return upsf,dvdxc,dvdyc
 
