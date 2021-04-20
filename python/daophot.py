@@ -17,15 +17,6 @@ from scipy.interpolate import interp2d, RectBivariateSpline
 import time
 from dlnpyutils import utils as dln
 
-    #      DATA D / 0.00000000,  0.0,        0.0       , 0.0       ,
-    #     .        -0.28867513,  0.28867513, 0.0       , 0.0       ,
-    #     .        -0.38729833,  0.00000000, 0.38729833, 0.0       ,
-    #     .        -0.43056816, -0.16999052, 0.16999052, 0.43056816/
-    #      DATA W / 1.00000000,  0.0       , 0.0       , 0.0       ,
-    #     .         0.50000000,  0.50000000, 0.0       , 0.0       ,
-    #     .         0.27777778,  0.44444444, 0.27777778, 0.0       ,
-    #     .         0.17392742,  0.32607258, 0.32607258, 0.17392742/
-
 PROFILE_DATAD = [[0.00000000,  0.0,        0.0       , 0.0       ],
                  [-0.28867513,  0.28867513, 0.0       , 0.0       ],
                  [-0.38729833,  0.00000000, 0.38729833, 0.0       ],
@@ -36,136 +27,6 @@ PROFILE_DATAW = [[1.00000000,  0.0       , 0.0       , 0.0       ],
                  [0.27777778,  0.44444444, 0.27777778, 0.0       ],
                  [0.17392742,  0.32607258, 0.32607258, 0.17392742]]
 PROFILE_DATAW = np.array(PROFILE_DATAW).T
-
-def daoerf(xin,x0,beta):
-    #      REAL FUNCTION  DAOERF  (XIN, XO, BETA, DFDXO, DFDBET)
-    #C
-    #C Numerically integrate a Gaussian function 
-    #C
-    #C          F = EXP {-0.5*[(x-XO)/SIGMA]**2 },
-    #C
-    #C from XIN-0.5 to XIN+0.5 using Gauss-Legendre integration.  BETA
-    #C is the half-width at half-maximum, which is equal to 1.17741 * SIGMA.
-    #C Thus,
-    #C
-    #C          F = EXP {-0.6931472*[(x-XO)/BETA]**2 }.
-    #C
-    #C Also: provide the first derivative of the integral with respect to 
-    #C Xo and BETA.  Use Gauss-Legendre integration.
-    #C
-    #C-----------------------------------------------------------------------
-    #C
-    #      IMPLICIT NONE
-    #      INTEGER MAXPT
-    #      PARAMETER (MAXPT=4)
-    #C
-    #      REAL DX(MAXPT,MAXPT), WT(MAXPT,MAXPT)
-    #C
-    #      REAL EXP
-    #C
-    #      REAL X, XSQ
-    #      REAL XIN, XO, BETA, DFDXO, DFDBET, BETASQ, DELTAX, F, WF
-    #      INTEGER NPT, I
-    #C
-    #      DATA DX / 0.00000000,  0.0,        0.0       , 0.0       ,
-    #     .         -0.28867513,  0.28867513, 0.0       , 0.0       ,
-    #     .         -0.38729833,  0.00000000, 0.38729833, 0.0       ,
-    #     .         -0.43056816, -0.16999052, 0.16999052, 0.43056816/
-    #      DATA WT / 1.00000000,  0.0       , 0.0       , 0.0       ,
-    #     .          0.50000000,  0.50000000, 0.0       , 0.0       ,
-    #     .          0.27777778,  0.44444444, 0.27777778, 0.0       ,
-    #     .          0.17392742,  0.32607258, 0.32607258, 0.17392742/
-    datadx = [[0.00000000,  0.0,        0.0       , 0.0      ] ,
-              [-0.28867513,  0.28867513, 0.0       , 0.0      ] ,
-              [-0.38729833,  0.00000000, 0.38729833, 0.0      ] ,
-              [-0.43056816, -0.16999052, 0.16999052, 0.43056816]]
-    datadx = np.array(datadx).T
-    datawt = [[1.00000000,  0.0       , 0.0       , 0.0       ],
-              [0.50000000,  0.50000000, 0.0       , 0.0       ],
-              [0.27777778,  0.44444444, 0.27777778, 0.0       ],
-              [0.17392742,  0.32607258, 0.32607258, 0.17392742]]
-    datawt = np.array(datawt).T
-
-    #      DAOERF = 0.
-    #      DFDXO = 0.
-    #      DFDBET = 0.
-    #      BETASQ=BETA**2
-    #      DELTAX = XIN-XO
-    #C
-
-    daoerf = 0.0
-    dfdx0 = 0.0
-    dfdbet = 0.0
-    betasq = beta**2
-    deltax = xin-x0
-    
-    #      XSQ = DELTAX**2
-    #      F = XSQ/BETASQ
-
-    xsq = deltax**2
-    f = xsq/betasq
-
-    #      IF (F .GT. 34.) RETURN
-    #      F = EXP(-0.6931472*F)
-    #      IF (F .GE. 0.046) THEN
-    #         NPT = 4
-    #      ELSE IF (F .GE. 0.0022) THEN
-    #         NPT = 3
-    #      ELSE IF (F .GE. 0.0001) THEN
-    #         NPT = 2
-    #      ELSE IF (F .GE. 1.E-10) THEN
-    #         DAOERF = F
-    #         DFDXO = 1.3862944 * DELTAX * F / BETASQ
-    #         DFDBET = 1.3862944 * XSQ * F / (BETASQ*BETA)
-    #         RETURN
-    #      ELSE
-    #         RETURN
-    #      END IF
-
-    if (f > 34):
-        return (daoerf,dfdx0,dfdbet)
-    f = np.exp(-0.6931472*f)
-    if (f >= 0.046):
-        npt = 4
-    elif (f >= 0.0022):
-        npt = 3
-    elif (f >= 0.0001):
-        npt = 2
-    elif (f >= 1e-10):
-        daoerf = f
-        dfdx0 = 1.3862944 * deltax * f / betasq
-        dfdbet = 1.3862944 * xsq * f / (betasq*beta)
-        return (daoerf,dfdx0,dfdbet)
-    else:
-        return (daoerf,dfdx0,dfdbet)
-    
-    #C
-    #      DO I=1,NPT
-    #         X = DELTAX + DX(I,NPT)
-    #         XSQ = X**2
-    #         F = EXP(-0.6931472*XSQ/BETASQ)
-    #         WF = WT(I,NPT)*F
-    #         DAOERF = DAOERF+WF
-    #         DFDXO = DFDXO + X*WF
-    #         DFDBET = DFDBET + XSQ*WF
-    #      END DO
-    #      DFDXO = 1.3862944*DFDXO/BETASQ
-    #      DFDBET = 1.3862944*DFDBET/(BETASQ*BETA)
-
-    for i in range(npt):
-        #x = deltax + datadx[npt-1,i]
-        x = deltax + datadx[i,npt-1]        
-        xsq = x**2
-        f = np.exp(-0.6931472*xsq/betasq)
-        #wf = datawt[npt-1,i]*f
-        wf = datawt[i,npt-1]*f        
-        daoerf += wf
-        dfdx0 += x*wf
-        dfdbet += xsq*wf
-    dfdx0 = 1.3862944*dfdx0/betasq
-    dfdbet = 1.3862944*dfdbet/(betasq*beta)
-
-    return (daoerf,dfdx0,dfdbet)
 
 def erf(xin,x0,beta):
     """
@@ -181,18 +42,18 @@ def erf(xin,x0,beta):
 
     """
     
-    #C Numerically integrate a Gaussian function 
-    #C
-    #C          F = EXP {-0.5*[(x-XO)/SIGMA]**2 },
-    #C
-    #C from XIN-0.5 to XIN+0.5 using Gauss-Legendre integration.  BETA
-    #C is the half-width at half-maximum, which is equal to 1.17741 * SIGMA.
-    #C Thus,
-    #C
-    #C          F = EXP {-0.6931472*[(x-XO)/BETA]**2 }.
-    #C
-    #C Also: provide the first derivative of the integral with respect to 
-    #C Xo and BETA.  Use Gauss-Legendre integration.
+    # Numerically integrate a Gaussian function 
+    #
+    #          F = EXP {-0.5*[(x-XO)/SIGMA]**2 },
+    #
+    # from XIN-0.5 to XIN+0.5 using Gauss-Legendre integration.  BETA
+    # is the half-width at half-maximum, which is equal to 1.17741 * SIGMA.
+    # Thus,
+    #
+    #          F = EXP {-0.6931472*[(x-XO)/BETA]**2 }.
+    #
+    # Also: provide the first derivative of the integral with respect to 
+    # Xo and BETA.  Use Gauss-Legendre integration.
 
     # The Gaussian is FORCED to have an AMPLITUDE of 1.
     # A = ht*sigma*sqrt(2*pi)
@@ -234,26 +95,13 @@ def profile_gaussian(dx,dy,par,ideriv=False,binned=True):
 
     # dx/dy can be scalars or 1D arrays
     
-    #      IF (IPSTYP .EQ. 1) THEN
-    #C
-    #C GAUSSIAN
-    #C
-    #C     F = ERFX * ERFY / (PAR(1) * PAR(2))
-    #C
-    #C PAR(1) is the HWHM in X; sigma(x) = 0.8493218 * HWHM
-    #C PAR(2) is the HWHM in Y; ditto
-    #C
-    #         P1P2 = PAR(1)*PAR(2)
-    #         ERFX = DAOERF(DX, 0., PAR(1), DHDXC, DHDSX)
-    #         ERFY = DAOERF(DY, 0., PAR(2), DHDYC, DHDSY)
-    #         PROFIL = ERFX*ERFY/P1P2
-    #         DHDXC = DHDXC*ERFY/P1P2
-    #         DHDYC = DHDYC*ERFX/P1P2
-    #         IF (IDERIV .GT. 0) THEN
-    #            TERM(1) = (DHDSX-ERFX/PAR(1))*ERFY/P1P2
-    #            TERM(2) = (DHDSY-ERFY/PAR(2))*ERFX/P1P2
-    #         END IF
-    #C
+    # GAUSSIAN
+    #
+    #     F = ERFX * ERFY / (PAR(1) * PAR(2))
+    #
+    # PAR(1) is the HWHM in X; sigma(x) = 0.8493218 * HWHM
+    # PAR(2) is the HWHM in Y; ditto
+
     n = dln.size(dx)
     p1p2 = par[0]*par[1]
     erfx,dhdxc,dhdsx = erf(dx,0.0,par[0])
@@ -428,15 +276,12 @@ def vecbin_lorentz(par,x,y,wt,ideriv):
 def profile_lorentz(dx,dy,par,ideriv=False,binned=True):
     """ LORENTZ PSF analytical profile."""
     
-    #      ELSE IF (IPSTYP .EQ. 5) THEN
-    #C
-    #C LORENTZ function
-    #C                      1
-    #C F = --------------------------------------
-    #C     [1 + (X/Ax)**2 + (Y/Ay)**2 + (XY*Axy)]
-    #C
-    #C PAR(1) is the HWHM in x at y = 0.
-    #C
+    # LORENTZ function
+    #                      1
+    # F = --------------------------------------
+    #     [1 + (X/Ax)**2 + (Y/Ay)**2 + (XY*Axy)]
+    #
+    # PAR(1) is the HWHM in x at y = 0.
 
     n = dln.size(dx)
     profil = np.zeros(n,float)
@@ -554,11 +399,8 @@ def vecbin_penny1(par,dx,dy,x,y,wt,ideriv):
 def profile_penny1(dx,dy,par,ideriv=False,binned=True):
     """ PENNY1 PSF analytical profile."""
        
-    #      ELSE IF (IPSTYP .EQ. 6) THEN
-    #C
-    #C Penny function --- Gaussian core plus Lorentzian wings.  The Lorentzian 
-    #C is elongated along the x or y axis, the Gaussian may be tilted.
-    #C
+    # Penny function --- Gaussian core plus Lorentzian wings.  The Lorentzian 
+    # is elongated along the x or y axis, the Gaussian may be tilted.
 
     n = dln.size(dx)
     profil = np.zeros(n,float)
@@ -709,12 +551,9 @@ def vecbin_penny2(par,dx,dy,x,y,wt,ideriv):
 def profile_penny2(dx,dy,par,ideriv=False,binned=True):
     """ PENNY2 PSF analytical profile."""
 
-    #      ELSE IF (IPSTYP .EQ. 7) THEN
-    #C
-    #C Penny function --- Gaussian core plus Lorentzian wings.
-    #C The Lorentzian and Gaussian may be tilted in different
-    #C directions.
-    #C
+    # Penny function --- Gaussian core plus Lorentzian wings.
+    # The Lorentzian and Gaussian may be tilted in different
+    # directions.
 
     n = dln.size(dx)
     profil = np.zeros(n,float)
@@ -818,52 +657,11 @@ def profile_penny2(dx,dy,par,ideriv=False,binned=True):
 def profile(ipstyp,dx,dy,par,ideriv=False,binned=True):
     """ PSF analytical profile."""
 
-    #C#######################################################################
-    #C
-    #      REAL FUNCTION  PROFIL  (IPSTYP, DX, DY, PAR, DHDXC, DHDYC, 
-    #     .     TERM, IDERIV)
-    #C
-    #C Compute the value of an ANALYTIC prfile for a point DX,DY distant
-    #C from the centroid.  Return both the computed value and its
-    #C first derivatives with respect to x and y.  If IDERIV .NE. 0,
-    #C return also the first derivatives with respect to all the parameters
-    #C defining the profile.
-    #C
-    #      IMPLICIT NONE
-    #      INTEGER MAXPAR, MAXPT
-    #      PARAMETER (MAXPAR=6, MAXPT=4)
-    #C
-    #      REAL PAR(MAXPAR), TERM(MAXPAR)
-    #      REAL D(MAXPT,MAXPT), W(MAXPT,MAXPT)
-    #      REAL X(MAXPT), XSQ(MAXPT), P1XSQ(MAXPT)
-    #C
-    #      REAL EXP, DAOERF
-    #C
-    #      REAL DX, DY, DHDXC, DHDYC, WFSQ, Y, WT, WF, ONEMP3
-    #      REAL RSQ, E, TALPHA, P1SQ, P2SQ, XY, DENOM
-    #      REAL FUNC, YSQ, WP4FOD, P4FOD, F, P1P2, ERFX, DHDSX, ERFY
-    #      REAL DEBY, DFBY, DBYX0, DBYY0
-    #      REAL DHDSY, ALPHA, P2YSQ
-    #      INTEGER I, IPSTYP, IDERIV, IX, IY, NPT
-    #C
-    #      DATA D / 0.00000000,  0.0,        0.0       , 0.0       ,
-    #     .        -0.28867513,  0.28867513, 0.0       , 0.0       ,
-    #     .        -0.38729833,  0.00000000, 0.38729833, 0.0       ,
-    #     .        -0.43056816, -0.16999052, 0.16999052, 0.43056816/
-    #      DATA W / 1.00000000,  0.0       , 0.0       , 0.0       ,
-    #     .         0.50000000,  0.50000000, 0.0       , 0.0       ,
-    #     .         0.27777778,  0.44444444, 0.27777778, 0.0       ,
-    #     .         0.17392742,  0.32607258, 0.32607258, 0.17392742/
-    #C
-    #      PROFIL = 0.
-    #      DHDXC = 0.
-    #      DHDYC = 0.
-    #C
-    #      IF (IDERIV .GT. 0) THEN
-    #         DO I=1,MAXPAR
-    #            TERM(I) = 0.
-    #         END DO
-    #      END IF
+    # Compute the value of an ANALYTIC prfile for a point DX,DY distant
+    # from the centroid.  Return both the computed value and its
+    # first derivatives with respect to x and y.  If IDERIV .NE. 0,
+    # return also the first derivatives with respect to all the parameters
+    # defining the profile.
 
     maxpar = len(par)
     term = np.zeros(maxpar,float)
@@ -879,117 +677,17 @@ def profile(ipstyp,dx,dy,par,ideriv=False,binned=True):
                 4:profile_moffat35, 5:profile_lorentz, 6:profile_penny1,
                 7:profile_penny2}
     out = profdict[ipstyp](dx,dy,par,ideriv=ideriv,binned=binned)
+
     # returns (profil,dhdxc,dhdxy,term)
     return out
-
-
-def bicubic(f, dx, dy):
-    """
-    Perform bicubic interpolation in a grid of values.
-    And return the derivatives wrt x and y.
-    """
-
-    #C
-    #      REAL FUNCTION  BICUBC  (F, NBOX, DX, DY, DFDX, DFDY)
-    #C
-    #C Perform a type of bicubic interpolation in a grid of values.
-    #C For a point located DX, DY distant from the corner of the grid
-    #C (defined to be 1,1), return both the interpolated value and
-    #C its first derivatives with respect to x and y.
-    #C
-    #      IMPLICIT NONE
-    #      INTEGER NBOX
-    #      REAL F(NBOX,NBOX), TEMP(4), DFDXT(4)
-    #C
-    #      REAL DX, DY, DFDX, DFDY, C1, C2, C3, C4
-    #      INTEGER JY
-    #C
-    #C By construction, the point at which we want to estimate the function
-    #C will lie between the second and third columns, and between the second
-    #C and third rows of F, at a distance of (DX,DY) from the (2,2) element
-    #C of F.
-    #C
-    #      DO JY=1,4
-    #         C1 = 0.5*(F(3,JY)-F(1,JY))
-    #         C4 = F(3,JY) - F(2,JY) - C1
-    #         C2 = 3.*C4 - 0.5*(F(4,JY)-F(2,JY)) + C1
-    #         C3 = C4 - C2
-    #         C4 = DX*C3
-    #         TEMP(JY) = DX*(DX*(C4+C2)+C1)+F(2,JY)
-    #         DFDXT(JY)= DX*(C4*3.+2.*C2)+C1
-    #      END DO
-    #      C1 = 0.5*(TEMP(3)-TEMP(1))
-    #      C4 = TEMP(3) - TEMP(2) - C1
-    #      C2 = 3.*C4 - 0.5*(TEMP(4)-TEMP(2)) + C1
-    #      C3 = C4 - C2
-    #      C4 = DY*C3
-    #      BICUBC = DY*(DY*(C4+C2)+C1)+TEMP(2)
-    #      DFDY = DY*(C4*3.+2.*C2)+C1
-    #      C1 = 0.5*(DFDXT(3)-DFDXT(1))
-    #      C4 = DFDXT(3) - DFDXT(2) - C1
-    #      C2 = 3.*C4 - 0.5*(DFDXT(4)-DFDXT(2)) + C1
-    #      C3 = C4 - C2
-    #      DFDX = DY*(DY*(DY*C3+C2)+C1)+DFDXT(2)
-    #      RETURN
-    #      END
-
-    temp = np.zeros(4,float)
-    dfdxt = np.zeros(4,float)    
-    
-    for jy in range(4):
-        c1 = 0.5*(f[2,jy]-f[0,jy])
-        c4 = f[2,jy] - f[1,jy] - c1
-        c2 = 3.0*c4 - 0.5*(f[3,jy]-f[1,jy]) + c1
-        c3 = c4 - c2
-        c4 = dx*c3
-        temp[jy] = dx*(dx*(c4+c2)+c1)+f[1,jy]
-        dfdxt[jy] = dx*(c4*3.0+2.0*c2)+c1
-    c1 = 0.5*(temp[2]-temp[0])
-    c4 = temp[2] - temp[1] - c1
-    c2 = 3.0*c4 - 0.5*(temp[3]-temp[1]) + c1
-    c3 = c4 - c2
-    c4 = dy*c3
-    bicubic = dy*(dy*(c4+c2)+c1)+temp[1]
-    dfdy = dy*(c4*3.0+2.0*c2)+c1
-    c1 = 0.5*(dfdxt[2]-dfdxt[0])
-    c4 = dfdxt[2] - dfdxt[1] - c1
-    c2 = 3.0*c4 - 0.5*(dfdxt[3]-dfdxt[1]) + c1
-    c3 = c4 - c2
-    dfdx = dy*(dy*(dy*c3+c2)+c1)+dfdxt[1]
-    
-    return bicubic, dfdx, dfdy
 
 
 def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay,
            ideriv=True,binned=True):
     """ Evaluate the PSF for a point."""
-    #    C
-    #      REAL FUNCTION  USEPSF  (IPSTYP, DX, DY, BRIGHT, PAR, PSF, 
-    #     .     NPSF, NPAR, NEXP, NFRAC, DELTAX, DELTAY, DVDXC, DVDYC)
-    #C
-    #C Evaluate the PSF for a point distant DX, DY from the center of a
-    #C star located at relative frame coordinates DELTAX, DELTAY.
-    #C
-    #      IMPLICIT NONE
-    #      INTEGER MAXPSF, MAXPAR, MAXEXP
-    #      PARAMETER (MAXPSF=207, MAXPAR=6, MAXEXP=10)
-    #C
-    #      REAL PAR(*), PSF(MAXPSF,MAXPSF,*), JUNK(MAXEXP)
-    #C
-    #      REAL PROFIL, BICUBC
-    #C
-    #      REAL MIDDLE, BRIGHT, DVDXC, DVDYC, DELTAX, DELTAY, XX, YY
-    #      REAL DX, DY, CORR, DFDX, DFDY
-    #      INTEGER K, LX, LY, IPSTYP
-    #      INTEGER NFRAC, NTERM, NPSF, NEXP, NPAR
-    #C
-    #      NTERM = NEXP + NFRAC
-    #      USEPSF = BRIGHT*PROFIL(IPSTYP, DX, DY, PAR, DVDXC, DVDYC, 
-    #     .     JUNK, 0)
-    #      DVDXC = BRIGHT*DVDXC
-    #      DVDYC = BRIGHT*DVDYC
-    #      IF (NTERM .LT. 0) RETURN
-    #      MIDDLE = (NPSF+1)/2
+
+    # Evaluate the PSF for a point distant DX, DY from the center of a
+    # star located at relative frame coordinates DELTAX, DELTAY.
 
     maxpsf = 207
     maxpar = 6
@@ -1006,7 +704,7 @@ def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay,
 
     middle = npsf//2
 
-    #C The PSF look-up tables are centered at (MIDDLE, MIDDLE).
+    # The PSF look-up tables are centered at (MIDDLE, MIDDLE).
 
     junk = np.zeros(10,float)
     if (nexp >= 0):
@@ -1024,134 +722,73 @@ def usepsf(ipstyp,dx,dy,bright,par,psf,npsf,npar,nexp,nfrac,deltax,deltay,
                     junk[8] = deltax*junk[5]
                     junk[9] = deltay*(5.0*junk[5]-2.0)/3.      
 
-    #      XX = 2.*DX+MIDDLE
-    #      LX = INT(XX)
-    #      YY = 2.*DY+MIDDLE
-    #      LY = INT(YY)
-
     xx = 2.0*dx+middle
     lx = np.array(xx).astype(int)
     yy = 2.0*dy+middle
     ly = np.array(yy).astype(int)
 
-    #C
-    #C This point in the stellar profile lies between columns LX and LX+1,
-    #C and between rows LY and LY+1 in the look-up tables.
-    #C
-    #      DO K=1,NTERM
-    #         CORR = BICUBC(PSF(LX-1,LY-1,K), MAXPSF, 
-    #     .        XX-REAL(LX), YY-REAL(LY), DFDX, DFDY)
-    #         USEPSF = USEPSF + JUNK(K)*CORR
-    #         DVDXC = DVDXC-JUNK(K)*DFDX
-    #         DVDYC = DVDYC-JUNK(K)*DFDY
-    #      END DO
-    #      RETURN
-    #      END
-    #C
-
+    # This point in the stellar profile lies between columns LX and LX+1,
+    # and between rows LY and LY+1 in the look-up tables.
     
     for k in range(nterm):
         f_psf = RectBivariateSpline(np.arange(npsf), np.arange(npsf), psf[:,:,k],kx=3,ky=3,s=0)
-        #f_psf = interp2d(np.arange(npsf), np.arange(npsf), psf[:,:,k],kind='cubic')
         corr = f_psf(xx,yy,grid=False)
         upsf += junk[k]*corr
         if ideriv is True:
             dfdx = f_psf(xx,yy,dx=1,grid=False)
             dfdy = f_psf(xx,yy,dy=1,grid=False)
             dvdxc -= junk[k]*dfdx
-            dvdyc -= junk[k]*dfdy                    
-        #corr, dfdx, dfdy = bicubic(psf[lx-1:,ly-1:,k], xx-float(lx), yy-float(ly))
-        #upsf += junk[k]*corr
-        #dvdxc -= junk[k]*dfdx
-        #dvdyc -= junk[k]*dfdy        
-    
+            dvdyc -= junk[k]*dfdy
+        
     return upsf,dvdxc,dvdyc
 
 
 def psfnparam(ipstyp, fwhm):
-    #INTEGER FUNCTION  NPARAM  (IPSTYP, FWHM, LABEL, PAR, MAXPAR)
-    #CHARACTER*8 LABEL
-    #INTEGER MAXPAR
-    #REAL PAR(MAXPAR)
-    #PAR(1) = FWHM/2.
-    #PAR(2) = PAR(1)
+    """
+    Figure out the label for the input PSF type and
+    initialize the parameter array.
+    """
 
     maxpar = 5
     par = np.zeros(maxpar,float)
     par[0] = fwhm/2
     par[1] = fwhm/2
     
-    #IF (IPSTYP .EQ. 1) THEN
-    #   NPARAM = 2
-    #   LABEL = 'GAUSSIAN'
     if (ipstyp==1):
         nparam = 2
         label = 'GAUSSIAN'
-    #ELSE IF (IPSTYP .EQ. 2) THEN
-    #   NPARAM = 3
-    #   PAR(3) = 0.
-    #   PAR(4) = 1.5
-    #   LABEL = 'MOFFAT15'
     elif (ipstyp==2):
         nparam = 3
         par[2] = 0.
         par[3] = 1.5
         label = 'MOFFAT15'
-    #ELSE IF (IPSTYP .EQ. 3) THEN
-    #   NPARAM = 3
-    #   PAR(3) = 0.
-    #   PAR(4) = 2.5
-    #   LABEL = 'MOFFAT25'
     elif (ipstyp==3):
         nparam = 3
         par[2] = 0.
         par[3] = 2.5
         label = 'MOFFAT25'
-    #ELSE IF (IPSTYP .EQ. 4) THEN
-    #   NPARAM = 3
-    #   PAR(3) = 0.
-    #   PAR(4) = 3.5
-    #   LABEL = 'MOFFAT35'        
     elif (ipstyp==4):
         nparam = 3
         par[2] = 0.
         par[3] = 3.5
         label = 'MOFFAT35'
-    #ELSE IF (IPSTYP .EQ. 5) THEN
-    #   NPARAM = 3
-    #   PAR(3) = 0.
-    #   LABEL = 'LORENTZ '
     elif (ipstyp==5):
         nparam = 3
         par[2] = 0.
         label = 'LORENTZ'
-    #ELSE IF (IPSTYP .EQ. 6) THEN
-    #   NPARAM = 4
-    #   PAR(3) = 0.75
-    #   PAR(4) = 0.0
-    #   LABEL = 'PENNY1  '
     elif (ipstyp==6):
         nparam = 4
         par[2] = 0.75
         par[3] = 0.0
         label = 'PENNY1'
-    #ELSE IF (IPSTYP .EQ. 7) THEN
-    #   NPARAM = 5
-    #   PAR(3) = 0.75
-    #   PAR(4) = 0.0
-    #   PAR(5) = 0.0
-    #   LABEL = 'PENNY2  '
     elif (ipstyp==7):
         nparam = 5
         par[2] = 0.75
         par[3] = 0.0
         par[4] = 0.0        
         label = 'PENNY2'
-    #ELSE
-    #   CALL STUPID ('Invalid PSF type: '//CHAR(IPSTYP+48))
-    #END IF
-    #RETURN
-    #END
+    else:
+        raise ValueError(str(ipstyp)+' PSF type not supported')
 
     return (nparam,par,label)
 
@@ -1162,26 +799,8 @@ def rdpsf(psffile):
     if os.path.exists(psffile) is False:
         raise ValueError(psffile+" NOT FOUND")
 
-    # Check RDPSF in mathsubs.f
-
-    #      INTEGER FUNCTION  RDPSF  (PSFFIL, IPSTYP, PAR, MAXPAR, NPAR,
-    #     .     PSF, MAXPSF, MAXEXP, NPSF, NEXP, NFRAC, 
-    #     .     PSFMAG, BRIGHT, XPSF, YPSF)
-    #
     # Read in the point-spread function
-    #
-    #      IMPLICIT NONE
-    #      INTEGER MAXPSF, MAXTYP, MAXPAR, MAXEXP
-    #      PARAMETER (MAXTYP=7)
     maxtyp = 7
-    #      REAL PAR(MAXPAR), PSF(MAXPSF,MAXPSF,MAXEXP)
-    #
-    #      CHARACTER*30 PSFFIL
-    #      CHARACTER*8 LABEL, CHECK
-    #      REAL PSFMAG, BRIGHT, XPSF, YPSF
-    #      INTEGER I, J, K, IPSTYP, NPSF, NPAR, NEXP, NFRAC, ISTAT
-    #      INTEGER NTERM, NPARAM
-
 
     # Read header line
     #      READ (3,302,IOSTAT=ISTAT) LABEL, NPSF, NPAR, NEXP, NFRAC, PSFMAG, 
@@ -1213,13 +832,6 @@ def rdpsf(psffile):
     nrow = int(header['ypsf']*2+1)
     header['ncol'] = ncol
     header['nrow'] = nrow    
-    
-    
-    #      DO IPSTYP=1,MAXTYP
-    #         I = NPARAM(IPSTYP, 1., CHECK, PAR, MAXPAR)
-    #         IF ((LABEL .EQ. CHECK) .AND. (I .EQ. NPAR)) GO TO 1100
-    #      END DO
-    #      CALL STUPID ('Inappropriate PSF: '//LABEL)
 
     # Check that the number of input parameters is correct for this PSF type
     # and initial PSF with some extra parameters
@@ -1235,13 +847,6 @@ def rdpsf(psffile):
         par[i] = float(line1[1+i*13:1+(i+1)*13])
         
     # Read in the data
-    #      NTERM = NEXP+NFRAC
-    #      IF (NTERM .GE. 1) THEN
-    #         DO K=1,NTERM
-    #            READ (3,311,IOSTAT=ISTAT) ((PSF(I,J,K), I=1,NPSF), J=1,NPSF)
-    #  311       FORMAT (1X, 6E13.6)
-    #         END DO
-    #      END IF
     nterm = nexp + nfrac
     header['nterm'] = nterm
     if nterm>=1:
@@ -1264,8 +869,6 @@ def rdpsf(psffile):
         
     # header, par, psf
     return (header, par, psf)
-        
-    #return (ipstyp, par, maxpar, npar, psf, maxpsf, maxexp, npsf, nexp, nfrac, psfmag, bright, xpsf, ypsf)
 
 def numinpvals(inpvals):
     """ Helper function to get the number of input values."""
