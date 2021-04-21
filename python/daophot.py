@@ -871,7 +871,7 @@ def rdpsf(psffile):
     return (header, par, psf)
 
 def numinpvals(inpvals):
-    """ Helper function to get the number of input values."""
+    """ Helper function to get the number of input values to PSF()."""
     if (type(inpvals) is list) or (type(inpvals) is tuple):
         listoflists = False
         if (type(inpvals[0]) is list) or (type(inpvals[0]) is tuple):
@@ -885,7 +885,7 @@ def numinpvals(inpvals):
     return nstars
         
 def getinpvals(inpvals,i):
-    """ Helper function get the next input values."""
+    """ Helper function get the next input values to PSF()."""
     if type(inpvals) is list or type(inpvals) is tuple:
         listoflists = False
         if (type(inpvals[0]) is list) or (type(inpvals[0]) is tuple):
@@ -1042,3 +1042,18 @@ class PSF:
         xy = ((x0,x1),(y0,y1))
         return xy
 
+
+# Fitting the PSF to selected stars
+# psf.f
+# getpsf() generates PSF from several stars
+# fitana() fits the ANALYTIC profile to selected stars
+#    works for a SINGLE ipstyp of PSF
+
+# get subarray around each star and check it for invalid pixels
+
+# After running fitana() it generates the look-up table
+# of corrections.
+
+# fitana() calls profil() and uses the derivatives dhdxc/dhdyc
+
+# Can I use curve_fit() to do this?

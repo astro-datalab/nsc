@@ -2055,3 +2055,200 @@ class PSF:
         xy = ((x0,x1),(y0,y1))
         return xy
 
+
+def fitana(im,cat,ipstyp,fitrad):
+    """ Fit PSF to a set of stars for a single ipstyp."""
+
+    maxpar = 6
+    maxn = 400
+
+    xcen = cat['x']
+    ycen = cat['y']
+    h = cat['height']
+    sky = cat['sky']
+
+    # get H from image value at star center
+    #h = (im[center]-sky)/profil(1,0.0,0.0,par)
+    
+    v = np.zeros(maxpar,float)
+    c = np.zeros((maxpar,maxpar),float)
+
+
+    # get NPAR from IPSTYP
+    npar = {1:2, 2:3, 3:3, 4:3, 5:3, 6:4, 7:5}[ipstyp]
+    
+    radlim = 3.0*fitrad
+    z = np.zeros(maxpar,float)
+    old = np.zeros(maxpar,float)
+    clamp = np.zeros(maxpar,float)
+    clamp[0:npar] = 0.5
+    clamp[0:2] = 2.0
+    niter = 0
+    oldchi = 1.0
+    xold = np.zeros(maxn,float)
+    yold = np.zeros(maxn,float)
+    xclamp = np.zeros(maxn,float)
+    yclamp = np.zeros(maxn,float)    
+    mpar = 2
+
+    # SECTION 1
+    # Now we will fit an integrated analytic function to the central part
+    # of the stellar profile.  For each star we will solve for three
+    # parameters: (1) H, the central height of the model profile (above
+    # sky); (2) XCEN, C the centroid of the star in x; and (3) YCEN,
+    # likewise for y.  In addition, from ALL STARS CONSIDERED TOGETHER
+    # we will determine any other parameters, PAR(i), required to describe
+    # the profile.  We will use a circle of radius FITRAD centered on the
+    # position of each PSF star. NOTE THAT we do not fit the data to an
+    # actual analytic profile, but rather the function is numerically
+    # integrated over the area of each pixel, and the observed data are fit
+    # to these integrals. 
+    
+    rsq = fitrad**2
+
+    # Iteration loop, until convergence
+    while (niter<1000):
+        niter += 1
+        
+        # Initialize the big accumulators
+        v[0:npar] = 0.0
+        c[0:npar,0:npar] = 0.0
+        chi = 0.0
+        sumwt = 0.0
+        
+        # Using the analytic model PSF defined by the current set of parameters,
+        # compute corrections to the brightnesses and centroids of all the PSF
+        # stars.  MEANWHILE, accumulate the corrections to the model parameters.
+
+    
+        # Loop over stars
+        nstar = len(cat)
+        for istar in range(nstar):
+
+            # Check for bad pixels
+        
+            lx = int(xcen[istar]-fitrad)
+            ly = int(ycen[istar]-fitrad)
+            mx = int(xcen[istar]+fitrad)-1
+            my = int(ycen[istar]+fitrad)-1
+        
+            dhn = 0.0
+            dhd = 0.0
+            dxn = 0.0
+            dxd = 0.0
+            dyn = 0.0
+            dyd = 0.0
+
+            for j in np.arange(ly,my+1):
+                dy = float(j) - ycen[istar]
+                dysq = dy**2
+                for i in np.arange(lx,mx+1):
+                    dx = float(i) - xcen[istar]
+                    wt = (dx**2+dysq)/rsq
+                    if wt<1:
+                        p,dhdxc,dhdyc,term = profil(ipstyp,dx,dy,par,ideriv=False)
+                        dp = im[i,j] - h[istar]*p - sky[istar]
+                        dhdxc *= h[istar]
+                        dhdyc *= h[istar]
+                        wt = 1.0-wt
+                        prod = wt*p
+                        dhn += prod*dp
+                        dhd += prod*p
+                        prod = wt*dhdxc
+                        dxn += prod*dp
+                        dxd += prod*dhdxc
+                        prod = wt*dhdyc
+                        dyn += prod*dp
+                        dyd += prod*dhdyc
+            h[istar] += dhn/dhd
+
+            dx = dxn/dxd
+            if (xold[istar]*dxn < 0):
+                xclamp[istar] = 0.5*xclamp[istar]
+            xold[istar] = dxn
+            if (xclamp[istar]<=0) or (yclamp[istar]<=0):
+                h[istar] = -10000.
+                continue
+            xcen[istar] = xcen[istar]+dxn/(1.0+np.abs(dxn)/xclamp[istar])
+
+            dyn = dyn/dyd
+            if (yold[istar]*dyn < 0):
+                yclamp[istar] = 0.5*yclamp[istar]
+            yold[istar] = dyn
+            ycen[istar] = ycen[istar]+dyn/(1.0+np.abs(dyn)/yclamp[istar])
+
+            peak,dhdxc,dhdyc,term = h[istar] * profil(ipstyp,0.0,0.0,par,ideriv=False)
+            for j in np.arange(ly,my+1):
+                dy = float(j) - ycen[istar]
+                dysq = dy**2
+                for i in np.arange(lx,mx+1):
+                    dx = float(i) - xcen[istar]
+                    wt = (dx**2+dysq)/rsq
+                    if wt<1:
+                        p,dhdxc,dhdyc,term = profil(ipstyp,dx,dy,par,ideriv=True)
+                        dp = im[i,j] - h[istar]*p - sky[istar]
+                        for k in range(mpar):
+                            term[k] *= h[istar]
+                        chi += np.abs(dp/peak)
+                        sumwt += 1.0
+                        wt = 1.0-wt
+                        wt = wt/(1.0+(0.125*(dp/(oldchi*peak))**8))
+                        for k in range(mpar):
+                            v[k] += wt*dp*term[k]
+                            for l in range(mpar):
+                                c[l,k] += wt*term[l]*term[k]
+
+        # Correct the fitting parameters.
+        c = np.linalg.inv(c)
+        z = np.dot(c,v)
+
+        #      SUBROUTINE  VMUL (A, MAX, N, V, X)
+        # Multiply a matrix by a vector:
+        #                    A * V = X 
+        # Arguments
+        #    A(column,row)  (INPUT) is a square matrix of dimension N.
+        #              MAX  (INPUT) is the size assigned to the array in the
+        #                           calling routine.
+        #           V(row)  (INPUT) is a column vector of dimension N.
+        #           X(row) (OUTPUT) is a column vector of dimension N. 
+        
+        
+        #CALL INVERS (C, MAXPAR, MPAR, ISTAT)
+        #CALL VMUL (C, MAXPAR, MPAR, V, Z)
+        for i in range(mpar):
+            if (z[i]*old[i] < 0):
+                clamp[i] = 0.5*clamp[i]
+            old[i] = z[i]
+            z[i] = clamp[i]*z[i]
+        z[0] = np.max([-0.1*par[0], np.min([0.1*par[0],z[0]]) ])
+        z[1] = np.max([-0.1*par[1], np.min([0.1*par[1],z[1]]) ])        
+        z[2] = z[2]/(1.0+np.abs(z[2])/np.min([0.1,1.0-np.abs(par[2])]))
+        for i in range(mpar):
+            par[i] += z[i]
+
+        if (par[0]>radlim) or (par[1]>radlim):
+            par[0] = -1
+            return par,chi
+        if (par[0]<=0.05) or (par[1]<=0.05):
+            par[0] = -1
+            return par,chi
+
+        sumwt -= float(mpar+3*nstar)
+        if (sumwt>0):
+            chi = 1.2533*chi/sumwt
+        else:
+            chi = 9.9999
+
+        print('    ', chi, par)
+        i = 10*mpar+14
+        if mpar == npar:
+            if np.abs(oldchi/chi-1.0) < 1e-5):
+                print('>> ')
+                return par,chi
+        else:
+            if np.abs(oldchi/chi-1.0) < 1e-3:
+                mpar += 1
+                continue
+            
+        oldchi = chi
+
