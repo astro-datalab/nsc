@@ -15,6 +15,7 @@ from scipy.signal import argrelmin
 import scipy.ndimage.filters as filters
 import time
 from dlnpyutils import utils as dln
+import phot
 
     #      DATA D / 0.00000000,  0.0,        0.0       , 0.0       ,
     #     .        -0.28867513,  0.28867513, 0.0       , 0.0       ,
@@ -2055,17 +2056,67 @@ class PSF:
         xy = ((x0,x1),(y0,y1))
         return xy
 
+    
+def readopt(optfile):
+    """ Read DAOPHOT .opt option file."""
+    if os.path.exists(optfile) is False:
+        raise ValueError(optfile+' NOT Found')
+    lines = dln.readlines(optfile)
+    lines = np.char.array(lines)
+    
+    gd, = np.where(lines.find('=') > -1)
+    if len(gd)==0:
+        raise ValueError('No good lines found in file '+optfile)
+    lines = lines[gd]
+    out = {}
+    for i in range(len(gd)):
+        key,value = lines[i].split('=')
+        key = key.strip()
+        value = value.strip()
+        if value.isdigit():
+            value = int(value)
+        if dln.isnumber(value):
+            value = float(value)
+        out[key] = value
+    return out
+    
+def getpsf(imfile,catfile,optfile):
+    """ Determines the PSF from multiple stars in image."""
 
-def fitana(im,cat,ipstyp,fitrad):
+
+    im,head = fits.getdata(imfile,header=True)
+    im = im.T
+    cat = phot.daoread(catfile)
+    #cat = fits.getdata(catfile,1)
+    opt = readopt(optfile)
+    
+    fitrad = opt['FI']  # in pixels
+    fwhm = opt['FW']    # in pixels
+    
+    # Get height from image and sky
+    height = im[np.round(cat['X']-1).astype(int),np.round(cat['Y']).astype(int)]-cat['SKY']
+    cat['HEIGHT'] = height
+    
+    #import pdb; pdb.set_trace()
+
+    #n = nparam(i, fwhm, label, par, maxpar)    
+    nparcheck,par,label = psfnparam(1, fwhm)
+    
+    psf = fitana(im,cat,1,fitrad,par)
+    
+    return psf
+    
+
+def fitana(im,cat,ipstyp,fitrad,par):
     """ Fit PSF to a set of stars for a single ipstyp."""
 
     maxpar = 6
     maxn = 400
 
-    xcen = cat['x']
-    ycen = cat['y']
-    h = cat['height']
-    sky = cat['sky']
+    xcen = cat['X']
+    ycen = cat['Y']
+    h = cat['HEIGHT']
+    sky = cat['SKY']
 
     # get H from image value at star center
     #h = (im[center]-sky)/profil(1,0.0,0.0,par)
@@ -2146,7 +2197,7 @@ def fitana(im,cat,ipstyp,fitrad):
                     dx = float(i) - xcen[istar]
                     wt = (dx**2+dysq)/rsq
                     if wt<1:
-                        p,dhdxc,dhdyc,term = profil(ipstyp,dx,dy,par,ideriv=False)
+                        p,dhdxc,dhdyc,term = profile(ipstyp,dx,dy,par,ideriv=False)
                         dp = im[i,j] - h[istar]*p - sky[istar]
                         dhdxc *= h[istar]
                         dhdyc *= h[istar]
@@ -2160,6 +2211,7 @@ def fitana(im,cat,ipstyp,fitrad):
                         prod = wt*dhdyc
                         dyn += prod*dp
                         dyd += prod*dhdyc
+            import pdb; pdb.set_trace()
             h[istar] += dhn/dhd
 
             dx = dxn/dxd
@@ -2198,6 +2250,9 @@ def fitana(im,cat,ipstyp,fitrad):
                             for l in range(mpar):
                                 c[l,k] += wt*term[l]*term[k]
 
+
+        import pdb; pdb.set_trace()
+                                
         # Correct the fitting parameters.
         c = np.linalg.inv(c)
         z = np.dot(c,v)
@@ -2242,7 +2297,7 @@ def fitana(im,cat,ipstyp,fitrad):
         print('    ', chi, par)
         i = 10*mpar+14
         if mpar == npar:
-            if np.abs(oldchi/chi-1.0) < 1e-5):
+            if np.abs(oldchi/chi-1.0) < 1e-5:
                 print('>> ')
                 return par,chi
         else:
