@@ -673,8 +673,7 @@ def profile(ipstyp,dx,dy,par,ideriv=False,binned=True):
         return out
     
     # Other functions
-    profdict = {1:profile_gaussian, 2:profile_moffat15, 3:profile_moffat25,
-                4:profile_moffat35, 5:profile_lorentz, 6:profile_penny1,
+    profdict = {1:profile_gaussian, 5:profile_lorentz, 6:profile_penny1,
                 7:profile_penny2}
     out = profdict[ipstyp](dx,dy,par,ideriv=ideriv,binned=binned)
 

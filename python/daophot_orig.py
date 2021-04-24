@@ -2087,22 +2087,60 @@ def getpsf(imfile,catfile,optfile):
     im,head = fits.getdata(imfile,header=True)
     im = im.T
     cat = phot.daoread(catfile)
-    #cat = fits.getdata(catfile,1)
+    orig = cat.copy()
     opt = readopt(optfile)
+    ncol,nrow = im.shape
+    
     
     fitrad = opt['FI']  # in pixels
     fwhm = opt['FW']    # in pixels
-    
-    # Get height from image and sky
-    height = im[np.round(cat['X']-1).astype(int),np.round(cat['Y']).astype(int)]-cat['SKY']
-    cat['HEIGHT'] = height
-    
-    #import pdb; pdb.set_trace()
 
-    #n = nparam(i, fwhm, label, par, maxpar)    
-    nparcheck,par,label = psfnparam(1, fwhm)
+    # Get initial heights
+    nparcheck,par,label = psfnparam(1, fwhm)    
+    # Get height from image and sky
+    pmax,dum1,dum2,dum3 = profile(1,0.0,0.0,par,ideriv=False)
+    hpsf = (im[np.round(cat['X']-1).astype(int),np.round(cat['Y']).astype(int)]-cat['SKY'])/pmax
+    cat['HPSF'] = hpsf
     
-    psf = fitana(im,cat,1,fitrad,par)
+    # Loop over PSF types
+    # if AN is negative then try all PSF types from 1 to |AN|
+    maxip = int(opt['AN'])
+    minip = np.max([1,maxip])
+    maxip = np.abs(maxip)
+    oldsig = 1e30
+    ipstyp = 0
+    iparr = np.arange(minip,maxip+1)
+    if minip==maxip: iparr=[minip]
+    for ip in iparr:
+        print('IPSTYP = '+str(ip))
+        npar,par,label = psfnparam(ip, fwhm)
+        inpcat = cat.copy()
+        par,sig,xcen,ycen,h = fitana(im,inpcat,ip,fitrad,par)
+
+        if par[0]<0:
+            continue
+        
+        if sig<oldsig:
+            ipstyp = ip
+            bestpar = par[0:npar].copy()
+            cat['X'] = xcen
+            cat['Y'] = ycen
+            cat['HPSF'] = h
+            oldsig = sig
+            
+    # Best one
+    if ipstyp<=0:
+        return None
+    sig = oldsig
+    xmid = float(ncol-1)/2.0
+    ymid = float(ncol-1)/2.0
+    npar,par1,label = psfnparam(ipstyp, fwhm)
+    par = bestpar.copy()
+
+    import pdb; pdb.set_trace()
+
+
+    # Derive the empirical look-up tables
     
     return psf
     
@@ -2113,9 +2151,9 @@ def fitana(im,cat,ipstyp,fitrad,par):
     maxpar = 6
     maxn = 400
 
-    xcen = cat['X']
-    ycen = cat['Y']
-    h = cat['HEIGHT']
+    xcen = cat['X']-1
+    ycen = cat['Y']-1
+    h = cat['HPSF']
     sky = cat['SKY']
 
     # get H from image value at star center
@@ -2138,8 +2176,8 @@ def fitana(im,cat,ipstyp,fitrad,par):
     oldchi = 1.0
     xold = np.zeros(maxn,float)
     yold = np.zeros(maxn,float)
-    xclamp = np.zeros(maxn,float)
-    yclamp = np.zeros(maxn,float)    
+    xclamp = np.ones(maxn,float)
+    yclamp = np.ones(maxn,float)    
     mpar = 2
 
     # SECTION 1
@@ -2211,25 +2249,28 @@ def fitana(im,cat,ipstyp,fitrad,par):
                         prod = wt*dhdyc
                         dyn += prod*dp
                         dyd += prod*dhdyc
-            import pdb; pdb.set_trace()
+
+            #print(niter,istar,dhn/dhd,dxn/dxd,dyn/dyd)
             h[istar] += dhn/dhd
 
-            dx = dxn/dxd
+            dxn = dxn/dxd
             if (xold[istar]*dxn < 0):
                 xclamp[istar] = 0.5*xclamp[istar]
             xold[istar] = dxn
             if (xclamp[istar]<=0) or (yclamp[istar]<=0):
                 h[istar] = -10000.
                 continue
-            xcen[istar] = xcen[istar]+dxn/(1.0+np.abs(dxn)/xclamp[istar])
+            xcen[istar] += dxn/(1.0+np.abs(dxn)/xclamp[istar])
 
             dyn = dyn/dyd
             if (yold[istar]*dyn < 0):
                 yclamp[istar] = 0.5*yclamp[istar]
             yold[istar] = dyn
-            ycen[istar] = ycen[istar]+dyn/(1.0+np.abs(dyn)/yclamp[istar])
+            ycen[istar] += dyn/(1.0+np.abs(dyn)/yclamp[istar])
 
-            peak,dhdxc,dhdyc,term = h[istar] * profil(ipstyp,0.0,0.0,par,ideriv=False)
+            peak,dhdxc,dhdyc,term = profile(ipstyp,0.0,0.0,par,ideriv=False)
+            peak *= h[istar]
+            #import pdb; pdb.set_trace()
             for j in np.arange(ly,my+1):
                 dy = float(j) - ycen[istar]
                 dysq = dy**2
@@ -2237,7 +2278,7 @@ def fitana(im,cat,ipstyp,fitrad,par):
                     dx = float(i) - xcen[istar]
                     wt = (dx**2+dysq)/rsq
                     if wt<1:
-                        p,dhdxc,dhdyc,term = profil(ipstyp,dx,dy,par,ideriv=True)
+                        p,dhdxc,dhdyc,term = profile(ipstyp,dx,dy,par,ideriv=True)
                         dp = im[i,j] - h[istar]*p - sky[istar]
                         for k in range(mpar):
                             term[k] *= h[istar]
@@ -2249,14 +2290,12 @@ def fitana(im,cat,ipstyp,fitrad,par):
                             v[k] += wt*dp*term[k]
                             for l in range(mpar):
                                 c[l,k] += wt*term[l]*term[k]
-
-
-        import pdb; pdb.set_trace()
                                 
         # Correct the fitting parameters.
-        c = np.linalg.inv(c)
-        z = np.dot(c,v)
-
+        c[0:mpar,0:mpar] = np.linalg.inv(c[0:mpar,0:mpar])
+        z = np.zeros(maxpar,float)
+        z[0:mpar] = np.dot(c[0:mpar,0:mpar],v[0:mpar])
+        
         #      SUBROUTINE  VMUL (A, MAX, N, V, X)
         # Multiply a matrix by a vector:
         #                    A * V = X 
@@ -2283,10 +2322,10 @@ def fitana(im,cat,ipstyp,fitrad,par):
 
         if (par[0]>radlim) or (par[1]>radlim):
             par[0] = -1
-            return par,chi
+            return par,chi,xcen,ycen,h
         if (par[0]<=0.05) or (par[1]<=0.05):
             par[0] = -1
-            return par,chi
+            return par,chi,xcen,ycen,h
 
         sumwt -= float(mpar+3*nstar)
         if (sumwt>0):
@@ -2294,12 +2333,12 @@ def fitana(im,cat,ipstyp,fitrad,par):
         else:
             chi = 9.9999
 
-        print('    ', chi, par)
+        print('    ', niter, chi, par)
         i = 10*mpar+14
         if mpar == npar:
             if np.abs(oldchi/chi-1.0) < 1e-5:
                 print('>> ')
-                return par,chi
+                return par,chi,xcen,ycen,h
         else:
             if np.abs(oldchi/chi-1.0) < 1e-3:
                 mpar += 1
