@@ -2080,17 +2080,19 @@ def readopt(optfile):
         out[key] = value
     return out
     
-def getpsf(imfile,catfile,optfile):
+def getpsf(imfile,catfile,apfile,optfile):
     """ Determines the PSF from multiple stars in image."""
 
 
     im,head = fits.getdata(imfile,header=True)
     im = im.T
     cat = phot.daoread(catfile)
+    aper = phot.daoread(apfile)
+    ind1,ind2 = dln.match(aper['ID'],cat['ID'])
+    cat['SKY'][ind2] = aper['SKY'][ind1]
     orig = cat.copy()
     opt = readopt(optfile)
     ncol,nrow = im.shape
-    
     
     fitrad = opt['FI']  # in pixels
     fwhm = opt['FW']    # in pixels
@@ -2216,10 +2218,10 @@ def fitana(im,cat,ipstyp,fitrad,par):
 
             # Check for bad pixels
         
-            lx = int(xcen[istar]-fitrad)
-            ly = int(ycen[istar]-fitrad)
-            mx = int(xcen[istar]+fitrad)-1
-            my = int(ycen[istar]+fitrad)-1
+            lx = int(xcen[istar]-fitrad)+1
+            ly = int(ycen[istar]-fitrad)+1
+            mx = int(xcen[istar]+fitrad)
+            my = int(ycen[istar]+fitrad)
         
             dhn = 0.0
             dhd = 0.0
@@ -2249,7 +2251,14 @@ def fitana(im,cat,ipstyp,fitrad,par):
                         prod = wt*dhdyc
                         dyn += prod*dp
                         dyd += prod*dhdyc
+                        print(i,j,p,im[i,j],h[istar],sky[istar],dp)
 
+
+            import pdb; pdb.set_trace()
+                        
+            pmax,dum1,dum2,dum3 = profile(ipstyp,0.0,0.0,par,ideriv=False)
+            print(pmax)
+                        
             #print(niter,istar,dhn/dhd,dxn/dxd,dyn/dyd)
             h[istar] += dhn/dhd
 
@@ -2268,6 +2277,8 @@ def fitana(im,cat,ipstyp,fitrad,par):
             yold[istar] = dyn
             ycen[istar] += dyn/(1.0+np.abs(dyn)/yclamp[istar])
 
+            print(niter,istar,xcen[istar],ycen[istar],h[istar],dhn/dhd,dxn,dyn)
+            
             peak,dhdxc,dhdyc,term = profile(ipstyp,0.0,0.0,par,ideriv=False)
             peak *= h[istar]
             #import pdb; pdb.set_trace()
@@ -2290,10 +2301,15 @@ def fitana(im,cat,ipstyp,fitrad,par):
                             v[k] += wt*dp*term[k]
                             for l in range(mpar):
                                 c[l,k] += wt*term[l]*term[k]
+
+            #print(niter,istar,xcen[istar],ycen[istar],chi)
                                 
         # Correct the fitting parameters.
+        print(c)
         c[0:mpar,0:mpar] = np.linalg.inv(c[0:mpar,0:mpar])
+        print(c)
         z = np.zeros(maxpar,float)
+        print(z)
         z[0:mpar] = np.dot(c[0:mpar,0:mpar],v[0:mpar])
         
         #      SUBROUTINE  VMUL (A, MAX, N, V, X)
@@ -2341,8 +2357,10 @@ def fitana(im,cat,ipstyp,fitrad,par):
                 return par,chi,xcen,ycen,h
         else:
             if np.abs(oldchi/chi-1.0) < 1e-3:
+                print('Adding one more parameter')
                 mpar += 1
                 continue
             
         oldchi = chi
 
+        import pdb; pdb.set_trace()
