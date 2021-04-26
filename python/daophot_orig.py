@@ -2323,12 +2323,12 @@ def fitana(im,cat,ipstyp,fitrad,par):
             
         #import pdb; pdb.set_trace()
         # Correct the fitting parameters.
-        print(c[0:mpar,0:mpar])
+        #print(c[0:mpar,0:mpar])
         c[0:mpar,0:mpar] = np.linalg.inv(c[0:mpar,0:mpar])
-        print(c[0:mpar,0:mpar])
+        #print(c[0:mpar,0:mpar])
         z = np.zeros(maxpar,float)
         z[0:mpar] = np.dot(c[0:mpar,0:mpar],v[0:mpar])
-        print(z)
+        #print(z)
         
         #      SUBROUTINE  VMUL (A, MAX, N, V, X)
         # Multiply a matrix by a vector:
@@ -2351,13 +2351,13 @@ def fitana(im,cat,ipstyp,fitrad,par):
         z[0] = np.max([-0.1*par[0], np.min([0.1*par[0],z[0]]) ])
         z[1] = np.max([-0.1*par[1], np.min([0.1*par[1],z[1]]) ])        
         z[2] = z[2]/(1.0+np.abs(z[2])/np.min([0.1,1.0-np.abs(par[2])]))
-        print(z)
-        print(par)
+        #print(z)
+        #print(par)
         for i in range(mpar):
             par[i] += z[i]
-        print(par)
+        #print(par)
 
-        import pdb; pdb.set_trace()
+        #import pdb; pdb.set_trace()
             
         if (par[0]>radlim) or (par[1]>radlim):
             par[0] = -1
@@ -2372,7 +2372,7 @@ def fitana(im,cat,ipstyp,fitrad,par):
         else:
             chi = 9.9999
 
-        print('    ', niter, chi, par)
+        print('    ', niter, chi, par[0:mpar])
         i = 10*mpar+14
         if mpar == npar:
             if np.abs(oldchi/chi-1.0) < 1e-5:
@@ -2386,4 +2386,4 @@ def fitana(im,cat,ipstyp,fitrad,par):
             
         oldchi = chi
 
-        import pdb; pdb.set_trace()
+        #import pdb; pdb.set_trace()
