@@ -2087,21 +2087,35 @@ def getpsf(imfile,catfile,apfile,optfile):
     im,head = fits.getdata(imfile,header=True)
     im = im.T
     cat = phot.daoread(catfile)
+    ncat = len(cat)
     aper = phot.daoread(apfile)
     ind1,ind2 = dln.match(aper['ID'],cat['ID'])
     cat['SKY'][ind2] = aper['SKY'][ind1]
     orig = cat.copy()
     opt = readopt(optfile)
     ncol,nrow = im.shape
+
     
     fitrad = opt['FI']  # in pixels
     fwhm = opt['FW']    # in pixels
+    psfrad = opt['PS']         
+    npsf = 2*(int(2.0*psfrad)+1)+1
+    psfrad = (float(npsf-1)/2.0-1.0)/2.0
 
+    
     # Get initial heights
     nparcheck,par,label = psfnparam(1, fwhm)    
     # Get height from image and sky
     pmax,dum1,dum2,dum3 = profile(1,0.0,0.0,par,ideriv=False)
-    hpsf = (im[np.round(cat['X']-1).astype(int),np.round(cat['Y']).astype(int)]-cat['SKY'])/pmax
+    hpsf = np.zeros(ncat,float)
+    for i in range(ncat):
+        lx = np.max([0,int(cat['X'][i]-1-psfrad)-2])
+        ly = np.max([0,int(cat['Y'][i]-1-psfrad)-2])
+        mx = np.min([ncol,int(cat['X'][i]-1+psfrad)+3])
+        my = np.min([nrow,int(cat['Y'][i]-1+psfrad)+3])
+        fmax = np.max(im[lx:mx+1,ly:my+1])
+        hpsf[i] = (fmax-cat['SKY'][i])/pmax
+    #hpsf = (im[np.round(cat['X']-1).astype(int),np.round(cat['Y']).astype(int)]-cat['SKY'])/pmax
     cat['HPSF'] = hpsf
     
     # Loop over PSF types
@@ -2251,13 +2265,13 @@ def fitana(im,cat,ipstyp,fitrad,par):
                         prod = wt*dhdyc
                         dyn += prod*dp
                         dyd += prod*dhdyc
-                        print(i,j,p,im[i,j],h[istar],sky[istar],dp)
+                        #print(i,j,p,im[i,j],h[istar],sky[istar],dp)
 
 
-            import pdb; pdb.set_trace()
+            #import pdb; pdb.set_trace()
                         
-            pmax,dum1,dum2,dum3 = profile(ipstyp,0.0,0.0,par,ideriv=False)
-            print(pmax)
+            #pmax,dum1,dum2,dum3 = profile(ipstyp,0.0,0.0,par,ideriv=False)
+            #print(pmax)
                         
             #print(niter,istar,dhn/dhd,dxn/dxd,dyn/dyd)
             h[istar] += dhn/dhd
@@ -2277,7 +2291,7 @@ def fitana(im,cat,ipstyp,fitrad,par):
             yold[istar] = dyn
             ycen[istar] += dyn/(1.0+np.abs(dyn)/yclamp[istar])
 
-            print(niter,istar,xcen[istar],ycen[istar],h[istar],dhn/dhd,dxn,dyn)
+            #print(niter,istar,xcen[istar],ycen[istar],h[istar],dhn/dhd,dxn,dyn)
             
             peak,dhdxc,dhdyc,term = profile(ipstyp,0.0,0.0,par,ideriv=False)
             peak *= h[istar]
@@ -2290,6 +2304,7 @@ def fitana(im,cat,ipstyp,fitrad,par):
                     wt = (dx**2+dysq)/rsq
                     if wt<1:
                         p,dhdxc,dhdyc,term = profile(ipstyp,dx,dy,par,ideriv=True)
+                        #print(i,j,p,dhdxc,dhdyc,term)
                         dp = im[i,j] - h[istar]*p - sky[istar]
                         for k in range(mpar):
                             term[k] *= h[istar]
@@ -2301,16 +2316,19 @@ def fitana(im,cat,ipstyp,fitrad,par):
                             v[k] += wt*dp*term[k]
                             for l in range(mpar):
                                 c[l,k] += wt*term[l]*term[k]
+                        #print(i,j,c[0:mpar,0:mpar])
 
             #print(niter,istar,xcen[istar],ycen[istar],chi)
-                                
+            #import pdb; pdb.set_trace()
+            
+        #import pdb; pdb.set_trace()
         # Correct the fitting parameters.
-        print(c)
+        print(c[0:mpar,0:mpar])
         c[0:mpar,0:mpar] = np.linalg.inv(c[0:mpar,0:mpar])
-        print(c)
+        print(c[0:mpar,0:mpar])
         z = np.zeros(maxpar,float)
-        print(z)
         z[0:mpar] = np.dot(c[0:mpar,0:mpar],v[0:mpar])
+        print(z)
         
         #      SUBROUTINE  VMUL (A, MAX, N, V, X)
         # Multiply a matrix by a vector:
@@ -2333,9 +2351,14 @@ def fitana(im,cat,ipstyp,fitrad,par):
         z[0] = np.max([-0.1*par[0], np.min([0.1*par[0],z[0]]) ])
         z[1] = np.max([-0.1*par[1], np.min([0.1*par[1],z[1]]) ])        
         z[2] = z[2]/(1.0+np.abs(z[2])/np.min([0.1,1.0-np.abs(par[2])]))
+        print(z)
+        print(par)
         for i in range(mpar):
             par[i] += z[i]
+        print(par)
 
+        import pdb; pdb.set_trace()
+            
         if (par[0]>radlim) or (par[1]>radlim):
             par[0] = -1
             return par,chi,xcen,ycen,h

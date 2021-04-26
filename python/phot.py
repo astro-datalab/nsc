@@ -255,7 +255,7 @@ def daoread(fil):
 
     # NL = 1  coo file
     if (nl==1) & (ncols==7):
-        dtype = np.dtype([('ID',long),('X',float),('Y',float),('MAG',float),('SHARP',float),('ROUND',float),('ROUND2',float)])
+        dtype = np.dtype([('ID',int),('X',float),('Y',float),('MAG',float),('SHARP',float),('ROUND',float),('ROUND2',float)])
         cat = np.zeros(nstars,dtype=dtype)
         lengths = np.array([7,9,9,9,9,9,9])
         lo = np.concatenate((np.array([0]), np.cumsum(lengths[0:-1])))
@@ -272,7 +272,7 @@ def daoread(fil):
         #  
         #     11  454.570   37.310  13.9710   0.0084  164.683   14.040  -0.0690        6
         #     36  287.280   93.860  14.5110   0.0126  165.018   14.580  -0.0690        6
-        dtype = np.dtype([('ID',long),('X',float),('Y',float),('MAG',float),('ERR',float),('SKY',float),('MAGFAP',float),('APCORR',float),('FINALAP',int)])
+        dtype = np.dtype([('ID',int),('X',float),('Y',float),('MAG',float),('ERR',float),('SKY',float),('MAGFAP',float),('APCORR',float),('FINALAP',int)])
         cat = np.zeros(nstars,dtype=dtype)
         lengths = np.array([7,9,9,9,9,9,9,9,9])
         lo = np.concatenate((np.array([0]), np.cumsum(lengths[0:-1])))
@@ -285,7 +285,7 @@ def daoread(fil):
 
     # NL = 1  als file
     elif (nl==1) & (ncols==9) & (arr1[-1].isdigit() is False):
-        dtype = np.dtype([('ID',long),('X',float),('Y',float),('MAG',float),('ERR',float),('SKY',float),('ITER',float),('CHI',float),('SHARP',float)])
+        dtype = np.dtype([('ID',int),('X',float),('Y',float),('MAG',float),('ERR',float),('SKY',float),('ITER',float),('CHI',float),('SHARP',float)])
         cat = np.zeros(nstars,dtype=dtype)
         lengths = np.array([7,9,9,9,9,9,9,9,9])
         lo = np.concatenate((np.array([0]), np.cumsum(lengths[0:-1])))
@@ -308,8 +308,8 @@ def daoread(fil):
         #                   Sky, St.Dev. of sky, skew of sky, Mag1err, Mag2err, etc.
         ncols = len(lines[4].split())
         naper = ncols-3   # apertures
-        nstars = long((numlines(fil)-3.0)/3.0)  # stars
-        dtype = np.dtype([('ID',long),('X',float),('Y',float),('SKY',float),('SKYSIG',float),('SKYSKEW',float),('MAG',float,naper),('ERR',float,naper)])
+        nstars = int((numlines(fil)-3.0)/3.0)  # stars
+        dtype = np.dtype([('ID',int),('X',float),('Y',float),('SKY',float),('SKYSIG',float),('SKYSKEW',float),('MAG',float,naper),('ERR',float,naper)])
         cat = np.zeros(nstars,dtype=dtype)
         # for line 1
         lengths1 = np.concatenate([np.array([7,9,9]),np.zeros(naper,dtype=int)+9])
@@ -326,7 +326,7 @@ def daoread(fil):
             # line 1
             # ID, X, Y, Mag1, Mag2, etc.. 
             line1 = lines[i*3+4]
-            cat[i]['ID'] = long(line1[lo1[0]:hi1[0]])
+            cat[i]['ID'] = int(line1[lo1[0]:hi1[0]])
             cat[i]['X'] = float(line1[lo1[1]:hi1[1]])
             cat[i]['Y'] = float(line1[lo1[2]:hi1[2]])
             mag = np.zeros(naper,dtype=float)
@@ -345,7 +345,7 @@ def daoread(fil):
             cat[i]['ERR'] = err
     # NL = 3  list
     elif nl==3:
-        dtype = np.dtype([('ID',long),('X',float),('Y',float),('MAG',float),('ERR',float),('SKY',float)])
+        dtype = np.dtype([('ID',int),('X',float),('Y',float),('MAG',float),('ERR',float),('SKY',float)])
         cat = np.zeros(nstars,dtype=dtype)
         lengths = np.array([7,9,9,9,9,9,9])
         lo = np.concatenate((np.array([0]), np.cumsum(lengths[0:-1])))
