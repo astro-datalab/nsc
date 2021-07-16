@@ -1418,7 +1418,7 @@ def mkdaoim(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,logge
     # 128 for Pre-V3.5.0 images and set 7 values to zero for V3.5.0 or later.
 
     #logger.info("Turning off the CP difference image masking flags")
-    if meta["plver"] > 0:      # CP data
+    if meta.get("plver") is not None:      # CP data
         # V3.5.0 and on, Integer masks
         versnum = meta["plver"].split('.')
         if (versnum[0]>3) | ((versnum[0]==3) & (versnum[1]>=5)):
