@@ -116,7 +116,7 @@ class Exposure:
     def setup(self):
         basedir,tmproot = getnscdirs(self.nscversion)
         # Prepare temporary directory
-        tmpcntr = 1L
+        tmpcntr = 1#L 
         tmpdir = tmproot+self.base+"."+str(tmpcntr)
         while (os.path.exists(tmpdir)):
             tmpcntr = tmpcntr+1
