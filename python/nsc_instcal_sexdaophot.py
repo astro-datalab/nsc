@@ -784,7 +784,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 4:
        version = sys.argv[4]
        verdir = version if version.endswith('/') else version+"/"
-
+    else: version = None
     # Get NSC directories
     basedir, tmpdir = getnscdirs(version)
 
