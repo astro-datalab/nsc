@@ -21,11 +21,11 @@ import shutil
 import subprocess
 import logging
 #from scipy.signal import convolve2d
+from dlnpyutils.utils import *
 from scipy.ndimage.filters import convolve
 import astropy.stats
 import struct
 import tempfile
-from dlnpyutils.utils import *
 
 # Ignore these warnings, it's a bug
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -853,6 +853,9 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
         if m != None:
             filter_name = (l.split())[1]
         cnt = cnt+1
+
+    # Add newlines
+    lines = [line + '\n' for line in lines]
     # Write out the new config file
     if os.path.exists("default.config"):
         os.remove("default.config")
@@ -902,7 +905,6 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
     except OSError as e:
         logger.error("SExtractor Execution failed:"+str(e))
         logger.error(e)
-        raise
 
     # Check that the output file exists
     if os.path.exists(outfile) is True:
@@ -929,11 +931,14 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
         rms = np.float(arr[ind2[0]+1])
         meta["SKYMED"] = (background,"Median sky background")
         meta["SKYRMS"] = (rms,"RMS of sky")
+    else:
+        cat = None
+        maglim = None
 
     # Delete temporary files
-    os.remove(sfluxfile)
-    os.remove(smaskfile)
-    os.remove(swtfile)
+    if os.path.exists(sfluxfile): os.remove(sfluxfile)
+    if os.path.exists(smaskfile): os.remove(smaskfile)
+    if os.path.exists(smaskfile): os.remove(swtfile)
     #os.remove("default.conv")
 
     return cat,maglim
