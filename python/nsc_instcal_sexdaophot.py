@@ -745,6 +745,10 @@ class Chip:
         if os.path.exists(outpsffile): os.remove(outpsffile)
         shutil.copyfile(daobase+".psf",outpsffile)
         # Copy DAOPHOT .apers file??
+        # copy Allstar PSF subtracted file to output dir
+        outsubfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+"s.fits"
+        if os.path.exists(outsubfile): os.remove(outsubfile)
+        shutil.copyfile(daobase+"s.fits",outsubfile)
         # Copy SE config file
         outconfigfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".sex.config"
         if os.path.exists(outconfigfile): os.remove(outconfigfile)
