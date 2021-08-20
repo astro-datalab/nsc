@@ -219,7 +219,7 @@ class Exposure:
 
         # LOOP through the HDUs/chips
         #----------------------------
-        for i in xrange(1,self.nexten):
+        for i in range(1,self.nexten):
             t0 = time.time()
             self.logger.info(" ")
             self.logger.info("=== Processing subimage "+str(i)+" ===")
