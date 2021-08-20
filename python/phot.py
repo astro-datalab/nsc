@@ -1426,7 +1426,7 @@ def mkdaoim(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,logge
     if meta.get("plver") is not None:      # CP data
         # V3.5.0 and on, Integer masks
         versnum = meta["plver"].split('.')
-        if (versnum[0]>3) | ((versnum[0]==3) & (versnum[1]>=5)):
+        if (int(versnum[0])>3) | ((int(versnum[0])==3) & (int(versnum[1])>=5)):
             bdpix = (mask == 7)
             nbdpix = np.sum(bdpix)
             if nbdpix > 0: mask[bdpix]=0
