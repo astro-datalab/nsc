@@ -151,15 +151,15 @@ class Exposure:
         wtfile = "bigwt.fits.fz"
         maskfile = "bigmask.fits.fz"
         self.logger.info("Copying InstCal images from mass store archive")
-        shutil.copyfile(self.origfluxfile,tmpdir+"/"+os.path.basename(self.origfluxfile))
+        shutil.copyfile(basedir+os.path.basename(self.origfluxfile),tmpdir+"/"+os.path.basename(self.origfluxfile))
         self.logger.info("  "+self.origfluxfile)
         if (os.path.basename(self.origfluxfile) != fluxfile):
             os.symlink(os.path.basename(self.origfluxfile),fluxfile)
-        shutil.copyfile(self.origwtfile,tmpdir+"/"+os.path.basename(self.origwtfile))
+        shutil.copyfile(basedir+os.path.basename(self.origwtfile),tmpdir+"/"+os.path.basename(self.origwtfile))
         self.logger.info("  "+self.origwtfile)
         if (os.path.basename(self.origwtfile) != wtfile):
             os.symlink(os.path.basename(self.origwtfile),wtfile)
-        shutil.copyfile(self.origmaskfile,tmpdir+"/"+os.path.basename(self.origmaskfile))
+        shutil.copyfile(basedir+os.path.basename(self.origmaskfile),tmpdir+"/"+os.path.basename(self.origmaskfile))
         self.logger.info("  "+self.origmaskfile)
         if (os.path.basename(self.origmaskfile) != maskfile):
             os.symlink(os.path.basename(self.origmaskfile),maskfile)
