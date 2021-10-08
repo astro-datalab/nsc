@@ -274,6 +274,13 @@ class Chip:
         self.sexcat = None
         self.seeing = None
         self.apcorr = None
+        
+        # for second run of SExtractor 
+        self.allsubfile=self.dir+"/"+self.base+"_daos.fits"
+        self.smeta = None #in runsex(), define self.meta=makemeta(header=fits.getheader(allsubfile,0)) 
+        self.sexcatfile2 = None
+        self.sexcat2 = None
+        
         # Internal hidden variables
         self._rdnoise = None
         self._gain = None
@@ -287,6 +294,9 @@ class Chip:
         self._cpfwhm = None
         self._daomaglim = None    # set by daoaperphot()
         self._sexmaglim = None    # set by runsex()
+        self._sexmaglim2 = None   # set by runsex() when run on ALLSTAR PSF-subtracted image
+        self._daomaglim2 = None   # set by daoaperphot() when run on 2nd SExtractor cat
+        
         # Logger
         self.logger = None
 
@@ -496,26 +506,50 @@ class Chip:
 
 
     # Write SE catalog in DAO format
-    def sextodao(self,cat=None,outfile=None,format="coo"):
+    def sextodao(self,cat=None,outfile=None,format="coo",meta=None): 
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
         if outfile is None: outfile=daobase+".coo"
         if cat is None: cat=self.sexcat
-        sextodao(self.sexcat,self.meta,outfile=outfile,format=format,logger=self.logger)
-
+        if meta is None: meta=self.meta                      
+        sextodao(cat,meta,outfile=outfile,format=format,logger=self.logger)
+        
     # Run Source Extractor
-    #---------------------
-    def runsex(self,outfile=None):
+    #---------------------    
+    def runsex(self,outfile=None,allsub=False)
+        # if allsub=False, run SExtractor on the fluxfile.  Otherwise, run on the ALLSTAR PSF-subtracted image.
+        if allsub==False: 
+            infile=self.fluxfile
+            meta=self.meta
+            sexcatfile="flux_sex.cat.fits"
+            offset=0
+        else:
+            daobase = os.path.basename(self.daofile)
+            daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]             
+            infile = daobase+"s.fits"
+            self.smeta=makemeta(header=fits.getheader(infile,0))  #should this be self.smeta?  probably.
+            meta=self.smeta
+            sexcatfile = "flux_sex2.cat.fits"
+            if self.sexcat is not None: offset=int(self.sexcat['NUMBER'][-1]) 
+        # set up runsex()
         basedir, tmpdir = getnscdirs(self.nscversion)
         configdir = basedir+"config/"
-        sexcatfile = "flux_sex.cat.fits"
-        sexcat, maglim = runsex(self.fluxfile,self.wtfile,self.maskfile,self.meta,sexcatfile,configdir,logger=self.logger)
-        self.sexcat = sexcatfile
-        self.sexcat = sexcat
-        self._sexmaglim = maglim
-        # Set the FWHM as well
-        fwhm = sexfwhm(sexcat,logger=self.logger)
-        self.meta['FWHM'] = fwhm
+        sexcat, maglim = runsex(infile,self.wtfile,self.maskfile,meta,sexcatfile,configdir,offset=offset,logger=self.logger) 
+        # save SExtractor catalog
+        if allsub==False:
+            self.sexcatfile = sexcatfile
+            self.sexcat = sexcat
+            self._sexmaglim = maglim
+            # Set the FWHM as well
+            fwhm = sexfwhm(sexcat,logger=self.logger)
+            self.meta['FWHM'] = fwhm
+        else: 
+            self.sexcatfile2 = sexcatfile
+            self.sexcat2 = sexcat
+            self._sexmaglim2 = maglim
+            fwhm = sexfwhm(sexcat,logger=self.logger)
+            self.smeta['FWHM'] = fwhm
+            
 
     # Determine FWHM using SE catalog
     #--------------------------------
@@ -553,11 +587,22 @@ class Chip:
 
     # DAOPHOT aperture photometry
     #----------------------------
-    def daoaperphot(self):
+    def daoaperphot(self,allsub=False):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        apcat, maglim = daoaperphot(self.daofile,daobase+".coo",outfile=daobase+".ap",logger=self.logger)
-        self._daomaglim = maglim
+        # determine whether this is being run on an ALLSTAR PSF-subtracted image 
+        if allsub==False:
+            imfile=self.daofile
+            coofile=daobase+".coo"
+            outfile=daobase+".ap"
+        else:
+            imfile=self.allsubfile
+            coofile=daobase+"2.coo"
+            outfile=daobase+"2.ap"
+        apcat, maglim = daoaperphot(imfile,coofile,outfile=outfile,optfile=daobase+".opt",logger=self.logger)
+        # save magnitude limit 
+        if allsub==False: self._daomaglim = maglim 
+        else: self._daomaglim2 = maglim 
 
     # Pick PSF stars using DAOPHOT
     #-----------------------------
@@ -586,14 +631,50 @@ class Chip:
     def createpsf(self,listfile=None,apfile=None,doiter=True,maxiter=5,minstars=6,subneighbors=True,verbose=False):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        createpsf(daobase+".fits",daobase+".ap",daobase+".lst",meta=self.meta,logger=self.logger)
+        subit = createpsf(daobase+".fits",daobase+".ap",daobase+".lst",meta=self.meta,logger=self.logger)
+        self.subiter=subit 
         
     # Run ALLSTAR
     #-------------
-    def allstar(self,psffile=None,apfile=None,subfile=None):
+    def allstar(self,psffile=None,apfile=None,subfile=None,allsub=False):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        alscat = allstar(daobase+".fits",daobase+".psf",daobase+".ap",outfile=daobase+".als",meta=self.meta,logger=self.logger)
+        # determine ifi this is being run on the first ALLSTAR PSF-subtracted image, or the flux image
+        if allsub==False: 
+            imfile = daobase+".fits"
+            subfile = daobase+"s.fits"
+            apfile = daobase+".ap"
+            outfile = daobase+".als"
+            meta=self.meta
+        else: 
+            imfile = daobase+"s.fits"
+            subfile = daobase+"2s.fits"
+            apfile = daobase+"2.ap"
+            outfile = daobase+"2.als"
+            meta=self.smeta
+        alscat = allstar(imfile,daobase+".psf",apfile=apfile,subfile=subfile,outfile=outfile,optfile=daobase+".als.opt",meta=meta,logger=self.logger) 
+
+
+    # Combine 1st + 2nd SExtractor & ALLSTAR catalogs
+    #------------------------------------------------
+    def combine_cats(self):
+        daobase = os.path.basename(self.daofile)
+        daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
+        sexfile1 = daobase+".coo"
+        sexfile2 = daobase+"2.coo"
+        alsfile1 = daobase+".als"
+        alsfile2 = daobase+"2.als"
+        sexcat1 = readlines(sexfile1)
+        sexcat2 = readlines(sexfile2)
+        alscat1 = readlines(alsfile1)
+        alscat2 = readlines(alsfile2)
+        self.sexcat.add_column(np.repeat(1,len(self.sexcat)),name="NDET_ITER")
+        self.sexcat2.add_column(np.repeat(2,len(self.sexcat2)),name="NDET_ITER")
+        self.sexcat=vstack([self.sexcat,self.sexcat2])
+        combined_sexcat = sexcat1+sexcat2[3:]
+        combined_alscat = alscat1+alscat2[3:] 
+        writelines(sexfile1,combined_sexcat,overwrite=True)
+        writelines(alsfile1,combined_alscat,overwrite=True)
         
     # Get aperture correction
     #------------------------
@@ -689,6 +770,7 @@ class Chip:
     # Process a single chip
     #----------------------
     def process(self):
+        self.logger.info("-- 1st SExtractor run, on fluxfile --")
         self.runsex()
         self.logger.info("-- Getting ready to run DAOPHOT --")
         self.mkopt()
@@ -701,6 +783,14 @@ class Chip:
         self.daopickpsf()
         self.createpsf()
         self.allstar()
+        # second SExtractor run
+        self.logger.info("-- 2nd SExtractor run, on ALLSTAR subim --")
+        self.runsex(allsub=True)
+        self.sextodao(cat=self.sexcat2,meta=self.meta,outfile="flux_dao2.coo")
+        self.daoaperphot(allsub=True)
+        self.allstar(allsub=True)
+        self.logger.info("--combining 1st + 2nd SExtracter & ALLSTAR catalogs--")
+        self.combine_cats()
         self.getapcor()
         self.finalcat()
 
