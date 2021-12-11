@@ -2,9 +2,9 @@ pro make_bok90prime_list,all,file=file,version=version
 
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
-dir = dldir+'users/dnidever/nsc/'
+dir = dldir+'dnidever/nsc/'
 
-if n_elements(version) eq 0 then version = 'v3' ;'v2'
+if n_elements(version) eq 0 then version = 'v4' ;'v3'
 if n_elements(file) eq 0 then file = dir+'instcal/'+version+'/lists/bok90prime_archive_info.fits.gz'
 
 ; Load all of the instcal exposures
@@ -114,13 +114,15 @@ release_day = long(strmid(release_date,8,2))
 release_mjd = JULDAY(release_month,release_day,release_year)-2400000.5d0
 ;release_cutoff = [2017,4,24]  ; v1 - April 24, 2017
 ;release_cutoff = [2017,10,11] ; v2 - Oct 11, 2017
-release_cutoff = [2018,10,9]  ; v2 - Oct 9, 2018
+;release_cutoff = [2018,10,9]  ; v2 - Oct 9, 2018
+release_cutoff = [2021,12,11]  ; v4 - Dec 11, 2021
 release_cutoff_mjd = JULDAY(release_cutoff[1],release_cutoff[2],release_cutoff[0])-2400000.5d0
 gdrelease = where(release_mjd le release_cutoff_mjd,ngdrelease,comp=bdrelease,ncomp=nbdrelease)
 print,strtrim(ngdrelease,2),' exposures are PUBLIC'
 str = str[gdrelease]  ; impose the public data cut
 
 ;MWRFITS,str,dir+'instcal/'+version+'/lists/bok90prime_instcal_list.fits',/create
+;spawn,'gzip '+dir+'instcal/'+version+'/lists/bok90prime_instcal_list.fits'
 
 stop
 

@@ -2,9 +2,9 @@ pro make_decam_list,all,file=file,version=version
 
 ; Main NOAO DECam source catalog
 NSC_ROOTDIRS,dldir,mssdir,localdir
-dir = dldir+'users/dnidever/nsc/'
+dir = dldir+'dnidever/nsc/'
 
-if n_elements(version) eq 0 then version = 'v3'
+if n_elements(version) eq 0 then version = 'v4' ; v3
 if n_elements(file) eq 0 then file=dir+'instcal/'+version+'/lists/decam_archive_info.fits.gz'
 
 ; Load all of the instcal exposures
@@ -181,7 +181,8 @@ release_mjd = JULDAY(release_month,release_day,release_year)-2400000.5d0
 ;release_cutoff = [2017,10,11] ; v2 - Oct 11, 2017
 ;release_cutoff = [2018,10,9]  ; v3 - Oct 9, 2018
 ;release_cutoff = [2019,7,9]    ; v3 - July 9, 2019
-release_cutoff = [2019,10,17]    ; v3 - Oct 17, 2019
+;release_cutoff = [2019,10,17]    ; v3 - Oct 17, 2019
+release_cutoff = [2021,12,11]  ; v4 - Dec 11, 2021
 release_cutoff_mjd = JULDAY(release_cutoff[1],release_cutoff[2],release_cutoff[0])-2400000.5d0
 gdrelease = where(release_mjd le release_cutoff_mjd,ngdrelease,comp=bdrelease,ncomp=nbdrelease)
 print,strtrim(ngdrelease,2),' exposures are PUBLIC'
@@ -203,7 +204,7 @@ str = str[gdrelease]  ; impose the public data cut
 ;REMOVE,torem,str
 
 ;MWRFITS,str,dir+'instcal/'+version+'/lists/decam_instcal_list.fits',/create
-
+;spawn,'gzip '+dir+'instcal/'+version+'/lists/decam_instcal_list.fits'
 
 stop
 
