@@ -3,92 +3,109 @@
 import os
 import time
 import numpy as np
- 
-def getrefcat(cenra,cendec,radius,refcat,count=count,file=file,saveref=saveref,silent=silent,logfile=logfile):
+from astropy.io import fits
+from astropy.table import Table
+import subprocess
+from dlnpyutils import utils as dln
+from dustmaps import SFDQuery
+
+def getrefcat(cenra,cendec,radius,refcat,file=file,
+              saveref=False,silent=False,logger=None):
     """
     Get reference catalog information from DL database 
  
-    INPUTS: 
-    cenra     Central RA for the search. 
-    cendec    Central DEC for the search. 
-    radius    Search radius in degrees. 
-    refcat    Reference catalog name (e.g. 2MASS, Gaia, etc.). 
-    =file     The file to save to or search for existing catalog. 
-    /saveref  Save the output to FILE. 
-    /silent   Don't print anything to the screen. 
-    =logfile  Filename for logging output. 
+    Parameters
+    ----------
+    cenra : float
+       Central RA for the search. 
+    cendec : float
+       Central DEC for the search. 
+    radius : float
+       Search radius in degrees. 
+    refcat : table
+       Reference catalog name (e.g. 2MASS, Gaia, etc.). 
+    savefile : str, optional
+       The file to save to or search for existing catalog. 
+    saveref : bool, optional
+       Save the output to FILE. 
+    silent : bool, optional
+       Don't print anything to the screen. 
+    logger : logging object, optional
+       Logging object to use for printing messages.
  
-    OUTPUTS: 
-    ref       Search results from the reference catalog. 
-    =count    Number of elements in REF. 
+    Returns
+    -------
+    ref : astropy table
+        Search results from the reference catalog. 
  
-    USAGE: 
-    IDL>cat = getrefcat(cenra,cendec,radius,refcat,file=file,saveref=saveref) 
+    Example
+    -------
+
+    cat = getrefcat(cenra,cendec,radius,refcat,file=file,saveref=saveref) 
  
     By D. Nidever  Sep 2017 
+    Translated to Python by D. Nidever, April 2022
     """
      
     count = 0 
     t0 = time.time() 
-     
+
+    if logger is None:
+        logger = dln.basiclogger()
+    
     # Check that we have psql installed 
-    spawn,['which','psql'],out,errout,/noshell 
+    out = subprocess.check_output(['which','psql'],shell=False)
     if os.path.exists(out[0]) == 0: 
-        print('No PSQL found on this sytem.' 
+        print('No PSQL found on this sytem.')
         return -1 
      
-    # Defaults 
-    if len(logfile) == 0: 
-        logf=-1 
-    else: 
-        logf=logfile 
-     
     # Temporary directory 
-    # /tmp is often small and get get fille dup 
-    NSC_ROOTDIRS,dldir,mssdir,localdir 
-    if len(version) == 0 : 
-        version='v2' 
-    dir = dldir+'users/dnidever/nsc/instcal/'+version+'/' 
+    # /tmp is often small and get get fille dup
+    dldir,mssdir,localdir = utils.rootdirs()
+    if version is None:
+        version = 'v3' 
+    fdir = dldir+'users/dnidever/nsc/instcal/'+version+'/' 
     tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/' 
      
     # FLIP THIS AROUND, INPUT SHOULD BE THE "EASY" VERSION!!! 
-    refname = strupcase(refcat) 
-    if refname == 'II/312/AIS' : 
-        refname='GALEX' 
-    if refname == '2MASS-PSC' : 
-        refname='TMASS' 
-    if refname == '2MASS' : 
-        refname='TMASS' 
-    if refname == 'GAIA/GAIA' : 
-        refname='GAIA' 
-    if refname == 'Skymapper' : 
-        refname='SKYMAPPER' 
-    if refname == 'GLIMPSE' : 
-        refname='II/293/glimpse' 
-    if refname == 'SAGE' : 
-        refname='II/305/archive' 
-    if refname == 'ATLASREFCAT2' : 
-        refname='ATLAS' 
+    refname = str(refcat).upper()
+    if refname == 'II/312/AIS': 
+        refname = 'GALEX' 
+    elif refname == '2MASS-PSC': 
+        refname = 'TMASS' 
+    elif refname == '2MASS': 
+        refname = 'TMASS' 
+    elif refname == 'GAIA/GAIA': 
+        refname = 'GAIA' 
+    elif refname == 'Skymapper': 
+        refname = 'SKYMAPPER' 
+    elif refname == 'GLIMPSE': 
+        refname = 'II/293/glimpse' 
+    elif refname == 'SAGE': 
+        refname = 'II/305/archive' 
+    elif refname == 'ATLASREFCAT2': 
+        refname = 'ATLAS' 
      
-    if len(file) == 0 : 
-        file=tmpdir+'ref_'+stringize(cenra,ndec=5)+'_'+stringize(cendec,ndec=5)+'_'+stringize(radius,ndec=3)+'_'+refname+'.fits' 
+    if savefile is None:
+        savefile = tmpdir+'ref_%.5f_%.5f_%.3f_%s.fits' % (cenra,cendec,radius,refname)
      
-    if not keyword_set(silent) : 
-        printlog,logf,'Querying '+refname+': RA='+stringize(cenra,ndec=5)+' DEC='+stringize(cendec,ndec=5)+' Radius='+stringize(radius,ndec=3) 
+    if silent==False:
+        logger.info('Querying '+refname+': RA='+stringize(cenra,ndec=5)+' DEC='+stringize(cendec,ndec=5)+' Radius='+stringize(radius,ndec=3))
      
     # Loading previously loaded file 
-    If os.path.exists(file) == 1: 
-        if not keyword_set(silent) : 
-            printlog,logf,'Loading previously-saved file ',file 
-        ref = MRDFITS(file,1,/silent) 
+    if os.path.exists(savefile): 
+        if silent==False:
+            logger.info('Loading previously-saved file '+savefile)
+        ref = Table.read(savefile) 
          
-        # Do the Query 
-        #-------------- 
+    # Do the Query 
+    #-------------- 
     else: 
          
         # Use DataLab database search 
         #---------------------------- 
-        If (refname == 'TMASS' or refname == 'GAIA' or refname == 'GAIADR2' or refname == 'PS' or refname == 'SKYMAPPER' or       refname == 'ALLWISE' or refname == 'ATLAS'): 
+        if (refname == 'TMASS' or refname == 'GAIA' or refname == 'GAIADR2' or refname == 'PS' or refname == 'SKYMAPPER' or
+            refname == 'ALLWISE' or refname == 'ATLAS'): 
             if refname == 'TMASS': 
                 tablename = 'twomass.psc' 
                 cols = 'designation,ra as raj2000,dec as dej2000,j_m as jmag,j_cmsig as e_jmag,h_m as hmag,h_cmsig as e_hmag,k_m as kmag,k_cmsig as e_kmag,ph_qual as qflg' 
@@ -135,21 +152,23 @@ def getrefcat(cenra,cendec,radius,refcat,count=count,file=file,saveref=saveref,s
             cmd = "psql -h "+server+" -U datalab -d tapdb -w --pset footer -c 'SELECT "+cols+" FROM "+tablename+          " WHERE q3c_radial_query("+racol+","+deccol+","+stringize(cenra,ndec=4,/nocomma)+","+stringize(cendec,ndec=4,/nocomma)+          ","+stringize(radius,ndec=3)+")' > "+refcattemp 
             os.remove(refcattemp,/allow 
             os.remove(file,/allow 
-            spawn,cmd,out,outerr 
-            # Check for empty query 
-            READLINE,refcattemp,tlines,nlineread=4 
+            spawn,cmd,out,outerr
+            out = subprocess.check_output(cmd,shell=False)
+            # Check for empty query
+            tlines = dln.readlines(refcattemp,nlineread=4)
+            #READLINE,refcattemp,tlines,nlineread=4 
             if len(tlines) < 4: 
-                if not keyword_set(silent) : 
-                    printlog,logf,'No Results' 
+                if silent==False:
+                    logger.info('No Results')
                 ref = -1 
                 nref = 0 
                 return ref 
             #  Load ASCII file and create the FITS file 
             ref = importascii(refcattemp,/header,delim='|',skipline=2,/silent) 
             if keyword_set(saveref): 
-                printlog,logf,'Saving catalog to file '+file 
-                MWRFITS,ref,file,/create 
-            os.remove(refcattemp,/allow 
+                logger.info(,'Saving catalog to file '+savefile)
+                ref.write(savefile,overwrite=True)
+            dln.remove(refcattemp,allow=True)
              
             # Fix 0.0 mags/errs in ATLAS 
             if refname == 'ATLAS': 
@@ -186,8 +205,8 @@ def getrefcat(cenra,cendec,radius,refcat,count=count,file=file,saveref=saveref,s
                 ref = QUERYVIZIER(refname,[cenra,cendec],radius*60,cfa=cfa,timeout=600,/silent) 
                 # Check for failure 
                 if size(ref,/type) != 8: 
-                    if not keyword_set(silent) : 
-                        printlog,logf,'Failure or No Results' 
+                    if silent==False : 
+                        logger.info(,'Failure or No Results' 
                     ref = -1 
                     nref = 0 
                     return ref 
@@ -200,8 +219,8 @@ def getrefcat(cenra,cendec,radius,refcat,count=count,file=file,saveref=saveref,s
                 pylines = 'python -c "from astroquery.vizier import Vizier#'+                'import astropy.units as u;'+                'import astropy.coordinates as coord;'+                'Vizier.TIMEOUT = 600;'+                'Vizier.ROW_LIMIT = -1;'+                'Vizier.cache_location = None;'+                'result = Vizier.query_region(coord.SkyCoord(ra='+strtrim(cenra,2)+', dec='+strtrim(cendec,2)+                ",unit=(u.deg,u.deg),frame='icrs'),width='"+strtrim(radius*60,2)+"m',catalog='"+refname+"');"+                "df=result[0];"+                "df.meta['description']=df.meta['description'][0:50];"+                "df.write('"+tempfile+".fits')"+'"' 
                 spawn,pylines,out,errout 
                 if os.path.exists(tempfile+'.fits') == 0: 
-                    if not keyword_set(silent) : 
-                        printlog,logf,'No Results' 
+                    if silent==False : 
+                        logger.info(,'No Results' 
                     ref = -1 
                     nref = 0 
                     os.remove([tempfile,tempfile+'.fits'],/allow 
@@ -240,14 +259,14 @@ def getrefcat(cenra,cendec,radius,refcat,count=count,file=file,saveref=saveref,s
              
             # Save the file 
             if keyword_set(saveref): 
-                if not keyword_set(silent) : 
-                    printlog,logf,'Saving catalog to file '+file 
+                if silent==False : 
+                    logger.info(,'Saving catalog to file '+file 
                 MWRFITS,ref,file,/create# only save if necessary 
     # use queryvizier.pro 
 # do the query 
      
     if silent==False:
-        printlog,logf,str(len(ref),2)+' sources found   dt=',stringize(time.time()-t0,ndec=1),' sec.' 
+        logger.info(,str(len(ref),2)+' sources found   dt=',stringize(time.time()-t0,ndec=1),' sec.' 
      
     count = len(ref) 
      
@@ -255,61 +274,54 @@ def getrefcat(cenra,cendec,radius,refcat,count=count,file=file,saveref=saveref,s
 
 
  
-def getrefdata(filt,cenra,cendec,radius,count=count,saveref=saveref,silent=silent,
-               dcr=dcr,modelmags=modelmags,logfile=logfile):
+def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
+               dcr=0.5,modelmags=False,logger=None):
+    """
+    Get reference catalog information needed for a given filter. 
+ 
+    Parameters
+    ----------
+    filt : str
+       Filter and instrument name, e.g. "c4d-u". 
+         This can be an array of multiple filters and 
+         then all the reference needed for all the filters 
+         will be included. 
+    cenra : float
+       Central RA for the search. 
+    cendec : float
+       Central DEC for the search. 
+    radius : float
+       Search radius in degrees. 
+    dcr : float, optional
+       The cross-matching radius in arcsec.  Default is 0.5". 
+    saveref : bool, optional
+       Save the output to FILE. 
+    silent : bool, optional
+       Don't print anything to the screen. 
+    modelmags : bool, optional
+       Return the model magnitudes as well. 
+    logger : logging object
+       Logging object to use for printing ot the screen.
+ 
+    Returns
+    -------
+    ref : astropy table
+       Search results from the reference catalog all in one 
+         catalog
+ 
+    Example
+    -------
 
-
-#+ 
-# 
-# GETREFDATA 
-# 
-# Get reference catalog information needed for a given filter. 
-# 
-# INPUTS: 
-#  filter    Filter and instrument name, e.g. "c4d-u". 
-#              This can be an array of multiple filters and 
-#              then all the reference needed for all the filters 
-#              will be included. 
-#  cenra     Central RA for the search. 
-#  cendec    Central DEC for the search. 
-#  radius    Search radius in degrees. 
-#  =dcr      The cross-matching radius in arcsec.  Default is 0.5". 
-#  /saveref  Save the output to FILE. 
-#  /silent   Don't print anything to the screen. 
-#  /modelmags  Return the model magnitudes as well. 
-#  =logfile  Filename to write output to. 
-# 
-# OUTPUTS: 
-#  ref       Search results from the reference catalog all in one 
-#              structure. 
-#  =count    Number of elements in REF. 
-# 
-# USAGE: 
-#  IDL>cat = getrefdata('g',cenra,cendec,radius,saveref=saveref) 
-# 
-# By D. Nidever  Sep 2017 
-#- 
+    cat = getrefdata('g',cenra,cendec,radius,saveref=saveref) 
+ 
+    By D. Nidever  Sep 2017 
+    Translated by D. Nidever, April 2022
+    """
                           
     t0 = time.time() 
-    undefine,ref 
-    count = 0 
-     
-    # Not enough inputs 
-    if len(filter) == 0 or len(cenra) == 0 or len(cendec) == 0 or    len(radius) == 0: 
-        print('Syntax - cat = getrefdata(filter,cenra,cendec,radius,saveref=saveref,dcr=dcr,' 
-        print('                          modelmags=modelmags,logfile=logfile)' 
-        return -1 
-     
-    # Defaults 
-    if len(dcr) == 0 :# arcsec 
-        dcr = 0.5 
-    if len(logfile) == 0: 
-        logf = -1 
-    else: 
-        logf=logfile 
      
     # Check that we have psql installed 
-    spawn,['which','psql'],out,errout,/noshell 
+    out = subprocess.check_output(['which','psql'],shell=False)
     if os.path.exists(out[0]) == 0: 
         print('No PSQL found on this sytem.' 
         return -1 
@@ -328,17 +340,17 @@ def getrefdata(filt,cenra,cendec,radius,count=count,saveref=saveref,silent=silen
     #  in case there is only partial coverage 
      
      
-    if not keyword_set(silent): 
-        printlog,logf,'Getting reference catalogs for:' 
-        printlog,logf,'FILTER(S) = ',strjoin(filter,', ') 
-        printlog,logf,'CENRA  = ',str(cenra,2) 
-        printlog,logf,'CENDEC = ',str(cendec,2) 
-        printlog,logf,'RADIUS = ',str(radius,2),' deg' 
+    if silent==False: 
+        logger.info(,'Getting reference catalogs for:' 
+        logger.info(,'FILTER(S) = ',strjoin(filter,', ') 
+        logger.info(,'CENRA  = ',str(cenra,2) 
+        logger.info(,'CENDEC = ',str(cendec,2) 
+        logger.info(,'RADIUS = ',str(radius,2),' deg' 
         case ext_type of 
-            1: printlog,logf,'Extinction Type: 1 - SFD' 
-            2: printlog,logf,'Extinction Type: 2 - RJCE ALLWISE' 
-            3: printlog,logf,'Extinction Type: 3 - RJCE GLIMPSE' 
-            4: printlog,logf,'Extinction Type: 4 - RJCE SAGE' 
+            1: logger.info(,'Extinction Type: 1 - SFD' 
+            2: logger.info(,'Extinction Type: 2 - RJCE ALLWISE' 
+            3: logger.info(,'Extinction Type: 3 - RJCE GLIMPSE' 
+            4: logger.info(,'Extinction Type: 4 - RJCE SAGE' 
             else: 
  
      
@@ -454,7 +466,7 @@ push,refcat,['2MASS-PSC','PS']
 #push,refcat,['2MASS-PSC'] 
  
 else: begin 
-printlog,logf,filter,' not currently supported' 
+logger.info(,filter,' not currently supported' 
 #return,-1 
  
  
@@ -502,12 +514,12 @@ nnewtags = len(newtags)
  
 # Load the necessary catalogs 
 nrefcat = len(refcat) 
-if not keyword_set(silent) : 
-printlog,logf,str(nrefcat,2),' reference catalogs to load: '+strjoin(refcat,', ') 
+if silent==False : 
+logger.info(,str(nrefcat,2),' reference catalogs to load: '+strjoin(refcat,', ') 
 for i in range(nrefcat): 
 t0 = time.time() 
-if not keyword_set(silent) : 
-printlog,logf,'Loading ',refcat[i],' reference catalog' 
+if silent==False : 
+logger.info(,'Loading ',refcat[i],' reference catalog' 
  
 # Load the catalog 
 ref1 = GETREFCAT(cenra,cendec,radius,refcat[i],count=nref1,silent=silent,logfile=logf) 
@@ -565,8 +577,8 @@ decind, = np.where(tags1 == 'DEC',ndecind)
  
 # Crossmatch 
 SRCMATCH,ref.ra,ref.dec,ref1.(raind),ref1.(decind),dcr,ind1,ind2,/sph,count=nmatch 
-if not keyword_set(silent) : 
-printlog,logf,str(nmatch,2)+' matches' 
+if silent==False: 
+        logger.info(str(nmatch)+' matches')
  
 # Add magnitude columns 
 if nmatch > 0: 
@@ -773,35 +785,32 @@ return ref
 
 def getreddening(ref,ext_type):
     """
-#+ 
-# 
-# GETREDDENING 
-# 
-# This calculates E(J-Ks) reddening using reference catalog data for 
-# the NSC. 
-# 
-# INPUTS: 
-#  ref      The structure with the reference catalog data. 
-#  exttype  Extinction type: 
-#             1 - SFD 
-#             2 - RJCE ALLWISE 
-#             3 - RJCE GlIMPSE 
-#             4 - RJCE SAGE 
-# 
-# OUTPUTS: 
-#  The REF structure EJK column and EXT_TYPE columns are updated. 
-# 
-# USAGE: 
-#  IDL>getreddening,ref,ext_type 
-# 
-# By D. Nidever  Feb 2019 
-#- 
+    This calculates E(J-Ks) reddening using reference catalog data for 
+    the NSC. 
+ 
+    Parameters
+    ----------
+    ref : catalog
+       The catalog with the reference catalog data. 
+    exttype : int
+       Extinction type: 
+             1 - SFD 
+             2 - RJCE ALLWISE 
+             3 - RJCE GlIMPSE 
+             4 - RJCE SAGE 
+ 
+    Returns
+    -------
+    The REF catalog EJK column and EXT_TYPE columns are updated. 
+ 
+    Example
+    -------
+
+    ref = getreddening(ref,ext_type)
+ 
+    By D. Nidever  Feb 2019 
+    Translated to Python by D. Nidever, April 2022
     """
-      
-    # Not enough inputs 
-    if len(ref) == 0 or ext_type == 0: 
-        print('Syntax - getreddening,ref,ext_type' 
-        return 
      
     # Add SFD reddening 
     GLACTC,ref.ra,ref.dec,2000.0,glon,glat,1,/deg 
