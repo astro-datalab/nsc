@@ -7,7 +7,9 @@ from glob import glob
 from astropy.io import fits
 from astropy.table import Table
 from astrop.wcs import WCS
+from astropy.coordinates import SkyCoord
 from dlnpyutils import utils as dln,coords
+from dustmaps.sfd import SFDQuery
 
 def nsc_instcal_calibrate(expdir,inpref,eqnfile=None,redo=False,selfcal=False,saveref=False,ncpu=1):
      
@@ -533,9 +535,12 @@ def nsc_instcal_calibrate(expdir,inpref,eqnfile=None,redo=False,selfcal=False,sa
                     chinfo['deccoef'][i] = deccoef 
                     BOMB: 
                  
-                # Get reddening 
-                glactc,cat['ra'],cat['dec'],2000.0,glon,glat,1,/deg 
-                ebv = dust_getval(glon,glat,/noloop,/interp) 
+                # Get reddening
+                coo = SkyCoord(ra=cat['ra'],dec=cat['dec'],unit='deg')
+                sfd = SFDQuery()
+                ebv = sfd(coords)                
+                #glactc,cat['ra'],cat['dec'],2000.0,glon,glat,1,/deg 
+                #ebv = dust_getval(glon,glat,/noloop,/interp)
                 cat['ebv'] = ebv 
                  
                 # Put in exposure-level information 
