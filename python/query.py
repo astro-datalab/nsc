@@ -7,7 +7,7 @@ from astropy.io import fits
 from astropy.table import Table
 import subprocess
 from dlnpyutils import utils as dln
-from dustmaps import SFDQuery
+from dustmaps.sfd import SFDQuery
 
 def getrefcat(cenra,cendec,radius,refcat,file=file,
               saveref=False,silent=False,logger=None):
@@ -116,13 +116,16 @@ def getrefcat(cenra,cendec,radius,refcat,file=file,
             deccol = 'dec' 
             if refname == 'GAIA': 
                 tablename = 'gaia_dr1.gaia_source' 
-                cols = 'source_id as source,ra as ra_icrs,ra_error as e_ra_icrs,dec as de_icrs,dec_error as e_de_icrs,'+             'phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,phot_g_mean_mag as gmag' 
+                cols = 'source_id as source,ra as ra_icrs,ra_error as e_ra_icrs,dec as de_icrs,dec_error as e_de_icrs,'
+                cols += 'phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,phot_g_mean_mag as gmag' 
                 server = 'gp04.datalab.noao.edu' 
                 #server = 'gp01.datalab.noao.edu' 
                 #server = 'dldb1.sdm.noao.edu' 
             if refname == 'GAIADR2': 
                 tablename = 'gaia_dr2.gaia_source' 
-                cols = 'source_id as source,ra,ra_error,dec,dec_error,pmra,pmra_error,pmdec,pmdec_error,phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,'+             'phot_g_mean_mag as gmag,phot_bp_mean_mag as bp,phot_bp_mean_flux as fbp,phot_bp_mean_flux_error as e_fbp,'+             'phot_rp_mean_mag as rp,phot_rp_mean_flux as frp,phot_rp_mean_flux_error as e_frp' 
+                cols = 'source_id as source,ra,ra_error,dec,dec_error,pmra,pmra_error,pmdec,pmdec_error,phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,'
+                cols += 'phot_g_mean_mag as gmag,phot_bp_mean_mag as bp,phot_bp_mean_flux as fbp,phot_bp_mean_flux_error as e_fbp,'
+                cols += 'phot_rp_mean_mag as rp,phot_rp_mean_flux as frp,phot_rp_mean_flux_error as e_frp' 
                 server = 'gp04.datalab.noao.edu' 
                 #server = 'gp01.datalab.noao.edu' 
             if refname == 'PS': 
@@ -132,7 +135,8 @@ def getrefcat(cenra,cendec,radius,refcat,file=file,
                 server = 'gp02.datalab.noao.edu' 
             if refname == 'SKYMAPPER': 
                 tablename = 'skymapper_dr1.master' 
-                cols = 'raj2000, dej2000, u_psf as sm_umag, e_u_psf as e_sm_umag, g_psf as sm_gmag, e_g_psf as e_sm_gmag, r_psf as sm_rmag, e_r_psf as e_sm_rmag, i_psf as sm_imag, '+             'e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag' 
+                cols = 'raj2000, dej2000, u_psf as sm_umag, e_u_psf as e_sm_umag, g_psf as sm_gmag, e_g_psf as e_sm_gmag, r_psf as sm_rmag,'
+                cols += 'e_r_psf as e_sm_rmag, i_psf as sm_imag,e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag' 
                 server = 'gp04.datalab.noao.edu' 
                 #server = 'gp01.datalab.noao.edu' 
                 racol = 'raj2000' 
@@ -144,14 +148,19 @@ def getrefcat(cenra,cendec,radius,refcat,file=file,
                 server = 'gp01.datalab.noao.edu' 
             if refname == 'ATLAS': 
                 tablename = 'atlasrefcat2' 
-                cols = 'objid,ra,dec,plx as parallax,dplx as parallax_error,pmra,dpmra as pmra_error,pmdec,dpmdec as pmdec_error,gaia,dgaia as gaiaerr,'+             'bp,dbp as bperr,rp,drp as rperr,teff,agaia,dupvar,ag,rp1,r1,r10,g as gmag,dg as gerr,gchi,gcontrib,'+             'r as rmag, dr as rerr,rchi,rcontrib,i as imag,di as ierr,ichi,icontrib,z as zmag,dz as zerr,zchi,zcontrib,nstat,'+             'j as jmag,dj as jerr,h as hmag,dh as herr,k as kmag,dk as kerr' 
+                cols = 'objid,ra,dec,plx as parallax,dplx as parallax_error,pmra,dpmra as pmra_error,pmdec,dpmdec as pmdec_error,gaia,dgaia as gaiaerr,'
+                cols += 'bp,dbp as bperr,rp,drp as rperr,teff,agaia,dupvar,ag,rp1,r1,r10,g as gmag,dg as gerr,gchi,gcontrib,'
+                cols += 'r as rmag, dr as rerr,rchi,rcontrib,i as imag,di as ierr,ichi,icontrib,z as zmag,dz as zerr,zchi,zcontrib,nstat,'
+                cols += 'j as jmag,dj as jerr,h as hmag,dh as herr,k as kmag,dk as kerr' 
                 server = 'gp10.datalab.noao.edu' 
              
             # Use Postgres command with q3c cone search 
             refcattemp = repstr(file,'.fits','.txt') 
-            cmd = "psql -h "+server+" -U datalab -d tapdb -w --pset footer -c 'SELECT "+cols+" FROM "+tablename+          " WHERE q3c_radial_query("+racol+","+deccol+","+stringize(cenra,ndec=4,/nocomma)+","+stringize(cendec,ndec=4,/nocomma)+          ","+stringize(radius,ndec=3)+")' > "+refcattemp 
-            os.remove(refcattemp,/allow 
-            os.remove(file,/allow 
+            cmd = "psql -h "+server+" -U datalab -d tapdb -w --pset footer -c 'SELECT "+cols+" FROM "+tablename
+            cmd += " WHERE q3c_radial_query("+racol+","+deccol+","+stringize(cenra,ndec=4,/nocomma)+","+stringize(cendec,ndec=4,/nocomma)
+            cmd += ","+stringize(radius,ndec=3)+")' > "+refcattemp 
+            dln.remove(refcattemp,allow=True)
+            dln.remove(file,allow=True) 
             spawn,cmd,out,outerr
             out = subprocess.check_output(cmd,shell=False)
             # Check for empty query
@@ -165,7 +174,7 @@ def getrefcat(cenra,cendec,radius,refcat,file=file,
                 return ref 
             #  Load ASCII file and create the FITS file 
             ref = importascii(refcattemp,/header,delim='|',skipline=2,/silent) 
-            if keyword_set(saveref): 
+            if saveref is not None:
                 logger.info(,'Saving catalog to file '+savefile)
                 ref.write(savefile,overwrite=True)
             dln.remove(refcattemp,allow=True)
@@ -176,54 +185,62 @@ def getrefcat(cenra,cendec,radius,refcat,file=file,
                 errcols = ['gaiaerr','bperr','rperr','gerr','rerr','ierr','zerr','jerr','herr','kerr'] 
                 tags = tag_names(ref) 
                 # Set mags with 0.0 to 99.99 
-                for j in range(len(magcols)): 
-                    colind , = np.where(strupcase(tags) == strupcase(magcols[j]),ncolind) 
-                    if colind > 0: 
-                        bdmag , = np.where(ref.(colind[0]) <= 0.0,nbdmag) 
-                        if nbdmag > 0 : 
-                            ref[bdmag].(colind[0])=99.99 
+                for j in range(len(magcols)):
+                    if magcols[j] in ref.colnames:
+                        bdmag = (ref[magcols[j]] <= 0.0)
+                        if np.sum(bdmag)>0:
+                            ref[magcols[j]][bdmag] = 99.99
                 # Set errors with 0.0 to 9.99 
-                for j in range(len(errcols)): 
-                    colind , = np.where(strupcase(tags) == strupcase(errcols[j]),ncolind) 
-                    if colind > 0: 
-                        bderr , = np.where(ref.(colind[0]) <= 0.0,nbderr) 
-                        if nbderr > 0 : 
-                            ref[bderr].(colind[0])=9.99 
+                for j in range(len(errcols)):
+                    if errcols[j] in ref.colnames:
+                        bderr = (ref[errcols[j]] <= 0.0)
+                        if np.sum(bderr)>0:
+                            ref[errcols[j]][bderr] = 9.99
              
-             
-            # Use QUERYVIZIER 
-            #---------------- 
-            #   for low density with 2MASS/GAIA and always for GALEX and APASS 
+        # Use QUERYVIZIER 
+        #---------------- 
+        #   for low density with 2MASS/GAIA and always for GALEX and APASS 
         else: 
              
             # Use QUERYVIZIER for GALEX (python code has problems) 
             if refname == 'II/312/ais' or refname == 'GALEX': 
-                #if refcat eq 'APASS' then cfa=0 else cfa=1  ; cfa doesn't have APASS 
-                cfa = 1# problems with CDS VizieR and cfa has APASS now 
-                if refcat == 'SAGE' : 
-                    cfa=0 
+                # if refcat eq 'APASS' then cfa=0 else cfa=1  ; cfa doesn't have APASS 
+                cfa = 1   # problems with CDS VizieR and cfa has APASS now 
+                if refcat == 'SAGE': 
+                    cfa = 0 
                 ref = QUERYVIZIER(refname,[cenra,cendec],radius*60,cfa=cfa,timeout=600,/silent) 
                 # Check for failure 
                 if size(ref,/type) != 8: 
                     if silent==False : 
-                        logger.info(,'Failure or No Results' 
+                        logger.info('Failure or No Results')
                     ref = -1 
                     nref = 0 
                     return ref 
                  
-                # Use Python code 
+            # Use Python code 
             else: 
                 # Use python code, it's much faster, ~18x 
                 tempfile = MKTEMP('vzr') 
                 os.remove(tempfile+'.fits',/allow 
-                pylines = 'python -c "from astroquery.vizier import Vizier#'+                'import astropy.units as u;'+                'import astropy.coordinates as coord;'+                'Vizier.TIMEOUT = 600;'+                'Vizier.ROW_LIMIT = -1;'+                'Vizier.cache_location = None;'+                'result = Vizier.query_region(coord.SkyCoord(ra='+strtrim(cenra,2)+', dec='+strtrim(cendec,2)+                ",unit=(u.deg,u.deg),frame='icrs'),width='"+strtrim(radius*60,2)+"m',catalog='"+refname+"');"+                "df=result[0];"+                "df.meta['description']=df.meta['description'][0:50];"+                "df.write('"+tempfile+".fits')"+'"' 
+                pylines = 'python -c "from astroquery.vizier import Vizier#'+
+                          'import astropy.units as u;'+
+                          'import astropy.coordinates as coord;'+
+                          'Vizier.TIMEOUT = 600;'+
+                          'Vizier.ROW_LIMIT = -1;'+
+                          'Vizier.cache_location = None;'+
+                          'result = Vizier.query_region(coord.SkyCoord(ra='+strtrim(cenra,2)+
+                          ', dec='+strtrim(cendec,2)+
+                          ",unit=(u.deg,u.deg),frame='icrs'),width='"+strtrim(radius*60,2)+"m',catalog='"+refname+"');"+
+                          "df=result[0];"+
+                          "df.meta['description']=df.meta['description'][0:50];"+
+                          "df.write('"+tempfile+".fits')"+'"' 
                 spawn,pylines,out,errout 
-                if os.path.exists(tempfile+'.fits') == 0: 
-                    if silent==False : 
-                        logger.info(,'No Results' 
+                if os.path.exists(tempfile+'.fits' ==False: 
+                    if silent==False: 
+                        logger.info('No Results')
                     ref = -1 
                     nref = 0 
-                    os.remove([tempfile,tempfile+'.fits'],/allow 
+                    dln.remove([tempfile,tempfile+'.fits'],allow=True)
                     return ref 
                 ref = MRDFITS(tempfile+'.fits',1,/silent) 
                 os.remove([tempfile,tempfile+'.fits'],/allow 
@@ -231,49 +248,154 @@ def getrefcat(cenra,cendec,radius,refcat,file=file,
             # Fix/homogenize the GAIA tags 
             if refname == 'GAIA': 
                 nref = len(ref) 
-                orig = ref 
-                ref = replicate({source:0LL,ra_icrs:0.0d0,e_ra_icrs:0.0d0,de_icrs:0.0d0,e_de_icrs:0.0d0,fg:0.0d0,e_fg:0.0d0,gmag:0.0d0},nref) 
-                struct_assign,orig,ref 
-                ref.fg = orig._fg_ 
-                ref.e_fg = orig.e__fg_ 
-                ref.gmag = orig._gmag_ 
-                undefine,orig 
+                orig = ref.copy()
+                dt = [('source',int),('ra_icrs',float),('e_ra_icrs',float),('de_icrs',float),('e_de_icrs',float),
+                      ('fg',float),('e_fg',float),('gmag',float)]
+                ref = np.zeros(nref,dtype=np.dtype(dt))
+                ref = Table(ref)
+                for n in orig.colnames:
+                    ref[n] = orig[n]
+                ref['fg'] = orig['_fg_']
+                ref['e_fg'] = orig['e__fg_']
+                ref['gmag'] = orig['_gmag_']
+                del orig
             # Fix/homogenize the 2MASS tags 
             if refname == 'TMASS': 
                 nref = len(ref) 
-                orig = ref 
-                ref = replicate({designation:'',raj2000:0.0d0,dej2000:0.0d0,jmag:0.0,e_jmag:0.0,hmag:0.0,e_hmag:0.0,kmag:0.0,e_kmag:0.0,qflg:''},nref) 
-                struct_assign,orig,ref 
-                ref.designation = orig._2mass 
-                undefine,orig 
+                orig = ref.copy()
+                dt = [('designation',(np.str,50)),('raj2000',float),('dej2000',float),('jmag',float),('e_jmag',float),
+                      ('hmag',float),('e_hmag',float),('kmag',float),('e_kmag',float),('qflg',(np.str,20))]
+                ref = np.zeros(nref,dtype=np.dtype(dt))
+                for n in orig.colnames:
+                    ref[n] = orig[n]
+                ref['designation'] = orig['_2mass']
+                del orig
             # Fix NANs in ALLWISE 
             if refname == 'ALLWISE': 
-                bd , = np.where(finite(ref._3_6_) == 0,nbd) 
-                if nbd > 0: 
-                    ref[bd]._3_6_ = 99.99 
-                    ref[bd].e__3_6_ = 9.99 
-                bd , = np.where(finite(ref._4_5_) == 0,nbd) 
-                if nbd > 0: 
-                    ref[bd]._4_5_ = 99.99 
-                    ref[bd].e__4_5_ = 9.99 
+                bd, = np.where(np.isfinite(ref['_3_6_']) == False)
+                if len(bd) > 0: 
+                    ref['_3_6_'][bd] = 99.99 
+                    ref['e__3_6_'][bd] = 9.99 
+                bd, = np.where(np.isfinite(ref['_4_5_']) == False)
+                if len(bd) > 0: 
+                    ref['_4_5_'][bd] = 99.99 
+                    ref['e__4_5_'][bd] = 9.99 
              
             # Save the file 
-            if keyword_set(saveref): 
-                if silent==False : 
-                    logger.info(,'Saving catalog to file '+file 
-                MWRFITS,ref,file,/create# only save if necessary 
-    # use queryvizier.pro 
-# do the query 
-     
+            if saveref is not None:
+                if silent==False: 
+                    logger.info('Saving catalog to file '+savefile)
+                ref.write(savefile,overwrite=True)  # only save if necessary
+                          
     if silent==False:
-        logger.info(,str(len(ref),2)+' sources found   dt=',stringize(time.time()-t0,ndec=1),' sec.' 
-     
-    count = len(ref) 
+        logger.info('%d sources found   dt=%.1f sec.' % (len(ref),time.time()-t0))
      
     return ref 
 
 
+def getexttype(cenra,cendec,radius):
+    """
+    Get the extinction type for the NSC. 
  
+    Parameters
+    ----------
+    cenra : float
+       Right Ascension at the center of the image. 
+    cendec : float
+       Declination at the center of the image. 
+    radius : float
+       Radius of the image. 
+ 
+    Returns
+    -------
+    exttype : int
+       Extinction type: 
+            1 - SFD 
+            2 - RJCE ALLWISE 
+            3 - RJCE GlIMPSE 
+            4 - RJCE SAGE 
+ 
+    Example
+    -------
+
+    ext_type = getexttype(cenra,cendec,radius) 
+    
+    By D. Nidever  Feb 2019 
+    Translated to Python by D. Nidever, April 2022
+    """
+     
+    # Figure out what reddening method we are using 
+    #---------------------------------------------- 
+    # Extinction types: 
+    # 1 - SFD, |b|>16 and RLMC>5.0 and RSMC>4.0 and max(EBV)<0.2 
+    # 2 - RJCE ALLWISE, |b|<16 or max(EBV)>0.2 and not GLIMPSE or SAGE 
+    #     data available 
+    # 3 - RJCE GLIMPSE, GLIMPSE data available 
+    # 4 - RJCE SAGE, SAGE data available 
+    ext_type = 0 
+    #GLACTC,cenra,cendec,2000.0,cengl,cengb,1,/deg 
+    cencoo = SkyCoord(ra=cenra,dec=cendec,unit='deg')
+    cengl = cencoo.galactic.l.deg
+    cengb = cencoo.galactic.b.deg
+                          
+    # Get grid of SFD EBV values across the field to see 
+    #  what regime we are working in 
+    x = scale_vector(findgen(100),-radius,radius)#replicate(1,100) 
+    y = replicate(1,100)#scale_vector(findgen(100),-radius,radius) 
+    rr,dd = coords.rotsphcen(x,y,cenra,cendec,gnomic=True,reverse=True)
+    coo = SkyCoord(ra=rr,dec=dd,unit='deg')
+    sfd = SFDQuery()
+    ebv = sfd(coo)
+    #GLACTC,rr,dd,2000.0,gl,gb,1,/deg 
+    #ebv_grid = dust_getval(gl,gb,/noloop,/interp) 
+    maxebv = np.max(ebv_grid) 
+     
+    # Check if there is any GLIMPSE data available 
+    #  do 3x3 grid with small matching radius 
+    if np.abs(cengb) < 5 and (cengl < 65 or cengl > 290): 
+        x = scale_vector(findgen(3),-radius,radius)#replicate(1,3) 
+        y = replicate(1,3)#scale_vector(findgen(3),-radius,radius) 
+        rr,dd = coords.rotsphcen(x,y,cenra,cendec,gnomic=True,reverse=True)
+        rr = reform(rr) 
+        dd = reform(dd) 
+        ncat = 0 
+        cnt = 0
+        while (ncat == 0) and (cnt < 9): 
+            cat = QUERYVIZIER('II/293/glimpse',[rr[cnt],dd[cnt]],1.0,count=ncat,/silent) 
+            cnt += 1 
+        if ncat > 0: 
+            ext_type = 3 
+     
+    # Check if there is any SAGE data available 
+    #  do 3x3 grid with small matching radius 
+    lmcrad = coords.sphdist(81.9,-69.867,cenra,cendec) 
+    smcrad = coords.sphdist(13.183,-72.8283,cenra,cendec) 
+    if lmcrad < 5.0 or smcrad < 4.0: 
+        x = scale_vector(findgen(3),-radius,radius)#replicate(1,3) 
+        y = replicate(1,3)#scale_vector(findgen(3),-radius,radius) 
+        rr,dd = coords.rotsphcen(x,y,cenra,cendec,gnomic=True,reverse=True)
+        rr = reform(rr) 
+        dd = reform(dd) 
+        ncat = 0 
+        cnt = 0
+        while (ncat == 0) and (cnt < 9): 
+            cat = QUERYVIZIER('II/305/archive',[rr[cnt],dd[cnt]],1.0,count=ncat,/silent) 
+            cnt += 1 
+        if ncat > 0: 
+            ext_type = 4 
+     
+    # Use RJCE ALLWISE, |b|<16 or max(EBV)>0.2 and not GLIMPSE or SAGE 
+    #     data available 
+    if ext_type == 0 and (np.abs(cengb) < 16 or maxebv > 0.2) : 
+        ext_type = 2 
+     
+    # SFD, |b|>16 and RLMC>5.0 and RSMC>4.0 and max(EBV)<0.2 
+    if ext_type == 0: 
+        ext_type = 1 
+     
+    return ext_type 
+
+                          
 def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
                dcr=0.5,modelmags=False,logger=None):
     """
@@ -323,7 +445,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
     # Check that we have psql installed 
     out = subprocess.check_output(['which','psql'],shell=False)
     if os.path.exists(out[0]) == 0: 
-        print('No PSQL found on this sytem.' 
+        print('No PSQL found on this sytem.')
         return -1 
      
     # Figure out what reddening method we are using 
@@ -334,453 +456,434 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
     #     data available 
     # 3 - RJCE GLIMPSE, GLIMPSE data available 
     # 4 - RJCE SAGE, SAGE data available 
-    ext_type = GETEXTTYPE(cenra,cendec,radius) 
+    ext_type = getexttype(cenra,cendec,radius) 
      
     # If there is GLIMPSE or SAGE data, also get ALLWISE data 
     #  in case there is only partial coverage 
      
      
     if silent==False: 
-        logger.info(,'Getting reference catalogs for:' 
-        logger.info(,'FILTER(S) = ',strjoin(filter,', ') 
-        logger.info(,'CENRA  = ',str(cenra,2) 
-        logger.info(,'CENDEC = ',str(cendec,2) 
-        logger.info(,'RADIUS = ',str(radius,2),' deg' 
-        case ext_type of 
-            1: logger.info(,'Extinction Type: 1 - SFD' 
-            2: logger.info(,'Extinction Type: 2 - RJCE ALLWISE' 
-            3: logger.info(,'Extinction Type: 3 - RJCE GLIMPSE' 
-            4: logger.info(,'Extinction Type: 4 - RJCE SAGE' 
-            else: 
+        logger.info(,'Getting reference catalogs for:')
+        logger.info(,'FILTER(S) = '+', '.join(filt))
+        logger.info(,'CENRA  = '+str(cenra)) 
+        logger.info(,'CENDEC = '+str(cendec)) 
+        logger.info(,'RADIUS = '+str(radius)+' deg')
+        if ext_type==1:
+            logger.info('Extinction Type: 1 - SFD')
+        elif ext_type==2:
+            logger.info('Extinction Type: 2 - RJCE ALLWISE')
+        elif ext_type==3:
+            logger.info('Extinction Type: 3 - RJCE GLIMPSE')
+        elif ext_type==4:
+            logger.info('Extinction Type: 4 - RJCE SAGE')
  
      
     # Load the reference catalogs 
     #----------------------------- 
     # Figure out the reference catalogs that we need based on 
-    #  filter-instrument combination 
-    for i in range(len(filter)): 
-        instfilt = filter[i] 
+    #  filter-instrument combination
+    refcat = []
+    for i in range(len(filt)): 
+        instfilt = filt[i] 
         # If no instrument information then assume it's DECam 
-        if strpos(instfilt,'-') == -1 : 
-            instfilt='c4d-'+instfilt 
-        # Check the cases 
-        CASE instfilt of 
-            # DECam u-band 
-            'c4d-u': begin 
+        if instfilt.find('-') == -1: 
+            instfilt = 'c4d-'+instfilt 
+        # Check the cases
+        # DECam u-band                           
+        if instfilt=='c4d-u':
             # Use GAIA, 2MASS and GALEX to calibrate 
-            push,refcat,['2MASS-PSC','II/312/ais'] 
-            if cendec <= 0 : 
-                push,refcat,'Skymapper' 
+            refcat += ['2MASS-PSC','II/312/ais'] 
+            if cendec <= 0: 
+                refcat += ['Skymapper']
+        # DECam g-band
+        elif instfilt=='c4d-g':
+            # Use PS1 if possible 
+            if cendec > -29: 
+                refcat += ['2MASS-PSC','PS'] 
+            else: 
+                # Use 2MASS and Skymapper to calibrate 
+                #push,refcat,['2MASS-PSC','Skymapper'] 
+                refcat += ['2MASS-PSC','ATLAS'] 
+        # DECam r-band
+        elif instfilt=='c4d-r':
+            # Use PS1 if possible 
+            if cendec > -29: 
+                refcat += ['2MASS-PSC','PS'] 
+            else: 
+                # Use 2MASS and Skymapper to calibrate 
+                #push,refcat,['2MASS-PSC','Skymapper'] 
+                refcat += ['2MASS-PSC','ATLAS'] 
+        # DECam i-band
+        elif instfilt=='c4d-i':
+            # Use PS1 if possible 
+            if cendec > -29: 
+                refcat += ['2MASS-PSC','PS'] 
+            else: 
+                # Use Skymapper and 2MASS to calibrate 
+                #push,refcat,['2MASS-PSC','Skymapper'] 
+                refcat += ['2MASS-PSC','ATLAS'] 
+        # DECam z-band 
+        elif instfilt=='c4d-z':
+            # Use PS1 if possible 
+            if cendec > -29: 
+                refcat += ['2MASS-PSC','PS'] 
+            else: 
+                # Use Skymapper and 2MASS to calibrate 
+                #push,refcat,['2MASS-PSC','Skymapper'] 
+                refcat += ['2MASS-PSC','ATLAS'] 
+        # DECam Y-band 
+        elif instfilt=='c4d-Y':
+            # Use PS1 if possible 
+            if cendec > -29: 
+                refcat += ['2MASS-PSC','PS'] 
+            else: 
+                # Use 2MASS to calibrate 
+                refcat += ['2MASS-PSC'] 
+        # DECam VR-band 
+        elif instfilt=='c4d-VR':
+            # Use PS1 if possible 
+            if cendec > -29: 
+                refcat += ['2MASS-PSC','PS'] 
+            else: 
+                refcat += ['2MASS-PSC','ATLAS'] 
+        # Bok+90Prime g-band 
+        elif instfilt=='ksb-g':
+            # Use PS1 
+            refcat += ['2MASS-PSC','PS'] 
+        # Bok+90Prime r-band 
+        elif instfilt=='ksb-r':
+            # Use PS1 
+            refcat += ['2MASS-PSC','PS'] 
+        # Mosaic3 g-band 
+        elif instfilt=='k4m-g':
+            # Use PS1 
+            refcat += ['2MASS-PSC','PS'] 
+        # Mosaic3 r-band 
+        elif instfilt=='k4m-r':
+            # Use PS1 
+            refcat += ['2MASS-PSC','PS'] 
+        # Mosaic3 i-band 
+        elif instfilt=='k4m-i':
+            # Use PS1 
+            refcat += ['2MASS-PSC','PS'] 
+        # Mosaic3 z-band 
+        elif instfilt=='k4m-z':
+            # Use PS1 
+            refcat += ['2MASS-PSC','PS'] 
+        # Mosaic3 VR-band 
+        elif instfilt=='k4m-VR':
+            # Use GAIA G-band to calibrate 
+            refcat += ['2MASS-PSC','PS'] 
+            #push,refcat,['2MASS-PSC'] 
+        else:
+            logger.info(filt+' not currently supported'_
  
-        # DECam g-band 
-        'c4d-g': begin 
-        # Use PS1 if possible 
-        if cendec > -29: 
-            push,refcat,['2MASS-PSC','PS'] 
+ 
+    # filter loop 
+    # Extinction catalogs 
+    if ext_type >= 2: 
+        refcat += ['ALLWISE']
+    elif ext_type == 3: 
+        refcat += ['GLIMPSE']
+    elif ext_type == 4: 
+        refcat += ['SAGE']
+    # If near DEC=-30 then load BOTH PS and ATLAS 
+    if (cendec > -34 and cendec < -26) and ((where(refcat == 'PS'))[0] != -1 or (where(refcat == 'ATLAS'))[0] != -1): 
+        refcat += ['PS','ATLAS']  # code below removes duplicates 
+    # Some catalogs 
+    if len(refcat) > 0: 
+        # Get the unique ones
+        urefcat,ui = np.unique(refcat,return_index=True)
+        #ui = np.uniq(refcat,np.argsort(refcat)) 
+        refcat = refcat[ui] 
+        # Always add Gaia at the beginning 
+        refcat = ['GAIADR2']+refcat
+    else:
+        refcat = ['GAIADR2']  #'GAIA/GAIA' 
+    nrefcat = len(refcat) 
+ 
+    # Figure out the new columns that need to be added 
+    for i in range(nrefcat):
+        if refcat[i]=='GAIADR2':
+            newtags +=['source','ra','ra_error','dec','dec_error','pmra','pmra_error','pmdec','pmdecerr','gmag','e_gmag','bp','e_bp','rp','e_rp'] 
+        elif refcat[i]=='2MASS-PSC':
+            newtags += ['jmag','e_jmag','hmag','e_hmag','kmag','e_kmag','qflg'] 
+        elif refcat[i]=='PS':
+            newtags += ['ps_gmag','ps_rmag','ps_imag','ps_zmag','ps_ymag'] 
+        elif refcat[i]=='APASS':
+            newtags += ['apass_gmag','e_apass_gmag','apass_rmag','e_apass_rmag'] 
+        elif refcat[i]=='II/312/ais':
+            newtags += ['nuv','e_nuv']# Galex 
+        elif refcat[i]=='Skymapper':
+            newtags += ['sm_umag','e_sm_umag','sm_gmag','e_sm_gmag','sm_rmag','e_sm_rmag','sm_imag','e_sm_imag','sm_zmag','e_sm_zmag']# Skymapper DR1 
+        elif refcat[i]=='ALLWISE':
+            newtags += ['w1mag','e_w1mag','w2mag','e_w2mag'] 
+        elif refcat[i]=='GLIMPSE':
+            newtags += ['gl_36mag','e_gl_36mag','gl_45mag','e_gl_45mag'] 
+        elif refcat[i]=='SAGE':
+            newtags += ['sage_36mag','e_sage_36mag','sage_45mag','e_sage_45mag'] 
+        elif refcat[i]=='ATLAS':
+            newtags += ['atlas_gmag','e_atlas_gmag','atlas_gcontrib','atlas_rmag','e_atlas_rmag','atlas_rcontrib',
+                        'atlas_imag','e_atlas_imag','atlas_icontrib','atlas_zmag','e_atlas_zmag','atlas_zcontrib'] 
+        else:
+            raise ValueError(refcat[i]+' NOT SUPPORTED')
+ 
+    newtags += ['ebv_sfd','ejk','e_ejk','ext_type'] 
+    if modelmags:
+        newtags += ['model_mag']
+    nnewtags = len(newtags) 
+ 
+    # Load the necessary catalogs 
+    nrefcat = len(refcat) 
+    if silent==False: 
+        logger.info(str(nrefcat)+' reference catalogs to load: '+', '.join(refcat))
+    for i in range(nrefcat): 
+        t0 = time.time() 
+        if silent==False: 
+                logger.info('Loading '+refcat[i]+' reference catalog')
+        # Load the catalog 
+        ref1 = getrefcat(cenra,cendec,radius,refcat[i],silent=silent,logger=logger) 
+        if len(ref1) == 0: 
+            continue
+ 
+        # Initialize the catalog 
+        dt = []
+        for j in range(nnewtags): 
+            dtype1 = float
+            if newtags[j] == 'qflg': 
+                dtype1 = (np.str,20)
+            if newtags[j] == 'ext_type': 
+                dtype1 = int
+            if newtags[j] == 'source': 
+                dtype1 = int
+            if newtags[j] == 'ra': 
+                dtype1 = float 
+            if newtags[j] == 'dec': 
+                dtype1 = float
+            if stregex(newtags[j],'contrib',/boolean) == 1: 
+                dtype1 = -1
+            dt += [(newtags[j],dtype)]
+ 
+        # First successful one, initialize the catalog 
+        if len(ref) == 0:
+            ref = np.zeros(nref1,dtype=np.dtype(dt))
+            for n in ref.colnames:
+                ref[n] = ref1[n]
+            #ref = replicate(schema,nref1) 
+            #struct_assign,ref1,ref,/nozero
+            if 'ra' in ref1.colnames:
+                ref['ra'] = ref['ra_icrs']
+                ref['dec'] = ref['de_icrs']
+            ind1 = np.arange(nref1).astype(int) 
+            ind2 = np.arange(nref1).astype(int)
+            nmatch = nref1 
+ 
+        # Second and later 
         else: 
-            # Use 2MASS and Skymapper to calibrate 
-            #push,refcat,['2MASS-PSC','Skymapper'] 
-            push,refcat,['2MASS-PSC','ATLAS'] 
  
-    # DECam r-band 
-    'c4d-r': begin 
-    # Use PS1 if possible 
-    if cendec > -29: 
-        push,refcat,['2MASS-PSC','PS'] 
-    else: 
-        # Use 2MASS and Skymapper to calibrate 
-        #push,refcat,['2MASS-PSC','Skymapper'] 
-        push,refcat,['2MASS-PSC','ATLAS'] 
+            # Get RA/DEC columns 
+            # 2MASS, Galex, APASS use RAJ2000 
+            # PS uses RA/DEC 
+            if (refcat[i] != 'PS' and refcat[i] != 'ALLWISE' and refcat[i] != 'ATLAS'):
+                racol = 'raj2000'
+            else:
+                racol = 'ra'
+            if (refcat[i] != 'PS' and refcat[i] != 'ALLWISE' and refcat[i] != 'ATLAS'):
+                deccol = 'dej2000']
+            else:
+                deccol = 'dec'
+                        
+        # Crossmatch 
+        ind1,ind2,dist = coords.xmatch(ref['ra'],ref['dec'],ref1[racol],ref1[deccol],dcr)
+        if silent==False: 
+            logger.info(str(nmatch)+' matches')
  
-# DECam i-band 
-'c4d-i': begin 
-# Use PS1 if possible 
-if cendec > -29: 
-    push,refcat,['2MASS-PSC','PS'] 
-else: 
-    # Use Skymapper and 2MASS to calibrate 
-    #push,refcat,['2MASS-PSC','Skymapper'] 
-    push,refcat,['2MASS-PSC','ATLAS'] 
- 
-# DECam z-band 
-'c4d-z': begin 
-# Use PS1 if possible 
-if cendec > -29: 
-push,refcat,['2MASS-PSC','PS'] 
-else: 
-# Use Skymapper and 2MASS to calibrate 
-#push,refcat,['2MASS-PSC','Skymapper'] 
-push,refcat,['2MASS-PSC','ATLAS'] 
- 
-# DECam Y-band 
-'c4d-Y': begin 
-# Use PS1 if possible 
-if cendec > -29: 
-push,refcat,['2MASS-PSC','PS'] 
-else: 
-# Use 2MASS to calibrate 
-push,refcat,['2MASS-PSC'] 
- 
-# DECam VR-band 
-'c4d-VR': begin 
-# Use PS1 if possible 
-if cendec > -29: 
-push,refcat,['2MASS-PSC','PS'] 
-else: 
-push,refcat,['2MASS-PSC','ATLAS'] 
- 
-# Bok+90Prime g-band 
-'ksb-g': begin 
-# Use PS1 
-push,refcat,['2MASS-PSC','PS'] 
- 
-# Bok+90Prime r-band 
-'ksb-r': begin 
-# Use PS1 
-push,refcat,['2MASS-PSC','PS'] 
- 
-# Mosaic3 g-band 
-'k4m-g': begin 
-# Use PS1 
-push,refcat,['2MASS-PSC','PS'] 
- 
-# Mosaic3 r-band 
-'k4m-r': begin 
-# Use PS1 
-push,refcat,['2MASS-PSC','PS'] 
- 
-# Mosaic3 i-band 
-'k4m-i': begin 
-# Use PS1 
-push,refcat,['2MASS-PSC','PS'] 
- 
-# Mosaic3 z-band 
-'k4m-z': begin 
-# Use PS1 
-push,refcat,['2MASS-PSC','PS'] 
- 
-# Mosaic3 VR-band 
-'k4m-VR': begin 
-# Use GAIA G-band to calibrate 
-push,refcat,['2MASS-PSC','PS'] 
-#push,refcat,['2MASS-PSC'] 
- 
-else: begin 
-logger.info(,filter,' not currently supported' 
-#return,-1 
- 
- 
-# filter loop 
-# Extinction catalogs 
-if ext_type >= 2 : 
-push,refcat,'ALLWISE' 
-if ext_type == 3 : 
-push,refcat,'GLIMPSE' 
-if ext_type == 4 : 
-push,refcat,'SAGE' 
-# If near DEC=-30 then load BOTH PS and ATLAS 
-if (cendec > -34 and cendec < -26) and    ((where(refcat == 'PS'))[0] != -1 or (where(refcat == 'ATLAS'))[0] != -1): 
-push,refcat,['PS','ATLAS']# code below removes duplicates 
-# Some catalogs 
-if len(refcat) > 0: 
-# Get the unique ones 
-ui = np.uniq(refcat,np.argsort(refcat)) 
-refcat = refcat[ui] 
-# Always add Gaia at the beginning 
-refcat = ['GAIADR2',refcat] 
- else refcat='GAIADR2'#'GAIA/GAIA' 
-nrefcat = len(refcat) 
- 
-# Figure out the new columns that need to be added 
-undefine,newtags 
-for i in range(nrefcat): 
-case refcat[i] of 
-'GAIADR2': push,newtags,['source','ra','ra_error','dec','dec_error','pmra','pmra_error','pmdec','pmdecerr','gmag','e_gmag','bp','e_bp','rp','e_rp'] 
-'2MASS-PSC': push,newtags,['jmag','e_jmag','hmag','e_hmag','kmag','e_kmag','qflg'] 
-'PS': push,newtags,['ps_gmag','ps_rmag','ps_imag','ps_zmag','ps_ymag'] 
-'APASS': push,newtags,['apass_gmag','e_apass_gmag','apass_rmag','e_apass_rmag'] 
-'II/312/ais': push,newtags,['nuv','e_nuv']# Galex 
-'Skymapper': push,newtags,['sm_umag','e_sm_umag','sm_gmag','e_sm_gmag','sm_rmag','e_sm_rmag','sm_imag','e_sm_imag','sm_zmag','e_sm_zmag']# Skymapper DR1 
-'ALLWISE': push,newtags,['w1mag','e_w1mag','w2mag','e_w2mag'] 
-'GLIMPSE': push,newtags,['gl_36mag','e_gl_36mag','gl_45mag','e_gl_45mag'] 
-'SAGE': push,newtags,['sage_36mag','e_sage_36mag','sage_45mag','e_sage_45mag'] 
-'ATLAS': push,newtags,['atlas_gmag','e_atlas_gmag','atlas_gcontrib','atlas_rmag','e_atlas_rmag','atlas_rcontrib',                         'atlas_imag','e_atlas_imag','atlas_icontrib','atlas_zmag','e_atlas_zmag','atlas_zcontrib'] 
-else: import pdb; pdb.set_trace(),refcat[i]+' NOT SUPPORTED' 
- 
-push,newtags,['ebv_sfd','ejk','e_ejk','ext_type'] 
-if keyword_set(modelmags) : 
-push,newtags,'model_mag' 
-nnewtags = len(newtags) 
- 
-# Load the necessary catalogs 
-nrefcat = len(refcat) 
-if silent==False : 
-logger.info(,str(nrefcat,2),' reference catalogs to load: '+strjoin(refcat,', ') 
-for i in range(nrefcat): 
-t0 = time.time() 
-if silent==False : 
-logger.info(,'Loading ',refcat[i],' reference catalog' 
- 
-# Load the catalog 
-ref1 = GETREFCAT(cenra,cendec,radius,refcat[i],count=nref1,silent=silent,logfile=logf) 
-if nref1 == 0 : 
-goto,BOMB 
-tags1 = tag_names(ref1) 
- 
-# Initialize the catalog 
-undefine,schema 
-for j in range(nnewtags): 
-val0 = 99.99 
-if newtags[j] == 'qflg' : 
-val0='' 
-if newtags[j] == 'ext_type' : 
-val0=0 
-if newtags[j] == 'source' : 
-val0=0LL 
-if newtags[j] == 'ra' : 
-val0=0.0d0 
-if newtags[j] == 'dec' : 
-val0=0.0d0 
-if stregex(newtags[j],'contrib',/boolean) == 1 : 
-val0=-1L 
-if len(schema) == 0: 
-schema=create_struct(newtags[j],val0) 
-else: 
-schema = create_struct(schema,newtags[j],val0) 
+        # Add magnitude columns 
+        if nmatch > 0:
+            if refcat[i]=='GAIADR2':
+                temp = ref[ind1]
+                for n in temp.colnames:
+                    temp[n] = ref1[n][ind2]
+                #struct_assign,ref1[ind2],temp,/nozero 
+                temp['e_gmag'] = 2.5*np.log10(1.0+ref1['e_fg'][ind2]/ref1['fg'][ind2]) 
+                temp['e_bp'] = 2.5*np.log10(1.0+ref1['e_fbp'][ind2]/ref1['fbp'][ind2]) 
+                temp['e_rp]' = 2.5*np.log10(1.0+ref1['e_frp'][ind2]/ref1['frp'][ind2]) 
+                ref[ind1] = temp 
+            elif refcat[i]=='2MASS-PSC':
+                ref['jmag'][ind1] = ref1['jmag'][ind2]
+                ref['e_jmag'][ind1] = ref1['e_jmag'][ind2]
+                ref['hmag'][ind1] = ref1['hmag'][ind2]
+                ref['e_hmag'][ind1] = ref1['e_hmag'][ind2]
+                ref['kmag'][ind1] = ref1['kmag'][ind2]
+                ref['e_kmag'][ind1] = ref1['e_kmag'][ind2]
+                ref['qflg'][ind1] = ref1['qflg'][ind2]
+            elif refcat[i]=='PS':
+                ref['ps_gmag'][ind1] = ref1['gmag'][ind2]
+                ref['ps_rmag'][ind1] = ref1['rmag'][ind2]
+                ref['ps_imag'][ind1] = ref1['imag'][ind2]
+                ref['ps_zmag'][ind1] = ref1['zmag'][ind2]
+                ref['ps_ymag'][ind1] = ref1['ymag'][ind2]
+            elif refcat[i]=='APASS':
+                ref['apass_gmag'][ind1] = ref1['g_mag'][ind2]
+                ref['e_apass_gmag'][ind1] = ref1['e_g_mag'][ind2]
+                ref['apass_rmag'][ind1] = ref1['r_mag'][ind2]
+                ref['e_apass_rmag'][ind1] = ref1['e_r_mag'][ind2]
+            elif refcat[i]=='II/312/ais':
+                if tag_exist(ref1,'NUV'): 
+                    ref['nuv'][ind1] = ref1['nuv'][ind2]
+                    ref['e_nuv'][ind1] = ref1['e_nuv'][ind2]
+                else: 
+                    ref['nuv'][ind1] = ref1['nuvmag'][ind2]
+                    ref['e_nuv'][ind1] = ref1['e_nuvmag'][ind2]
+            elif refcat[i]=='Skymapper':
+                ref['sm_umag'][ind1] = ref1['sm_umag'][ind2]
+                ref['e_sm_umag'][ind1] = ref1['e_sm_umag'][ind2]
+                ref['sm_gmag'][ind1] = ref1['sm_gmag'][ind2]
+                ref['e_sm_gmag'][ind1] = ref1['e_sm_gmag'][ind2]
+                ref['sm_rmag'][ind1] = ref1['sm_rmag'][ind2]
+                ref['e_sm_rmag'][ind1] = ref1['e_sm_rmag'][ind2]
+                ref['sm_imag'][ind1] = ref1['sm_imag'][ind2]
+                ref['e_sm_imag'][ind1] = ref1['e_sm_imag'][ind2]
+                ref['sm_zmag'][ind1] = ref1['sm_zmag'][ind2]
+                ref['e_sm_zmag'][ind1] = ref1['e_sm_zmag'][ind2]
+            elif refcat[i]=='ATLAS':
+                ref['atlas_gmag'][ind1] = ref1['gmag'][ind2]
+                ref['e_atlas_gmag'][ind1] = ref1['gerr'][ind2]
+                ref['atlas_gcontrib'][ind1] = ref1['gcontrib'][ind2]
+                ref['atlas_rmag'][ind1] = ref1['rmag'][ind2]
+                ref['e_atlas_rmag'][ind1] = ref1['rerr'][ind2]
+                ref['atlas_rcontrib'][ind1] = ref1['rcontrib'][ind2]
+                ref['atlas_imag'][ind1] = ref1['imag'][ind2]
+                ref['e_atlas_imag'][ind1] = ref1['ierr'][ind2]
+                ref['atlas_icontrib'][ind1] = ref1['icontrib'][ind2]
+                ref['atlas_zmag'][ind1] = ref1['zmag'][ind2]
+                ref['e_atlas_zmag'][ind1] = ref1['zerr'][ind2]
+                ref['atlas_zcontrib'][ind1] = ref1['zcontrib'][ind2]
+            elif refcat[i]=='ALLWISE':
+                ref['w1mag'][ind1] = ref1['w1mag'][ind2]
+                ref['e_w1mag'][ind1] = ref1['e_w1mag'][ind2]
+                ref['w2mag'][ind1] = ref1['w2mag'][ind2]
+                ref['e_w2mag'][ind1] = ref1['e_w2mag'][ind2]
+            elif refcat[i]=='GLIMPSE':
+                ref['gl_36mag'][ind1] = ref1['_3_6mag'][ind2]
+                ref['e_gl_36mag'][ind1] = ref1['e_3_6mag'][ind2]
+                ref['gl_45mag'][ind1] = ref1['_4_5mag'][ind2]
+                ref['e_gl_45mag'][ind1] = ref1['e_4_5mag'][ind2]
+            elif refcat[i]=='SAGE':
+                ref['sage_36mag'][ind1] = ref1['__3_6_'][ind2]
+                ref['e_sage_36mag'][ind1] = ref1['e__3_6_'][ind2]
+                ref['sage_45mag'][ind1] = ref1['__4_5_'][ind2]
+                ref['e_sage_45mag'][ind1] = ref1['e__4_5_'][ind2]
+            else:
+                raise ValueError(catname+' NOT SUPPORTED')
  
  
-# First successful one, initialize the catalog 
-if len(ref) == 0: 
-ref = replicate(schema,nref1) 
-struct_assign,ref1,ref,/nozero 
-if tag_exist(ref1,'RA') == 0: 
-ref.ra = ref.ra_icrs 
-ref.dec = ref.de_icrs 
-ind1 = lindgen(nref1) 
-ind2 = lindgen(nref1) 
-nmatch = nref1 
- 
-# Second and later 
-else: 
- 
-# Get RA/DEC columns 
-# 2MASS, Galex, APASS use RAJ2000 
-# PS uses RA/DEC 
-if (refcat[i] != 'PS' and refcat[i] != 'ALLWISE' and refcat[i] != 'ATLAS'): 
-raind, = np.where(tags1 == 'RAJ2000',nraind) 
-else: 
-raind, = np.where(tags1 == 'RA',nraind) 
-if (refcat[i] != 'PS' and refcat[i] != 'ALLWISE' and refcat[i] != 'ATLAS'): 
-decind, = np.where(tags1 == 'DEJ2000',ndecind) 
-else: 
-decind, = np.where(tags1 == 'DEC',ndecind) 
- 
-# Crossmatch 
-SRCMATCH,ref.ra,ref.dec,ref1.(raind),ref1.(decind),dcr,ind1,ind2,/sph,count=nmatch 
-if silent==False: 
-        logger.info(str(nmatch)+' matches')
- 
-# Add magnitude columns 
-if nmatch > 0: 
-case refcat[i] of 
-'GAIADR2': begin 
-temp = ref[ind1] 
-struct_assign,ref1[ind2],temp,/nozero 
-temp.e_gmag = 2.5*alog10(1.0+ref1[ind2].e_fg/ref1[ind2].fg) 
-temp.e_bp = 2.5*alog10(1.0+ref1[ind2].e_fbp/ref1[ind2].fbp) 
-temp.e_rp = 2.5*alog10(1.0+ref1[ind2].e_frp/ref1[ind2].frp) 
-ref[ind1] = temp 
- 
-'2MASS-PSC': begin 
-ref[ind1].jmag = ref1[ind2].jmag 
-ref[ind1].e_jmag = ref1[ind2].e_jmag 
-ref[ind1].hmag = ref1[ind2].hmag 
-ref[ind1].e_hmag = ref1[ind2].e_hmag 
-ref[ind1].kmag = ref1[ind2].kmag 
-ref[ind1].e_kmag = ref1[ind2].e_kmag 
-ref[ind1].qflg = ref1[ind2].qflg 
- 
-'PS': begin 
-ref[ind1].ps_gmag = ref1[ind2].gmag 
-ref[ind1].ps_rmag = ref1[ind2].rmag 
-ref[ind1].ps_imag = ref1[ind2].imag 
-ref[ind1].ps_zmag = ref1[ind2].zmag 
-ref[ind1].ps_ymag = ref1[ind2].ymag 
- 
-'APASS': begin 
-ref[ind1].apass_gmag = ref1[ind2].g_mag 
-ref[ind1].e_apass_gmag = ref1[ind2].e_g_mag 
-ref[ind1].apass_rmag = ref1[ind2].r_mag 
-ref[ind1].e_apass_rmag = ref1[ind2].e_r_mag 
- 
-'II/312/ais': begin 
-if tag_exist(ref1,'NUV'): 
-ref[ind1].nuv = ref1[ind2].nuv 
-ref[ind1].e_nuv = ref1[ind2].e_nuv 
-else: 
-ref[ind1].nuv = ref1[ind2].nuvmag 
-ref[ind1].e_nuv = ref1[ind2].e_nuvmag 
- 
-'Skymapper': begin 
-ref[ind1].sm_umag = ref1[ind2].sm_umag 
-ref[ind1].e_sm_umag = ref1[ind2].e_sm_umag 
-ref[ind1].sm_gmag = ref1[ind2].sm_gmag 
-ref[ind1].e_sm_gmag = ref1[ind2].e_sm_gmag 
-ref[ind1].sm_rmag = ref1[ind2].sm_rmag 
-ref[ind1].e_sm_rmag = ref1[ind2].e_sm_rmag 
-ref[ind1].sm_imag = ref1[ind2].sm_imag 
-ref[ind1].e_sm_imag = ref1[ind2].e_sm_imag 
-ref[ind1].sm_zmag = ref1[ind2].sm_zmag 
-ref[ind1].e_sm_zmag = ref1[ind2].e_sm_zmag 
- 
-'ATLAS': begin 
-ref[ind1].atlas_gmag = ref1[ind2].gmag 
-ref[ind1].e_atlas_gmag = ref1[ind2].gerr 
-ref[ind1].atlas_gcontrib = ref1[ind2].gcontrib 
-ref[ind1].atlas_rmag = ref1[ind2].rmag 
-ref[ind1].e_atlas_rmag = ref1[ind2].rerr 
-ref[ind1].atlas_rcontrib = ref1[ind2].rcontrib 
-ref[ind1].atlas_imag = ref1[ind2].imag 
-ref[ind1].e_atlas_imag = ref1[ind2].ierr 
-ref[ind1].atlas_icontrib = ref1[ind2].icontrib 
-ref[ind1].atlas_zmag = ref1[ind2].zmag 
-ref[ind1].e_atlas_zmag = ref1[ind2].zerr 
-ref[ind1].atlas_zcontrib = ref1[ind2].zcontrib 
- 
-'ALLWISE': begin 
-ref[ind1].w1mag = ref1[ind2].w1mag 
-ref[ind1].e_w1mag = ref1[ind2].e_w1mag 
-ref[ind1].w2mag = ref1[ind2].w2mag 
-ref[ind1].e_w2mag = ref1[ind2].e_w2mag 
- 
-'GLIMPSE': begin 
-ref[ind1].gl_36mag = ref1[ind2]._3_6mag 
-ref[ind1].e_gl_36mag = ref1[ind2].e_3_6mag 
-ref[ind1].gl_45mag = ref1[ind2]._4_5mag 
-ref[ind1].e_gl_45mag = ref1[ind2].e_4_5mag 
- 
-'SAGE': begin 
-ref[ind1].sage_36mag = ref1[ind2].__3_6_ 
-ref[ind1].e_sage_36mag = ref1[ind2].e__3_6_ 
-ref[ind1].sage_45mag = ref1[ind2].__4_5_ 
-ref[ind1].e_sage_45mag = ref1[ind2].e__4_5_ 
- 
-else: import pdb; pdb.set_trace(),catname+' NOT SUPPORTED' 
+        # Add leftover ones 
+        if nmatch < len(ref1): 
+            left1 = ref1 
+            if nmatch > 0:
+                left1 = np.delete(left1,ind2)
+                #remove,ind2,left1 
+            nleft1 = len(left1)
+            new = np.zeros(nleft1,dtype=np.dtype(dt))
+            #new = replicate(schema,nleft1) 
+            new['ra'] = left1[racol]
+            new['dec'] = left1[deccol]
+            if refcat[i]=='GAIADR2':
+                temp = ref[ind1]
+                for n in left1.colnames:
+                     new[n] = left1[n]
+                #struct_assign,left1,new 
+                new['e_gmag'] = 2.5*np.log10(1.0+left1['e_fg/left1['fg) 
+                new['e_bp'] = 2.5*np.log10(1.0+left1['e_fbp/left1['fbp) 
+                new['e_rp'] = 2.5*np.log10(1.0+left1['e_frp/left1['frp) 
+            elif refcat[i]=='2MASS-PSC':
+                new['jmag'] = left1['jmag']
+                new['e_jmag'] = left1['e_jmag']
+                new['hmag'] = left1['hmag']
+                new['e_hmag'] = left1['e_hmag']
+                new['kmag'] = left1['kmag']
+                new['e_kmag'] = left1['e_kmag'] 
+                new['qflg'] = left1['qflg']
+            elif refcat[i]=='PS':
+                new['ps_gmag'] = left1['gmag'] 
+                new['ps_rmag'] = left1['rmag']
+                new['ps_imag'] = left1['imag']
+                new['ps_zmag'] = left1['zmag']
+                new['ps_ymag'] = left1['ymag']
+            elif refcat[i]=='APASS':
+                new['apass_gmag'] = left1['g_mag'] 
+                new['e_apass_gmag'] = left1['e_g_mag'] 
+                new['apass_rmag'] = left1['r_mag']
+                new['e_apass_rmag'] = left1['e_r_mag']
+            elif refcat[i]=='II/312/ais':
+                if tag_exist(left1,'NUV'): 
+                    new['nuv'] = left1['nuv']
+                    new['e_nuv'] = left1['e_nuv'] 
+                else: 
+                    new['nuv'] = left1['nuvmag'] 
+                    new['e_nuv'] = left1['e_nuvmag'] 
+            elif refcat[i]=='Skymapper':
+                new['sm_umag'] = left1['sm_umag'] 
+                new['e_sm_umag'] = left1['e_sm_umag'] 
+                new['sm_gmag'] = left1['sm_gmag']
+                new['e_sm_gmag'] = left1['e_sm_gmag'] 
+                new['sm_rmag'] = left1['sm_rmag']
+                new['e_sm_rmag'] = left1['e_sm_rmag'] 
+                new['sm_imag'] = left1['sm_imag']
+                new['e_sm_imag'] = left1['e_sm_imag'] 
+                new['sm_zmag'] = left1['sm_zmag']
+                new['e_sm_zmag'] = left1['e_sm_zmag'] 
+            elif refcat[i]=='ATLAS':
+                new['atlas_gmag'] = left1['gmag']
+                new['e_atlas_gmag'] = left1['gerr'] 
+                new['atlas_gcontrib'] = left1['gcontrib'] 
+                new['atlas_rmag'] = left1['rmag']
+                new['e_atlas_rmag'] = left1['rerr'] 
+                new['atlas_rcontrib'] = left1['rcontrib'] 
+                new['atlas_imag'] = left1['imag']
+                new['e_atlas_imag'] = left1['ierr'] 
+                new['atlas_icontrib'] = left1['icontrib'] 
+                new['atlas_zmag'] = left1['zmag']
+                new['e_atlas_zmag'] = left1['zerr'] 
+                new['atlas_zcontrib'] = left1['zcontrib'] 
+            elif refcat[i]=='ALLWISE':
+                new['w1mag'] = left1['w1mag']
+                new['e_w1mag'] = left1['e_w1mag'] 
+                new['w2mag'] = left1['w2mag']
+                new['e_w2mag'] = left1['e_w2mag'] 
+            elif refcat[i]=='GLIMPSE':
+                new['gl_36mag'] = left1['_3_6mag']
+                new['e_gl_36mag'] = left1['e_3_6mag'] 
+                new['gl_45mag'] = left1['_4_5mag']
+                new['e_gl_45mag'] = left1['e_4_5mag'] 
+            elif refcat[i]=='SAGE':
+                new['sage_36mag'] = left1['__3_6_']
+                new['e_sage_36mag'] = left1['e__3_6_'] 
+                new['sage_45mag'] = left1['__4_5_']
+                new['e_sage_45mag'] = left1['e__4_5_']
+            else:
+                raise ValueError(catname+' NOT SUPPORTED')
  
  
-# Add leftover ones 
-if nmatch < len(ref1): 
-left1 = ref1 
-if nmatch > 0 : 
-remove,ind2,left1 
-nleft1 = len(left1) 
-new = replicate(schema,nleft1) 
-new.ra = left1.(raind) 
-new.dec = left1.(decind) 
+        # Combine the two 
+        old = ref.copy()
+        ref = np.zeros(len(old)+nlef1,dtype=np.dtype(dt))
+        ref[0:len(old)] = old 
+        ref[len(old):] = new
+        del old
+        del new
+        del left1
+  
+    # Get extinction 
+    #---------------- 
+    ref = getreddening(ref,ext_type)
  
-case refcat[i] of 
-'GAIADR2': begin 
-temp = ref[ind1] 
-struct_assign,left1,new 
-new.e_gmag = 2.5*alog10(1.0+left1.e_fg/left1.fg) 
-new.e_bp = 2.5*alog10(1.0+left1.e_fbp/left1.fbp) 
-new.e_rp = 2.5*alog10(1.0+left1.e_frp/left1.frp) 
+    count = len(ref) 
  
-'2MASS-PSC': begin 
-new.jmag = left1.jmag 
-new.e_jmag = left1.e_jmag 
-new.hmag = left1.hmag 
-new.e_hmag = left1.e_hmag 
-new.kmag = left1.kmag 
-new.e_kmag = left1.e_kmag 
-new.qflg = left1.qflg 
- 
-'PS': begin 
-new.ps_gmag = left1.gmag 
-new.ps_rmag = left1.rmag 
-new.ps_imag = left1.imag 
-new.ps_zmag = left1.zmag 
-new.ps_ymag = left1.ymag 
- 
-'APASS': begin 
-new.apass_gmag = left1.g_mag 
-new.e_apass_gmag = left1.e_g_mag 
-new.apass_rmag = left1.r_mag 
-new.e_apass_rmag = left1.e_r_mag 
- 
-'II/312/ais': begin 
-if tag_exist(left1,'NUV'): 
-new.nuv = left1.nuv 
-new.e_nuv = left1.e_nuv 
-else: 
-new.nuv = left1.nuvmag 
-new.e_nuv = left1.e_nuvmag 
- 
-'Skymapper': begin 
-new.sm_umag = left1.sm_umag 
-new.e_sm_umag = left1.e_sm_umag 
-new.sm_gmag = left1.sm_gmag 
-new.e_sm_gmag = left1.e_sm_gmag 
-new.sm_rmag = left1.sm_rmag 
-new.e_sm_rmag = left1.e_sm_rmag 
-new.sm_imag = left1.sm_imag 
-new.e_sm_imag = left1.e_sm_imag 
-new.sm_zmag = left1.sm_zmag 
-new.e_sm_zmag = left1.e_sm_zmag 
- 
-'ATLAS': begin 
-new.atlas_gmag = left1.gmag 
-new.e_atlas_gmag = left1.gerr 
-new.atlas_gcontrib = left1.gcontrib 
-new.atlas_rmag = left1.rmag 
-new.e_atlas_rmag = left1.rerr 
-new.atlas_rcontrib = left1.rcontrib 
-new.atlas_imag = left1.imag 
-new.e_atlas_imag = left1.ierr 
-new.atlas_icontrib = left1.icontrib 
-new.atlas_zmag = left1.zmag 
-new.e_atlas_zmag = left1.zerr 
-new.atlas_zcontrib = left1.zcontrib 
- 
-'ALLWISE': begin 
-new.w1mag = left1.w1mag 
-new.e_w1mag = left1.e_w1mag 
-new.w2mag = left1.w2mag 
-new.e_w2mag = left1.e_w2mag 
- 
-'GLIMPSE': begin 
-new.gl_36mag = left1._3_6mag 
-new.e_gl_36mag = left1.e_3_6mag 
-new.gl_45mag = left1._4_5mag 
-new.e_gl_45mag = left1.e_4_5mag 
- 
-'SAGE': begin 
-new.sage_36mag = left1.__3_6_ 
-new.e_sage_36mag = left1.e__3_6_ 
-new.sage_45mag = left1.__4_5_ 
-new.e_sage_45mag = left1.e__4_5_ 
- 
-else: import pdb; pdb.set_trace(),catname+' NOT SUPPORTED' 
- 
- 
-# Combine the two 
-old = ref 
-ref = replicate(schema,len(old)+nleft1) 
-ref[0:len(old)-1] = old 
-ref[len(old)::] = new 
-undefine,old,new,left1 
- 
-BOMB: 
- 
-# Get extinction 
-#---------------- 
-GETREDDENING,ref,ext_type 
- 
-count = len(ref) 
- 
-print('dt=',stringize(time.time()-t0,ndec=1),' sec' 
- 
-return ref 
+    print('dt=%.1f sec' % (time.time()-t0))
+
+    return ref 
  
 
 def getreddening(ref,ext_type):
@@ -812,73 +915,80 @@ def getreddening(ref,ext_type):
     Translated to Python by D. Nidever, April 2022
     """
      
-    # Add SFD reddening 
-    GLACTC,ref.ra,ref.dec,2000.0,glon,glat,1,/deg 
-    ebv = dust_getval(glon,glat,/noloop,/interp) 
-    ref.ebv_sfd = ebv 
+    # Add SFD reddening
+    coo = SkyCoord(ra=ref['ra'],dec=ref['dec'],unit='deg')
+    sfd = SFDQuery()
+    ebv = sfd(coo)
+    #glon = coo.galactic.l.deg
+    #glat = coo.galactic.b.deg
+    #GLACTC,ref.ra,ref.dec,2000.0,glon,glat,1,/deg 
+    #ebv = dust_getval(glon,glat,/noloop,/interp) 
+    ref['ebv_sfd'] = ebv 
      
     # Start with SFD extinction for all 
     ejk_sfd = 1.5*0.302*ref.ebv_sfd 
-    ref.ejk = ejk_sfd 
-    ref.e_ejk = 0.1# not sure what to put here 
-    bd , = np.where(ref.ebv_sfd > 0.3,nbd)# E(B-V)>0.3 is roughly where things "break down" 
-    if nbd > 0 : 
-        ref[bd].e_ejk=1.0 
-    ref.ext_type = 1 
+    ref['ejk'] = ejk_sfd 
+    ref['e_ejk'] = 0.1 # not sure what to put here 
+    bd, = np.where(ref['ebv_sfd'] > 0.3)   # E(B-V)>0.3 is roughly where things "break down" 
+    if len(bd) > 0 : 
+        ref['e_ejk'][bd] = 1.0 
+    ref['ext_type'] = 1 
      
     # RJCE extinction 
     if ext_type >= 2: 
          
         # RJCE GLIMPSE, type=3 
         if ext_type == 3: 
-            gdglimpse , = np.where(ref.jmag < 50 and ref.hmag < 50 and ref.kmag < 50 and                       ref.gl_45mag < 50,ngdglimpse) 
-            if ngdglimpse > 0: 
-                ejk = 1.5*0.918*(ref[gdglimpse].hmag-ref[gdglimpse].gl_45mag-0.08) 
-                e_ejk = 1.5*0.918*sqrt(ref[gdglimpse].e_hmag**2+ref[gdglimpse].e_gl_45mag**2) 
+            gdglimpse, = np.where((ref['jmag'] < 50) & (ref['hmag'] < 50) & (ref['kmag'] < 50) & (ref['gl_45mag'] < 50))
+            if len(gdglimpse) > 0: 
+                ejk = 1.5*0.918*(ref['hmag'][gdglimpse]-ref['gl_45mag'][gdglimpse]-0.08) 
+                e_ejk = 1.5*0.918*np.sqrt(ref['e_hmag'][gdglimpse]**2+ref['e_gl_45mag'][gdglimpse]**2) 
                 #gdejk = where(ejk gt 0 and ejk lt ejk_sfd[gdglimpse] and e_ejk lt 0.2,ngdejk) 
-                gdejk , = np.where(ejk < ejk_sfd[gdglimpse],ngdejk) 
-                if ngdejk > 0: 
-                    ref[gdglimpse[gdejk]].ejk = ejk[gdejk] > 0.0 
-                    ref[gdglimpse[gdejk]].e_ejk = e_ejk[gdejk] 
-                    ref[gdglimpse[gdejk]].ext_type = 3 
+                gdejk, = np.where(ejk < ejk_sfd[gdglimpse],ngdejk) 
+                if len(gdejk) > 0: 
+                    ref['ejk'][gdglimpse[gdejk]] = np.maximum(ejk[gdejk],0)
+                    ref['e_ejk'][gdglimpse[gdejk]] = e_ejk[gdejk] 
+                    ref['ext_type'][gdglimpse[gdejk]] = 3 
          
         # RJCE SAGE, type=4 
         if ext_type == 4: 
-            gdsage , = np.where(ref.jmag < 50 and ref.hmag < 50 and ref.kmag < 50 and                    ref.sage_45mag < 50,ngdsage) 
-            if ngdsage > 0: 
-                ejk = 1.5*0.918*(ref[gdsage].hmag-ref[gdsage].sage_45mag-0.08) 
-                e_ejk = 1.5*0.918*sqrt(ref[gdsage].e_hmag**2+ref[gdsage].e_sage_45mag**2) 
+            gdsage, = np.where((ref['jmag'] < 50) & (ref['hmag'] < 50) & (ref['kmag'] < 50) & (ref['sage_45mag'] < 50))
+            if len(gdsage) > 0: 
+                ejk = 1.5*0.918*(ref['hmag'][gdsage]-ref['sage_45mag'][gdsage]-0.08) 
+                e_ejk = 1.5*0.918*np.sqrt(ref['e_hmag'][gdsage]**2+ref['e_sage_45mag'][gdsage]**2) 
                 #gdejk = where(ejk gt 0 and ejk lt ejk_sfd[gdsage] and e_ejk lt 0.2,ngdejk) 
-                gdejk , = np.where(ejk < ejk_sfd[gdsage],ngdejk) 
-                if ngdejk > 0: 
-                    ref[gdsage[gdejk]].ejk = ejk[gdejk] > 0.0 
-                    ref[gdsage[gdejk]].e_ejk = e_ejk[gdejk] 
-                    ref[gdsage[gdejk]].ext_type = 4 
+                gdejk, = np.where(ejk < ejk_sfd[gdsage]) 
+                if len(gdejk) > 0: 
+                    ref['ejk'][gdsage[gdejk]] = np.maximum(ejk[gdejk],0)
+                    ref['e_ejk'][gdsage[gdejk]] = e_ejk[gdejk] 
+                    ref['ext_type'][gdsage[gdejk]] = 4 
          
         # RJCE ALLWISE, type=2 
         #   Use ALLWISE for those that don't have IRAC data 
-        gdwise , = np.where(ref.jmag < 50 and ref.hmag < 50 and ref.kmag < 50 and                  ref.w2mag < 50 and ref.ext_type <= 1,ngdwise) 
-        if ngdwise > 0: 
-            ejk = 1.5*0.918*(ref[gdwise].hmag-ref[gdwise].w2mag-0.05) 
-            e_ejk = 1.5*0.918*sqrt(ref[gdwise].e_hmag**2+ref[gdwise].e_w2mag**2) 
+        gdwise, = np.where((ref['jmag'] < 50) & (ref['hmag'] < 50) & (ref['kmag'] < 50) &
+                           (ref['w2mag'] < 50) & (ref['ext_type'] <= 1))
+        if len(gdwise) > 0: 
+            ejk = 1.5*0.918*(ref['hmag'][gdwise]-ref['w2mag'][gdwise]-0.05) 
+            e_ejk = 1.5*0.918*np.sqrt(ref['e_hmag'][gdwise]**2+ref['e_w2mag'][gdwise]**2) 
             #gdejk = where(ejk gt 0 and ejk lt ejk_sfd[gdwise] and e_ejk lt 0.2,ngdejk) 
-            gdejk , = np.where(ejk < ejk_sfd[gdwise],ngdejk) 
-            if ngdejk > 0: 
-                ref[gdwise[gdejk]].ejk = ejk[gdejk] > 0.0 
-                ref[gdwise[gdejk]].e_ejk = e_ejk[gdejk] 
-                ref[gdwise[gdejk]].ext_type = 2 
+            gdejk, = np.where(ejk < ejk_sfd[gdwise])
+            if len(gdejk) > 0: 
+                ref['ejk'][gdwise[gdejk]] = np.maximum(ejk[gdejk],0)
+                ref['e_ejk'][gdwise[gdejk]] = e_ejk[gdejk] 
+                ref['ext_type'][gdwise[gdejk]] = 2 
      
     # No good reddening 
-    bd , = np.where(ref.ext_type == 1 and ref.ebv_sfd > 0.3,nbd)# E(B-V)>0.3 is roughly where things "break down" 
-    if nbd > 0: 
-        ref[bd].ejk = 999999.0 
-        ref[bd].e_ejk = 999999.0 
-        ref[bd].ext_type = 0 
+    bd, = np.where((ref['ext_type'] == 1) & (ref['ebv_sfd'] > 0.3))   # E(B-V)>0.3 is roughly where things "break down" 
+    if len(bd) > 0: 
+        ref['ejk'][bd] = 999999.0 
+        ref['e_ejk'][bd] = 999999.0 
+        ref['ext_type'][bd] = 0 
      
     # Fix NANs in E_EJK 
-    bd , = np.where(finite(ref.e_ejk) == 0,nbd) 
-    if nbd > 0 : 
-        ref[bd].e_ejk = 9.99 
-     
+    bd, = np.where(np.isfinite(ref['e_ejk']) == False)
+    if len(bd) > 0 : 
+        ref['e_ejk'][bd] = 9.99 
+
+    return ref
  
  

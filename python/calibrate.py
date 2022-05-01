@@ -538,7 +538,7 @@ def nsc_instcal_calibrate(expdir,inpref,eqnfile=None,redo=False,selfcal=False,sa
                 # Get reddening
                 coo = SkyCoord(ra=cat['ra'],dec=cat['dec'],unit='deg')
                 sfd = SFDQuery()
-                ebv = sfd(coords)                
+                ebv = sfd(coo)                
                 #glactc,cat['ra'],cat['dec'],2000.0,glon,glat,1,/deg 
                 #ebv = dust_getval(glon,glat,/noloop,/interp)
                 cat['ebv'] = ebv 
