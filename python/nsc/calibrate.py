@@ -10,9 +10,47 @@ from astrop.wcs import WCS
 from astropy.coordinates import SkyCoord
 from dlnpyutils import utils as dln,coords
 from dustmaps.sfd import SFDQuery
+from . import utils,query
 
-def nsc_instcal_calibrate(expdir,inpref,eqnfile=None,redo=False,selfcal=False,saveref=False,ncpu=1):
-     
+def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=False,ncpu=1,logger=None):
+    """
+    Perform photometry and astrometric calibration of an NSC exposure using
+    external catalogs.
+
+    Parameters
+    ----------
+    expdir : str
+       The absolute path to the NSCexposure directory.
+    inpref : astropy table, optional
+       Input reference catalog.
+    eqnfile : str, optional
+       File that contains the model mag equations.
+    redo : bool, optional
+       Perform the calibration again on this exposure.  Default is False.
+    selfcal : bool, optional
+       Perform self-calibration instead of using external catalog.
+         Default is False.
+    saveref : bool, optional
+       Save the reference catalog.  Default is False.
+    ncpu : int, optional
+       Number of cpus to use.  Default is 1.
+    logger : logging object
+       A logging object used for logging information.
+
+    Returns
+    -------
+    A calibrated catalog is saved to the exposure directory
+
+    Example
+    -------
+
+    calibreate(expdir,inpref,eqnfile)
+
+
+    Written by D. Nidever in Nov 2017
+    Translated to Python by D. Nidever, April 2022
+    """
+
     # Calibrate catalogs for one exposure
     dldir,mssdir,localdir = utils.rootdirs()
      
@@ -23,8 +61,8 @@ def nsc_instcal_calibrate(expdir,inpref,eqnfile=None,redo=False,selfcal=False,sa
     t00 = time.time() 
      
     base = os.path.basename(expdir) 
-    #logf = expdir+'/'+base+'_calib.log' 
-    logf = -1 
+    if logger is None:
+        logger = dln.basiclogger()
     outfile = expdir+'/'+base+'_meta.fits' 
     # get version number 
     lo = expdir.find('nsc/instcal/') 
@@ -342,7 +380,7 @@ def nsc_instcal_calibrate(expdir,inpref,eqnfile=None,redo=False,selfcal=False,sa
         logger.info('------------------------------------') 
          
         # Getting reference catalogs 
-        if len(inpref) == 0: 
+        if inpref is None: 
             # Search radius 
             radius = 1.1 * np.sqrt( (0.5*rarange)**2 + (0.5*decrange)**2 ) 
             ref = getrefdata(instrument+'-'+filt,cenra,cendec,radius) 
