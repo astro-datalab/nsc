@@ -8,8 +8,15 @@ from astropy.table import Table
 import subprocess
 from dlnpyutils import utils as dln
 from dustmaps.sfd import SFDQuery
+from astroquery.vizier import Vizier
+from astropy.coordinates import Angle,SkyCoord
+import astropy.units as u
+Vizier.TIMEOUT = 600
+Vizier.ROW_LIMIT = -1
+Vizier.cache_location = None
 
-def getrefcat(cenra,cendec,radius,refcat,file=file,
+
+def getrefcat(cenra,cendec,radius,refcat,savefile=None,
               saveref=False,silent=False,logger=None):
     """
     Get reference catalog information from DL database 
@@ -55,9 +62,13 @@ def getrefcat(cenra,cendec,radius,refcat,file=file,
     
     # Check that we have psql installed 
     out = subprocess.check_output(['which','psql'],shell=False)
-    if os.path.exists(out[0]) == 0: 
-        print('No PSQL found on this sytem.')
-        return -1 
+    if type(out) is bytes:
+        out = out.decode()
+    out = out.strip()
+    if dln.size(out)>1:
+        out = out[0]
+    if os.path.exists(out) == 0: 
+        raise ValueError('No PSQL found on this sytem.')
      
     # Temporary directory 
     # /tmp is often small and get get fille dup
@@ -157,11 +168,10 @@ def getrefcat(cenra,cendec,radius,refcat,file=file,
             # Use Postgres command with q3c cone search 
             refcattemp = repstr(file,'.fits','.txt') 
             cmd = "psql -h "+server+" -U datalab -d tapdb -w --pset footer -c 'SELECT "+cols+" FROM "+tablename
-            cmd += " WHERE q3c_radial_query("+racol+","+deccol+","+stringize(cenra,ndec=4,/nocomma)+","+stringize(cendec,ndec=4,/nocomma)
-            cmd += ","+stringize(radius,ndec=3)+")' > "+refcattemp 
+            cmd += " WHERE q3c_radial_query(%s,%s,%.5f,%.5f,%.3f)" % (racol,deccol,cenra,cendec,radius)
+            cmd += " > "+refcattemp
             dln.remove(refcattemp,allow=True)
             dln.remove(file,allow=True) 
-            spawn,cmd,out,outerr
             out = subprocess.check_output(cmd,shell=False)
             # Check for empty query
             tlines = dln.readlines(refcattemp,nlineread=4)
@@ -173,9 +183,10 @@ def getrefcat(cenra,cendec,radius,refcat,file=file,
                 nref = 0 
                 return ref 
             #  Load ASCII file and create the FITS file 
-            ref = importascii(refcattemp,/header,delim='|',skipline=2,/silent) 
+            ref = Table.read(refcattemp)
+            #ref = importascii(refcattemp,/header,delim='|',skipline=2,/silent) 
             if saveref is not None:
-                logger.info(,'Saving catalog to file '+savefile)
+                logger.info('Saving catalog to file '+savefile)
                 ref.write(savefile,overwrite=True)
             dln.remove(refcattemp,allow=True)
              
@@ -197,54 +208,28 @@ def getrefcat(cenra,cendec,radius,refcat,file=file,
                         if np.sum(bderr)>0:
                             ref[errcols[j]][bderr] = 9.99
              
-        # Use QUERYVIZIER 
+        # Use astroquery vizier
         #---------------- 
         #   for low density with 2MASS/GAIA and always for GALEX and APASS 
         else: 
              
             # Use QUERYVIZIER for GALEX (python code has problems) 
-            if refname == 'II/312/ais' or refname == 'GALEX': 
-                # if refcat eq 'APASS' then cfa=0 else cfa=1  ; cfa doesn't have APASS 
-                cfa = 1   # problems with CDS VizieR and cfa has APASS now 
-                if refcat == 'SAGE': 
-                    cfa = 0 
-                ref = QUERYVIZIER(refname,[cenra,cendec],radius*60,cfa=cfa,timeout=600,/silent) 
-                # Check for failure 
-                if size(ref,/type) != 8: 
-                    if silent==False : 
-                        logger.info('Failure or No Results')
-                    ref = -1 
-                    nref = 0 
-                    return ref 
-                 
-            # Use Python code 
-            else: 
-                # Use python code, it's much faster, ~18x 
-                tempfile = MKTEMP('vzr') 
-                os.remove(tempfile+'.fits',/allow 
-                pylines = 'python -c "from astroquery.vizier import Vizier#'+
-                          'import astropy.units as u;'+
-                          'import astropy.coordinates as coord;'+
-                          'Vizier.TIMEOUT = 600;'+
-                          'Vizier.ROW_LIMIT = -1;'+
-                          'Vizier.cache_location = None;'+
-                          'result = Vizier.query_region(coord.SkyCoord(ra='+strtrim(cenra,2)+
-                          ', dec='+strtrim(cendec,2)+
-                          ",unit=(u.deg,u.deg),frame='icrs'),width='"+strtrim(radius*60,2)+"m',catalog='"+refname+"');"+
-                          "df=result[0];"+
-                          "df.meta['description']=df.meta['description'][0:50];"+
-                          "df.write('"+tempfile+".fits')"+'"' 
-                spawn,pylines,out,errout 
-                if os.path.exists(tempfile+'.fits' ==False: 
-                    if silent==False: 
-                        logger.info('No Results')
-                    ref = -1 
-                    nref = 0 
-                    dln.remove([tempfile,tempfile+'.fits'],allow=True)
-                    return ref 
-                ref = MRDFITS(tempfile+'.fits',1,/silent) 
-                os.remove([tempfile,tempfile+'.fits'],/allow 
-             
+            #if refname == 'II/312/ais' or refname == 'GALEX': 
+            # if refcat eq 'APASS' then cfa=0 else cfa=1  ; cfa doesn't have APASS 
+            cfa = 1   # problems with CDS VizieR and cfa has APASS now 
+            if refcat == 'SAGE': 
+                cfa = 0 
+            result = Vizier.query_region(SkyCoord(ra=cenra, dec=cendec, unit='deg'),
+                                         radius=Angle(radius, "deg"), catalog=refname)
+            df = result[0]
+            df.meta['description']=df.meta['description'][0:50]
+            #ref = QUERYVIZIER(refname,[cenra,cendec],radius*60,cfa=cfa,timeout=600,/silent) 
+            # Check for failure 
+            if len(result)==0:
+                if silent==False : 
+                    logger.info('Failure or No Results')
+                return None 
+               
             # Fix/homogenize the GAIA tags 
             if refname == 'GAIA': 
                 nref = len(ref) 
@@ -260,7 +245,7 @@ def getrefcat(cenra,cendec,radius,refcat,file=file,
                 ref['gmag'] = orig['_gmag_']
                 del orig
             # Fix/homogenize the 2MASS tags 
-            if refname == 'TMASS': 
+            elif refname == 'TMASS': 
                 nref = len(ref) 
                 orig = ref.copy()
                 dt = [('designation',(np.str,50)),('raj2000',float),('dej2000',float),('jmag',float),('e_jmag',float),
@@ -271,7 +256,7 @@ def getrefcat(cenra,cendec,radius,refcat,file=file,
                 ref['designation'] = orig['_2mass']
                 del orig
             # Fix NANs in ALLWISE 
-            if refname == 'ALLWISE': 
+            elif refname == 'ALLWISE': 
                 bd, = np.where(np.isfinite(ref['_3_6_']) == False)
                 if len(bd) > 0: 
                     ref['_3_6_'][bd] = 99.99 
@@ -361,7 +346,9 @@ def getexttype(cenra,cendec,radius):
         ncat = 0 
         cnt = 0
         while (ncat == 0) and (cnt < 9): 
-            cat = QUERYVIZIER('II/293/glimpse',[rr[cnt],dd[cnt]],1.0,count=ncat,/silent) 
+            result = Vizier.query_region(SkyCoord(ra=rr[cnt],dec=dd[cnt],unit='deg'),
+                                         radius=Angle(1.0,"deg"),catalog='II/293/glimpse')
+            #cat = QUERYVIZIER('II/293/glimpse',[rr[cnt],dd[cnt]],1.0,count=ncat,/silent) 
             cnt += 1 
         if ncat > 0: 
             ext_type = 3 
@@ -379,7 +366,9 @@ def getexttype(cenra,cendec,radius):
         ncat = 0 
         cnt = 0
         while (ncat == 0) and (cnt < 9): 
-            cat = QUERYVIZIER('II/305/archive',[rr[cnt],dd[cnt]],1.0,count=ncat,/silent) 
+            result = Vizier.query_region(SkyCoord(ra=rr[cnt],dec=dd[cnt],unit='deg'),
+                                         radius=Angle(1.0,"deg"),catalog='II/305/archive')
+            #cat = QUERYVIZIER('II/305/archive',[rr[cnt],dd[cnt]],1.0,count=ncat,/silent) 
             cnt += 1 
         if ncat > 0: 
             ext_type = 4 
@@ -463,11 +452,11 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
      
      
     if silent==False: 
-        logger.info(,'Getting reference catalogs for:')
-        logger.info(,'FILTER(S) = '+', '.join(filt))
-        logger.info(,'CENRA  = '+str(cenra)) 
-        logger.info(,'CENDEC = '+str(cendec)) 
-        logger.info(,'RADIUS = '+str(radius)+' deg')
+        logger.info('Getting reference catalogs for:')
+        logger.info('FILTER(S) = '+', '.join(filt))
+        logger.info('CENRA  = '+str(cenra)) 
+        logger.info('CENDEC = '+str(cendec)) 
+        logger.info('RADIUS = '+str(radius)+' deg')
         if ext_type==1:
             logger.info('Extinction Type: 1 - SFD')
         elif ext_type==2:
@@ -576,7 +565,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
             refcat += ['2MASS-PSC','PS'] 
             #push,refcat,['2MASS-PSC'] 
         else:
-            logger.info(filt+' not currently supported'_
+            logger.info(filt+' not currently supported')
  
  
     # filter loop 
@@ -660,7 +649,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
                 dtype1 = float 
             if newtags[j] == 'dec': 
                 dtype1 = float
-            if stregex(newtags[j],'contrib',/boolean) == 1: 
+            if newtags[j].find('contrib') > -1:
                 dtype1 = -1
             dt += [(newtags[j],dtype)]
  
@@ -689,7 +678,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
             else:
                 racol = 'ra'
             if (refcat[i] != 'PS' and refcat[i] != 'ALLWISE' and refcat[i] != 'ATLAS'):
-                deccol = 'dej2000']
+                deccol = 'dej2000'
             else:
                 deccol = 'dec'
                         
@@ -707,7 +696,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
                 #struct_assign,ref1[ind2],temp,/nozero 
                 temp['e_gmag'] = 2.5*np.log10(1.0+ref1['e_fg'][ind2]/ref1['fg'][ind2]) 
                 temp['e_bp'] = 2.5*np.log10(1.0+ref1['e_fbp'][ind2]/ref1['fbp'][ind2]) 
-                temp['e_rp]' = 2.5*np.log10(1.0+ref1['e_frp'][ind2]/ref1['frp'][ind2]) 
+                temp['e_rp'] = 2.5*np.log10(1.0+ref1['e_frp'][ind2]/ref1['frp'][ind2]) 
                 ref[ind1] = temp 
             elif refcat[i]=='2MASS-PSC':
                 ref['jmag'][ind1] = ref1['jmag'][ind2]
@@ -794,9 +783,9 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
                 for n in left1.colnames:
                      new[n] = left1[n]
                 #struct_assign,left1,new 
-                new['e_gmag'] = 2.5*np.log10(1.0+left1['e_fg/left1['fg) 
-                new['e_bp'] = 2.5*np.log10(1.0+left1['e_fbp/left1['fbp) 
-                new['e_rp'] = 2.5*np.log10(1.0+left1['e_frp/left1['frp) 
+                new['e_gmag'] = 2.5*np.log10(1.0+left1['e_fg']/left1['fg']) 
+                new['e_bp'] = 2.5*np.log10(1.0+left1['e_fbp']/left1['fbp']) 
+                new['e_rp'] = 2.5*np.log10(1.0+left1['e_frp']/left1['frp']) 
             elif refcat[i]=='2MASS-PSC':
                 new['jmag'] = left1['jmag']
                 new['e_jmag'] = left1['e_jmag']
