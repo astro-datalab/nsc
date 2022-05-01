@@ -6,8 +6,10 @@ setup(name='noaosourcecatalog',
       version='1.0.0',
       description='NOIRLab Source Catalog Processing Software',
       author='David Nidever',
-      author_email='dnidever@noao.edu',
+      author_email='dnidever@montana.edu',
       url='https://github.com/astro-datalab/noaosourcecatalog',
-      py_modules=['nsc_instcal',''],
+      packages=['nsc'],
+      package_dir={'':'python'},
+      #py_modules=['nsc_instcal',''],
       requires=['numpy','astropy','scipy','dlnpyutils']
 )
