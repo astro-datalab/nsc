@@ -20,7 +20,7 @@ def rootdirs():
         dldir = '/net/dl2/'
         mssdir = '/mss1/'
         localdir = '/d0/'
-    elif host.find('gp09') > -1 or host.find('gp08') > -1 or host.find('gp07') > -1 or
+    elif host.find('gp09') > -1 or host.find('gp08') > -1 or host.find('gp07') > -1 or \
          host.find('gp06') > -1 or host.find('gp05') > -1:
         #dldir = '/net/dl1/users/'
         dldir = '/net/dl2/'

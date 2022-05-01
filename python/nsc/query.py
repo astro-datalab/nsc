@@ -3,21 +3,23 @@
 import os
 import time
 import numpy as np
-from astropy.io import fits
+from astropy.io import fits,ascii
 from astropy.table import Table
 import subprocess
-from dlnpyutils import utils as dln
+from dlnpyutils import utils as dln,coords
 from dustmaps.sfd import SFDQuery
 from astroquery.vizier import Vizier
 from astropy.coordinates import Angle,SkyCoord
 import astropy.units as u
+from . import utils
+
 Vizier.TIMEOUT = 600
 Vizier.ROW_LIMIT = -1
 Vizier.cache_location = None
 
 
-def getrefcat(cenra,cendec,radius,refcat,savefile=None,
-              saveref=False,silent=False,logger=None):
+def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
+              savefile=None,silent=False,logger=None):
     """
     Get reference catalog information from DL database 
  
@@ -30,11 +32,13 @@ def getrefcat(cenra,cendec,radius,refcat,savefile=None,
     radius : float
        Search radius in degrees. 
     refcat : table
-       Reference catalog name (e.g. 2MASS, Gaia, etc.). 
+       Reference catalog name (e.g. 2MASS, Gaia, etc.)
+    version : str
+       Version of NSC reduction.. 
+    saveref : bool, optional
+       Save the output to SAVEFILE or a default filename. Default is False.
     savefile : str, optional
        The file to save to or search for existing catalog. 
-    saveref : bool, optional
-       Save the output to FILE. 
     silent : bool, optional
        Don't print anything to the screen. 
     logger : logging object, optional
@@ -99,9 +103,11 @@ def getrefcat(cenra,cendec,radius,refcat,savefile=None,
      
     if savefile is None:
         savefile = tmpdir+'ref_%.5f_%.5f_%.3f_%s.fits' % (cenra,cendec,radius,refname)
-     
+    if os.path.exists(os.path.abspath(os.path.dirname(savefile)))==False:
+        os.makedirs(os.path.abspath(os.path.dirname(savefile)))
+
     if silent==False:
-        logger.info('Querying '+refname+': RA='+stringize(cenra,ndec=5)+' DEC='+stringize(cendec,ndec=5)+' Radius='+stringize(radius,ndec=3))
+        logger.info('Querying %s: RA=%.5f DEC=%.5f Radius=%.3f' % (refname,cenra,cendec,radius))
      
     # Loading previously loaded file 
     if os.path.exists(savefile): 
@@ -115,77 +121,105 @@ def getrefcat(cenra,cendec,radius,refcat,savefile=None,
          
         # Use DataLab database search 
         #---------------------------- 
-        if (refname == 'TMASS' or refname == 'GAIA' or refname == 'GAIADR2' or refname == 'PS' or refname == 'SKYMAPPER' or
-            refname == 'ALLWISE' or refname == 'ATLAS'): 
+        if refname in ['TMASS','GAIA','GAIADR2','GAIAEDR3','PS','SKYMAPPER','SKYMAPPERDR2','ALLWISE','ATLAS']:
             if refname == 'TMASS': 
                 tablename = 'twomass.psc' 
                 cols = 'designation,ra as raj2000,dec as dej2000,j_m as jmag,j_cmsig as e_jmag,h_m as hmag,h_cmsig as e_hmag,k_m as kmag,k_cmsig as e_kmag,ph_qual as qflg' 
-                #server = 'gp04.datalab.noao.edu' 
-                server = 'gp01.datalab.noao.edu' 
-                #server = 'dldb1.sdm.noao.edu' 
+                ##server = 'gp04.datalab.noao.edu' 
+                #server = 'gp01.datalab.noirlab.edu' 
+                ##server = 'dldb1.sdm.noao.edu' 
+                server = 'db03.datalab.noirlab.edu'
+                user = 'dlquery'
             racol = 'ra' 
             deccol = 'dec' 
             if refname == 'GAIA': 
                 tablename = 'gaia_dr1.gaia_source' 
                 cols = 'source_id as source,ra as ra_icrs,ra_error as e_ra_icrs,dec as de_icrs,dec_error as e_de_icrs,'
                 cols += 'phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,phot_g_mean_mag as gmag' 
-                server = 'gp04.datalab.noao.edu' 
-                #server = 'gp01.datalab.noao.edu' 
-                #server = 'dldb1.sdm.noao.edu' 
+                #server = 'gp04.datalab.noirlab.edu' 
+                ##server = 'gp01.datalab.noao.edu' 
+                ##server = 'dldb1.sdm.noao.edu' 
+                server = 'db03.datalab.noirlab.edu'
+                user = 'dlquery'
             if refname == 'GAIADR2': 
                 tablename = 'gaia_dr2.gaia_source' 
                 cols = 'source_id as source,ra,ra_error,dec,dec_error,pmra,pmra_error,pmdec,pmdec_error,phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,'
                 cols += 'phot_g_mean_mag as gmag,phot_bp_mean_mag as bp,phot_bp_mean_flux as fbp,phot_bp_mean_flux_error as e_fbp,'
                 cols += 'phot_rp_mean_mag as rp,phot_rp_mean_flux as frp,phot_rp_mean_flux_error as e_frp' 
-                server = 'gp04.datalab.noao.edu' 
-                #server = 'gp01.datalab.noao.edu' 
+                #server = 'gp04.datalab.noirlab.edu' 
+                ##server = 'gp01.datalab.noao.edu' 
+                server = 'db03.datalab.noirlab.edu'
+                user = 'dlquery'
+            if refname == 'GAIAEDR3': 
+                tablename = 'gaia_edr3.gaia_source' 
+                cols = 'source_id as source,ra,ra_error,dec,dec_error,pmra,pmra_error,pmdec,pmdec_error,phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,'
+                cols += 'phot_g_mean_mag as gmag,phot_bp_mean_mag as bp,phot_bp_mean_flux as fbp,phot_bp_mean_flux_error as e_fbp,'
+                cols += 'phot_rp_mean_mag as rp,phot_rp_mean_flux as frp,phot_rp_mean_flux_error as e_frp' 
+                #server = 'gp04.datalab.noirlab.edu' 
+                ##server = 'gp01.datalab.noao.edu' 
+                server = 'db03.datalab.noirlab.edu'
+                user = 'dlquery'
             if refname == 'PS': 
-                #tablename = 'cp_calib.ps1' 
-                tablename = 'public.ps1' 
+                tablename = 'cp_calib.ps1' 
+                #tablename = 'public.ps1' 
                 cols = 'ra, dec, g as gmag, r as rmag, i as imag, z as zmag, y as ymag' 
-                server = 'gp02.datalab.noao.edu' 
+                #server = 'gp02.datalab.noirlab.edu' 
+                server = 'gp01.datalab.noirlab.edu' 
+                user = 'datalab'
             if refname == 'SKYMAPPER': 
                 tablename = 'skymapper_dr1.master' 
                 cols = 'raj2000, dej2000, u_psf as sm_umag, e_u_psf as e_sm_umag, g_psf as sm_gmag, e_g_psf as e_sm_gmag, r_psf as sm_rmag,'
                 cols += 'e_r_psf as e_sm_rmag, i_psf as sm_imag,e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag' 
-                server = 'gp04.datalab.noao.edu' 
-                #server = 'gp01.datalab.noao.edu' 
+                #server = 'gp04.datalab.noirlab.edu' 
+                ##server = 'gp01.datalab.noao.edu' 
+                server = 'db03.datalab.noirlab.edu'
+                user = 'dlquery'
+                racol = 'raj2000' 
+                deccol = 'dej2000' 
+            if refname == 'SKYMAPPERDR2': 
+                tablename = 'skymapper_dr2.master' 
+                cols = 'raj2000, dej2000, u_psf as sm_umag, e_u_psf as e_sm_umag, g_psf as sm_gmag, e_g_psf as e_sm_gmag, r_psf as sm_rmag,'
+                cols += 'e_r_psf as e_sm_rmag, i_psf as sm_imag,e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag' 
+                #server = 'gp04.datalab.noirlab.edu' 
+                ##server = 'gp01.datalab.noao.edu' 
+                server = 'db03.datalab.noirlab.edu'
+                user = 'dlquery'
                 racol = 'raj2000' 
                 deccol = 'dej2000' 
             if refname == 'ALLWISE': 
                 tablename = 'allwise.source' 
-                cols = 'ra, dec, w1mdef as w1mag, w1sigmdef as e_w1mag, w2mdef as w2mag, w2sigmdef as e_w2mag' 
+                #cols = 'ra, dec, w1mdef as w1mag, w1sigmdef as e_w1mag, w2mdef as w2mag, w2sigmdef as e_w2mag' 
+                cols = 'ra, dec, w1mpro as w1mag, w1sigmpro as e_w1mag, w2mpro as w2mag, w2sigmpro as e_w2mag' 
                 #server = 'gp04.datalab.noao.edu' 
-                server = 'gp01.datalab.noao.edu' 
+                server = 'gp01.datalab.noirlab.edu' 
+                user = 'datalab'
             if refname == 'ATLAS': 
                 tablename = 'atlasrefcat2' 
                 cols = 'objid,ra,dec,plx as parallax,dplx as parallax_error,pmra,dpmra as pmra_error,pmdec,dpmdec as pmdec_error,gaia,dgaia as gaiaerr,'
                 cols += 'bp,dbp as bperr,rp,drp as rperr,teff,agaia,dupvar,ag,rp1,r1,r10,g as gmag,dg as gerr,gchi,gcontrib,'
                 cols += 'r as rmag, dr as rerr,rchi,rcontrib,i as imag,di as ierr,ichi,icontrib,z as zmag,dz as zerr,zchi,zcontrib,nstat,'
                 cols += 'j as jmag,dj as jerr,h as hmag,dh as herr,k as kmag,dk as kerr' 
-                server = 'gp10.datalab.noao.edu' 
-             
+                server = 'gp10.datalab.noirlab.edu' 
+                user = 'datalab'
+
             # Use Postgres command with q3c cone search 
-            refcattemp = repstr(file,'.fits','.txt') 
-            cmd = "psql -h "+server+" -U datalab -d tapdb -w --pset footer -c 'SELECT "+cols+" FROM "+tablename
-            cmd += " WHERE q3c_radial_query(%s,%s,%.5f,%.5f,%.3f)" % (racol,deccol,cenra,cendec,radius)
+            refcattemp = savefile.replace('.fits','.txt') 
+            cmd = "psql -h "+server+" -U "+user+" -d tapdb -w --pset footer -c 'SELECT "+cols+" FROM "+tablename
+            cmd += " WHERE q3c_radial_query(%s,%s,%.5f,%.5f,%.3f)'" % (racol,deccol,cenra,cendec,radius)
             cmd += " > "+refcattemp
             dln.remove(refcattemp,allow=True)
-            dln.remove(file,allow=True) 
-            out = subprocess.check_output(cmd,shell=False)
+            dln.remove(savefile,allow=True) 
+            out = subprocess.check_output(cmd,shell=True)
             # Check for empty query
-            tlines = dln.readlines(refcattemp,nlineread=4)
-            #READLINE,refcattemp,tlines,nlineread=4 
+            tlines = dln.readlines(refcattemp,nreadline=4)
             if len(tlines) < 4: 
                 if silent==False:
                     logger.info('No Results')
-                ref = -1 
-                nref = 0 
-                return ref 
+                return []
             #  Load ASCII file and create the FITS file 
-            ref = Table.read(refcattemp)
+            ref = ascii.read(refcattemp,data_start=3,delimiter='|')
             #ref = importascii(refcattemp,/header,delim='|',skipline=2,/silent) 
-            if saveref is not None:
+            if saveref:
                 logger.info('Saving catalog to file '+savefile)
                 ref.write(savefile,overwrite=True)
             dln.remove(refcattemp,allow=True)
@@ -194,7 +228,7 @@ def getrefcat(cenra,cendec,radius,refcat,savefile=None,
             if refname == 'ATLAS': 
                 magcols = ['gaia','bp','rp','gmag','rmag','imag','zmag','jmag','hmag','kmag'] 
                 errcols = ['gaiaerr','bperr','rperr','gerr','rerr','ierr','zerr','jerr','herr','kerr'] 
-                tags = tag_names(ref) 
+                cols = ref.colnames
                 # Set mags with 0.0 to 99.99 
                 for j in range(len(magcols)):
                     if magcols[j] in ref.colnames:
@@ -216,19 +250,19 @@ def getrefcat(cenra,cendec,radius,refcat,savefile=None,
             # Use QUERYVIZIER for GALEX (python code has problems) 
             #if refname == 'II/312/ais' or refname == 'GALEX': 
             # if refcat eq 'APASS' then cfa=0 else cfa=1  ; cfa doesn't have APASS 
-            cfa = 1   # problems with CDS VizieR and cfa has APASS now 
-            if refcat == 'SAGE': 
-                cfa = 0 
+            #cfa = 1   # problems with CDS VizieR and cfa has APASS now 
+            #if refcat == 'SAGE': 
+            #    cfa = 0 
             result = Vizier.query_region(SkyCoord(ra=cenra, dec=cendec, unit='deg'),
                                          radius=Angle(radius, "deg"), catalog=refname)
-            df = result[0]
-            df.meta['description']=df.meta['description'][0:50]
-            #ref = QUERYVIZIER(refname,[cenra,cendec],radius*60,cfa=cfa,timeout=600,/silent) 
             # Check for failure 
             if len(result)==0:
                 if silent==False : 
                     logger.info('Failure or No Results')
-                return None 
+                return []                
+            ref = result[0]
+            ref.meta['description'] = ref.meta['description'][0:50]
+            #ref = QUERYVIZIER(refname,[cenra,cendec],radius*60,cfa=cfa,timeout=600,/silent) 
                
             # Fix/homogenize the GAIA tags 
             if refname == 'GAIA': 
@@ -267,7 +301,7 @@ def getrefcat(cenra,cendec,radius,refcat,savefile=None,
                     ref['e__4_5_'][bd] = 9.99 
              
             # Save the file 
-            if saveref is not None:
+            if saveref:
                 if silent==False: 
                     logger.info('Saving catalog to file '+savefile)
                 ref.write(savefile,overwrite=True)  # only save if necessary
@@ -318,39 +352,36 @@ def getexttype(cenra,cendec,radius):
     # 3 - RJCE GLIMPSE, GLIMPSE data available 
     # 4 - RJCE SAGE, SAGE data available 
     ext_type = 0 
-    #GLACTC,cenra,cendec,2000.0,cengl,cengb,1,/deg 
     cencoo = SkyCoord(ra=cenra,dec=cendec,unit='deg')
     cengl = cencoo.galactic.l.deg
     cengb = cencoo.galactic.b.deg
                           
     # Get grid of SFD EBV values across the field to see 
     #  what regime we are working in 
-    x = scale_vector(findgen(100),-radius,radius)#replicate(1,100) 
-    y = replicate(1,100)#scale_vector(findgen(100),-radius,radius) 
+    x = np.linspace(-radius,radius,100).reshape(-1,1) + np.zeros(100,float).reshape(1,-1)
+    y = np.zeros(100,float).reshape(-1,1) + np.linspace(-radius,radius,100)
     rr,dd = coords.rotsphcen(x,y,cenra,cendec,gnomic=True,reverse=True)
     coo = SkyCoord(ra=rr,dec=dd,unit='deg')
     sfd = SFDQuery()
-    ebv = sfd(coo)
-    #GLACTC,rr,dd,2000.0,gl,gb,1,/deg 
-    #ebv_grid = dust_getval(gl,gb,/noloop,/interp) 
+    ebv_grid = sfd(coo)
     maxebv = np.max(ebv_grid) 
-     
+
     # Check if there is any GLIMPSE data available 
     #  do 3x3 grid with small matching radius 
     if np.abs(cengb) < 5 and (cengl < 65 or cengl > 290): 
-        x = scale_vector(findgen(3),-radius,radius)#replicate(1,3) 
-        y = replicate(1,3)#scale_vector(findgen(3),-radius,radius) 
+        x = np.linspace(-radius,radius,3).reshape(-1,1) +np.zeros(3,float).reshape(1,-1)
+        y = np.zeros(3,float).reshape(-1,1) + np.linspace(-radius,radius,3)
         rr,dd = coords.rotsphcen(x,y,cenra,cendec,gnomic=True,reverse=True)
-        rr = reform(rr) 
-        dd = reform(dd) 
-        ncat = 0 
+        rr = rr.flatten()
+        dd = dd.flatten()
+        nresult = 0 
         cnt = 0
-        while (ncat == 0) and (cnt < 9): 
+        while (nresult == 0) and (cnt < 9): 
             result = Vizier.query_region(SkyCoord(ra=rr[cnt],dec=dd[cnt],unit='deg'),
-                                         radius=Angle(1.0,"deg"),catalog='II/293/glimpse')
-            #cat = QUERYVIZIER('II/293/glimpse',[rr[cnt],dd[cnt]],1.0,count=ncat,/silent) 
+                                         radius=Angle(1.0,"arcmin"),catalog='II/293/glimpse')
+            nresult = len(result)
             cnt += 1 
-        if ncat > 0: 
+        if nresult > 0: 
             ext_type = 3 
      
     # Check if there is any SAGE data available 
@@ -358,19 +389,19 @@ def getexttype(cenra,cendec,radius):
     lmcrad = coords.sphdist(81.9,-69.867,cenra,cendec) 
     smcrad = coords.sphdist(13.183,-72.8283,cenra,cendec) 
     if lmcrad < 5.0 or smcrad < 4.0: 
-        x = scale_vector(findgen(3),-radius,radius)#replicate(1,3) 
-        y = replicate(1,3)#scale_vector(findgen(3),-radius,radius) 
+        x = np.linspace(-radius,radius,3).reshape(-1,1) +np.zeros(3,float).reshape(1,-1)
+        y = np.zeros(3,float).reshape(-1,1) + np.linspace(-radius,radius,3)
         rr,dd = coords.rotsphcen(x,y,cenra,cendec,gnomic=True,reverse=True)
-        rr = reform(rr) 
-        dd = reform(dd) 
-        ncat = 0 
+        rr = rr.flatten() 
+        dd = dd.flatten() 
+        nresult = 0 
         cnt = 0
-        while (ncat == 0) and (cnt < 9): 
+        while (nresult == 0) and (cnt < 9): 
             result = Vizier.query_region(SkyCoord(ra=rr[cnt],dec=dd[cnt],unit='deg'),
-                                         radius=Angle(1.0,"deg"),catalog='II/305/archive')
-            #cat = QUERYVIZIER('II/305/archive',[rr[cnt],dd[cnt]],1.0,count=ncat,/silent) 
+                                         radius=Angle(1.0,"arcmin"),catalog='II/305/archive')
+            nresult = len(result)
             cnt += 1 
-        if ncat > 0: 
+        if nresult > 0: 
             ext_type = 4 
      
     # Use RJCE ALLWISE, |b|<16 or max(EBV)>0.2 and not GLIMPSE or SAGE 
@@ -433,9 +464,16 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
      
     # Check that we have psql installed 
     out = subprocess.check_output(['which','psql'],shell=False)
-    if os.path.exists(out[0]) == 0: 
-        print('No PSQL found on this sytem.')
-        return -1 
+    if type(out) is bytes:
+        out = out.decode()
+    out = out.strip()
+    if dln.size(out)>1:
+        out = out[0]
+    if os.path.exists(out) == 0: 
+        raise ValueError('No PSQL found on this sytem.')
+
+    if logger is None:
+        logger = dln.basiclogger()
      
     # Figure out what reddening method we are using 
     #---------------------------------------------- 
@@ -566,9 +604,8 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
             #push,refcat,['2MASS-PSC'] 
         else:
             logger.info(filt+' not currently supported')
+
  
- 
-    # filter loop 
     # Extinction catalogs 
     if ext_type >= 2: 
         refcat += ['ALLWISE']
@@ -582,85 +619,87 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
     # Some catalogs 
     if len(refcat) > 0: 
         # Get the unique ones
-        urefcat,ui = np.unique(refcat,return_index=True)
-        #ui = np.uniq(refcat,np.argsort(refcat)) 
-        refcat = refcat[ui] 
+        rrefcat,ui = np.unique(refcat,return_index=True)
         # Always add Gaia at the beginning 
-        refcat = ['GAIADR2']+refcat
+        refcat = ['GAIAEDR3']+refcat
     else:
-        refcat = ['GAIADR2']  #'GAIA/GAIA' 
+        refcat = ['GAIAEDR3']
     nrefcat = len(refcat) 
  
     # Figure out the new columns that need to be added 
+    newcols = []
     for i in range(nrefcat):
-        if refcat[i]=='GAIADR2':
-            newtags +=['source','ra','ra_error','dec','dec_error','pmra','pmra_error','pmdec','pmdecerr','gmag','e_gmag','bp','e_bp','rp','e_rp'] 
+        if refcat[i]=='GAIADR2' or refcat[i]=='GAIAEDR3':
+            newcols +=['source','ra','ra_error','dec','dec_error','pmra','pmra_error','pmdec','pmdec_error','gmag','e_gmag','bp','e_bp','rp','e_rp'] 
         elif refcat[i]=='2MASS-PSC':
-            newtags += ['jmag','e_jmag','hmag','e_hmag','kmag','e_kmag','qflg'] 
+            newcols += ['jmag','e_jmag','hmag','e_hmag','kmag','e_kmag','qflg'] 
         elif refcat[i]=='PS':
-            newtags += ['ps_gmag','ps_rmag','ps_imag','ps_zmag','ps_ymag'] 
+            newcols += ['ps_gmag','ps_rmag','ps_imag','ps_zmag','ps_ymag'] 
         elif refcat[i]=='APASS':
-            newtags += ['apass_gmag','e_apass_gmag','apass_rmag','e_apass_rmag'] 
+            newcols += ['apass_gmag','e_apass_gmag','apass_rmag','e_apass_rmag'] 
         elif refcat[i]=='II/312/ais':
-            newtags += ['nuv','e_nuv']# Galex 
+            newcols += ['nuv','e_nuv']  # Galex 
         elif refcat[i]=='Skymapper':
-            newtags += ['sm_umag','e_sm_umag','sm_gmag','e_sm_gmag','sm_rmag','e_sm_rmag','sm_imag','e_sm_imag','sm_zmag','e_sm_zmag']# Skymapper DR1 
+            newcols += ['sm_umag','e_sm_umag','sm_gmag','e_sm_gmag','sm_rmag','e_sm_rmag','sm_imag','e_sm_imag','sm_zmag','e_sm_zmag']  # Skymapper DR1 
         elif refcat[i]=='ALLWISE':
-            newtags += ['w1mag','e_w1mag','w2mag','e_w2mag'] 
+            newcols += ['w1mag','e_w1mag','w2mag','e_w2mag'] 
         elif refcat[i]=='GLIMPSE':
-            newtags += ['gl_36mag','e_gl_36mag','gl_45mag','e_gl_45mag'] 
+            newcols += ['gl_36mag','e_gl_36mag','gl_45mag','e_gl_45mag'] 
         elif refcat[i]=='SAGE':
-            newtags += ['sage_36mag','e_sage_36mag','sage_45mag','e_sage_45mag'] 
+            newcols += ['sage_36mag','e_sage_36mag','sage_45mag','e_sage_45mag'] 
         elif refcat[i]=='ATLAS':
-            newtags += ['atlas_gmag','e_atlas_gmag','atlas_gcontrib','atlas_rmag','e_atlas_rmag','atlas_rcontrib',
+            newcols += ['atlas_gmag','e_atlas_gmag','atlas_gcontrib','atlas_rmag','e_atlas_rmag','atlas_rcontrib',
                         'atlas_imag','e_atlas_imag','atlas_icontrib','atlas_zmag','e_atlas_zmag','atlas_zcontrib'] 
         else:
             raise ValueError(refcat[i]+' NOT SUPPORTED')
- 
-    newtags += ['ebv_sfd','ejk','e_ejk','ext_type'] 
+    newcols += ['ebv_sfd','ejk','e_ejk','ext_type'] 
     if modelmags:
-        newtags += ['model_mag']
-    nnewtags = len(newtags) 
+        newcols += ['model_mag']
+    nnewcols = len(newcols) 
  
     # Load the necessary catalogs 
     nrefcat = len(refcat) 
     if silent==False: 
         logger.info(str(nrefcat)+' reference catalogs to load: '+', '.join(refcat))
+    ref = None
     for i in range(nrefcat): 
         t0 = time.time() 
         if silent==False: 
                 logger.info('Loading '+refcat[i]+' reference catalog')
         # Load the catalog 
         ref1 = getrefcat(cenra,cendec,radius,refcat[i],silent=silent,logger=logger) 
-        if len(ref1) == 0: 
+        nref1 = len(ref1)
+        if nref1 == 0: 
             continue
  
         # Initialize the catalog 
         dt = []
-        for j in range(nnewtags): 
+        for j in range(nnewcols): 
             dtype1 = float
-            if newtags[j] == 'qflg': 
+            if newcols[j] == 'qflg': 
                 dtype1 = (np.str,20)
-            if newtags[j] == 'ext_type': 
+            if newcols[j] == 'ext_type': 
                 dtype1 = int
-            if newtags[j] == 'source': 
+            if newcols[j] == 'source': 
                 dtype1 = int
-            if newtags[j] == 'ra': 
+            if newcols[j] == 'ra': 
                 dtype1 = float 
-            if newtags[j] == 'dec': 
+            if newcols[j] == 'dec': 
                 dtype1 = float
-            if newtags[j].find('contrib') > -1:
+            if newcols[j].find('contrib') > -1:
                 dtype1 = -1
-            dt += [(newtags[j],dtype)]
+            dt += [(newcols[j],dtype1)]
  
         # First successful one, initialize the catalog 
-        if len(ref) == 0:
+        if ref is None:
             ref = np.zeros(nref1,dtype=np.dtype(dt))
+            ref = Table(ref)
             for n in ref.colnames:
-                ref[n] = ref1[n]
+                if n in ref1.colnames:
+                    ref[n] = ref1[n]
             #ref = replicate(schema,nref1) 
             #struct_assign,ref1,ref,/nozero
-            if 'ra' in ref1.colnames:
+            if 'ra' not in ref1.colnames:
                 ref['ra'] = ref['ra_icrs']
                 ref['dec'] = ref['de_icrs']
             ind1 = np.arange(nref1).astype(int) 
@@ -682,17 +721,18 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
             else:
                 deccol = 'dec'
                         
-        # Crossmatch 
-        ind1,ind2,dist = coords.xmatch(ref['ra'],ref['dec'],ref1[racol],ref1[deccol],dcr)
-        if silent==False: 
-            logger.info(str(nmatch)+' matches')
+            # Crossmatch 
+            ind1,ind2,dist = coords.xmatch(ref['ra'],ref['dec'],ref1[racol],ref1[deccol],dcr)
+            if silent==False: 
+                logger.info(str(nmatch)+' matches')
  
         # Add magnitude columns 
         if nmatch > 0:
-            if refcat[i]=='GAIADR2':
+            if refcat[i]=='GAIADR2' or refcat[i]=='GAIAEDR3':
                 temp = ref[ind1]
                 for n in temp.colnames:
-                    temp[n] = ref1[n][ind2]
+                    if n in ref1.colnames:
+                        temp[n] = ref1[n][ind2]
                 #struct_assign,ref1[ind2],temp,/nozero 
                 temp['e_gmag'] = 2.5*np.log10(1.0+ref1['e_fg'][ind2]/ref1['fg'][ind2]) 
                 temp['e_bp'] = 2.5*np.log10(1.0+ref1['e_fbp'][ind2]/ref1['fbp'][ind2]) 
@@ -769,20 +809,19 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
  
         # Add leftover ones 
         if nmatch < len(ref1): 
-            left1 = ref1 
+            left1 = ref1.copy()
             if nmatch > 0:
                 left1 = np.delete(left1,ind2)
                 #remove,ind2,left1 
             nleft1 = len(left1)
             new = np.zeros(nleft1,dtype=np.dtype(dt))
-            #new = replicate(schema,nleft1) 
+            new = Table(new)
             new['ra'] = left1[racol]
             new['dec'] = left1[deccol]
-            if refcat[i]=='GAIADR2':
+            if refcat[i]=='GAIADR2' or refcat[i]=='GAIAEDR3':
                 temp = ref[ind1]
                 for n in left1.colnames:
                      new[n] = left1[n]
-                #struct_assign,left1,new 
                 new['e_gmag'] = 2.5*np.log10(1.0+left1['e_fg']/left1['fg']) 
                 new['e_bp'] = 2.5*np.log10(1.0+left1['e_fbp']/left1['fbp']) 
                 new['e_rp'] = 2.5*np.log10(1.0+left1['e_frp']/left1['frp']) 
@@ -806,7 +845,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
                 new['apass_rmag'] = left1['r_mag']
                 new['e_apass_rmag'] = left1['e_r_mag']
             elif refcat[i]=='II/312/ais':
-                if tag_exist(left1,'NUV'): 
+                if 'NUV' in left1.colnames:
                     new['nuv'] = left1['nuv']
                     new['e_nuv'] = left1['e_nuv'] 
                 else: 
@@ -855,14 +894,15 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
                 raise ValueError(catname+' NOT SUPPORTED')
  
  
-        # Combine the two 
-        old = ref.copy()
-        ref = np.zeros(len(old)+nlef1,dtype=np.dtype(dt))
-        ref[0:len(old)] = old 
-        ref[len(old):] = new
-        del old
-        del new
-        del left1
+            # Combine the two 
+            old = ref.copy()
+            ref = np.zeros(len(old)+nleft1,dtype=np.dtype(dt))
+            ref = Table(ref)
+            ref[0:len(old)] = old 
+            ref[len(old):] = new
+            del old
+            del new
+            del left1
   
     # Get extinction 
     #---------------- 
@@ -908,14 +948,10 @@ def getreddening(ref,ext_type):
     coo = SkyCoord(ra=ref['ra'],dec=ref['dec'],unit='deg')
     sfd = SFDQuery()
     ebv = sfd(coo)
-    #glon = coo.galactic.l.deg
-    #glat = coo.galactic.b.deg
-    #GLACTC,ref.ra,ref.dec,2000.0,glon,glat,1,/deg 
-    #ebv = dust_getval(glon,glat,/noloop,/interp) 
     ref['ebv_sfd'] = ebv 
      
     # Start with SFD extinction for all 
-    ejk_sfd = 1.5*0.302*ref.ebv_sfd 
+    ejk_sfd = 1.5*0.302*ref['ebv_sfd']
     ref['ejk'] = ejk_sfd 
     ref['e_ejk'] = 0.1 # not sure what to put here 
     bd, = np.where(ref['ebv_sfd'] > 0.3)   # E(B-V)>0.3 is roughly where things "break down" 
