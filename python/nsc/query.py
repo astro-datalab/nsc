@@ -128,7 +128,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 ##server = 'gp04.datalab.noao.edu' 
                 #server = 'gp01.datalab.noirlab.edu' 
                 ##server = 'dldb1.sdm.noao.edu' 
-                server = 'db03.datalab.noirlab.edu'
+                server = 'db02.datalab.noirlab.edu'
                 user = 'dlquery'
             racol = 'ra' 
             deccol = 'dec' 
@@ -139,7 +139,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 #server = 'gp04.datalab.noirlab.edu' 
                 ##server = 'gp01.datalab.noao.edu' 
                 ##server = 'dldb1.sdm.noao.edu' 
-                server = 'db03.datalab.noirlab.edu'
+                server = 'db02.datalab.noirlab.edu'
                 user = 'dlquery'
             if refname == 'GAIADR2': 
                 tablename = 'gaia_dr2.gaia_source' 
@@ -148,7 +148,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 cols += 'phot_rp_mean_mag as rp,phot_rp_mean_flux as frp,phot_rp_mean_flux_error as e_frp' 
                 #server = 'gp04.datalab.noirlab.edu' 
                 ##server = 'gp01.datalab.noao.edu' 
-                server = 'db03.datalab.noirlab.edu'
+                server = 'db02.datalab.noirlab.edu'
                 user = 'dlquery'
             if refname == 'GAIAEDR3': 
                 tablename = 'gaia_edr3.gaia_source' 
@@ -157,7 +157,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 cols += 'phot_rp_mean_mag as rp,phot_rp_mean_flux as frp,phot_rp_mean_flux_error as e_frp' 
                 #server = 'gp04.datalab.noirlab.edu' 
                 ##server = 'gp01.datalab.noao.edu' 
-                server = 'db03.datalab.noirlab.edu'
+                server = 'db02.datalab.noirlab.edu'
                 user = 'dlquery'
             if refname == 'PS': 
                 tablename = 'cp_calib.ps1' 
@@ -172,7 +172,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 cols += 'e_r_psf as e_sm_rmag, i_psf as sm_imag,e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag' 
                 #server = 'gp04.datalab.noirlab.edu' 
                 ##server = 'gp01.datalab.noao.edu' 
-                server = 'db03.datalab.noirlab.edu'
+                server = 'db02.datalab.noirlab.edu'
                 user = 'dlquery'
                 racol = 'raj2000' 
                 deccol = 'dej2000' 
@@ -182,7 +182,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 cols += 'e_r_psf as e_sm_rmag, i_psf as sm_imag,e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag' 
                 #server = 'gp04.datalab.noirlab.edu' 
                 ##server = 'gp01.datalab.noao.edu' 
-                server = 'db03.datalab.noirlab.edu'
+                server = 'db02.datalab.noirlab.edu'
                 user = 'dlquery'
                 racol = 'raj2000' 
                 deccol = 'dej2000' 
@@ -191,8 +191,9 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 #cols = 'ra, dec, w1mdef as w1mag, w1sigmdef as e_w1mag, w2mdef as w2mag, w2sigmdef as e_w2mag' 
                 cols = 'ra, dec, w1mpro as w1mag, w1sigmpro as e_w1mag, w2mpro as w2mag, w2sigmpro as e_w2mag' 
                 #server = 'gp04.datalab.noao.edu' 
-                server = 'gp01.datalab.noirlab.edu' 
-                user = 'datalab'
+                #server = 'gp01.datalab.noirlab.edu' 
+                server = 'db02.datalab.noirlab.edu' 
+                user = 'dlquery'
             if refname == 'ATLAS': 
                 tablename = 'atlasrefcat2' 
                 cols = 'objid,ra,dec,plx as parallax,dplx as parallax_error,pmra,dpmra as pmra_error,pmdec,dpmdec as pmdec_error,gaia,dgaia as gaiaerr,'
@@ -461,6 +462,9 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
     """
                           
     t0 = time.time() 
+
+    if dln.size(filt)==1 and type(filt) is str:
+        filt = [filt]
      
     # Check that we have psql installed 
     out = subprocess.check_output(['which','psql'],shell=False)
@@ -614,14 +618,14 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
     elif ext_type == 4: 
         refcat += ['SAGE']
     # If near DEC=-30 then load BOTH PS and ATLAS 
-    if (cendec > -34 and cendec < -26) and ((where(refcat == 'PS'))[0] != -1 or (where(refcat == 'ATLAS'))[0] != -1): 
+    if (cendec > -34 and cendec < -26) and (('PS' in refcat) or ('ATLAS' in refcat)):
         refcat += ['PS','ATLAS']  # code below removes duplicates 
     # Some catalogs 
     if len(refcat) > 0: 
         # Get the unique ones
-        rrefcat,ui = np.unique(refcat,return_index=True)
+        refcat,ui = np.unique(refcat,return_index=True)
         # Always add Gaia at the beginning 
-        refcat = ['GAIAEDR3']+refcat
+        refcat = ['GAIAEDR3']+list(refcat)
     else:
         refcat = ['GAIAEDR3']
     nrefcat = len(refcat) 
@@ -687,7 +691,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
             if newcols[j] == 'dec': 
                 dtype1 = float
             if newcols[j].find('contrib') > -1:
-                dtype1 = -1
+                dtype1 = int
             dt += [(newcols[j],dtype1)]
  
         # First successful one, initialize the catalog 
