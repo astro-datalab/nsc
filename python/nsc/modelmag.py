@@ -206,7 +206,7 @@ def modelmag(tab,instfilt,dec,eqnfile):
     adderrcols = []
     psmagind, = np.where((dln.find(cols,'^PS_') > -1) & (dln.find(cols,'MAG$') > -1))
     if len(psmagind) > 0:
-        adderrcols += ['E_'+cols[psmagind]]
+        adderrcols += list('E_'+cols[psmagind])
     nadderrcols = len(adderrcols)
     ## Making error structure
     errcolind = np.where(dln.find(tabcols,'^E_') > -1)
@@ -215,14 +215,15 @@ def modelmag(tab,instfilt,dec,eqnfile):
     for i in range(len(errcols)):
         errdt += [(errcols[i],float)]
     if nadderrcols > 0:
-        for i in range(nadderrtags):
+        for i in range(nadderrcols):
             errdt += [(adderrcols[i],float)]
     err = np.zeros(ntab,dtype=np.dtype(errdt))
     err = Table(err)
-    for c in errcols:
+    for c in err.colnames:
         err[c] = 0.001
     for n in err.colnames:
-        err[n] = tab[n]
+        if c in tab.colnames:
+            err[n] = tab[n]
     ## leave the PS errors at 0.001
     ## convert NAN or 99.99 to 9.99 to be consistent
     for c in err.colnames:

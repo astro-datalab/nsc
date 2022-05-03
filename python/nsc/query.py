@@ -160,12 +160,13 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 server = 'db02.datalab.noirlab.edu'
                 user = 'dlquery'
             if refname == 'PS': 
-                tablename = 'cp_calib.ps1' 
-                #tablename = 'public.ps1' 
+                #tablename = 'cp_calib.ps1' 
+                tablename = 'public.ps1' 
                 cols = 'ra, dec, g as gmag, r as rmag, i as imag, z as zmag, y as ymag' 
-                #server = 'gp02.datalab.noirlab.edu' 
-                server = 'gp01.datalab.noirlab.edu' 
-                user = 'datalab'
+                ##server = 'gp02.datalab.noirlab.edu' 
+                #server = 'gp01.datalab.noirlab.edu' 
+                server = 'db02.datalab.noirlab.edu'
+                user = 'dlquery'
             if refname == 'SKYMAPPER': 
                 tablename = 'skymapper_dr1.master' 
                 cols = 'raj2000, dej2000, u_psf as sm_umag, e_u_psf as e_sm_umag, g_psf as sm_gmag, e_g_psf as e_sm_gmag, r_psf as sm_rmag,'
