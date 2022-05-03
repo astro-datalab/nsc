@@ -6,8 +6,9 @@ import numpy as np
 from glob import glob
 from astropy.io import fits
 from astropy.table import Table
-from astrop.wcs import WCS
+from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
+from astropy.time import Time
 from dlnpyutils import utils as dln,coords
 from dustmaps.sfd import SFDQuery
 from . import utils,query,modelmag
@@ -59,7 +60,9 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         raise ValueError(expdir+' NOT FOUND')
      
     t00 = time.time() 
-     
+
+    if expdir[-1]=='/':
+        expdir = expdir[0:-1]
     base = os.path.basename(expdir) 
     if logger is None:
         logger = dln.basiclogger()
@@ -86,9 +89,9 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
      
     # Model magnitude equation file
     if eqnfile is None:
-        eqnfile = dldir+'users/dnidever/nsc/instcal/'+version+'/config/modelmag_equations.txt' 
+        eqnfile = dldir+'dnidever/nsc/instcal/'+version+'/config/modelmag_equations.txt' 
     logger.info('Using model magnitude equation file '+eqnfile)
-    if os.path.exists(eqnfile) == false: 
+    if os.path.exists(eqnfile) == False: 
         raise ValueError(eqnfile+' NOT FOUND')
     eqnlines = dln.readlines(eqnfile)
     for l in eqnlines: logger.info(l)
@@ -139,18 +142,24 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     # Create structure, exten=1 has header now 
     ind, = np.where(ncatarr > 0)
     cat1 = fits.getdata(catfiles[ind[0]],2)
-    cdt = cat1.dtype
+    cdt = cat1.dtype.descr
     cdt += [('ccdnum',int),('ebv',float),('ra',float),('dec',float),('raerr',float),
             ('decerr',float),('cmag',float),('cerr',float),('sourceid',(np.str,50)),
             ('filter',(np.str,50)),('mjd',float)]
     cat = np.zeros(ncat,dtype=np.dtype(cdt))
+    cat = Table(cat)
+    for c in cat.colnames:
+        cat[c].name = c.lower()
     # Start the chips summary structure
     dt = [('expdir',(np.str,300)),('instrument',(np.str,10)),('filename',(np.str,300)),('measfile',(np.str,300)),
           ('ccdnum',int),('nsources',int),('nmeas',int),('cenra',float),('cendec',float),('ngaiamatch',int),
           ('ngoodgaiamatch',int),('rarms',float),('rastderr',float),('racoef',(float,4)),('decrms',float),
-          ('decstderr',float),('decstderr',float),('deccoef',(float,4)),('vra',(float,4)),('vdec',(float,4)),
+          ('decstderr',float),('deccoef',(float,4)),('vra',(float,4)),('vdec',(float,4)),
           ('zptype',int),('zpterm',float),('zptermerr',float),('nrefmatch',int),('depth95',float),('depth10sig',float)]
     chinfo = np.zeros(nchips,dtype=np.dtype(dt))
+    chinfo = Table(chinfo)
+    for c in chinfo.colnames:
+        chinfo[c].name = c.lower()
     for c in ['cenra','cendec','rarms','rastderr','decrms','decstderr','zpterm','zptermerr']:
         chinfo[c] = 999999.
     chinfo['depth95'] = 99.99
@@ -163,7 +172,9 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         dum = os.path.splitext(os.path.basename(catfiles[i]))[0].split('_')
         ccdnum = int(dum[-1])
         hd = fits.getheader(catfiles[i],2)
-        cat1 = Table.read(catilfes[i],2)
+        cat1 = Table.read(catfiles[i],2)
+        for c in cat1.colnames:
+            cat1[c].name = c.lower()
         ncat1 = hd['naxis2']   # handles empty catalogs 
          
         # Fix negative FWHM values 
@@ -177,9 +188,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         chinfo['ccdnum'][i] = ccdnum 
         chinfo['nsources'][i] = ncat1 
         # Get the chip corners
-        dum = fits.getdata(catfiles[1],1)
-        #dum = MRDFITS(catfiles[i],1,/silent) 
-        hd1 = dum['field_header_card']
+        dum = fits.getdata(catfiles[i],1)
+        hd1 = fits.Header.fromstring('\n'.join(dum[0][0]),sep='\n')
         nx = hd1['NAXIS1']
         ny = hd1['NAXIS2']
         try:
@@ -191,7 +201,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         #if noparams <= 0: 
         #    logger.info('Problem with WCS in header '+catfiles[i])
         #    goto,BOMB1 
-        vcoo = wcs1.pixel_to_world(,[0,nx-1,nx-1,0],[0,0,ny-1,ny-1])
+        vcoo = wcs1.pixel_to_world([0,nx-1,nx-1,0],[0,0,ny-1,ny-1])
         vra = vcoo.ra.deg
         vdec = vcoo.dec.deg
         chinfo['vra'][i] = vra 
@@ -220,9 +230,9 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
             # Stuff into main structure 
             cat[cnt:cnt+ncat1] = temp 
             cnt += ncat1 
-            cenra = np.mean(minmax(cat1['alpha_j2000'])) 
+            cenra = np.mean(dln.minmax(cat1['alpha_j2000'])) 
             # Wrapping around RA=0 
-            if dln.valrange(cat1['alpha_j2000)']) > 100: 
+            if dln.valrange(cat1['alpha_j2000']) > 100: 
                 ra = cat1['alpha_j2000']
                 bdra, = np.where(ra > 180) 
                 if len(bdra) > 0: 
@@ -269,7 +279,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
             vra[bdra2] += 360 
         rarange = dln.valrange(vra)*np.cos(np.deg2rad(cendec))
         rawrap = True
-     else:
+    else:
         rawrap = False 
 
     logger.info('CENRA  = %.5f' % cenra)
@@ -283,7 +293,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     # Number of good sources 
     goodsources, = np.where((cat['imaflags_iso']==0) & (~((cat['flags']& 8)>0)) &
                             (~((cat['flags']&16)>0)) & (cat['mag_auto'] < 50))
-    logger.info('GOOD SRCS = '+str(len(goodsources)))
+    ngoodsources = len(goodsources)
+    logger.info('GOOD SRCS = '+str(ngoodsources))
          
     # Measure median seeing FWHM 
     gdcat, = np.where((cat['mag_auto'] < 50) & (cat['magerr_auto'] < 0.05) & (cat['class_star'] > 0.8))
@@ -292,7 +303,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
          
     # Load the logfile and get absolute flux filename 
     loglines = dln.readlines(expdir+'/'+base+'.log')
-    ind = dln.grep(loglines,'Step#2: Copying InstCal images from mass store archive')
+    ind = dln.grep(loglines,'Step #2: Copying InstCal images from mass store archive',index=True)
     fline = loglines[ind[0]+1] 
     lo = fline.find('/archive') 
     # make sure the mss1 directory is correct for this server 
@@ -337,7 +348,9 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         exptime = hd1['exptime']
     dateobs = head['date-obs']
     airmass = head['airmass']
-    mjd = date2jd(dateobs,/mjd) 
+    t = Time(dateobs, format='fits')
+    mjd = t.mjd
+    #mjd = date2jd(dateobs,/mjd) 
     logger.info('FILTER = '+filt)
     logger.info('EXPTIME = %.2f sec.' % exptime)
     logger.info('MJD = %.4f' % mjd)
@@ -349,13 +362,14 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
          
     # Start the exposure-level structure
     edt = [('file',(np.str,300)),('wtfile',(np.str,300)),('maskfile',(np.str,300)),('instrument',(np.str,10)),
-           ('base',(np.str,100)),('exptnum',int),('ra',float),('dec',float),('dateobs',(np.str,50)),('mjd',float),
+           ('base',(np.str,100)),('expnum',int),('ra',float),('dec',float),('dateobs',(np.str,50)),('mjd',float),
            ('filter',(np.str,50)),('exptime',float),('airmass',float),('wcscal',(np.str,50)),('nsources',int),
            ('ngoodsources',int),('nmeas',int),('fwhm',float),('nchips',int),('rarms',float),('decrms',float),
            ('ebv',float),('ngaiamatch',int),('ngoodgaiamatch',int),('zptype',int),('zpterm',float),('zptermerr',float),
            ('zptermsig',float),('zpspatialvar_rms',float),('zpspatialvar_range',float),('zpspatialvar_nccd',int),
            ('nrefmatch',int),('ngoodrefmatch',int),('depth95',float),('depth10sig',float)]
     expinfo = np.zeros(1,dtype=np.dtype(edt))
+    expinfo = Table(expinfo)
     expinfo['file'] = fluxfile
     expinfo['wtfile'] = wtfile
     expinfo['maskfile'] = maskfile
@@ -379,7 +393,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     expinfo['fwhm'] = medfwhm 
     expinfo['ngoodsources'] = ngoodsources 
     wcscal = head.get('wcscal')
-    if nwcscal == 0: 
+    if wcscal is None:
         wcscal = 'NAN' 
     expinfo['wcscal'] = wcscal 
          
@@ -393,8 +407,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     if inpref is None: 
         # Search radius 
         radius = 1.1 * np.sqrt( (0.5*rarange)**2 + (0.5*decrange)**2 ) 
-        ref = getrefdata(instrument+'-'+filt,cenra,cendec,radius) 
-        if count == 0: 
+        ref = query.getrefdata(instrument+'-'+filt,cenra,cendec,radius) 
+        if len(ref) == 0: 
             logger.info('No Reference Data')
             return 
     # Using input reference catalog 
@@ -425,7 +439,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     logger.info('Step 3. Astrometric calibration')
     logger.info('--------------------------------') 
     # Get reference catalog with Gaia values 
-    gdgaia, = np.where(ref['source'] > 0,ngdgaia) 
+    gdgaia, = np.where(ref['source'] > 0) 
     gaia = ref[gdgaia] 
     # Match everything to Gaia at once, this is much faster! 
     ind1,ind2,dist = coords.xmatch(gaia['ra'],gaia['dec'],cat['alpha_j2000'],cat['delta_j2000'],1.0)
@@ -447,7 +461,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         # Gaia matches for this chip 
         gaiaind1 = allgaiaind[chind2] 
         gaiadist1 = allgaiadist[chind2] 
-        gmatch, = np.where(gaiaind1 > -1 and gaiadist1 <= 0.5)   # get sources with Gaia matches 
+        import pdb; pdb.set_trace()
+        gmatch, = np.where((gaiaind1 > -1) & (gaiadist1 <= 0.5))   # get sources with Gaia matches 
         if len(gmatch) == 0: 
             gmatch, = np.where(gaiaind1 > -1 and gaiadist1 <= 1.0) 
         if len(gmatch) < 5: 
@@ -889,7 +904,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
                             
             #MWRFITS,meas,outfile,/create 
             #MWRFITS,chinfo[i],outfile,/silent# add chip stucture for this chip 
-            CHIPBOMB: 
+            #CHIPBOMB: 
                      
     # Total number of measurements 
     expinfo['nmeas'] = np.sum(chinfo['nmeas']) 

@@ -914,7 +914,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
  
     count = len(ref) 
  
-    print('dt=%.1f sec' % (time.time()-t0))
+    logger.info('dt=%.1f sec' % (time.time()-t0))
 
     return ref 
  
