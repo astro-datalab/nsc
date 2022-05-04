@@ -25,9 +25,10 @@ def fitzpterm(mstr,expinfo,chinfo):
     sig = dln.mad(diff) 
     gd, = np.where(np.abs(diff-med) < 3*sig) 
     x = np.zeros(n,float)
-    zpterm = dln_poly_fit(x[gd],diff[gd],0,measure_errors=err[gd],sigma=zptermerr,yerror=yerror,status=status,yfit=yfit1) #,/bootstrap) 
-    zpterm = zpterm[0]
-    zptermerr = zptermerr[0] 
+    zpterm,zptermerr = dln.wtmean(diff[gd],err[gd],error=True)
+    #zpterm = dln_poly_fit(x[gd],diff[gd],0,measure_errors=err[gd],sigma=zptermerr,yerror=yerror,status=status,yfit=yfit1) #,/bootstrap) 
+    #zpterm = zpterm[0]
+    #zptermerr = zptermerr[0] 
     # Save in exposure structure 
     expinfo['zpterm'] = zpterm 
     expinfo['zptermerr'] = zptermerr 
@@ -43,7 +44,8 @@ def fitzpterm(mstr,expinfo,chinfo):
         if nmatch >= 5: 
             gd1, = np.where(np.abs(diff[ind2]-med) < 3*sig) 
             if len(gd1) >= 5: 
-                zpterm1 = dln_poly_fit(x[ind2[gd1]],diff[ind2[gd1]],0,measure_errors=err[ind2[gd1]],sigma=zptermerr1,yerror=yerror,status=status,yfit=yfit1) #,/bootstrap) 
+                zpterm1,zptermerr1 = dln.wtmean(diff[ind2[gd1]],err[ind2[gd1]],error=True)
+                #zpterm1 = dln_poly_fit(x[ind2[gd1]],diff[ind2[gd1]],0,measure_errors=err[ind2[gd1]],sigma=zptermerr1,yerror=yerror,status=status,yfit=yfit1) #,/bootstrap) 
                 chinfo['zpterm'][i] = zpterm1 
                 chinfo['zptermerr'][i] = zptermerr1 
                 chinfo['nrefmatch'][i] = nmatch 
@@ -56,9 +58,6 @@ def fitzpterm(mstr,expinfo,chinfo):
         expinfo['zpspatialvar_nccd'] = len(gdchip)
 
     return expinfo
-
-def selfcalzpterm(expdir,cat,expinfo,chinfo):
-    pass
 
 
 def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
@@ -86,25 +85,26 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
     chinfo['nrefmatch'] = 0 
      
     # What instrument is this? 
-    instrument = 'c4d'# by default 
-    if stregex(expdir,'/k4m/',/boolean) == 1 : 
-        instrument='k4m' 
-    if stregex(expdir,'/ksb/',/boolean) == 1 : 
-        instrument='ksb' 
-    instfilt = instrument+'-'+str(expinfo[0].filter,2) 
-    # version 
-    lo = strpos(expdir,'dl1') 
-    dum = strsplit(strmid(expdir,lo+3),'/',/extract) 
-    version = dum[4] 
-    if version == 'c4d' or version == 'k4m' or version == 'ksb' :# version1 
-        version='' 
+    instrument = 'c4d'  # by default 
+    if expdir.find('/k4m/') > -1:
+        instrument = 'k4m' 
+    if expdir.find('/ksb/') > -1:        
+        instrument = 'ksb' 
+    instfilt = instrument+'-'+str(expinfo['filter']][0]) 
+    # version
+    # get version number 
+    lo = expdir.find('nsc/instcal/') 
+    dum = expdir[lo+12:] 
+    version = dum[0:dum.find('/')]
+    if version == 'c4d' or version == 'k4m' or version == 'ksb': # version1 
+        version = '' 
      
     # Central coordinates 
     cenra = expinfo['ra']
     cendec = expinfo['dec']
      
     # Read in the summary structure 
-    sumfile = dldir+'users/dnidever/nsc/instcal/'+version+'/lists/nsc_instcal_calibrate.fits' 
+    sumfile = dldir+'dnidever/nsc/instcal/'+version+'/lists/nsc_instcal_calibrate.fits' 
     if os.path.exists(sumfile) == False: 
         if silent==False:
             logger.info(sumfile+' NOT FOUND')
@@ -138,16 +138,16 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
             logger.info('No good '+instfilt+' exposure at this position')
         return 
     sumfiltpos = sumfilt[ind1] 
-    dist = SPHDIST(sumfiltpos.ra,sumfiltpos.dec,cenra,cendec,/deg) 
-    gddist , = np.where(dist < minradius,ngddist) 
-    if ngddist == 0: 
+    dist = coords.sphdit(sumfiltpos['ra'],sumfiltpos['dec'],cenra,cendec)
+    gddist, = np.where(dist < minradius) 
+    if len(gddist) == 0: 
         if silent==False)
-            logger.info('No good '+instfilt+' exposures within '+stringize(minradius,ndec=2)+' deg')
+            logger.info('No good '+instfilt+' exposures within %0.2f deg' % minradius)
         return 
     refexp = sumfiltpos[gddist] 
     nrefexp = len(refexp) 
     if silent==False:
-        logger.info(str(ngddist)+' good exposures within '+stringize(minradius,ndec=2)+' deg')
+        logger.info(str(ngddist)+' good exposures within %0.2f deg' % minradius)
      
     # Pick the best ones 
     si = np.flip(np.argsort(refexp['zptermerr'])) 
@@ -160,10 +160,10 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
     for i in range(nrefexp): 
          
         # Load the catalog 
-        catfile = str(refexp[i].expdir,2)+'/'+str(refexp[i].base,2)+'_cat.fits' 
-        if strmid(catfile,0,4) == '/net' and strmid(dldir,0,4) != '/net' : 
-            catfile=strmid(catfile,4) 
-        cat1 = MRDFITS(catfile,1,/silent) 
+        catfile = refexp['expdir'][i]+'/'+refexp['base'][i]+'_cat.fits'
+        if catfile[0:4]=='/net' and dldir[0:4]=='/net':
+            catfile = catfile[4:]
+        cat1 = Table.read(catfile)
         # Only want good ones 
         gdcat1, = np.where((cat1['imaflags_iso'] == 0) & (((cat1['flags'] & 8)==0)) & (((cat1['flags'] & 16)==0)) & 
                            (cat1['cmag'] < 50) & (1.087/cat1['cerr'] > 10) & (cat1['fwhm_world']*3600 < 2.5) &  # Remove bad measurements 
@@ -184,53 +184,57 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
              
             # Convert to small catalog version 
             nnew = ngdcat1 
-            schema = {souceid:'',ra:0.0d0,dec:0.0d0,ndet:1L,cmag:0.0,cerr:0.0} 
-            newcat = REPLICATE(schema,nnew) 
-            STRUCT_ASSIGN,cat1[gdcat1],newcat,/nozero 
+            dt = [('sourceid',(np.str,100)),('ra',float),('dec',float),('ndet',int),('cmag',float),('cerr',float)]
+            newcat = np.zeros(nnew,dtype=np.dtype(dt))
+            newcat = Table(newcat)
+            for n in newcat.colnames:
+                newcat[n] = cat[n][gdcat1]
              
             # First one, start REF structure 
             if len(ref) == 0: 
                 # Start ref structure 
-                ref = replicate(schema,1e5>nnew) 
+                ref = np.zeros(np.maximum(100000,nnew),dtype=np.dtype(dt))
+                ref = Table(ref)
                 nref = len(ref) 
                 # Convert CMAG/CMAGERR to cumulative quantities 
-                cmag = 2.5118864d**newcat.cmag * (1.0d0/newcat.cerr**2) 
-                cerr = 1.0d0/newcat.cerr**2 
-                newcat.cmag = cmag 
-                newcat.cerr = cerr 
+                cmag = 2.5118864**newcat['cmag'] * (1.0/newcat['cerr']**2) 
+                cerr = 1.0/newcat['cerr']**2 
+                newcat['cmag'] = cmag 
+                newcat['cerr'] = cerr 
                 # Add to REF 
-                ref[0:nnew-1] = newcat 
+                ref[0:nnew] = newcat 
                 refcnt += nnew 
                  
-                # Second or later, add to them 
+            # Second or later, add to them 
             else: 
                  
                 # Crossmatch 
-                SRCMATCH,ref[0:refcnt-1].ra,ref[0:refcnt-1].dec,newcat.ra,newcat.dec,0.5,ind1,ind2,/sph,count=nmatch 
+                ind1,ind2,dist = coords.xmatch(ref['ra'][0:refcnt],ref['dec'][0:refcnt],newcat['ra'],newcat['dec'],0.5)
+                nmatch = len(ind1)
                 if silent==False:
                     logger.info('  '+str(nmatch)+' crossmatches')
                  
                 # Combine crossmatches 
                 if nmatch > 0: 
                     # Cumulative sum of weighted average 
-                    ref[ind1].cmag += 2.5118864d**newcat[ind2].cmag * (1.0d0/newcat[ind2].cerr**2) 
-                    ref[ind1].cerr += 1.0d0/newcat[ind2].cerr**2 
-                    ref[ind1].ndet++ 
+                    ref['cmag'][ind1] += 2.5118864**newcat['cmag'][ind2] * (1.0/newcat['cerr'][ind2]**2) 
+                    ref['cerr'][ind1] += 1.0/newcat['cerr'][ind2]**2 
+                    ref['ndet'][ind1] += 1 
                     # Remove 
                     if nmatch < len(newcat): 
-                        REMOVE,ind2,newcat 
+                        newcat = np.delete(newcat,ind2)
                     else: 
-                        undefine,newcat 
+                        newcat = None
                  
                 # Add leftover ones 
                 if len(newcat) > 0: 
-                    if not keyword_set(silent) : 
+                    if silent==False:
                         logger.info('  Adding '+str(len(newcat))+' leftovers')
                     # Convert CMAG/CMAGERR to cumulative quantities 
-                    cmag = 2.5118864d**newcat.cmag * (1.0d0/newcat.cerr**2) 
-                    cerr = 1.0d0/newcat.cerr**2 
-                    newcat.cmag = cmag 
-                    newcat.cerr = cerr 
+                    cmag = 2.5118864**newcat['cmag'] * (1.0/newcat['cerr']**2) 
+                    cerr = 1.0/newcat['cerr']**2 
+                    newcat['cmag'] = cmag 
+                    newcat['cerr'] = cerr 
                     # Add more elements 
                     if refcnt+len(newcat) > nref: 
                         oldref = ref 
