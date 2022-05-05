@@ -4,6 +4,7 @@ import os
 import time
 import numpy as np
 from glob import glob
+import heaqlpy as hp
 from astropy.io import fits
 from astropy.table import Table
 from astropy.wcs import WCS
@@ -128,17 +129,16 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
      
     # Calculate healpix number 
     nside = 32
-    theta = (90-sumfilt.dec)/radeg 
-    phi = sumfilt.ra/radeg 
-    ANG2PIX_RING,nside,theta,phi,allpix 
-    ANG2PIX_RING,nside,(90-cendec)/radeg,cenra/radeg,cenpix 
-    MATCH,allpix,cenpix,ind1,ind2,/sort,count=nmatch 
+    allpix = hp.ang2pix(nside,sumfilt['ra'],sumfilt['dec'],lonlat=True)
+    cenpix = hp.ang2pix(nside,cenra,cendec,lonlat=True)
+    ind1,ind2 = dln.match(allpix,cenpix)
+    nmatch = len(ind1)
     if nmatch == 0: 
         if silent==False:
             logger.info('No good '+instfilt+' exposure at this position')
         return 
     sumfiltpos = sumfilt[ind1] 
-    dist = coords.sphdit(sumfiltpos['ra'],sumfiltpos['dec'],cenra,cendec)
+    dist = coords.sphdist(sumfiltpos['ra'],sumfiltpos['dec'],cenra,cendec)
     gddist, = np.where(dist < minradius) 
     if len(gddist) == 0: 
         if silent==False)
@@ -237,43 +237,41 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
                     newcat['cerr'] = cerr 
                     # Add more elements 
                     if refcnt+len(newcat) > nref: 
-                        oldref = ref 
-                        nnewref = 1e5 > len(newcat) 
-                        ref = REPLICATE(schema,nref+nnewref) 
-                        ref[0:nref-1] = oldref 
+                        oldref = ref.copy()
+                        nnewref = np.maximum(len(newcat),100000)
+                        ref = np.zeros(nref+nnewref,dtype=np.dtype(dt))
+                        ref = Table(ref)
+                        ref[0:nref] = oldref 
                         nref = len(ref) 
-                        undefine,oldref 
+                        del oldref
                     # Add new elements to REF 
-                    ref[refcnt:refcnt+len(newcat)-1] = newcat 
+                    ref[refcnt:refcnt+len(newcat)] = newcat 
                     refcnt += len(newcat) 
-            # add leftovers 
-        # 2nd or later exposure 
-    # some good sources 
          
         # Do we have enough exposures 
-        if nrefexpused >= (nrefexp < 10) : 
+        if nrefexpused >= (nrefexp < 10): 
             goto,DONE 
-         
-        #stop 
+
          
 # reference exposures loop 
-   :NE: 
+   #DONE: 
     # No good sources 
     if refcnt == 0: 
         if silent==False:
             logger.info('No good sources')
         return 
     # Remove extra elements 
-    ref = ref[0:refcnt-1] 
+    ref = ref[0:refcnt] 
     # Take average for CMAG and CERR 
-    newflux = ref.cmag / ref.cerr 
-    newmag = 2.50*alog10(newflux) 
-    newerr = sqrt(1.0/ref.cerr) 
-    ref.cmag = newmag 
-    ref.cerr = newerr 
+    newflux = ref['cmag'] / ref['cerr']
+    newmag = 2.5*np.log10(newflux) 
+    newerr = np.sqrt(1.0/ref['cerr']) 
+    ref['cmag'] = newmag 
+    ref['cerr'] = newerr 
      
     # Cross-match with the observed data 
-    SRCMATCH,ref.ra,ref.dec,cat.ra,cat.dec,0.5,ind1,ind2,/sph,count=nmatch 
+    ind1,ind2,dist = coords.xmatch(ref['ra'],ref['dec'],cat['ra'],cat['dec'],0.5)
+    nmatch = len(ind1)
     if nmatch == 0: 
         if silent==False:
             logger.info('No reference sources match to the data')
@@ -281,11 +279,11 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
     cat2 = cat[ind2] 
     ref2 = ref[ind1] 
     # Take a robust mean relative to CMAG 
-    mag = cat2.mag_auto + 2.5*alog10(expinfo['exptime)# correct for the exposure time 
-    err = cat2.magerr_auto 
-    model_mag = ref2.cmag 
-    col2 = fltarr(nmatch) 
-    mstr = {col:col2,mag:float(mag),model:float(model_mag),err:float(err),ccdnum:int(cat2.ccdnum)} 
+    mag = cat2['mag_auto'] + 2.5*np.log10(expinfo['exptime'])  # correct for the exposure time 
+    err = cat2['magerr_auto']
+    model_mag = ref2['cmag']
+    col2 = np.zeros(nmatch,float)
+    mstr = {'col':col2,'mag':float(mag),'model':float(model_mag),'err':float(err),'ccdnum':int(cat2['ccdnum'])} 
      
      
     # MEASURE THE ZERO-POINT 
@@ -293,16 +291,18 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
     # Same as from nsc_instcal_calibrate_fitzpterm.pro 
      
     # Fit the global and ccd zero-points 
-    n = len(mstr.col) 
-    diff = mstr.model - mstr.mag 
-    err = mstr.err 
+    n = len(mstr['col']) 
+    diff = mstr['model'] - mstr['mag']
+    err = mstr['err']
     # Make a sigma cut 
-    med = np.median([diff]) 
-    sig = mad([diff]) 
-    gd , = np.where(abs(diff-med) < 3*sig,ngd) 
-    x = fltarr(n) 
-    zpterm = dln_poly_fit(x[gd],diff[gd],0,measure_errors=err[gd],sigma=zptermerr,yerror=yerror,status=status,yfit=yfit1,/bootstrap) 
-    zpterm = zpterm[0] & zptermerr=zptermerr[0] 
+    med = np.median(diff) 
+    sig = dln.mad(diff) 
+    gd, = np.where(abs(diff-med) < 3*sig) 
+    ngd = len(gd)
+    x = np.zeros(n,float)
+    zpterm,zptermerr = dln.wtmean(diff[gd],err[gd],error=True)
+    #zpterm = dln_poly_fit(x[gd],diff[gd],0,measure_errors=err[gd],sigma=zptermerr,yerror=yerror,status=status,yfit=yfit1,/bootstrap) 
+    #zpterm = zpterm[0] & zptermerr=zptermerr[0] 
     # Save in exposure structure 
     expinfo['zpterm'] = zpterm 
     expinfo['zptermerr'] = zptermerr 
@@ -313,14 +313,17 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
     # Measure chip-level zpterm and variations 
     nchips = len(chinfo) 
     for i in range(nchips): 
-        MATCH,chinfo[i].ccdnum,mstr.ccdnum,ind1,ind2,/sort,count=nmatch 
+        ind1,ind2 = dln.match(chinfo['ccdnum'][i],mstr['ccdnum'])
+        nmatch = len(ind1)
+        #MATCH,chinfo[i].ccdnum,mstr.ccdnum,ind1,ind2,/sort,count=nmatch 
         if nmatch >= 5: 
-            gd1 , = np.where(abs(diff[ind2]-med) < 3*sig,ngd1) 
-            if ngd1 >= 5: 
-                zpterm1 = dln_poly_fit(x[ind2[gd1]],diff[ind2[gd1]],0,measure_errors=err[ind2[gd1]],sigma=zptermerr1,yerror=yerror,status=status,yfit=yfit1,/bootstrap) 
-                chinfo[i].zpterm = zpterm1 
-                chinfo[i].zptermerr = zptermerr1 
-                chinfo[i].nrefmatch = nmatch 
+            gd1, = np.where(np.abs(diff[ind2]-med) < 3*sig) 
+            if len(gd1) >= 5: 
+                zpterm1,zptermerr1 = dln.wtmean(diff[ind2[gd1]],err[ind2[gd1]],error=True)
+                #zpterm1 = dln_poly_fit(x[ind2[gd1]],diff[ind2[gd1]],0,measure_errors=err[ind2[gd1]],sigma=zptermerr1,yerror=yerror,status=status,yfit=yfit1,/bootstrap) 
+                chinfo['zpterm'][i] = zpterm1 
+                chinfo['zptermerr'][i] = zptermerr1 
+                chinfo['nmatch'][i] = nmatch 
      
     # Measure spatial variations 
     gdchip, = np.where(chinfo['zpterm'] < 1000) 
