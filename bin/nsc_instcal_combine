@@ -14,7 +14,7 @@ import glob
 import logging
 import socket
 from argparse import ArgumentParser
-import nsc
+from nsc import utils,combine
 
 if __name__ == "__main__":
 
@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
      
     # Calibrate catalogs for one exposure
-    dldir,mssdir,localdir = nsc.utils.rootdirs()
+    dldir,mssdir,localdir = utils.rootdirs()
 
     
     # Start the logfile 
@@ -77,6 +77,6 @@ if __name__ == "__main__":
     logger.setLevel(logging.NOTSET)
 
 
-    nsc.combine.combine(pix,version,nside=nside,redo=args.redo,
-                        verbose=args.verbose,multilevel=multilevel,
-                        outdir=outdir,nmulti=args.nmulti)
+    combine.combine(pix,version,nside=nside,redo=args.redo,
+                    verbose=args.verbose,multilevel=multilevel,
+                    outdir=outdir,nmulti=args.nmulti)
