@@ -13,6 +13,7 @@ import subprocess
 import glob
 import logging
 import socket
+from datetime import datetime
 from argparse import ArgumentParser
 from nsc import utils,combine
 
@@ -36,7 +37,7 @@ if __name__ == "__main__":
     host = hostname.split('.')[0]
     radeg = np.float64(180.00) / np.pi
 
-    # Inputs                                                                                                                                              
+    # Inputs
     pix = int(args.pix[0])
     version = args.version[0]
     verbose = args.verbose
@@ -48,14 +49,11 @@ if __name__ == "__main__":
     multilevel = True
     outdir = args.outdir
 
-     
-    # Calibrate catalogs for one exposure
+    # Combine catalogs for one exposure
     dldir,mssdir,localdir = utils.rootdirs()
-
     
     # Start the logfile 
     #------------------ 
-    # format is delvered_forcebrick.brick.host.DATETIME.log
     host = socket.gethostname()
     hostname = host.split('.')[0]
     logtime = datetime.now().strftime("%Y%m%d%H%M%S") 
@@ -70,7 +68,7 @@ if __name__ == "__main__":
     if os.path.exists(logfile): os.remove(logfile)
     fileHandler = logging.FileHandler(logfile)
     fileHandler.setFormatter(logFormatter)
-    rootLogger.addHandler(fileHandler)
+    logger.addHandler(fileHandler)
     consoleHandler = logging.StreamHandler()
     consoleHandler.setFormatter(logFormatter)
     logger.addHandler(consoleHandler)

@@ -12,5 +12,5 @@ setup(name='noaosourcecatalog',
       package_dir={'':'python'},
       scripts=['bin/nsc_instcal_calibrate','bin/nsc_instcal_combine'],
       #py_modules=['nsc_instcal',''],
-      requires=['numpy','astropy','scipy','dlnpyutils']
+      requires=['numpy','astropy','scipy','dlnpyutils','sep','healpy']
 )

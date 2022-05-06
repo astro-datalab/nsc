@@ -15,42 +15,47 @@ import logging
 import socket
 from datetime import datetime
 from argparse import ArgumentParser
-from nsc import utils,calibrate
+from nsc import utils,measure
 
 if __name__ == "__main__":
 
-    # Calibrate one full DECam/Mosaic3/Bok InstCal image
-
-    parser = ArgumentParser(description='Calibrate one NSC InstCal image')
-    parser.add_argument('expdir', type=str, nargs=1, help='Exposure directory')
-    #parser.add_argument('inpref', type=str, nargs=1, help='Input reference')
-    parser.add_argument('--eqnfile', type=str, nargs=1, help='Modelmag equations filename')
+    # Run measurement on one full DECam/Mosaic3/Bok InstCal image
+    parser = ArgumentParser(description='Run measurement on one NSC InstCal image')
+    parser.add_argument('fluxfile', type=str, nargs=1, help='Absolute flux filename')
+    parser.add_argument('wtfile', type=str, nargs=1, help='Absolute weight filename')
+    parser.add_argument('maskfile', type=str, nargs=1, help='Absolute mask filename')
+    parser.add_argument('version', type=str, nargs=1, help='NSC version')
     parser.add_argument('--redo', action='store_true', help='Redo this image')
-    parser.add_argument('--selfcal', action='store_true', help='Self calibration')
-    parser.add_argument('--saveref', action='store_true', help='Save the reference catalog')
-    parser.add_argument('--ncpu', type=int, nargs=1, help='Number of cpus to use')
     args = parser.parse_args()
 
     t0 = time.time()
 
     # File names
-    expdir = args.expdir
-    if type(expdir) is list:
-        expdir = expdir[0]
-    eqnfile = args.eqnfile
-    if type(eqnfile) is list:
-        eqnfile = eqnfile[0]
+    fluxfile = args.fluxfile
+    if type(fluxfile) is list:
+        fluxfile = fluxfile[0]
+    wtfile = args.wtfile
+    if type(wtfile) is list:
+        wtfile = wtfile[0]
+    maskfile = args.maskfile
+    if type(maskfile) is list:
+        maskfile = maskfile[0]
 
-    # Calibrate catalogs for one exposure
+    # Check that the files exist
+    if os.path.exists(fluxfile) is False:
+        print(fluxfile+" file NOT FOUND")
+        sys.exit()
+    if os.path.exists(wtfile) is False:
+        print(wtfile+" file NOT FOUND")
+        sys.exit()
+    if os.path.exists(maskfile) is False:
+        print(maskile+" file NOT FOUND")
+        sys.exit()
+
+    # Measure catalogs for one exposure
     dldir,mssdir,localdir = utils.rootdirs()
-     
-    # Make sure the directory exists 
-    if os.path.exists(expdir) == False:
-        raise ValueError(expdir+' NOT FOUND')
-     
+          
     t00 = time.time() 
-     
-    base = os.path.basename(expdir) 
     
     # Start the logfile 
     #------------------ 
@@ -64,7 +69,7 @@ if __name__ == "__main__":
         logger.removeHandler(logger.handlers[0]) 
     logger = logging.getLogger()
     logtime = datetime.now().strftime("%Y%m%d%H%M%S")
-    logfile = expdir+'/'+base+'_calib.log'
+    logfile = expdir+'/'+base+'_meas.log'
     if os.path.exists(logfile): os.remove(logfile)
     fileHandler = logging.FileHandler(logfile)
     fileHandler.setFormatter(logFormatter)
@@ -74,5 +79,14 @@ if __name__ == "__main__":
     logger.addHandler(consoleHandler)
     logger.setLevel(logging.NOTSET)
 
-    calibrate.calibrate(expdir,eqnfile=eqnfile,redo=args.redo,
-                        selfcal=args.selfcal,saveref=args.saveref,ncpu=args.ncpu)
+    # Create the Exposure object
+    exp = measure.Exposure(fluxfile,wtfile,maskfile,nscversion=version)
+    # Run
+    exp.run()
+
+    print("Total time = "+str(time.time()-t0)+" seconds")
+
+
+
+
+
