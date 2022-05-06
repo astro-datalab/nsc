@@ -351,7 +351,7 @@ def detect_segment(exp,nsig=5.0):
     
     # Parameter checking
     if nsig <= 0:
-        print "Nsig must be >0"
+        print("Nsig must be >0")
         return
 
     # Subtract background from image
@@ -410,10 +410,10 @@ def detect_delta(exp,nsig=5.0,fluxfrac=0.5):
 
     # Parameter checking
     if nsig <= 0:
-        print "Nsig must be >0"
+        print("Nsig must be >0")
         return
     if fluxfrac < 0:
-        print "Fluxfrac must be >0"
+        print("Fluxfrac must be >0")
         return
 
     # Subtract background from image
@@ -526,7 +526,7 @@ def detect_delta(exp,nsig=5.0,fluxfrac=0.5):
     else:
         peaks = None
 
-    print ngdpeaks, "sources detected in image"
+    print(ngdpeaks, "sources detected in image")
         
     return peaks
 
@@ -537,7 +537,7 @@ def detect_peaksegment(exp,nsig=5.0):
     
     # Parameter checking
     if nsig <= 0:
-        print "Nsig must be >0"
+        print("Nsig must be >0")
         return
 
     # Subtract background from image
@@ -1149,7 +1149,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     file = args.file
     
-    print "Running DAOPHOT PSF photometry on ", file
+    print("Running DAOPHOT PSF photometry on ", file)
 
     # Figure out the output file
     dir = os.path.dirname(file)
@@ -1158,13 +1158,13 @@ if __name__ == "__main__":
     base, ext = os.path.splitext(os.path.basename(file))
     outfile = dir+'/'+base+'_cat.fits'
     if os.path.exists(outfile) and not args.clobber:
-        print outfile," EXISTS and --clobber not set"
+        print(outfile," EXISTS and --clobber not set")
         sys.exit()
     
     # Load the file
     im, head = fits.getdata(file,0,header=True)
     nx, ny = im.shape
-    print "Dimensions", im.shape
+    print("Dimensions", im.shape)
 
     # Make new "image" or "exposure" class that has:
     # -flux image
@@ -1176,7 +1176,7 @@ if __name__ == "__main__":
     # -wcs?
     
     # Get the background
-    print "Computing background image"
+    print("Computing background image")
     # THIS TAKES WAY TOO LONG  
     bkg = photutils.Background2D(im, (nx/10, ny/10), filter_size=1,method='median')
     subim = im-bkg.background
@@ -1235,7 +1235,7 @@ if __name__ == "__main__":
     morph = get_morph(exp,peaks)
     
     # output to csv file
-    print "Writing output catalog to ", outfile
+    print("Writing output catalog to ", outfile)
     # Delete output file if it exists and clobber set
     if os.path.exists(outfile) and args.clobber:
         os.remove(outfile)

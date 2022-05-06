@@ -49,12 +49,12 @@ if __name__ == "__main__":
 
     t0 = time.time()
 
-    print sys.argv
+    print(sys.argv)
 
     # Not enough inputs
     n = len(sys.argv)
     if n < 4:
-        print "Syntax - nsc_instcal.py fluxfile wtfile maskfile version"
+        print("Syntax - nsc_instcal.py fluxfile wtfile maskfile version")
         sys.exit()
 
     # File names
@@ -63,13 +63,13 @@ if __name__ == "__main__":
     maskfile = sys.argv[3]
     # Check that the files exist
     if os.path.exists(fluxfile) == False:
-        print fluxfile, "file NOT FOUND"
+        print(fluxfile, "file NOT FOUND")
         sys.exit()
     if os.path.exists(wtfile) == False:
-        print wtfile, "file NOT FOUND"
+        print(wtfile, "file NOT FOUND")
         sys.exit()
     if os.path.exists(maskfile) == False:
-        print maskile, "file NOT FOUND"
+        print(maskile, "file NOT FOUND")
         sys.exit()
 
     base = os.path.basename(fluxfile)
@@ -78,13 +78,13 @@ if __name__ == "__main__":
     # 1) Prepare temporary directory
     #---------------------------------
     #print "Step #1: Preparing temporary directory"
-    tmpcntr = 1L
+    tmpcntr = 1
     tmpdir = tmproot+base+"."+str(tmpcntr)
     while (os.path.exists(tmpdir)):
         tmpcntr = tmpcntr+1
         tmpdir = tmproot+base+"."+str(tmpcntr)
         if tmpcntr > 20:
-            print "Temporary Directory counter getting too high. Exiting"
+            print("Temporary Directory counter getting too high. Exiting")
             sys.exit()
     os.mkdir(tmpdir)
     origdir = os.getcwd()
@@ -279,7 +279,7 @@ if __name__ == "__main__":
         # WEIGHT_IMAGE  F4-00507860_01_comb.mask.fits
 
         filter_name = ''
-        cnt = 0L
+        cnt = 0
         for l in lines:
             # SATUR_LEVEL
             m = re.search('^SATUR_LEVEL',l)

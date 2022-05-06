@@ -128,7 +128,7 @@ if __name__ == "__main__":
     calstr['chipindx'] = brklo
     calstr['nchips'] = nchexp
     # Getting number of good chip WCS for each exposures
-    for i in range(len(calstr): calstr['ngoodchipwcs'][i] = np.sum(chstr['ngaiamatch']][brklo[i]:brkhi[i]+1]>0)
+    for i in range(len(calstr)): calstr['ngoodchipwcs'][i] = np.sum(chstr['ngaiamatch'][brklo[i]:brkhi[i]+1]>0)
     # Fixing absolute paths of flux filename
     cfile = calstr['file']
     cfile = cfile.replace('/net/mss1/','')
@@ -152,7 +152,7 @@ if __name__ == "__main__":
         # Fix CHSTR CENRA
         bd2,nbd2 = dln.where(chra<0)
         if nbd2>0: chra[bd2]+=360
-        chstr['cenra']][bdra[ind3]] = chra
+        chstr['cenra'][bdra[ind3]] = chra
         # Fix CHSTR VRA
         vra = chstr['vra'][bdra[ind3]]
         bd3,nbd3 = dln.where(vra<0)
@@ -162,10 +162,10 @@ if __name__ == "__main__":
     # Fix instrument in STR and CHSTR
     print('FIXING INSTRUMENT IN STR AND CHSTR')
     type = ['c4d','k4m','ksb']
-    for i=0,len(type)-1:
-        gd,ngd = dln.where(stregex(calstr.expdir,'/'+type[i]+'/',/boolean)==1)
+    for i in range(len(type)):
+        gd,ngd = dln.where(stregex(calstr.expdir,'/'+type[i]+'/')==1)
         if ngd>0: calstr[gd].instrument=type[i]
-        gd,ngd = dln.where(stregex(chstr.expdir,'/'+type[i]+'/',/boolean)==1)
+        gd,ngd = dln.where(stregex(chstr.expdir,'/'+type[i]+'/')==1)
         if ngd>0: chstr[gd].instrument=type[i]
 
     ## Fix missing AIRMASS
@@ -248,7 +248,7 @@ if __name__ == "__main__":
         badzpmask = np.zeros(len(calstr),bool)+True
         
         for i in range(nzpstr):
-            ind,nind = dln.where((calstr['instrument']==zpstr['instrument']][i]) & (calstr['filter']==zpstr['filter'][i]) & (calstr['success']==1))
+            ind,nind = dln.where((calstr['instrument']==zpstr['instrument'][i]) & (calstr['filter']==zpstr['filter'][i]) & (calstr['success']==1))
             print(zpstr['instrument'][i]+'-'+zpstr['filter'][i]+' '+str(nind)+' exposures')
             if nind>0:
                 calstr1 = calstr[ind]
@@ -260,7 +260,7 @@ if __name__ == "__main__":
                 bdam,nbdam = dln.where(am < 0.9)
                 if nbdam>0: am[bdam] = np.median(am)
 # I GOT TO HERE IN THE TRANSLATING!!!
-                glactc,calstr1.ra,calstr1.dec,2000.0,glon,glat,1,/deg
+                #glactc,calstr1.ra,calstr1.dec,2000.0,glon,glat,1,/deg
 
                 # Measure airmass dependence
                 gg0,ngg0 = dln.where((np.abs(zpterm)<50) & (am<2.0))
@@ -271,11 +271,12 @@ if __name__ == "__main__":
                 coef = dln.poly_fit(am[gg],zpterm[gg],1,robust=True)
                 print(zpstr['instrument'][i]+'-'+zpstr['filter'][i]+' '+str(coef))
                 # Trim out bad exposures to determine the correlations and make figures
-                gg,ngg = dln.where(np.abs(zpterm-zpf) lt (3.5*sig0 > 0.2) and calstr1.airmass lt 2.0 and calstr1.fwhm lt 2.0 and calstr1.rarms lt 0.15 & 
-                           calstr1.decrms lt 0.15 and calstr1.success eq 1 and calstr1.wcscal eq 'Successful' and calstr1.zptermerr lt 0.05 & 
-                           calstr1.zptermsig lt 0.08 and (calstr1.ngoodchipwcs eq calstr1.nchips) & 
-                           (calstr1.instrument ne 'c4d' or calstr1.zpspatialvar_nccd le 5 or (calstr1.instrument eq 'c4d' and calstr1.zpspatialvar_nccd gt 5 and calstr1.zpspatialvar_rms lt 0.1)) and $
-                           np.abs(glat) gt 10 and calstr1.nrefmatch gt 100 and calstr1.exptime ge 30)
+                gg,ngg = dln.where(np.abs(zpterm-zpf) < (3.5*sig0 > 0.2) and calstr1.airmass < 2.0 and calstr1.fwhm < 2.0 and calstr1.rarms < 0.15 & 
+                           calstr1.decrms < 0.15 and calstr1.success == 1 and calstr1.wcscal == 'Successful' and calstr1.zptermerr < 0.05 & 
+                           calstr1.zptermsig < 0.08 and (calstr1.ngoodchipwcs == calstr1.nchips) & 
+                           (calstr1.instrument != 'c4d' or calstr1.zpspatialvar_nccd <= 5 or (calstr1.instrument == 'c4d' and 
+                                                                                              calstr1.zpspatialvar_nccd > 5 and calstr1.zpspatialvar_rms < 0.1)) and
+                           np.abs(glat) > 10 and calstr1.nrefmatch > 100 and calstr1.exptime >= 30)
 
                 # Zpterm with airmass dependence removed
                 relzpterm = zpterm + 25   # 25 to get "absolute" zpterm
@@ -339,7 +340,7 @@ if __name__ == "__main__":
                 #  calmag = instmag + zpterm
                 # if there are clouds then instmag is larger/fainter
                 #  and zpterm is smaller (more negative)
-                #bdind, = np.where(calstr[ind].zpterm-medzp lt -zpthresh[i],nbdind)
+                #bdind, = np.where(calstr[ind].zpterm-medzp < -zpthresh[i],nbdind)
                 gdmask = (relzpterm >= -zpstr['thresh'][i]) & (relzpterm <= zpstr['thresh'][i])
                 gdind,ngdind,bdind,nbdind = dln.where(gdmask,comp=True)
                 print('  '+str(nbdind)+' exposures with ZPTERM below the threshold')
@@ -476,7 +477,7 @@ if __name__ == "__main__":
         healstr = healstr[idx]
         q = healstr.pix
         lo,nlo = dln.where(q != np.roll(q,1))
-        #hi, = np.where(q ne shift(q,-1))
+        #hi, = np.where(q != shift(q,-1))
         hi = [lo[1:nlo-1]-1,nhealstr-1]
         nexp = hi-lo+1
         dtype_index = np.dtype([('pix',int),('lo',int),('hi',int),('nexp',int)])
@@ -542,11 +543,11 @@ if __name__ == "__main__":
     #if not keyword_set(redo) then begin
     #  outfiles = dir+'combine/'+str(upix/1000,2)+'/'+str(upix,2)+'.fits.gz'
     #  test = file_test(outfiles)
-    #  gd, = np.where(test eq 0,ngd,comp=bd,ncomp=nbd)
-    #  if nbd gt 0 then begin
+    #  gd, = np.where(test == 0,ngd,comp=bd,ncomp=nbd)
+    #  if nbd > 0 then begin
     #    print,str(nbd,2),' files already exist and /redo not set.'
     #  endif 
-    #  if ngd eq 0 then begin
+    #  if ngd == 0 then begin
     #    print,'No files to process'
     #    return
     #  endif
@@ -644,7 +645,7 @@ if __name__ == "__main__":
     #si = sort(sum.mtime)
     #sum = sum[si]
     ## only keep fairly recent ones
-    #gd, = np.where(sum.mtime gt 1.4897704e+09,ngd)
+    #gd, = np.where(sum.mtime > 1.4897704e+09,ngd)
     #sum = sum[gd]
     ## Deal with duplicates
     #dbl = doubles(sum.pix,count=ndbl)
@@ -654,7 +655,7 @@ if __name__ == "__main__":
     #  MATCH,sum[alldbl].pix,sum[dbl[i]].pix,ind1,ind2,/sort,count=nmatch
     #  torem[ind1[0:nmatch-2]] = 1
     #endfor
-    #bd=where(torem eq 1,nbd)
+    #bd=where(torem == 1,nbd)
     #remove,alldbl[bd],sum
     #dt = lonarr(len(index))-1
     #MATCH,index.pix,sum.pix,ind1,ind2,/sort,count=nmatch
@@ -678,12 +679,12 @@ if __name__ == "__main__":
     #glactc,pixra,pixdec,2000.0,pixgl,pixgb,1,/deg
     #cel2lmc,pixra,pixdec,palmc,radlmc
     #cel2smc,pixra,pixdec,rasmc,radsmc
-    #gdpix, = np.where(index.nexp lt 50 and np.abs(pixgb) gt 10 and radlmc gt 5 and radsmc gt 5,ngdpix)
+    #gdpix, = np.where(index.nexp < 50 and np.abs(pixgb) > 10 and radlmc > 5 and radsmc > 5,ngdpix)
     #
     #outfile = dldir+'users/dnidever/nsc/instcal/combine/'+str(index.pix,2)+'.fits'
 
     # Now run the combination program on each healpix pixel
-    PBS_DAEMON,cmd,cmddir,jobs=jobs,/hyperthread,/idle,prefix='nsccmb',nmulti=nmulti,wait=1
+    jobs = job_daemon(cmd,cmddir,jobs=jobs,hyperthread=True,prefix='nsccmb',nmulti=nmulti,wait=1)
 
     # RUN NSC_COMBINE_SUMMARY WHEN IT'S DONE!!!
 
@@ -692,9 +693,9 @@ if __name__ == "__main__":
     #sumstr = replicate({pix:0L,nexposures:0L,nobjects:0L,success:0},nupix)
     #sumstr.pix = upix
     #for i=0,nupix-1 do begin
-    #  if (i+1) mod 5000 eq 0 then print,i+1
+    #  if (i+1) mod 5000 == 0 then print,i+1
     #  file = dir+'combine/'+str(upix[i],2)+'.fits'
-    #  if file_test(file) eq 1 then begin
+    #  if file_test(file) == 1 then begin
     #    meta = MRDFITS(file,1,/silent)
     #    sumstr[i].nexposures = len(meta)
     #    hd = headfits(file,exten=2)
@@ -704,7 +705,7 @@ if __name__ == "__main__":
     #    sumstr[i].success = 0
     #  endelse
     #endfor
-    #gd, = np.where(sumstr.success eq 1,ngd)
+    #gd, = np.where(sumstr.success == 1,ngd)
     #print,str(ngd,2),' Healpix successfully processed'
     #print,'Writing summary file to ',dir+'combine/nsc_instcal_combine.fits'
     #MWRFITS,sumstr,dir+'combine/nsc_instcal_combine.fits',/create

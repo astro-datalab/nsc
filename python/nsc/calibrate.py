@@ -4,7 +4,7 @@ import os
 import time
 import numpy as np
 from glob import glob
-import heaqlpy as hp
+import healpy as hp
 from astropy.io import fits
 from astropy.table import Table
 from astropy.wcs import WCS
@@ -13,6 +13,7 @@ from astropy.time import Time
 from dlnpyutils import utils as dln,coords
 from dustmaps.sfd import SFDQuery
 from scipy.optimize import curve_fit
+from scipy import stats
 from . import utils,query,modelmag
 
 def fitzpterm(mstr,expinfo,chinfo):
@@ -26,16 +27,14 @@ def fitzpterm(mstr,expinfo,chinfo):
     sig = dln.mad(diff) 
     gd, = np.where(np.abs(diff-med) < 3*sig) 
     x = np.zeros(n,float)
-    zpterm,zptermerr = dln.wtmean(diff[gd],err[gd],error=True)
-    #zpterm = dln_poly_fit(x[gd],diff[gd],0,measure_errors=err[gd],sigma=zptermerr,yerror=yerror,status=status,yfit=yfit1) #,/bootstrap) 
-    #zpterm = zpterm[0]
-    #zptermerr = zptermerr[0] 
-    # Save in exposure structure 
+    zpterm,zptermerr1 = dln.wtmean(diff[gd],err[gd],error=True)
+    zptermerr = dln.bootstrap(diff[gd],dln.wtmean,args=err[gd],indexargs=True)
+    # Save in exposure table
     expinfo['zpterm'] = zpterm 
     expinfo['zptermerr'] = zptermerr 
     expinfo['zptermsig'] = sig 
     expinfo['nrefmatch'] = n 
-    expinfo['ngoodrefmatch'] = ngd 
+    expinfo['ngoodrefmatch'] = len(gd)
      
     # Measure chip-level zpterm and variations 
     nchips = len(chinfo) 
@@ -45,20 +44,20 @@ def fitzpterm(mstr,expinfo,chinfo):
         if nmatch >= 5: 
             gd1, = np.where(np.abs(diff[ind2]-med) < 3*sig) 
             if len(gd1) >= 5: 
-                zpterm1,zptermerr1 = dln.wtmean(diff[ind2[gd1]],err[ind2[gd1]],error=True)
-                #zpterm1 = dln_poly_fit(x[ind2[gd1]],diff[ind2[gd1]],0,measure_errors=err[ind2[gd1]],sigma=zptermerr1,yerror=yerror,status=status,yfit=yfit1) #,/bootstrap) 
+                zpterm1, _ = dln.wtmean(diff[ind2[gd1]],err[ind2[gd1]],error=True)
+                zptermerr1 = dln.bootstrap(diff[ind2[gd1]],dln.wtmean,args=err[ind2[gd1]],indexargs=True)
                 chinfo['zpterm'][i] = zpterm1 
                 chinfo['zptermerr'][i] = zptermerr1 
                 chinfo['nrefmatch'][i] = nmatch 
      
     # Measure spatial variations 
-    gdchip, = np.where(chinfo.zpterm < 1000) 
+    gdchip, = np.where(chinfo['zpterm'] < 1000) 
     if len(gdchip) > 1: 
         expinfo['zpspatialvar_rms'] = np.std(chinfo['zpterm'][gdchip]) 
         expinfo['zpspatialvar_range'] = np.max(chinfo['zpterm'][gdchip])-np.min(chinfo['zpterm'][gdchip]) 
         expinfo['zpspatialvar_nccd'] = len(gdchip)
 
-    return expinfo
+    return expinfo,chinfo
 
 
 def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
@@ -91,7 +90,7 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
         instrument = 'k4m' 
     if expdir.find('/ksb/') > -1:        
         instrument = 'ksb' 
-    instfilt = instrument+'-'+str(expinfo['filter']][0]) 
+    instfilt = instrument+'-'+str(expinfo['filter'][0]) 
     # version
     # get version number 
     lo = expdir.find('nsc/instcal/') 
@@ -105,14 +104,16 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
     cendec = expinfo['dec']
      
     # Read in the summary structure 
-    sumfile = dldir+'dnidever/nsc/instcal/'+version+'/lists/nsc_instcal_calibrate.fits' 
+    #sumfile = dldir+'dnidever/nsc/instcal/'+version+'/lists/nsc_instcal_calibrate.fits' 
+    sumfile = dldir+'dnidever/nsc/instcal/'+version+'/lists/nsc_calibrate_summary.fits' 
     if os.path.exists(sumfile) == False: 
         if silent==False:
             logger.info(sumfile+' NOT FOUND')
         return 
-    suminfo = Table.read(sumfile)
-    #sum = MRDFITS(sumfile,1,/silent) 
-    allinstfilt = np.char.array(suminfo['instrument'])+'-'+np.char.array(suminfo['filter'])
+    logger.info('Loading '+sumfile)
+    suminfo = Table.read(sumfile,1)
+    for n in suminfo.colnames: suminfo[n].name = n.lower()  # lowercase names
+    allinstfilt = np.char.array(suminfo['instrument'].astype(str))+'-'+np.char.array(suminfo['filter'].astype(str))
     gdfilt, = np.where((allinstfilt == instfilt) & (suminfo['nrefmatch'] > 10) & (suminfo['success'] == 1) & (suminfo['fwhm'] < 2.0)) 
     if len(gdfilt) == 0: 
         if silent==False:
@@ -131,23 +132,23 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
     nside = 32
     allpix = hp.ang2pix(nside,sumfilt['ra'],sumfilt['dec'],lonlat=True)
     cenpix = hp.ang2pix(nside,cenra,cendec,lonlat=True)
-    ind1,ind2 = dln.match(allpix,cenpix)
+    ind1,ind2 = dln.match(cenpix,allpix)
     nmatch = len(ind1)
     if nmatch == 0: 
         if silent==False:
             logger.info('No good '+instfilt+' exposure at this position')
         return 
-    sumfiltpos = sumfilt[ind1] 
+    sumfiltpos = sumfilt[ind2] 
     dist = coords.sphdist(sumfiltpos['ra'],sumfiltpos['dec'],cenra,cendec)
     gddist, = np.where(dist < minradius) 
     if len(gddist) == 0: 
-        if silent==False)
+        if silent==False:
             logger.info('No good '+instfilt+' exposures within %0.2f deg' % minradius)
         return 
     refexp = sumfiltpos[gddist] 
     nrefexp = len(refexp) 
     if silent==False:
-        logger.info(str(ngddist)+' good exposures within %0.2f deg' % minradius)
+        logger.info(str(len(gddist))+' good exposures within %0.2f deg' % minradius)
      
     # Pick the best ones 
     si = np.flip(np.argsort(refexp['zptermerr'])) 
@@ -158,11 +159,15 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
     refcnt = 0
     nrefexpused = 0
     for i in range(nrefexp): 
-         
         # Load the catalog 
-        catfile = refexp['expdir'][i]+'/'+refexp['base'][i]+'_cat.fits'
-        if catfile[0:4]=='/net' and dldir[0:4]=='/net':
-            catfile = catfile[4:]
+        #catfile = str(refexp['expdir'][i]).strip()+'/'+str(refexp['base'][i]).strip()+'_cat.fits'
+        catfile = str(refexp['expdir'][i]).strip()+'/'+str(refexp['base'][i]).strip()+'_meas.fits'
+        #if catfile[0:4]=='/net' and dldir[0:4]=='/net':
+        #    catfile = catfile[4:]
+        if catfile[0:4] != '/net':
+            catfile = '/net'+catfile
+        if catfile.find('/dl1/users/') > -1:
+            catfile = catfile.replace('/dl1/users/','/dl2/')
         cat1 = Table.read(catfile)
         # Only want good ones 
         gdcat1, = np.where((cat1['imaflags_iso'] == 0) & (((cat1['flags'] & 8)==0)) & (((cat1['flags'] & 16)==0)) & 
@@ -206,8 +211,7 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
                 refcnt += nnew 
                  
             # Second or later, add to them 
-            else: 
-                 
+            else:                  
                 # Crossmatch 
                 ind1,ind2,dist = coords.xmatch(ref['ra'][0:refcnt],ref['dec'][0:refcnt],newcat['ra'],newcat['dec'],0.5)
                 nmatch = len(ind1)
@@ -250,16 +254,14 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
          
         # Do we have enough exposures 
         if nrefexpused >= (nrefexp < 10): 
-            goto,DONE 
+            break
 
-         
-# reference exposures loop 
-   #DONE: 
     # No good sources 
     if refcnt == 0: 
         if silent==False:
             logger.info('No good sources')
-        return 
+        return expinfo,chinfo
+
     # Remove extra elements 
     ref = ref[0:refcnt] 
     # Take average for CMAG and CERR 
@@ -275,7 +277,7 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
     if nmatch == 0: 
         if silent==False:
             logger.info('No reference sources match to the data')
-        return 
+        return expinfo,chinfo
     cat2 = cat[ind2] 
     ref2 = ref[ind1] 
     # Take a robust mean relative to CMAG 
@@ -283,12 +285,12 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
     err = cat2['magerr_auto']
     model_mag = ref2['cmag']
     col2 = np.zeros(nmatch,float)
-    mstr = {'col':col2,'mag':float(mag),'model':float(model_mag),'err':float(err),'ccdnum':int(cat2['ccdnum'])} 
+    mstr = {'col':col2,'mag':mag,'model':model_mag,'err':err,'ccdnum':cat2['ccdnum']} 
      
      
     # MEASURE THE ZERO-POINT 
     #----------------------- 
-    # Same as from nsc_instcal_calibrate_fitzpterm.pro 
+    # Same as from fitzpterm()
      
     # Fit the global and ccd zero-points 
     n = len(mstr['col']) 
@@ -297,12 +299,11 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
     # Make a sigma cut 
     med = np.median(diff) 
     sig = dln.mad(diff) 
-    gd, = np.where(abs(diff-med) < 3*sig) 
+    gd, = np.where(np.abs(diff-med) < 3*sig) 
     ngd = len(gd)
     x = np.zeros(n,float)
-    zpterm,zptermerr = dln.wtmean(diff[gd],err[gd],error=True)
-    #zpterm = dln_poly_fit(x[gd],diff[gd],0,measure_errors=err[gd],sigma=zptermerr,yerror=yerror,status=status,yfit=yfit1,/bootstrap) 
-    #zpterm = zpterm[0] & zptermerr=zptermerr[0] 
+    zpterm, _ = dln.wtmean(diff[gd],err[gd],error=True)
+    zptermerr = dln.bootstrap(diff[gd],dln.wtmean,args=err[gd],indexargs=True)
     # Save in exposure structure 
     expinfo['zpterm'] = zpterm 
     expinfo['zptermerr'] = zptermerr 
@@ -315,12 +316,11 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
     for i in range(nchips): 
         ind1,ind2 = dln.match(chinfo['ccdnum'][i],mstr['ccdnum'])
         nmatch = len(ind1)
-        #MATCH,chinfo[i].ccdnum,mstr.ccdnum,ind1,ind2,/sort,count=nmatch 
         if nmatch >= 5: 
             gd1, = np.where(np.abs(diff[ind2]-med) < 3*sig) 
             if len(gd1) >= 5: 
-                zpterm1,zptermerr1 = dln.wtmean(diff[ind2[gd1]],err[ind2[gd1]],error=True)
-                #zpterm1 = dln_poly_fit(x[ind2[gd1]],diff[ind2[gd1]],0,measure_errors=err[ind2[gd1]],sigma=zptermerr1,yerror=yerror,status=status,yfit=yfit1,/bootstrap) 
+                zpterm1, _ = dln.wtmean(diff[ind2[gd1]],err[ind2[gd1]],error=True)
+                zptermerr1 = dln.bootstrap(diff[ind2[gd1]],dln.wtmean,args=err[ind2[gd1]],indexargs=True)
                 chinfo['zpterm'][i] = zpterm1 
                 chinfo['zptermerr'][i] = zptermerr1 
                 chinfo['nmatch'][i] = nmatch 
@@ -329,7 +329,7 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
     gdchip, = np.where(chinfo['zpterm'] < 1000) 
     if len(gdchip) > 1: 
         expinfo['zpspatialvar_rms'] = np.std(chinfo['zpterm'][gdchip]) 
-        expinfo['zpspatialvar_range'] = np.max(chinfo['zpterm'][gdchip]-np.min(chinfo['zpterm'][gdchip]) 
+        expinfo['zpspatialvar_range'] = np.max(chinfo['zpterm'][gdchip]-np.min(chinfo['zpterm'][gdchip]))
         expinfo['zpspatialvar_nccd'] = len(gdchip)
      
     # Print out the results 
@@ -342,7 +342,7 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
     #dt = systime(1)-t0 
     #if not keyword_set(silent) then logger.info('dt = ',stringize(dt,ndec=2),' sec.' 
      
-
+    return expinfo,chinfo
 
 
 def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=False,ncpu=1,logger=None):
@@ -408,9 +408,10 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     logger.info('Version = '+version)
      
     # Check for output file 
-    if os.path.exists(outfile) == False and redo==False:
+    if os.path.exists(outfile) == True and redo==False:
         logger.info(outfile+' already exists and /redo not set.')
-     
+        return
+
     # What instrument is this? 
     instrument = 'c4d'# by default
     if expdir.find('/k4m/') > -1:
@@ -686,11 +687,11 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     logger.info('FILTER = '+filt)
     logger.info('EXPTIME = %.2f sec.' % exptime)
     logger.info('MJD = %.4f' % mjd)
-         
+
     # Set some catalog values 
     cat['filter'] = filt
     cat['mjd'] = mjd 
-    cat['sourceid'] = instrument+'.'+str(expnum)+'.'+str(cat['ccdnum'])+'.'+str(cat['number']) 
+    cat['sourceid'] = instrument+'.'+str(expnum)+'.'+np.char.array(cat['ccdnum'].astype(str))+'.'+np.char.array(cat['number'].astype(str))
          
     # Start the exposure-level structure
     edt = [('file',(np.str,300)),('wtfile',(np.str,300)),('maskfile',(np.str,300)),('instrument',(np.str,10)),
@@ -983,33 +984,29 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         gdcat, = np.where((cat1['imaflags_iso'] == 0) & (~((cat1['flags'] & 8) > 0)) & (~((cat1['flags'] & 16) > 0)) &
                           (cat1['mag_auto'] < 50) &  (cat1['magerr_auto'] < 0.05) & 
                           (cat1['fwhm_world']*3600 < 2*medfwhm) & (mmags[:,0] < 50) & (mmags[:,1] < 5))
-    if len(gdcat) == 0: 
+    if len(gdcat) > 0: 
+        ref2 = ref1[gdcat] 
+        mmags2 = mmags[gdcat,:] 
+        cat2 = cat1[gdcat] 
+        # Matched structure 
+        mag2 = cat2['mag_auto'] + 2.5*np.log10(exptime)   # correct for the exposure time 
+        mstr = {'col':mmags2[:,2],'mag':mag2,'model':mmags2[:,0],'err':mmags2[:,1],'ccdnum':cat2['ccdnum']} 
+        # Measure the zero-point
+        expinfo,chinfo = fitzpterm(mstr,expinfo,chinfo)
+        expinfo['zptype'] = 1 
+    else:
         logger.info('No good reference sources')
-        goto,ENDBOMB 
-    ref2 = ref1[gdcat] 
-    mmags2 = mmags[gdcat,:] 
-    cat2 = cat1[gdcat] 
-    # Matched structure 
-    mag2 = cat2['mag_auto'] + 2.5*np.log10(exptime)   # correct for the exposure time 
-    import pdb; pdb.set_trace()
-    mstr = {'col':float(mmags2[:,2]),'mag':float(mag2),'model':float(mmags2[:,0]),'err':float(mmags2[:,1]),'ccdnum':int(cat2['ccdnum'])} 
-    # Measure the zero-point
-    expinfo = fitzpterm(mstr,expinfo,chinfo)
-    expinfo['zptype'] = 1 
-                 
-    #ENDBOMB:
     
     # Use self-calibration 
     if expinfo['nrefmatch'] <= 5 and selfcal:
-        chinfo = selfcalzpterm(expdir,cat,expinfo,chinfo)
-        #NSC_INSTCAL_CALIBRATE_SELFCALZPTERM,expdir,cat,expinfo,chinfo 
+        expinfo,chinfo = selfcalzpterm(expdir,cat,expinfo,chinfo)
         expinfo['zptype'] = 3 
 
     # Apply the zero-point to the full catalogs 
     # USE CHIP-LEVEL ZERO-POINTS WHEN POSSIBLE!!! 
     # Create an output catalog for each chip 
-    nsrc = int(np.sum(chinfo['nsources']))
-    lo = [0,nsrc[0:nchips-1]] 
+    nsrc = np.cumsum(chinfo['nsources'])
+    lo = np.append(0,nsrc[0:nchips])
     hi = nsrc-1 
     for i in range(nchips): 
         ncat1 = hi[i]-lo[i]+1 
@@ -1052,7 +1049,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     # Measure the depth 
     #   need good photometry 
     gdmag, = np.where(cat['cmag'] < 50) 
-    if len(gdmag) > 0: 
+    ngdmag = len(gdmag)
+    if ngdmag > 0: 
         # Get 95% percentile depth 
         cmag = cat['cmag'][gdmag]
         si = np.argsort(cmag) 
@@ -1060,7 +1058,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         depth95 = cmag[int(np.round(0.95*ngdmag))-1] 
         expinfo['depth95'] = depth95 
         chinfo['depth95'] = depth95 
-        logger.info('95% percentile depth = %.2f mag' % depth95)
+        logger.info('95% percentile depth'+' = %.2f mag' % depth95)
         # Get 10 sigma depth 
         #  S/N = 1.087/err 
         #  so S/N=5 is for err=1.087/5=0.2174 
@@ -1070,7 +1068,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         if len(depind) < 5 : 
             depind, = np.where((cat['cmag'] < 50) & (cat['cmag'] > depth95-3.0) & (cat['cerr'] >= 0.0787) & (cat['cerr'] <= 0.1387))
         if len(depind) > 5: 
-            depth10sig = np.median([cat[depind].cmag]) 
+            depth10sig = np.median(cat['cmag'][depind]) 
         else: 
             depind, = np.where(cat['cmag'] < 50) 
             if len(depind) > 0: 
@@ -1089,14 +1087,14 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
             dln.file_copy(metafile,expdir+'/'+base+'_meta.v1.fits',overwrite=True)
              
     # Create an output catalog for each chip 
-    nsrc = int(np.sum(chinfo['nsources']))
-    lo = [0,nsrc[0:nchips-1]] 
+    nsrc = np.cumsum(chinfo['nsources'])
+    lo = np.append(0,nsrc[0:nchips]) 
     hi = nsrc-1 
     for i in range(nchips): 
         ncat1 = hi[i]-lo[i]+1 
         if ncat1 == 0: 
             logger.info('No sources for CCDNUM='+str(chinfo['ccdnum'][i]))
-            goto,CHIPBOMB 
+            continue
         cat1 = cat[lo[i]:hi[i]] 
                  
         # Apply QA cuts 
@@ -1128,15 +1126,15 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
             # use 1000 as the boundary since sometimes there's a sharp drop 
             # at the boundary that causes problem sources with SExtractor 
             bdind, = np.where((cat1['x_image'] > 1000) & (cat1['ccdnum'] == 31))
+            ngdind = len(cat1)-len(bdind)
             if len(bdind) > 0:  # some bad ones found 
                 if ngdind == 0:  # all bad 
                     #logger.info('NO useful measurements in ',list[i].file 
                     cat1 = None
                     ncat1 = 0 
-                    goto,CHIPBOMB 
+                    continue
                 else: 
                     #logger.info('  Removing '+strtrim(nbdind,2)+' bad chip 31 measurements, '+strtrim(ngdind,2)+' left.' 
-                    #REMOVE,bdind,cat1 
                     cat1 = np.delete(cat1,bdind)
                     ncat1 = len(cat1)         
             else:
@@ -1146,9 +1144,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         bdcat, = np.where(cat1['imaflags_iso'] > 0)
         if len(bdcat) > 0: 
             #logger.info('  Removing ',strtrim(nbdcat,2),' sources with bad CP flags.' 
-            if nbdcat == ncat1 : 
-                goto,CHIPBOMB 
-            #REMOVE,bdcat,cat1 
+            if len(bdcat) == ncat1: 
+                continue
             cat1 = np.delete(cat1,bdcat)
             ncat1 = len(cat1) 
                          
@@ -1158,9 +1155,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
                                ((cat1['flags'] & 16) > 0))   # aperture truncate 
         if len(bdseflags) > 0: 
             #logger.info('  Removing ',strtrim(nbdseflags,2),' truncated sources' 
-            if nbdseflags == ncat1 : 
-                goto,CHIPBOMB 
-            #REMOVE,bdseflags,cat1 
+            if len(bdseflags) == ncat1: 
+                continue
             cat1 = np.delete(cat1,bdseflags)
             ncat1 = len(cat1) 
                          
@@ -1170,14 +1166,14 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         bdsnr, = np.where(1.087/cat1['magerr_auto'] < snrcut) 
         if len(bdsnr) > 0: 
             #logger.info('  Removing ',strtrim(nbdsnr,2),' sources with S/N<',strtrim(snrcut,2) 
-            if nbdsnr == ncat1: 
-                goto,CHIPBOMB 
-            #REMOVE,bdsnr,cat1 
+            if len(bdsnr) == ncat1: 
+                continue
             cat1 = np.delete(cat1,bdsnr)
             ncat1 = len(cat1) 
                          
         # Convert to final format 
         if ncat1 > 0:
+            cat1 = Table(cat1)
             mdt = [('measid',(np.str,100)),('objectid',(np.str,100)),('exposure',(np.str,50)),
                    ('ccdnum',int),('filter',(np.str,50)),('mjd',float),('x',float),('y',float),
                    ('ra',float),('raerr',float),('dec',float),('decerr',float),('mag_auto',float),
@@ -1189,21 +1185,22 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
             meas = np.zeros(ncat1,dtype=np.dtype(mdt))
             meas = Table(meas)
             for n in meas.colnames:
-                meas[n] = cat1[n]
-            meas['measid'] = str(cat1['sourceid']) 
+                if n in cat1.colnames:
+                    meas[n] = cat1[n]
+            meas['measid'] = cat1['sourceid'].astype(str)
             meas['exposure'] = base 
             meas['x'] = cat1['x_image']
             meas['y'] = cat1['y_image']
             meas['mag_auto'] = cat1['cmag']
             meas['magerr_auto'] = cat1['cerr']
-            meas['mag_aper1'] = cat1['mag_aper'][0] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
-            meas['magerr_aper1'] = cat1['magerr_aper'][0] 
-            meas['mag_aper2'] = cat1['mag_aper'][1] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
-            meas['magerr_aper2'] = cat1['magerr_aper'][1] 
-            meas['mag_aper4'] = cat1['mag_aper'][2] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
-            meas['magerr_aper4'] = cat1['magerr_aper'][2] 
-            meas['mag_aper8'] = cat1['mag_aper'][4] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
-            meas['magerr_aper8'] = cat1['magerr_aper'][4] 
+            meas['mag_aper1'] = cat1['mag_aper'][:,0] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
+            meas['magerr_aper1'] = cat1['magerr_aper'][:,0] 
+            meas['mag_aper2'] = cat1['mag_aper'][:,1] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
+            meas['magerr_aper2'] = cat1['magerr_aper'][:,1] 
+            meas['mag_aper4'] = cat1['mag_aper'][:,2] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
+            meas['magerr_aper4'] = cat1['magerr_aper'][:,2] 
+            meas['mag_aper8'] = cat1['mag_aper'][:,4] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
+            meas['magerr_aper8'] = cat1['magerr_aper'][:,4] 
             meas['asemi'] = cat1['a_world'] * 3600.         # convert to arcsec 
             meas['asemierr'] = cat1['erra_world'] * 3600.   # convert to arcsec 
             meas['bsemi'] = cat1['b_world'] * 3600.         # convert to arcsec 
@@ -1224,13 +1221,9 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
 
             hdu = fits.HDUList()
             hdu.append(fits.table_to_hdu(meas))
-            hdu.append(fits.table_to_hdu(chinfo[i]))   # add chip stucture for this chip
+            hdu.append(fits.table_to_hdu(chinfo[i:i+1]))   # add chip stucture for this chip
             hdu.writeto(outfile,overwrite=True)
             hdu.close()
-                            
-            #MWRFITS,meas,outfile,/create 
-            #MWRFITS,chinfo[i],outfile,/silent# add chip stucture for this chip 
-            #CHIPBOMB: 
                      
     # Total number of measurements 
     expinfo['nmeas'] = np.sum(chinfo['nmeas']) 
