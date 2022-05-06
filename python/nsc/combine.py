@@ -1161,36 +1161,13 @@ def breakup_idstr(dbfile):
 
 
 # Combine data for one NSC healpix region
-if __name__ == "__main__":
-    parser = ArgumentParser(description='Combine NSC data for one healpix region.')
-    parser.add_argument('pix', type=str, nargs=1, help='HEALPix pixel number')
-    parser.add_argument('version', type=str, nargs=1, help='Version number')
-    parser.add_argument('--nside', type=int, default=128, help='HEALPix Nside')
-    parser.add_argument('-r','--redo', action='store_true', help='Redo this HEALPIX')
-    parser.add_argument('-v','--verbose', action='store_true', help='Verbose output')
-    parser.add_argument('-m','--multilevel', action='store_true', help='Break into smaller healpix')
-    parser.add_argument('--outdir', type=str, default='', help='Output directory')
-    parser.add_argument('-nm','--nmulti', type=int, nargs=1, default=1, help='Number of jobs')
-
-    args = parser.parse_args()
+def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdir=None,nmulti=None):
 
     t0 = time.time()
     hostname = socket.gethostname()
     host = hostname.split('.')[0]
     radeg = np.float64(180.00) / np.pi
 
-    # Inputs
-    pix = int(args.pix[0])
-    version = args.version[0]
-    verbose = args.verbose
-    nside = args.nside
-    redo = args.redo
-    multilevel = args.multilevel
-    nmulti = dln.first_el(args.nmulti)
-    print('KLUDGE!!!  FORCING --MULTILEVEL')
-    multilevel = True
-    outdir = args.outdir
-    
     tmpdir = '/tmp/'  # default
     # on thing/hulk use
     if (host == "thing") or (host == "hulk"):

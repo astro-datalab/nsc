@@ -10,7 +10,7 @@ setup(name='noaosourcecatalog',
       url='https://github.com/astro-datalab/noaosourcecatalog',
       packages=['nsc'],
       package_dir={'':'python'},
-      scripts=['bin/nsc_instcal_calibrate'],
+      scripts=['bin/nsc_instcal_calibrate','bin/nsc_instcal_combine'],
       #py_modules=['nsc_instcal',''],
       requires=['numpy','astropy','scipy','dlnpyutils']
 )
