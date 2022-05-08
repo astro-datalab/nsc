@@ -18,8 +18,7 @@ Vizier.ROW_LIMIT = -1
 Vizier.cache_location = None
 
 
-def getrefcat(minra,refcat,version=None,saveref=False,
-              savefile=None,silent=False,logger=None):
+def getdata(refcat,minra,redo=False,silent=False,logger=None):
     """
     Get reference catalog information from DL database 
  
@@ -77,10 +76,6 @@ def getrefcat(minra,refcat,version=None,saveref=False,
     # Temporary directory 
     # /tmp is often small and get get fille dup
     dldir,mssdir,localdir = utils.rootdirs()
-    if version is None:
-        version = 'v3' 
-    fdir = dldir+'users/dnidever/nsc/instcal/'+version+'/' 
-    tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/' 
      
     # FLIP THIS AROUND, INPUT SHOULD BE THE "EASY" VERSION!!! 
     refname = str(refcat).upper()
@@ -100,20 +95,28 @@ def getrefcat(minra,refcat,version=None,saveref=False,
         refname = 'II/305/archive' 
     elif refname == 'ATLASREFCAT2': 
         refname = 'ATLAS' 
-     
-    if savefile is None:
-        savefile = tmpdir+'ref_%.5f_%.5f_%.3f_%s.fits' % (cenra,cendec,radius,refname)
+
+
+    ra0 = minra
+    ra1 = minra+1.0
+
+
+    outdir = '/net/dl1/users/nidever/nsc/refcatalogs/'+refname+'/'
+    if os.path.exists(outdir)==False:
+        os.makedirs(outdir)
+    savefile = outdir+'ref_%.6f_%.6f_%s.fits' % (ra0,ra1,refname)
     if os.path.exists(os.path.abspath(os.path.dirname(savefile)))==False:
         os.makedirs(os.path.abspath(os.path.dirname(savefile)))
 
     if silent==False:
-        logger.info('Querying %s: RA=%.5f DEC=%.5f Radius=%.3f' % (refname,cenra,cendec,radius))
+        logger.info('Querying %s: %.6f <= RA < %.6f' % (refname,ra0,ra1))
+
+    
      
     # Loading previously loaded file 
-    if os.path.exists(savefile): 
-        if silent==False:
-            logger.info('Loading previously-saved file '+savefile)
-        ref = Table.read(savefile) 
+    if os.path.exists(savefile) and redo==False:
+        logger.info(savefile+' already exists and redo==False')
+        return None
          
     # Do the Query 
     #-------------- 
@@ -204,15 +207,10 @@ def getrefcat(minra,refcat,version=None,saveref=False,
                 server = 'gp10.datalab.noirlab.edu' 
                 user = 'datalab'
 
-
-            ra0 = minra
-            ra1 = minra+1.0
-
-                
             # Use Postgres command with q3c cone search 
             refcattemp = savefile.replace('.fits','.txt') 
             cmd = "psql -h "+server+" -U "+user+" -d tapdb -w --pset footer -c 'SELECT "+cols+" FROM "+tablename
-            cmd += " WHERE ra >= %.6f and ra < %.6f'" % (ra0,ra1))
+            cmd += " WHERE ra >= %.6f and ra < %.6f'" % (ra0,ra1)
             cmd += " > "+refcattemp
             dln.remove(refcattemp,allow=True)
             dln.remove(savefile,allow=True) 
@@ -307,17 +305,25 @@ def getrefcat(minra,refcat,version=None,saveref=False,
                     ref['_4_5_'][bd] = 99.99 
                     ref['e__4_5_'][bd] = 9.99 
              
-            # Save the file 
-            if saveref:
-                if silent==False: 
-                    logger.info('Saving catalog to file '+savefile)
-                ref.write(savefile,overwrite=True)  # only save if necessary
+        # Convert all mags and errmags to float32
+        for n in ref.colnames:
+            if n.find('mag') > -1:
+                ref[n] = ref[n].astype(np.float32)
+            if n.find('e_') > -1 and n.find('mag') > -1:
+                ref[n] = ref[n].astype(np.float32)
+                
 
-
-    import pdb; pdb.set_trace()
+        # Save the file 
+        logger.info('Saving catalog to file '+savefile)
+        ref.write(savefile,overwrite=True)
                 
     if silent==False:
         logger.info('%d sources found   dt=%.1f sec.' % (len(ref),time.time()-t0))
      
     return ref 
 
+def download(refcat,redo=False):
+    """ Download data."""
+
+    for i in range(360):
+        dum = getdata(refcat,i,redo=redo)
