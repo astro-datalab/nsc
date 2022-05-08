@@ -224,9 +224,6 @@ def getdata(refcat,minra,redo=False,silent=False,logger=None):
             #  Load ASCII file and create the FITS file 
             ref = ascii.read(refcattemp,data_start=3,delimiter='|')
             #ref = importascii(refcattemp,/header,delim='|',skipline=2,/silent) 
-            if saveref:
-                logger.info('Saving catalog to file '+savefile)
-                ref.write(savefile,overwrite=True)
             dln.remove(refcattemp,allow=True)
              
             # Fix 0.0 mags/errs in ATLAS 
