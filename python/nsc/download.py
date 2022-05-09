@@ -97,7 +97,7 @@ def getdata(refcat,minra,redo=False,silent=False,logger=None):
         refname = 'ATLAS' 
 
 
-    ra0 = minra
+    ra0 = float(minra)
     ra1 = minra+1.0
 
 
@@ -258,8 +258,23 @@ def getdata(refcat,minra,redo=False,silent=False,logger=None):
             #cfa = 1   # problems with CDS VizieR and cfa has APASS now 
             #if refcat == 'SAGE': 
             #    cfa = 0 
-            result = Vizier.query_region(SkyCoord(ra=cenra, dec=cendec, unit='deg'),
-                                         radius=Angle(radius, "deg"), catalog=refname)
+
+            if refname=='GALEX':
+                cols = ['RAJ2000','DEJ2000','FUVmag','e_FUVmag','NUVmag','e_NUVmag']
+                catname = 'II/335/galex_ais'
+            elif refname=='GLIMPSE':
+                # Only includes GLIMPSE I,II,3D
+                cols = ['RAJ2000','DEJ2000','_2MASS','_3.6mag','e_3.6mag','_4.5mag','e_4.5mag']
+                catname = 'glimpse'
+            elif refname=='SAGE':
+                cols = ['RAJ2000','DEJ2000','__3.6_','e__3.6_','__4.5_','e__4.5_']
+                catname = 'II/305/catalog'
+
+            Vizier.ROW_LIMIT = -1
+            Vizier.columns = cols
+            result = Vizier.query_constraints(catalog=catname,
+                                              RA='>='+str(ra0)+' & <'+str(ra1))
+
             # Check for failure 
             if len(result)==0:
                 if silent==False : 
@@ -311,7 +326,14 @@ def getdata(refcat,minra,redo=False,silent=False,logger=None):
                 ref[n] = ref[n].astype(np.float32)
             if n.find('e_') > -1 and n.find('mag') > -1:
                 ref[n] = ref[n].astype(np.float32)
-                
+        # Lowercase column names
+        for n in ref.colnames:
+            ref[n].name = n.lower()
+        # Convert raj2000/dej2000 to ra/dec
+        if 'raj2000' in ref.colnames:
+            ref['raj2000'].name = 'ra'
+        if 'dej2000' in ref.colnames:
+            ref['dej2000'].name = 'dec'  
 
         # Save the file 
         logger.info('Saving catalog to file '+savefile)
