@@ -1238,6 +1238,112 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
             
     dt = time.time()-t00 
     logger.info('dt = %.2f sec.' % dt)
-                     
+
+
+def calibrate_healpix(pix,version,nside=64,redo=False):
+    """
+    This program is a wrapper around NSC_INSTCAL_CALIBRATE
+    for all exposures in the same region of the sky.
+    It retrieves the reference catalogs ONCE which saves time.
+
+    Parameters
+    ----------
+    pix       The HEALPix pixel number.
+    version   The version name, e.g. 'v3'. 
+    =nside    The HEALPix nside to use.  Default is 64.
+    /redo     Rerun on exposures that were previously processed.
+
+    Returns
+    -------
+
+    Example
+    -------
+
+    calibrate_healpix(1045,'v3')
+
+    By D. Nidever 2017
+    Translated to Python by D. Nidever, May 2022
+    """
+
+    # Main NOAO DECam source catalog
+    lsdir,mssdir,localdir = utils.rootdirs()
+    fdir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
+    tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
+    if os.path.exists(fdir)==False:
+        os.makedirs(fdir+'logs/')
+    if os.path.exists(tmpdir)==False:
+        os.makedirs(tmpdir)
+
+    t00 = time.time()
+
+    # Load the list of exposures
+    listfile = fdir+'/lists/nsc_calibrate_healpix_list.fits'
+    if os.path.exists(listfile)==False:
+        print(listfile,' NOT FOUND')
+        return
+    hplist = Table.read(listfile)
+
+    # Get the exposures for this healpix
+    print('Calibrating InstCal SExtractor catalogs for Healpix pixel = '+str(pix))
+    ind1,ind2 = dln.match(hplist['pix'],pix)
+    nind = len(ind1)
+    if nind==0:
+        print('No exposures')
+        return
+    print('NEXPOSURES = '+str(nind))
+    hplist1 = hplist[ind]
+    hplist1['expdir'] = np.char.array(hplist1['expdir']).strip()
+    hplist1['instrument ']= np.char.array(hplist1['instrument']).strip()
+    hplist1['filter'] = np.char.array(hplist1['filter']).strip()
+
+    # Central coordinates
+    cenra,cendec = hp.pix2ang(nside,pix,lonlat=True)
+    print('RA  = %.6f' % cenra)
+    print('DEC = %.6f' % cendec)
+    cencoo = SkyCoord(ra=cenra,dec=cendec,unit='deg')
+    glon = cencoo.galactic.l.degree
+    glat = cencoo.galactic.b.degree
+    print('L = %.6f' % glon)
+    print('B = %.6f' % glat)
+
+    # List of instrument-filters
+    filters = np.char.array(hplist1['instrument']).strip()+'-'+np.char.array([f.strip()[0:2] for f in hplist1['filter']]).strip()
+    filters = np.unique(filters)
+
+    # Get required radius
+    #  DECam      needs 1.1 deg
+    #  Mosaic3    needs 0.43 deg
+    #  Bok90prime needs 0.75 deg
+    nc4d = np.sum(np.char.array(hplist1['instrument']).find('c4d') > -1)
+    nksb = np.sum(np.char.array(hplist1['instrument']).find('ksb') > -1)
+    minradius = 0.43
+    if nksb>0:
+        minradius = np.maximum(minradius, 0.75)
+    if nc4d>0: 
+        minradius = np.maximum(minradius, 1.1)
+    # Add extra area for the size of the healpix pixel
+    #   nside=128 is roughly 27' across
+    #   nside=64 is roughly 55' across
+    #   nside=32 is roughly 110' across
+    radius = minradius + 0.5
+
+    # Get all of the reference data that we need
+    print('')
+    ref = getrefdata(filters,cenra,cendec,radius)
+
+    # Loop over the exposures
+    for i in range(nind):
+        print('')
+        print('---- EXPOSURE '+str(i+1)+' OF '+str(nind)+' ----')
+        print('')
+        expdir = hplist1['expdir'][i]
+        lo = expdir.find('/d1')
+        expdir = dldir + expdir[lo+5:]
+        calibrate(expdir,ref,redo=redo)
+
+    print('')
+    print('Total time = %.2f sec' % (time.time()-t00))
+
+
  
                 
