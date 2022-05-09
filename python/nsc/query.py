@@ -3,19 +3,84 @@
 import os
 import time
 import numpy as np
+import socket
 from astropy.io import fits,ascii
-from astropy.table import Table
+from astropy.table import Table,vstack
 import subprocess
 from dlnpyutils import utils as dln,coords
 from dustmaps.sfd import SFDQuery
 from astroquery.vizier import Vizier
 from astropy.coordinates import Angle,SkyCoord
+import healpy as hp
 import astropy.units as u
 from . import utils
 
 Vizier.TIMEOUT = 600
 Vizier.ROW_LIMIT = -1
 Vizier.cache_location = None
+
+def tempest_query(cenra,cendec,radius,refcat,silent=False,logger=None):
+    """
+    Get reference catalog information from FITS files on tempest.
+ 
+    Parameters
+    ----------
+    cenra : float
+       Central RA for the search. 
+    cendec : float
+       Central DEC for the search. 
+    radius : float
+       Search radius in degrees. 
+    refcat : table
+       Reference catalog name (e.g. 2MASS, Gaia, etc.)
+    silent : bool, optional
+       Don't print anything to the screen. 
+    logger : logging object, optional
+       Logging object to use for printing messages.
+ 
+    Returns
+    -------
+    ref : astropy table
+        Search results from the reference catalog. 
+ 
+    Example
+    -------
+
+    cat = tempest_query(cenra,cendec,radius,refcat) 
+ 
+    """
+
+    t0 = time.time() 
+
+    if logger is None:
+        logger = dln.basiclogger()
+
+
+    # What healpix do we need to load
+    nside = 32
+    upix = hp.ang2pix(nside,cenra,cendec,lonlat=True)
+    cenvec = hp.ang2vec(cenra,cendec,lonlat=True)
+    allpix = hp.query_disc(nside,cenvec,np.deg2rad(radius),inclusive=True)
+
+    # Loop over healpix
+    ref = None
+    for p in allpix:
+        reffile = '/home/x51j468/catalogs/'+refcat+'/'+str(p//1000)+'/'+str(p)+'.fits'
+        if os.path.exists(reffile)==False:
+            print(reffile,' NOT FOUND')
+        tab = Table.read(reffile)
+        ntab = len(tab)
+        if ref is None:
+            ref = tab
+        else:
+            ref = vstack((ref,tab))
+
+    # Do radius cut
+    dist = coords.sphdist(cenra,cendec,ref['ra'],ref['dec'])
+    gd, = np.where(dist <= radius)
+    ref = ref[gd]
+    
+    return ref
 
 
 def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
@@ -52,7 +117,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
     Example
     -------
 
-    cat = getrefcat(cenra,cendec,radius,refcat,file=file,saveref=saveref) 
+    cat = getrefcat(cenra,cendec,radius,refcat,savefile=savefile,saveref=saveref) 
  
     By D. Nidever  Sep 2017 
     Translated to Python by D. Nidever, April 2022
@@ -60,6 +125,17 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
      
     count = 0 
     t0 = time.time() 
+
+    host = socket.gethostname()
+    host = host.split('.')[0]
+    if 'tempest' in host.lower():
+        tempest = True
+    else:
+        tempest = False
+
+    # Run query on tempest
+    if tempest:
+        return tempest_query(cenra,cendec,radius,refcat,silent=silent,logger=logger)
 
     if logger is None:
         logger = dln.basiclogger()
