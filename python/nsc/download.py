@@ -90,9 +90,9 @@ def getdata(refcat,minra,redo=False,silent=False,logger=None):
     elif refname == 'Skymapper': 
         refname = 'SKYMAPPER' 
     elif refname == 'GLIMPSE': 
-        refname = 'II/293/glimpse' 
+        catname = 'II/293/glimpse' 
     elif refname == 'SAGE': 
-        refname = 'II/305/archive' 
+        catname = 'II/305/archive' 
     elif refname == 'ATLASREFCAT2': 
         refname = 'ATLAS' 
 
@@ -259,18 +259,19 @@ def getdata(refcat,minra,redo=False,silent=False,logger=None):
             #if refcat == 'SAGE': 
             #    cfa = 0 
 
-            if refname=='GALEX':
+            if refname.upper()=='GALEX':
                 cols = ['RAJ2000','DEJ2000','FUVmag','e_FUVmag','NUVmag','e_NUVmag']
                 catname = 'II/335/galex_ais'
-            elif refname=='GLIMPSE':
+            elif refname.upper()=='GLIMPSE':
                 # Only includes GLIMPSE I,II,3D
                 cols = ['RAJ2000','DEJ2000','_2MASS','_3.6mag','e_3.6mag','_4.5mag','e_4.5mag']
-                catname = 'glimpse'
-            elif refname=='SAGE':
+                catname = 'II/293/glimpse'
+            elif refname.upper()=='SAGE':
                 cols = ['RAJ2000','DEJ2000','__3.6_','e__3.6_','__4.5_','e__4.5_']
                 catname = 'II/305/catalog'
 
             Vizier.ROW_LIMIT = -1
+            Vizier.TIMEOUT = 1000000
             Vizier.columns = cols
             result = Vizier.query_constraints(catalog=catname,
                                               RA='>='+str(ra0)+' & <'+str(ra1))
@@ -279,7 +280,7 @@ def getdata(refcat,minra,redo=False,silent=False,logger=None):
             if len(result)==0:
                 if silent==False : 
                     logger.info('Failure or No Results')
-                return []                
+                return [] 
             ref = result[0]
             ref.meta['description'] = ref.meta['description'][0:50]
             #ref = QUERYVIZIER(refname,[cenra,cendec],radius*60,cfa=cfa,timeout=600,/silent) 
