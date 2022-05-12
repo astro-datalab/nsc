@@ -19,7 +19,7 @@ Vizier.TIMEOUT = 600
 Vizier.ROW_LIMIT = -1
 Vizier.cache_location = None
 
-def tempest_query(cenra,cendec,radius,refcat,silent=False,logger=None):
+def tempest_query(cenra,cendec,radius,refcat,nside=32,silent=False,logger=None):
     """
     Get reference catalog information from FITS files on tempest.
  
@@ -57,7 +57,6 @@ def tempest_query(cenra,cendec,radius,refcat,silent=False,logger=None):
 
 
     # What healpix do we need to load
-    nside = 32
     upix = hp.ang2pix(nside,cenra,cendec,lonlat=True)
     cenvec = hp.ang2vec(cenra,cendec,lonlat=True)
     allpix = hp.query_disc(nside,cenvec,np.deg2rad(radius),inclusive=True)
@@ -65,18 +64,28 @@ def tempest_query(cenra,cendec,radius,refcat,silent=False,logger=None):
     # Loop over healpix
     ref = None
     for p in allpix:
-        reffile = '/home/x51j468/catalogs/'+refcat+'/'+str(p//1000)+'/'+str(p)+'.fits'
+        reffile = '/home/x51j468/catalogs/'+refcat+'/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'
         if os.path.exists(reffile)==False:
             print(reffile,' NOT FOUND')
+            continue
         tab = Table.read(reffile)
+        # Sometimes the catalog files have a 2nd dimension
+        for n in tab.colnames:
+            if tab[n].ndim==2 and tab[n].shape[1]==1:
+                tab[n] = tab[n].flatten()
         ntab = len(tab)
         if ref is None:
             ref = tab
         else:
             ref = vstack((ref,tab))
 
+    if ref is None:
+        return []
+            
     # Do radius cut
     dist = coords.sphdist(cenra,cendec,ref['ra'],ref['dec'])
+    if dist.ndim==2:
+        dist = dist.flatten()
     gd, = np.where(dist <= radius)
     ref = ref[gd]
     
@@ -84,7 +93,7 @@ def tempest_query(cenra,cendec,radius,refcat,silent=False,logger=None):
 
 
 def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
-              savefile=None,silent=False,logger=None):
+              savefile=None,nside=32,silent=False,logger=None):
     """
     Get reference catalog information from DL database 
  
@@ -135,7 +144,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
 
     # Run query on tempest
     if tempest:
-        return tempest_query(cenra,cendec,radius,refcat,silent=silent,logger=logger)
+        return tempest_query(cenra,cendec,radius,refcat,nside=nside,silent=silent,logger=logger)
 
     if logger is None:
         logger = dln.basiclogger()
