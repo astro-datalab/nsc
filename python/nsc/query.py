@@ -1004,7 +1004,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
             del old
             del new
             del left1
-  
+
     # Get extinction 
     #---------------- 
     ref = getreddening(ref,ext_type)
@@ -1012,9 +1012,14 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
     # Get the model magnitudes
     if modelmags:
         model_mag = modelmag.modelmag(ref,filt,cendec,eqnfile)
-        ref['model_mag'] = model_mag[:,0]
-        ref['model_magerr'] = model_mag[:,1]
-        ref['model_color'] = model_mag[:,2]      
+        if model_mag is not None and len(model_mag)>0:
+            ref['model_mag'] = model_mag[:,0]
+            ref['model_magerr'] = model_mag[:,1]
+            ref['model_color'] = model_mag[:,2]
+        else:
+            ref['model_mag'] = 99.99
+            ref['model_magerr'] = 9.99
+            ref['model_color'] = 99.99            
         gdmodel, = np.where(ref['model_mag'] < 50)
         if silent==False:
             logger.info(str(len(gdmodel))+' stars with good model magnitudes')

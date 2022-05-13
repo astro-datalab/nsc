@@ -50,6 +50,7 @@ def modelmag(tab,instfilt,dec,eqnfile):
     # EBV  - E(B-V) reddening
 
     ntab = len(tab)
+    colnames = tab.colnames
     for n in tab.colnames:
         tab[n].name = n.upper()
     tabcols = np.char.array(tab.colnames)
@@ -110,7 +111,8 @@ def modelmag(tab,instfilt,dec,eqnfile):
         cols = np.char.array(modelmageqn_cols).upper()
 
     ## Remove numbers and "COLOR"
-    bd, = np.where(cols.isnumeric() | (cols.upper() == 'COLOR') | (cols == '??'))
+    isnumeric = np.array([dln.isnumber(c) for c in cols])
+    bd, = np.where(isnumeric | (cols.upper() == 'COLOR') | (cols == '??'))
     if len(bd)>0:
         if len(bd) < len(cols):
             cols = np.delete(cols,bd)
@@ -130,13 +132,13 @@ def modelmag(tab,instfilt,dec,eqnfile):
         if ntagmatch>0:
             leftind = np.delete(leftind,ind2)
         print('Needed columns missing. '+' '.join(cols[leftind]))
-
+        
     ## Make the color
     ##  replace the columns by TAB[GD].COLUMN
     if usecolor:
         coloreqn_cols = np.char.array(re.split('[-+*^]',coloreqn)).upper()
         coloreqn_cols = np.unique(coloreqn_cols)  # unique ones
-        bd, = np.where(coloreqn_cols.isnumeric())  ## Remove numbers
+        bd, = np.where(np.array([dln.isnumber(c) for c in coloreqn_cols]))  ## Remove numbers
         if len(bd)>0:
             coloreqn_cols = np.delete(coloreqn_cols,bd)
         colcmd = coloreqn.upper()
@@ -155,7 +157,7 @@ def modelmag(tab,instfilt,dec,eqnfile):
         magind, = np.where(tabcols.upper() == cols[magcolsind[i]].upper())
         if len(magind) == 0:
             print(cols[magcolsind[i]].upper()+' column NOT found')
-            return -999999.
+            return []
         goodmask &= ((tab[tabcols[magind[0]]] < 50) & (tab[tabcols[magind[0]]] > 0) & np.isfinite(tab[tabcols[magind[0]]]))
 
     ## input quality cuts
@@ -183,12 +185,13 @@ def modelmag(tab,instfilt,dec,eqnfile):
     gd, = np.where(goodmask==True)
     if len(gd)==0:
         print('No good sources left')
-        return -999999.
+        return []
 
     # Make the model magnitude
     ##  replace the columns by TAB[GD].COLUMN
     modelmageqn_cols = np.char.array(re.split('[-+*^]',modelmageqn)).upper()
-    bd, = np.where(modelmageqn_cols.isnumeric() | (modelmageqn_cols.upper() == 'COLOR'))  ## Remove numbers and "COLOR"
+    bd, = np.where(np.array([dln.isnumber(c) for c in modelmageqn_cols]) |
+                   (modelmageqn_cols.upper() == 'COLOR'))  ## Remove numbers and "COLOR"
     if len(bd)>0:
         modelmageqn_cols = np.delete(modelmageqn_cols,bd)
     modelmageqn_cols = np.unique(modelmageqn_cols)  # unique ones
@@ -236,7 +239,8 @@ def modelmag(tab,instfilt,dec,eqnfile):
     if usecolor:
         colorerr_cols = np.char.array(re.split('[-+*^]',coloreqn)).upper()
         colorerr_cols = np.unique(colorerr_cols)  # unique ones
-        bd, = np.where(colorerr_cols.isnumeric() | (colorerr_cols.upper() == 'EBV'))  ## Remove numbers and "EBV"
+        bd, = np.where(np.array([dln.isnumber(c) for c in colorerr_cols]) |
+                       (colorerr_cols.upper() == 'EBV'))  ## Remove numbers and "EBV"
         if len(bd)>0:
             colorerr_cols = np.delete(colorerr_cols,bd)
         ## use - and + signs to break apart the components that need to be squared
@@ -264,7 +268,8 @@ def modelmag(tab,instfilt,dec,eqnfile):
     ## get the columns
     modelmagerr_cols = np.char.array(re.split('[-+*^]',modelmageqn)).upper()
     modelmagerr_cols = np.unique(modelmagerr_cols)  # unique ones
-    bd, = np.where(modelmagerr_cols.isnumeric() | (modelmagerr_cols.upper() == 'EBV'))  ## Remove numbers and "EBV"
+    bd, = np.where(np.array([dln.isnumber(c) for c in modelmagerr_cols]) |
+                   (modelmagerr_cols.upper() == 'EBV'))  ## Remove numbers and "EBV"
     if len(bd)>0:
         modelmagerr_cols = np.delete(modelmagerr_cols,bd)
     ##   use - and + signs to break apart the components that need to be  squared
@@ -293,4 +298,8 @@ def modelmag(tab,instfilt,dec,eqnfile):
     mags[:,1] = modelmagerr
     mags[:,2] = color
 
+    # Change back to original column names
+    for n in colnames:
+        tab[n.upper()].name = n
+    
     return mags
