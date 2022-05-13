@@ -9,6 +9,14 @@ from astropy.table import Table
 import subprocess
 from dlnpyutils import utils as dln
 
+# software directory
+def codedir():
+    """ Return the software directory."""
+    fil = os.path.abspath(__file__)
+    codedir = os.path.dirname(fil)
+    import pdb; pdb.set_trace()
+    return codedir
+
 def rootdirs():
     # Return the NSC root directories for various machines
 
@@ -26,6 +34,10 @@ def rootdirs():
         dldir = '/net/dl2/'
         mssdir = '/net/mss1/'
         localdir = '/data0/'
+    elif host.find('tempest') > -1:
+        dldir = '/home/x25h971/'
+        mssdir = None
+        localdir = '/tmp/'
     else:
         raise ValueError(host+' UNKNOWN')
 

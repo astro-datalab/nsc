@@ -13,7 +13,7 @@ from astroquery.vizier import Vizier
 from astropy.coordinates import Angle,SkyCoord
 import healpy as hp
 import astropy.units as u
-from . import utils
+from . import utils,modelmag
 
 Vizier.TIMEOUT = 600
 Vizier.ROW_LIMIT = -1
@@ -56,6 +56,12 @@ def tempest_query(cenra,cendec,radius,refcat,nside=32,silent=False,logger=None):
         logger = dln.basiclogger()
 
 
+    refname = refcat.lower()
+    if refname=='ps':
+        refname = 'ps1'
+    if refname=='2mass-psc':
+        refname = '2mass'
+    
     # What healpix do we need to load
     upix = hp.ang2pix(nside,cenra,cendec,lonlat=True)
     cenvec = hp.ang2vec(cenra,cendec,lonlat=True)
@@ -64,9 +70,9 @@ def tempest_query(cenra,cendec,radius,refcat,nside=32,silent=False,logger=None):
     # Loop over healpix
     ref = None
     for p in allpix:
-        reffile = '/home/x51j468/catalogs/'+refcat+'/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'
+        reffile = '/home/x51j468/catalogs/'+refname+'/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'
         if os.path.exists(reffile)==False:
-            print(reffile,' NOT FOUND')
+            #print(reffile,' NOT FOUND')
             continue
         tab = Table.read(reffile)
         # Sometimes the catalog files have a 2nd dimension
@@ -81,7 +87,22 @@ def tempest_query(cenra,cendec,radius,refcat,nside=32,silent=False,logger=None):
 
     if ref is None:
         return []
-            
+
+    # Fix mag names for PS1
+    if refname=='ps1':
+        ref['g'].name = 'gmag'
+        ref['r'].name = 'rmag'
+        ref['i'].name = 'imag'
+        ref['z'].name = 'zmag'
+        ref['y'].name = 'ymag'        
+
+    # Fix mag names for GLIMPSE
+    if refname=='glimpse':
+        ref['_3.6mag'].name = '_3_6mag'
+        ref['e_3.6mag'].name = 'e_3_6mag'        
+        ref['_4.5mag'].name = '_4_5mag'
+        ref['e_4.5mag'].name = 'e_4_5mag'
+    
     # Do radius cut
     dist = coords.sphdist(cenra,cendec,ref['ra'],ref['dec'])
     if dist.ndim==2:
@@ -504,7 +525,7 @@ def getexttype(cenra,cendec,radius):
 
                           
 def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
-               dcr=0.5,modelmags=False,logger=None):
+               dcr=0.5,eqnfile=None,modelmags=False,logger=None):
     """
     Get reference catalog information needed for a given filter. 
  
@@ -552,19 +573,14 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
     if dln.size(filt)==1 and type(filt) is str:
         filt = [filt]
      
-    # Check that we have psql installed 
-    out = subprocess.check_output(['which','psql'],shell=False)
-    if type(out) is bytes:
-        out = out.decode()
-    out = out.strip()
-    if dln.size(out)>1:
-        out = out[0]
-    if os.path.exists(out) == 0: 
-        raise ValueError('No PSQL found on this sytem.')
-
     if logger is None:
         logger = dln.basiclogger()
-     
+
+    if eqnfile is None:
+        dldir,mssdir,localdir = utils.rootdirs()
+        version = 'v4'
+        eqnfile = dldir+'dnidever/nsc/instcal/'+version+'/config/modelmag_equations.txt' 
+        
     # Figure out what reddening method we are using 
     #---------------------------------------------- 
     # Extinction types: 
@@ -699,9 +715,9 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
     # Extinction catalogs 
     if ext_type >= 2: 
         refcat += ['ALLWISE']
-    elif ext_type == 3: 
+    if ext_type == 3: 
         refcat += ['GLIMPSE']
-    elif ext_type == 4: 
+    if ext_type == 4: 
         refcat += ['SAGE']
     # If near DEC=-30 then load BOTH PS and ATLAS 
     if (cendec > -34 and cendec < -26) and (('PS' in refcat) or ('ATLAS' in refcat)):
@@ -746,7 +762,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
     if modelmags:
         newcols += ['model_mag']
     nnewcols = len(newcols) 
- 
+    
     # Load the necessary catalogs 
     nrefcat = len(refcat) 
     if silent==False: 
@@ -761,7 +777,13 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
         nref1 = len(ref1)
         if nref1 == 0: 
             continue
- 
+
+        # Convert RAJ2000/DEJ2000 to RA/DEC
+        if 'raj2000' in ref1.colnames:
+            ref1['raj2000'].name = 'ra'
+        if 'dej2000' in ref1.colnames:
+            ref1['dej2000'].name = 'dec'
+        
         # Initialize the catalog 
         dt = []
         for j in range(nnewcols): 
@@ -798,21 +820,9 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
  
         # Second and later 
         else: 
- 
-            # Get RA/DEC columns 
-            # 2MASS, Galex, APASS use RAJ2000 
-            # PS uses RA/DEC 
-            if (refcat[i] != 'PS' and refcat[i] != 'ALLWISE' and refcat[i] != 'ATLAS'):
-                racol = 'raj2000'
-            else:
-                racol = 'ra'
-            if (refcat[i] != 'PS' and refcat[i] != 'ALLWISE' and refcat[i] != 'ATLAS'):
-                deccol = 'dej2000'
-            else:
-                deccol = 'dec'
                         
             # Crossmatch 
-            ind1,ind2,dist = coords.xmatch(ref['ra'],ref['dec'],ref1[racol],ref1[deccol],dcr)
+            ind1,ind2,dist = coords.xmatch(ref['ra'],ref['dec'],ref1['ra'],ref1['dec'],dcr)
             if silent==False: 
                 logger.info(str(nmatch)+' matches')
  
@@ -906,8 +916,8 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
             nleft1 = len(left1)
             new = np.zeros(nleft1,dtype=np.dtype(dt))
             new = Table(new)
-            new['ra'] = left1[racol]
-            new['dec'] = left1[deccol]
+            new['ra'] = left1['ra']
+            new['dec'] = left1['dec']
             if refcat[i]=='GAIADR2' or refcat[i]=='GAIAEDR3':
                 temp = ref[ind1]
                 for n in left1.colnames:
@@ -997,7 +1007,15 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
     # Get extinction 
     #---------------- 
     ref = getreddening(ref,ext_type)
- 
+
+    # Get the model magnitudes
+    if modelmags:
+        model_mag = modelmag.modelmag(ref,filt,cendec,eqnfile)
+        ref['model_mag'] = model_mag
+        gmodel, = np.where(ref['model_mag'] < 50)
+        if silent==False:
+            logger.info(str(len(gdmodel))+' stars with good model magnitudes')
+    
     count = len(ref) 
  
     logger.info('dt=%.1f sec' % (time.time()-t0))
@@ -1053,13 +1071,13 @@ def getreddening(ref,ext_type):
     if ext_type >= 2: 
          
         # RJCE GLIMPSE, type=3 
-        if ext_type == 3: 
+        if ext_type == 3:
             gdglimpse, = np.where((ref['jmag'] < 50) & (ref['hmag'] < 50) & (ref['kmag'] < 50) & (ref['gl_45mag'] < 50))
             if len(gdglimpse) > 0: 
                 ejk = 1.5*0.918*(ref['hmag'][gdglimpse]-ref['gl_45mag'][gdglimpse]-0.08) 
                 e_ejk = 1.5*0.918*np.sqrt(ref['e_hmag'][gdglimpse]**2+ref['e_gl_45mag'][gdglimpse]**2) 
                 #gdejk = where(ejk gt 0 and ejk lt ejk_sfd[gdglimpse] and e_ejk lt 0.2,ngdejk) 
-                gdejk, = np.where(ejk < ejk_sfd[gdglimpse],ngdejk) 
+                gdejk, = np.where(ejk < ejk_sfd[gdglimpse]) 
                 if len(gdejk) > 0: 
                     ref['ejk'][gdglimpse[gdejk]] = np.maximum(ejk[gdejk],0)
                     ref['e_ejk'][gdglimpse[gdejk]] = e_ejk[gdejk] 
