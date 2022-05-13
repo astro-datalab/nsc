@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import sys
 import time
 import socket
 import numpy as np
@@ -10,12 +11,13 @@ import subprocess
 from dlnpyutils import utils as dln
 
 # software directory
-def codedir():
+def datadir():
     """ Return the software directory."""
     fil = os.path.abspath(__file__)
     codedir = os.path.dirname(fil)
-    import pdb; pdb.set_trace()
-    return codedir
+    packagedir = os.path.dirname(sys.modules[__package__].__file__)
+    datadir = packagedir+'/data/'
+    return datadir
 
 def rootdirs():
     # Return the NSC root directories for various machines

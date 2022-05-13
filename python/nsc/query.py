@@ -577,9 +577,10 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
         logger = dln.basiclogger()
 
     if eqnfile is None:
-        dldir,mssdir,localdir = utils.rootdirs()
+        datadir = utils.datadir()
         version = 'v4'
-        eqnfile = dldir+'dnidever/nsc/instcal/'+version+'/config/modelmag_equations.txt' 
+        eqnfile = datadir+'/params/'+version+'/modelmag_equations.txt'
+        #eqnfile = dldir+'dnidever/nsc/instcal/'+version+'/config/modelmag_equations.txt' 
         
     # Figure out what reddening method we are using 
     #---------------------------------------------- 
@@ -760,7 +761,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
             raise ValueError(refcat[i]+' NOT SUPPORTED')
     newcols += ['ebv_sfd','ejk','e_ejk','ext_type'] 
     if modelmags:
-        newcols += ['model_mag']
+        newcols += ['model_mag','model_magerr','model_color']
     nnewcols = len(newcols) 
     
     # Load the necessary catalogs 
@@ -1011,8 +1012,10 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
     # Get the model magnitudes
     if modelmags:
         model_mag = modelmag.modelmag(ref,filt,cendec,eqnfile)
-        ref['model_mag'] = model_mag
-        gmodel, = np.where(ref['model_mag'] < 50)
+        ref['model_mag'] = model_mag[:,0]
+        ref['model_magerr'] = model_mag[:,1]
+        ref['model_color'] = model_mag[:,2]      
+        gdmodel, = np.where(ref['model_mag'] < 50)
         if silent==False:
             logger.info(str(len(gdmodel))+' stars with good model magnitudes')
     
