@@ -22,6 +22,8 @@ import warnings
 from astropy.io import fits
 from astropy.utils.exceptions import AstropyWarning
 from astropy.wcs import WCS
+from astropy.coordinates import SkyCoord
+from scipy.interpolate import RectBivariateSpline
 #from skimage import measure, morphology
 #from scipy.signal import argrelmin
 #import scipy.ndimage.filters as filters
@@ -111,8 +113,307 @@ def doImagesOverlap(head1,head2):
 
     return olap
 
-def image_reproject(im,head,outhead,wtim=None,tmproot='.',verbose=False):
-    """ Reproject image onto new projection with interpolation."""
+ 
+def adxyinterp(head,rr,dd,nstep=10,xyad=False):
+    """
+    Instead of transforming the entire large 2D RA/DEC 
+    arrays to X/Y do a sparse grid and perform linear 
+    interpolation to the full size. 
+ 
+    Parameters
+    ----------
+    head : header
+       The FITS header with the WCS. 
+    rr : numpy array
+       The 2D RA array. 
+    dd  : numpy array
+       The 2D DEC array. 
+    nstep : int, optional
+       The undersampling to use, default nstep=10. 
+    xyad : bool, optional
+       Perform X/Y->RA/DEC conversion instead. 
+          In this case the meaning of the coordinate 
+          arrays are flipped, i.e. rr/dd<->xx/yy 
+ 
+    Returns
+    -------
+    xx : numpy array
+       The 2D X array. 
+    yy : numpy array
+       The 2D Y array. 
+ 
+    Example
+    -------
+
+    xx,yy = adxyinterp(head,ra,dec,nstep=10)
+            
+    By D. Nidever  Oct. 2016 
+    Translated to Python by D. Nidever, April 2022
+    """
+
+    nx,ny = rr.shape
+    nxs = (nx-1)//nstep + 1 
+    nys = (ny-1)//nstep + 1 
+
+    wcs = WCS(head)
+     
+    # Small dimensions, just transform the full grid 
+    if nx <= nstep or ny <= nstep: 
+        if xyad==False:
+            xx,yy = wcs.world_to_pixel(SkyCoord(ra=rr,dec=dd,unit='deg'))
+        else:
+            coo = wcs.pixel_to_world(rr,dd)
+            xx = coo.ra.deg
+            yy = coo.dec.deg
+
+    # Subsample the RA/DEC arrays 
+    rrs = rr[0:nx:nstep,0:ny:nstep] 
+    dds = dd[0:nx:nstep,0:ny:nstep] 
+    if xyad==False:
+        xxs,yys = wcs.world_to_pixel(SkyCoord(ra=rrs,dec=dds,unit='deg'))
+    else:
+        coos = wcs.pixel_to_world(rrs,dds)
+        xxs = coos.ra.deg
+        yys = coos.dec.deg
+     
+    # Start final arrays 
+    xx = np.zeros((nx,ny),float)
+    yy = np.zeros((nx,ny),float)
+     
+    # Use CONGRID to perform the linear interpolation 
+    #   congrid normally does nx_out/nx_in scaling 
+    #   if /minus_one set it does (nx_out-1)/(nx_in-1) 
+
+    xx0,yy0 = np.arange(xxs.shape[0]),np.arange(xxs.shape[1])
+    xx1 = np.arange((nxs-1)*nstep+1)/((nxs-1)*nstep)*(xxs.shape[0]-1)
+    yy1 = np.arange((nys-1)*nstep+1)/((nys-1)*nstep)*(xxs.shape[1]-1)
+    ixx = RectBivariateSpline(xx0,yy0,xxs,kx=1,ky=1)(xx1,yy1)
+    iyy = RectBivariateSpline(xx0,yy0,yys,kx=1,ky=1)(xx1,yy1)
+    xx[0:(nxs-1)*nstep+1,0:(nys-1)*nstep+1] = ixx 
+    yy[0:(nxs-1)*nstep+1,0:(nys-1)*nstep+1] = iyy 
+     
+    # Deal with right edge 
+    if (nxs-1)*nstep+1 < nx: 
+        # Make a short grid in X at the right edge 
+        rrs_rt = rr[nx-nstep-1:nx:nstep,0:ny:nstep] 
+        dds_rt = dd[nx-nstep-1:nx:nstep,0:ny:nstep] 
+        if xyad==False:
+            xxs_rt,yys_rt = wcs.world_to_pixel(SkyCoord(ra=rrs_rt,dec=dds_rt,unit='deg'))
+        else: 
+            coo_rt = wcs.pixel_to_world(rrs_rt,dds_rt)
+            xxs_rt = coo_rt.ra.deg
+            yys_rt = coo_rt.dec.deg
+
+        xx0_rt,yy0_rt = np.arange(xxs_rt.shape[0]),np.arange(xxs_rt.shape[1])
+        xx1_rt = np.arange(nstep+1)/nstep*(xxs_rt.shape[0]-1)
+        yy1_rt = np.arange((nys-1)*nstep+1)/((nys-1)*nstep)*(xxs_rt.shape[1]-1)
+        ixx_rt = RectBivariateSpline(xx0_rt,yy0_rt,xxs_rt,kx=1,ky=1)(xx1_rt,yy1_rt)
+        iyy_rt = RectBivariateSpline(xx0_rt,yy0_rt,yys_rt,kx=1,ky=1)(xx1_rt,yy1_rt)
+        xx[nx-nstep-1:nx,0:(nys-1)*nstep+1] = ixx_rt
+        yy[nx-nstep-1:nx,0:(nys-1)*nstep+1] = iyy_rt 
+
+    # Deal with top edge 
+    if (nys-1)*nstep+1 < ny: 
+        # Make a short grid in Y at the top edge 
+        rrs_tp = rr[0:nx:nstep,ny-nstep-1:ny:nstep] 
+        dds_tp = dd[0:nx:nstep,ny-nstep-1:ny:nstep] 
+        if xyad==False:
+            xxs_tp, yys_tp = wcs.world_to_pixel(SkyCoord(ra=rrs_tp,dec=dds_tp,unit='deg'))
+        else: 
+            coo_tp = wcs.pixel_to_world(rrs_tp,dds_tp)
+            xxs_tp = coo_tp.ra.deg
+            yys_tp = coo_tp.dec.deg
+
+        xx0_tp,yy0_tp = np.arange(xxs_tp.shape[0]),np.arange(xxs_tp.shape[1])
+        xx1_tp = np.arange((nxs-1)*nstep+1)/((nxs-1)*nstep)*(xxs_tp.shape[0]-1)
+        yy1_tp = np.arange(nstep+1)/nstep*(xxs_tp.shape[1]-1)
+        ixx_tp = RectBivariateSpline(xx0_tp,yy0_tp,xxs_tp,kx=1,ky=1)(xx1_tp,yy1_tp)
+        iyy_tp = RectBivariateSpline(xx0_tp,yy0_tp,yys_tp,kx=1,ky=1)(xx1_tp,yy1_tp)
+        xx[0:(nxs-1)*nstep+1,ny-nstep-1:ny] = ixx_tp 
+        yy[0:(nxs-1)*nstep+1,ny-nstep-1:ny] = iyy_tp 
+
+    # Deal with top/right corner 
+    if (nxs-1)*nstep+1 < nx and (nys-1)*nstep+1 < ny: 
+        # Make a short grid in X and Y at the top-right corner 
+        rrs_tr = rr[nx-nstep-1:nx:nstep,ny-nstep-1:ny:nstep] 
+        dds_tr = dd[nx-nstep-1:nx:nstep,ny-nstep-1:ny:nstep] 
+        if xyad==False:
+            xxs_tr, yys_tr = wcs.world_to_pixel(SkyCoord(ra=rrs_tr,dec=dds_tr,unit='deg'))
+        else: 
+            coo_tr = wcs.pixel_to_world(rrs_tr,dds_tr)
+            xxs_tr = coo_tr.ra.deg
+            yys_tr = coo_tr.dec.deg
+
+        xx0_tr,yy0_tr = np.arange(xxs_tr.shape[0]),np.arange(xxs_tr.shape[1])
+        xx1_tr = np.arange(nstep+1)/nstep*(xxs_tr.shape[0]-1)
+        yy1_tr = np.arange(nstep+1)/nstep*(xxs_tr.shape[1]-1)
+        ixx_tr = RectBivariateSpline(xx0_tr,yy0_tr,xxs_tr,kx=1,ky=1)(yy1_tr,xx1_tr)
+        iyy_tr = RectBivariateSpline(xx0_tr,yy0_tr,yys_tr,kx=1,ky=1)(yy1_tr,xx1_tr)
+        xx[nx-nstep-1:nx,ny-nstep-1:ny] = ixx_tr
+        yy[nx-nstep-1:nx,ny-nstep-1:ny] = iyy_tr
+
+    return xx,yy
+
+def image_reproject_bilinear(im,head,outhead,wtim=None,verbose=False):
+    """
+    Resample image using python bilinear RectBivariateSpline.
+
+    Parameters
+    ----------
+    im : numpy array
+       Input image.
+    head : Header
+       Header for the input image that containts the WCS.
+    outhead : Header
+       Header for the output image that contains the WCS.
+    wtim : numpy array, optional
+       Weight image.
+    verbose : boolean, optional
+       Verbose output to the screen.
+
+    Returns
+    -------
+    oim : numpy array
+       Resampled image.
+    ohead : Header
+       Header for resampled image.
+    owtim : numpy array
+       Resampled weight image.  Only if wtim is input.
+
+    Example
+    -------
+
+    out = image_reproject_bilinear(im,head,outhead)
+
+    """
+
+    t0 = time.time()
+
+    if isinstance(head,WCS):
+        wcs = head
+    else:
+        wcs = WCS(head)
+    if isinstance(outhead,WCS):
+        outwcs = outhead
+    else:
+        outwcs = WCS(outhead)
+
+    ny,nx = im.shape
+    fnx,fny = outwcs.array_shape
+
+    # Make the wtim if not input
+    #   1-good, 0-bad
+    if wtim is None:   
+        wtim = np.ones(ny,nx,float)
+        saturate = head.get('saturate')
+        if satuate is not None:
+            gdpix = (im < saturate)
+            bdpix = (im >= saturate)
+            if np.sum(bdpix) > 0:
+                background = np.nanmedian(im[gdpix])
+                wtim[bdpix] = 0.0
+                im[bdpix] = background
+
+    # Get image ra/dec vertices
+    vcoo = wcs.pixel_to_world([0,nx-1,nx-1,0],[0,0,ny-1,ny-1])
+    vertices_ra = vcoo.ra.deg
+    vertices_dec = vcoo.dec.deg
+
+    # 2D RA/DEC arrays for final image
+    xb = np.zeros(fny,float).reshape(-1,1) + np.arange(fnx).reshape(1,-1)
+    yb = np.arange(fny).reshape(-1,1) + np.zeros(fnx).reshape(1,-1)
+    bcoo = outwcs.pixel_to_world(xb,yb)
+    rab = bcoo.ra.deg
+    decb = bcoo.dec.deg
+
+    # Get X/Y range for this image in the final coordinate system
+    vx,vy = outwcs.world_to_pixel(SkyCoord(ra=vertices_ra,dec=vertices_dec,unit='deg'))
+    xout = [np.maximum(np.floor(np.min(vx))-2, 0),
+            np.minimum(np.ceil(np.max(vx))+2, fnx-2)+1]
+    xout = np.array(xout).astype(int)
+    nxout = int(xout[1]-xout[0])
+    yout = [np.maximum(np.floor(np.min(vy))-2, 0),
+            np.minimum(np.ceil(np.max(vy))+2, fny-2)+1]
+    yout = np.array(yout).astype(int)
+    nyout = int(yout[1]-yout[0])
+    rr = rab[yout[0]:yout[1],xout[0]:xout[1]]
+    dd = decb[yout[0]:yout[1],xout[0]:xout[1]]
+    xx,yy = adxyinterp(head,rr,dd,nstep=10)
+
+    # The x/y position to bilinear need to be in the original system, ~1sec
+    rim = np.zeros(xx.shape,float)
+    rwtim = np.zeros(xx.shape,bool)
+    good = ((xx>=0) & (xx<=im.shape[1]-1) & (yy>=0) & (yy<=im.shape[0]-1))
+    if np.sum(good)>0:
+        rim[good] = RectBivariateSpline(np.arange(im.shape[0]),np.arange(im.shape[1]),im,kx=1,ky=1).ev(yy[good],xx[good])
+        rwtim[good] = RectBivariateSpline(np.arange(im.shape[0]),np.arange(im.shape[1]),wtim,kx=1,ky=1).ev(yy[good],xx[good])
+ 
+    # Contruct final image
+    oim = np.zeros((fny,fnx),float)
+    oim[yout[0]:yout[1],xout[0]:xout[1]] = rim
+    owtim = np.zeros((fny,fnx),bool)
+    owtim[yout[0]:yout[1],xout[0]:xout[1]] = rwtim
+ 
+
+    # Contruct the final header
+    ohead = head.copy()
+    # Delete any previous WCS keywords
+    for n in ['CRVAL1','CRVAL2','CRPIX1','CRPIX2','CDELT1','CDELT2','CTYPE1','CTYPE2','CD1_1','CD1_2','CD2_1','CD2_2']:
+        if n in ohead:
+            del ohead[n]
+    cards = [f[0] for f in ohead.cards]
+    pvnames = dln.grep(cards,'PV[0-9]_+[0-9]')
+    for p in pvnames:
+        del ohead[p]
+    # Add the new WCS
+    whead = outwcs.to_header()
+    ohead.extend(whead)
+    ohead['NAXIS1'] = fnx
+    ohead['NAXIS2'] = fny
+
+    dt = time.time()-t0
+    if verbose:
+        print('dt = %8.2f sec' % dt)
+
+    return oim,ohead,owtim
+        
+
+def image_reproject_swarp(im,head,outhead,wtim=None,tmproot='.',verbose=False):
+    """
+    Reproject image onto new projection with interpolation with Swarp.
+
+    Parameters
+    ----------
+    im : numpy array
+       Input image.
+    head : Header
+       Header for the input image that containts the WCS.
+    outhead : Header
+       Header for the output image that contains the WCS.
+    wtim : numpy array, optional
+       Weight image.
+    tmproot : str
+       Temporary directory to use for the work.  Default is the current directory.
+    verbose : boolean, optional
+       Verbose output to the screen.
+
+    Returns
+    -------
+    oim : numpy array
+       Resampled image.
+    ohead : Header
+       Header for resampled image.
+    owtim : numpy array
+       Resampled weight image.  Only if wtim is input.
+
+    Example
+    -------
+
+    out = image_reproject_swarp(im,head,outhead)
+
+    """
+
+    t0 = time.time()
 
     if isinstance(head,WCS):
         wcs = head
@@ -140,7 +441,7 @@ def image_reproject(im,head,outhead,wtim=None,tmproot='.',verbose=False):
     # Create configuration file
     # fields to modify: IMAGEOUT_NAME, WEIGHTOUT_NAME, WEIGHT_IMAGE, CENTER, PIXEL_SCALE, IMAGE_SIZE, GAIN?
     fil = os.path.abspath(__file__)
-    codedir = os.path.dirname(os.path.dirname(fil))
+    codedir = os.path.dirname(os.path.dirname(os.path.dirname(fil)))
     paramdir = codedir+'/params/'
     shutil.copyfile(paramdir+"swarp.config",tmpdir+"/swarp.config")
     configfile = "swarp.config"
@@ -191,20 +492,27 @@ def image_reproject(im,head,outhead,wtim=None,tmproot='.',verbose=False):
 
     # Run swarp
     if verbose is False:
-        slogfile = "swarp.log"
-        sf = open(slogfile,'w')
-        retcode = subprocess.call(["swarp",imfile,"-c",configfile],stdout=sf,stderr=subprocess.STDOUT,shell=False)
-        sf.close()
-        slines = dln.readlines(slogfile)
+        #slogfile = "swarp.log"
+        #sf = open(slogfile,'w')
+        #retcode = subprocess.call(["swarp",imfile,"-c",configfile],stdout=sf,stderr=subprocess.STDOUT,shell=False)
+        #sf.close()
+        #slines = dln.readlines(slogfile)
+        retcode = subprocess.check_output(["swarp",imfile,"-c",configfile],shell=False,stderr=subprocess.STDOUT)        
     else:
-        retcode = subprocess.call(["swarp",imfile,"-c",configfile],shell=False)        
+        retcode = subprocess.run(["swarp",imfile,"-c",configfile],shell=False,stderr=subprocess.STDOUT)        
                 
     # Load the output file
     oim,ohead = fits.getdata(imoutfile,header=True)
+    # By default swarp makes it sky-right, flip
+    if ohead['CD1_1'] < 0:
+        if verbose:
+            print('Flipping swarp image in RA axis')
+        oim = oim[:,::-1]
+        ohead['CD1_1'] = -ohead['CD1_1']
     out = (oim,ohead)
     if wtim is not None:
         owtim,owthead = fits.getdata(wtoutfile,header=True)
-        out = (oim,ohead,owtim,owthead)
+        out = (oim,ohead,owtim)
 
     # Delete temporary directory and files??
     tmpfiles = glob.glob('*')
@@ -214,6 +522,10 @@ def image_reproject(im,head,outhead,wtim=None,tmproot='.',verbose=False):
 
     # Go back to the original direcotry
     os.chdir(origdir)
+
+    dt = time.time()-t0
+    if verbose:
+        print('dt = %8.2f sec' % dt)
 
     return out
 
@@ -247,6 +559,19 @@ def image_reproject(im,head,outhead,wtim=None,tmproot='.',verbose=False):
     
     #znew = interpolate.bisplev(xnew[:,0], ynew[0,:], tck)
 
+def image_reproject(im,head,outhead,wtim=None,kind='swarp',tmproot='.',verbose=False):
+    """
+    Reproject image onto new projection with interpolation.
+    Wrapper for the _swarp and _bilinear functions
+    """
+
+    if kind == 'swarp':
+        return image_reproject_swarp(im,head,outhead,wtim=wtim,tmproot=tmproot,verbose=verbose)
+    elif kind == 'bilinear':
+        return image_reproject_swarp(im,head,outhead,wtim=wtim,verbose=verbose)
+    else:
+        raise ValueError(kind,' not supported')
+    
 
 def image_interp(imagefile,outhead,weightfile=None,masknan=False):
     """ Interpolate a single image (can be multi-extension) to the output WCS."""
