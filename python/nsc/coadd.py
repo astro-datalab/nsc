@@ -573,8 +573,42 @@ def image_reproject(im,head,outhead,wtim=None,kind='swarp',tmproot='.',verbose=F
         raise ValueError(kind,' not supported')
     
 
-def image_interp(imagefile,outhead,weightfile=None,masknan=False):
-    """ Interpolate a single image (can be multi-extension) to the output WCS."""
+def image_interp(imagefile,outhead,weightfile=None,masknan=False,verbose=False):
+    """
+    Interpolate a single image (can be multi-extension) to the output WCS.
+
+    Parameters
+    ----------
+    imagefile : str
+       Filename for the flux file.  Can be multi-extension.
+    outhead : Header
+       Header for the output image that contains the WCs.
+    weightfile : str, optional
+       Filename for the weight file.  Optional.
+    masknan : boolean, optional
+       Flag to mask NaNs in image.  Default is False.
+    verbose : boolean, optional
+       Verbose output to the screen.  Default is False.
+
+    Returns
+    -------
+    oim : numpy array
+       Resampled flux image.
+    ohead : Header
+       Header for final resampled image.
+    obg : numpy array
+       The resampled background image.
+    owtim : numpy array
+       Resample weight image if the weight file was input.
+
+    Example
+    -------
+
+    oim,ohead,obg,owtim = image_interp('image.fits',outhead)
+
+    """
+
+    t0 = time.time()
 
     if os.path.exists(imagefile) is False:
         raise ValueError(imagefile+" NOT FOUND")
@@ -582,10 +616,13 @@ def image_interp(imagefile,outhead,weightfile=None,masknan=False):
         if os.path.exists(weightfile) is False:
             raise ValueError(weightfile+" NOT FOUND")    
 
+    if isinstance(outhead,WCS):
+        brickwcs = outhead
+    else:
+        brickwcs = WCS(outhead)
+
     # Output vertices
-    bricknx = outhead['NAXIS1']
-    brickny = outhead['NAXIS1']
-    brickwcs = WCS(outhead)
+    bricknx,brickny = brickwcs.array_shape
     brickra,brickdec = brickwcs.wcs_pix2world(bricknx/2,brickny/2,0)
     brickvra,brickvdec = brickwcs.wcs_pix2world([0,bricknx-1,bricknx-1,0],[0,0,brickny-1,brickny-1],0)
     brickvlon,brickvlat = coords.rotsphcen(brickvra,brickvdec,brickra,brickdec,gnomic=True)
@@ -601,19 +638,24 @@ def image_interp(imagefile,outhead,weightfile=None,masknan=False):
         if nimhdu != nwthdu:
             raise ValueError(imagefile+' and '+weightfile+' do NOT have the same number of extensions.')
 
+    if verbose:
+        print('Flux file = '+imagefile)
+        if weightfile is not None:
+            print('Weight file = '+weightfile)
+        print(str(nimhdu)+' extensions')
+
     # Open the files
     imhdulist = fits.open(imagefile)
     if weightfile is not None:
         wthdulist = fits.open(weightfile)
 
     # Initialize final images
-    fnx = outhead['NAXIS1']
-    fny = outhead['NAXIS2']    
-    fim = np.zeros((fnx,fny),float)
-    fwt = np.zeros((fnx,fny),float)
-    fbg = np.zeros((fnx,fny),float)
+    oim = np.zeros((brickny,bricknx),float)
+    owtim = np.zeros((brickny,bricknx),float)
+    obg = np.zeros((brickny,bricknx),float)
         
     # Loop over the HDUs
+    noverlap = 0
     for i in range(nimhdu):           
         # Just get the header
         head = imhdulist[i].header
@@ -626,6 +668,7 @@ def image_interp(imagefile,outhead,weightfile=None,masknan=False):
         # Check that it overlaps the final area
         if doImagesOverlap(brickwcs,wcs) is False:
             continue
+        print('Extension '+str(i)+' overlaps')
             
         mask = None
         # Flux image
@@ -654,26 +697,36 @@ def image_interp(imagefile,outhead,weightfile=None,masknan=False):
         bkg_image = bkg.back()
         im -= bkg_image
         im[mask] = 0
-        
-        import pdb; pdb.set_trace()
-
-        newim = image_reproject(im,head,outhead)
-
-
 
         # Step 2. Reproject the image
-        newim, footprint = reproject_interp((im,head), outhead)
         if weightfile is not None:
-            newwt, wfootprint = reproject_interp((wt,whead), outhead)
-        newbg, bfootprint = reproject_interp((bkg_image,head), outhead)        
+            newim,newhead,newwt = image_reproject(im,head,outhead,wtim=wt)
+        else:
+            newim,newhead = image_reproject(im,head,outhead)
+        ohead = newhead.copy()   # initial the output header
+        newbg, bghead = image_reproject(bkg_image,head,outhead)
 
         # Step 3. Add to final images
-        fim += newim
+        oim += newim
         if weightfile is not None:
-            fwt += newwt
-        fbg += newbg
+            owtim += newwt
+        obg += newbg
 
-    return fim,fwt,fbf
+        noverlap += 1
+
+    dt = time.time()-t0
+    if verbose:
+        print('dt = %8.2f sec' % dt)
+
+    if noverlap==0:
+        print('No overlap')
+        return None,None,None
+
+    ohead['NOVERLAP'] = (noverlap,'number of chips overlap')
+    if weightfile is not None:
+        return oim,ohead,obg,owtim
+    else:
+        return oim,ohead,obg
 
     
 def meancube(imcube,wtcube,weights=None,crreject=False):
