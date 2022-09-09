@@ -514,6 +514,8 @@ def image_reproject_swarp(im,head,outhead,wtim=None,tmproot='.',verbose=False):
         owtim,owthead = fits.getdata(wtoutfile,header=True)
         out = (oim,ohead,owtim)
 
+    # Add information in the original header!!
+
     # Delete temporary directory and files??
     tmpfiles = glob.glob('*')
     for f in tmpfiles:
@@ -765,8 +767,13 @@ def meancube(imcube,wtcube,weights=None,crreject=False):
     return final,error
 
 
-def stack(imagefiles,errorfiles,bgfiles,weights=None):
+def stack(meta):
     """ Actually do the stacking/averaging of multiple images already reprojected."""
+
+    imagefiles = meta['timfile']
+    errorfiles = meta['twtfile']
+    bgfiles = meta['tbgfile']
+    weights = meta['weights']
 
     # DO NOT use the error maps for the weighted average.  Use scalar weights for each exposure.
     #  otherwise you'll get screwy images
@@ -825,9 +832,76 @@ def stack(imagefiles,errorfiles,bgfiles,weights=None):
 
     return final,error
 
+
+def mktempfile(im,wt,bg,outhead,scale=1.0,weight=1.0,nbin=2):
+    """ Break up into bins and save to temporary file """
+
+    ny,nx = im.shape
+
+    # Set up temporary file n ames
+    tid,tfile = tempfile.mkstemp(prefix="timage",dir="/tmp")
+    os.close(tid)  # close open file
+    tbase = os.path.basename(tfile)
+    timfile = "/tmp/"+tbase+"_flx.fits"
+    twtfile = "/tmp/"+tbase+"_wt.fits"
+    tbgfile = "/tmp/"+tbase+"_bg.fits"
+
+    timhdu = fits.open(timfile)
+    twthdu = fits.open(twtfile)
+    tbghdu = fits.open(tbgfile)        
+
+    xbin = ybin = nbin
+    dx = nx // xbin
+    dy = ny // ybin
+        
+    # Put information in header
+    # ONAXIS1, ONAXIS2, SUBX0, SUBX1, SUBY0, SUBY1, SUBNX, SUBNY
+    for i in range(xbin):
+        x0 = i*dx
+        x1 = x0 + dx-1
+        if i==(xbin-1): x1=(nx-1)
+        for j in range(ybin):
+            y0 = j*dy
+            y1 = y0 + dy-1
+            if j==(ybin-1): y1=(fny-1)
+            newhead = outhead.copy()
+            newhead['SCALE'] = scale
+            newhead['WEIGHT'] = weight
+            newhead['ONAXIS1'] = newhead['NAXIS1']
+            newhead['ONAXIS2'] = newhead['NAXIS2']
+            newhead['SUBX0'] = x0
+            newhead['SUBX1'] = x1
+            newhead['SUBNX'] = x1-x0+1               
+            newhead['SUBY0'] = y0
+            newhead['SUBY1'] = y1
+            newhead['SUBNY'] = y1-y0+1
+            # Flux
+            subim = im[y0:y1+1,x0:x1+1].copy()
+            hdu1 = fits.PrimaryHDU(subim,newhead.copy())
+            timhdu.append(hdu1)
+            # Weight
+            subwt = wt[y0:y1+1,x0:x1+1].copy()
+            hdu1 = fits.PrimaryHDU(subwt,newhead.copy())
+            twthdu.append(hdu1)
+            # Background
+            subbg = bg[y0:y1+1,x0:x1+1].copy()
+            hdu1 = fits.PrimaryHDU(subbg,newhead.copy())
+            timhdu.append(hdu1)                
+
+    timhdu.writeto(timfile,overwrite=True)
+    timhdu.close()
+    twthdu.writeto(twtfile,overwrite=True)
+    twthdu.close()
+    tbghdu.writeto(tbgfile,overwrite=True)
+    tbghdu.close()        
+                
+    return timfile,twtfile,tbgfile
+
     
-def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average'):
-    """ Create a coadd given a list of images. """
+def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average',nbin=2,outfile=None):
+    """
+    Create a coadd given a list of images.
+    """
 
     # meta should have zpterm, exptime, fwhm
     
@@ -840,133 +914,66 @@ def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average'):
     # Figure out scales and weights
     # F_trans = 10^(-0.8*(delta_mag-0.2))    
     scales = meta['exptime'] * 10**(-0.8*(meta['zpterm']-0.2))
+    meta['scale'] = scales
 
     # Use weight~S/N
     # S/N goes as sqrt(exptime) and in background-dominated regime S/N ~ 1/FWHM
     # so maybe something like weight ~ sqrt(scaling)/FWHM
     weights = np.sqrt(scales)/meta['fwhm']
     weights /= np.sum(weights)    # normalize
+    meta['weight'] = weights
 
     # Loop over the images
-    tempfiles = []
-    tempwtfiles = []
-    tempbgfiles = []
+    meta['timfile'] = 100*' '  # add columns for temporary file names
+    meta['twtfile'] = 100*' '
+    meta['tbgfile'] = 100*' '
     for f in range(nimages):
 
-        # Interpolate image
-        fim, fwt, fbg = image_interp(imagefiles[f],outhead,weightfile=weightfiles[f])
+        # Step 1. Interpolate image
+        fim, fhead, fbg, fwt = image_interp(imagefiles[f],outhead,weightfile=weightfiles[f])
+        ny,nx = fim.shape
 
-        # Flux image
-        imfile = imagefiles[f]        
-        # Check for extension at the end, e.g., image.fits[3]
-        if imfile.endswith(']') & (imfile.find('[')>-1):
-            lo = imfile.find('[')
-            exten = imfile[lo:-2]
-            imfile = imfile[0:lo]
-        else:
-            exten = 0
-        im,head = fits.getheader(imagefiles[f],exten,header=True)
-        im = im.byteswap(inplace=True).newbyteorder()    # for sep need native byte order
-        # Weight image
-        wtfile = wtfiles[f]        
-        # Check for extension at the end, e.g., image.fits[3]
-        if wtfile.endswith(']') & (wtfile.find('[')>-1):
-            lo = wtfile.find('[')
-            exten = wtfile[lo:-2]
-            wtfile = wtfile[0:lo]
-        else:
-            exten = 0
-        wt,whead = fits.getheader(weightfiles[f],exten,header=True)
-        wt = wt.byteswap(inplace=True).newbyteorder()
-        nx1,ny1 = im.shape
-        
-        # Step 1. Background subtract the image
-        bkg = sep.Background(data, mask=mask, bw=64, bh=64, fw=3, fh=3)
-        bkg_image = bkg.back()
-        im -= bkg_image
-        
-        # Step 2. Reproject the image
-        newim, footprint = reproject_interp((im,head), outhead)
-        newwt, wfootprint = reproject_interp((wt,whead), outhead)
-        newbg, bfootprint = reproject_interp((bkg_image,head), outhead)        
-        fnx,fny = newim.shape
-
-        # Step 3. Scale the image
+        # Step 2. Scale the image
         #  divide image by "scales"
-        newim /= scales[i]
+        fim /= scales[i]
         #  wt = 1/err^2, need to perform same operation on err as on image
-        newwt *= scales[i]**2
-        
-        # Step 4. Break up into bins and save to temporary file
-        tid,tfile = tempfile.mkstemp(prefix="timage",dir="/tmp")
-        os.close(tid)  # close open file
-        tbase = os.path.basename(tfile)
-        timfile = "/tmp/"+tbase+"_flx.fits"
-        twtfile = "/tmp/"+tbase+"_wt.fits"
-        tbgfile = "/tmp/"+tbase+"_bg.fits"
+        fwt *= scales[i]**2
 
-        timhdu = fits.open(timfile)
-        twthdu = fits.open(twtfile)
-        tbghdu = fits.open(tbgfile)        
-
-        xbin = ybin = 2
-        dx = fnx // xbin
-        dy = fny // ybin
-        
-        # Put information in header
-        # ONAXIS1, ONAXIS2, SUBX0, SUBX1, SUBY0, SUBY1, SUBNX, SUBNY
-        for i in range(xbin):
-            x0 = i*dx
-            x1 = x0 + dx-1
-            if i==(xbin-1): x1=(fnx-1)
-            for j in range(ybin):
-                y0 = j*dy
-                y1 = y0 + dy-1
-                if j==(ybin-1): y1=(fny-1)
-                newhead = outhead.copy()
-                newhead['SCALE'] = scales[i]
-                newhead['WEIGHT'] = weights[i]
-                newhead['ONAXIS1'] = newhead['NAXIS1']
-                newhead['ONAXIS2'] = newhead['NAXIS2']
-                newhead['SUBX0'] = x0
-                newhead['SUBX1'] = x1
-                newhead['SUBNX'] = x1-x0+1               
-                newhead['SUBY0'] = y0
-                newhead['SUBY1'] = y1
-                newhead['SUBNY'] = y1-y0+1
-                # Flux
-                subim = newim[x0:x1+1,y0:y1+1].copy()
-                hdu1 = fits.PrimaryHDU(subim,newhead.copy())
-                timhdu.append(hdu1)
-                # Weight
-                subwt = newwt[x0:x1+1,y0:y1+1].copy()
-                hdu1 = fits.PrimaryHDU(subwt,newhead.copy())
-                twthdu.append(hdu1)
-                # Background
-                subbg = newbg[x0:x1+1,y0:y1+1].copy()
-                hdu1 = fits.PrimaryHDU(subbg,newhead.copy())
-                timhdu.append(hdu1)                
-        timhdu.writeto(timfile,overwrite=True)
-        timhdu.close()
-        twthdu.writeto(twtfile,overwrite=True)
-        twthdu.close()
-        tbghdu.writeto(tbgfile,overwrite=True)
-        tbghdu.close()        
-                
-        tempfiles.append(timfile)
-        tempwtfiles.append(twtfile)
-        tempbgfiles.append(tbgfile)
-
+        # Step 3. Break up image and save to temporary files
+        timfile,twtfile,tbgfile = mktempfile(fim,fwt,fbg,outhead,scale=scales[i],
+                                             weight=weights[i],nbin=nbin)
+        meta['timfile'][f] = timfile
+        meta['twtfile'][f] = twtfile
+        meta['tbgfile'][f] = tbgfile
         
     # Step 4. Stack the images
-    final = stack(tempfiles,tempwtfiles,tempbgfiles,weights)
+    final,error = stack(meta)
 
     # Delete temporary files
+    for i in range(meta):
+        if os.path.exists(meta['timfile'][i]): os.remove(meta['timfile'][i])
+        if os.path.exists(meta['twtfile'][i]): os.remove(meta['twtfile'][i])
+        if os.path.exists(meta['tbgfile'][i]): os.remove(meta['tbgfile'][i])
 
     # Final header
     #  scales, weights, image names, mean backgrounds
-    
-    
+    fhead = outhead.copy()
+
+
+    # Output final file
+    if outfile is not None:
+        hdu = fits.HDUList()
+        hdu.append(fits.PrimaryHDU(final,fhead))
+        hdu[0].header['COMMENT'] = 'Flux image'
+        # units, number of images, names, weights, scales, 
+        hdu.append(fits.ImageHDU(error))
+        hdu[1].header['COMMENT'] = 'Weight/error image'
+        hdu.writeto(outfile,overwrite=True)
+        hdu.close()
+
+    return final,error
+
+
     # OLD NOTES
     #-give list of FITS files (possible with extensions) and mask/noise file info, WCS/output header and coadd method
     #-loop through each file and resample onto final projection (maybe write to temporary file)
