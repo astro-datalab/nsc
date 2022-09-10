@@ -960,6 +960,8 @@ def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average',
 
     """
 
+    t0 = time.time()
+
     # meta should have zpterm, exptime, fwhm
     
     nimages = dln.size(imagefiles)
@@ -1036,6 +1038,10 @@ def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average',
         hdu[1].header['COMMENT'] = 'Weight/error image'
         hdu.writeto(outfile,overwrite=True)
         hdu.close()
+
+    dt = time.time()-t0
+    if verbose:
+        print('dt = %8.2f sec' % dt)
 
     return final,error
 
