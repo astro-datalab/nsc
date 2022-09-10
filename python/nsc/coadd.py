@@ -736,29 +736,29 @@ def meancube(imcube,wtcube,weights=None,crreject=False):
     # Weights should be normalized, e.g., sum(weights)=1
     # pixels to be masked in an image should have wtcube = 0
 
-    nx,ny,nimages = imcube.shape
+    ny,nx,nimages = imcube.shape
 
     # Unweighted
     if weights is None:
         weights = np.ones(nimages,float)/nimages
     
     # Do the weighted average
-    finaltot = np.zeros((nx,ny),float)
-    finaltotwt = np.zeros((nx,ny),float)        
-    totvarim = np.zeros((nx,ny),float)
+    finaltot = np.zeros((ny,nx),float)
+    finaltotwt = np.zeros((ny,nx),float)        
+    totvarim = np.zeros((ny,nx),float)
     for i in range(nimages):
         mask = (wtcube[:,:,i] > 0)
-        var = np.zeros((nx,ny),float)  # sig^2
-        var[mask] = 1/wtcube[:,:,mask]
-        finaltot[mask] += imcube[:,:,mask]*weights[i]
+        var = np.zeros((ny,nx),float)  # sig^2
+        var[mask] = 1/wtcube[:,:,i][mask]
+        finaltot[mask] += imcube[:,:,i][mask]*weights[i]
         finaltotwt[mask] += weights[i]
         # Variance in each pixel for noise images and the scalar weights
-        totvarim[mask] += weights[i]*var
+        totvarim[mask] += weights[i]*var[mask]
     # Create the weighted average image
     finaltotwt[finaltotwt<=0] = 1
     final = finaltot/finaltotwt
     # Create final error image
-    error = np.sqrt(finalvarim)
+    error = np.sqrt(totvarim)
     
     # CR rejection
     if crreject is True:
@@ -768,12 +768,34 @@ def meancube(imcube,wtcube,weights=None,crreject=False):
 
 
 def stack(meta):
-    """ Actually do the stacking/averaging of multiple images already reprojected."""
+    """
+    Actually do the stacking/averaging of multiple images already reprojected.
 
+    Parameters
+    ----------
+    meta : table
+       Table that contains all of the information to perform the stacking.
+         Required columns are : "timfile", "twtfile", "tbgfile", "weight"
+
+    Returns
+    -------
+    final : numpy array
+       Final coadded flux image.
+    error : numpy array
+       Final coadded error image.
+
+    Example
+    -------
+
+    final,error = stack(meta)
+
+    """
+
+    nimages = len(meta)
     imagefiles = meta['timfile']
-    errorfiles = meta['twtfile']
+    weightfiles = meta['twtfile']
     bgfiles = meta['tbgfile']
-    weights = meta['weights']
+    weights = meta['weight']
 
     # DO NOT use the error maps for the weighted average.  Use scalar weights for each exposure.
     #  otherwise you'll get screwy images
@@ -790,21 +812,21 @@ def stack(meta):
     hdu.close()
 
     # Original image size
-    head = fits.getheader(imagegfiles[0],0)
+    head = fits.getheader(imagefiles[0],0)
     fnx = head['ONAXIS1']
     fny = head['ONAXIS2']
     
     # Get the sizes and positions of the subimages
-    dtype = np.dtype([('SUBX0',int),('SUBX1',int),('SUBY0',int),('SUBY1',int),('NX',int),('NY',int)])
-    binstr = np.zeros(nbin,dtype=dtype)
+    dtype = np.dtype([('X0',int),('X1',int),('Y0',int),('Y1',int),('NX',int),('NY',int)])
+    bintab = np.zeros(nbin,dtype=dtype)
     for b in range(nbin):
         head = fits.getheader(imagefiles[0],b)
-        substr['X0'][b] = head['SUBX0']
-        substr['X1'][b] = head['SUBX1']
-        substr['Y0'][b] = head['SUBY0']
-        substr['Y1'][b] = head['SUBY1']        
-        binstr['NX'][b] = head['SUBNX']
-        binstr['NY'][b] = head['SUBNY']
+        bintab['X0'][b] = head['SUBX0']
+        bintab['X1'][b] = head['SUBX1']
+        bintab['Y0'][b] = head['SUBY0']
+        bintab['Y1'][b] = head['SUBY1']        
+        bintab['NX'][b] = head['SUBNX']
+        bintab['NY'][b] = head['SUBNY']
 
     # Final image
     final = np.zeros((fny,fnx),float)
@@ -812,12 +834,12 @@ def stack(meta):
         
     # Loop over bins
     for b in range(nbin):
-        imcube = np.zeros((substr['NY'][b],substr['NX'][b],nimages),np.float64)
-        wtcube = np.zeros((substr['NY'][b],substr['NX'][b],nimages),np.float64)        
+        imcube = np.zeros((bintab['NY'][b],bintab['NX'][b],nimages),float)
+        wtcube = np.zeros((bintab['NY'][b],bintab['NX'][b],nimages),float)        
         # Loop over images
         for f in range(nimages):
-            im,head = fits.getheader(imagefiles[f],b,header=True)
-            wt,whead = fits.getheader(weightfiles[f],b,header=True)
+            im,head = fits.getdata(imagefiles[f],b,header=True)
+            wt,whead = fits.getdata(weightfiles[f],b,header=True)
             # Background subtraction here???
             # Deal with NaNs
             wt[~np.isfinite(im)] = 0
@@ -827,8 +849,8 @@ def stack(meta):
         # Do the weighted combination
         avgim,errim = meancube(imcube,wtcube,weights=weights)
         # Stuff into final image
-        final[substr['Y0'][b]:substr['Y1'][b]+1,substr['X0'][b]:substr['X1'][b]+1] = avgim
-        error[substr['Y0'][b]:substr['Y1'][b]+1,substr['X0'][b]:substr['X1'][b]+1] = errim
+        final[bintab['Y0'][b]:bintab['Y1'][b]+1,bintab['X0'][b]:bintab['X1'][b]+1] = avgim
+        error[bintab['Y0'][b]:bintab['Y1'][b]+1,bintab['X0'][b]:bintab['X1'][b]+1] = errim
 
     return final,error
 
@@ -902,6 +924,40 @@ def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average',
           nbin=2,outfile=None,verbose=False):
     """
     Create a coadd given a list of images.
+
+    Parameters
+    ----------
+    imagefiles : list
+       List of flux image filenames.
+    weightfiles : list
+       List of weight image filenames.
+    meta : table
+       Table of information for each image.  Must have "zperm",
+         "exptime", and "fwhm".
+    outhead : header or WCS
+       Header with projection for the output image.
+    coaddtype : str, optional
+       Statistic to use for coaddition.  Default is 'average'.
+    nbin : int, optional
+       Number of bins to use (in X and Y) when splitting up the
+         image for the temporary files.  Default is 2.
+    outfile : str, optional
+       Name of output FITS filename.
+    verbose : boolean, optional
+       Verbose output to the screen.  Default is False.
+
+    Returns
+    -------
+    final : numpy array
+       Final coadded flux image.
+    error : numpy array
+       Final coadded error image.
+
+    Example
+    -------
+
+    final, error = coadd(imagefiles,weightfiles,meta,outhead)
+
     """
 
     # meta should have zpterm, exptime, fwhm
@@ -929,6 +985,8 @@ def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average',
     meta['twtfile'] = 100*' '
     meta['tbgfile'] = 100*' '
     for f in range(nimages):
+        if verbose:
+            print(str(f+1)+' '+imagefiles[f]+' '+weightfiles[f])
 
         # Step 1. Interpolate image
         fim, fhead, fbg, fwt = image_interp(imagefiles[f],outhead,weightfile=weightfiles[f],verbose=verbose)
@@ -936,13 +994,13 @@ def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average',
 
         # Step 2. Scale the image
         #  divide image by "scales"
-        fim /= scales[i]
+        fim /= scales[f]
         #  wt = 1/err^2, need to perform same operation on err as on image
-        fwt *= scales[i]**2
+        fwt *= scales[f]**2
 
         # Step 3. Break up image and save to temporary files
-        timfile,tbgfile,twtfile = mktempfile(fim,fhead,fbg,fwt,outhead,scale=scales[i],
-                                             weight=weights[i],nbin=nbin)
+        timfile,tbgfile,twtfile = mktempfile(fim,fhead,fbg,fwt,outhead,scale=scales[f],
+                                             weight=weights[f],nbin=nbin)
         meta['timfile'][f] = timfile
         meta['tbgfile'][f] = tbgfile
         meta['twtfile'][f] = twtfile
@@ -951,7 +1009,7 @@ def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average',
     final,error = stack(meta)
 
     # Delete temporary files
-    for i in range(meta):
+    for i in range(len(meta)):
         if os.path.exists(meta['timfile'][i]): os.remove(meta['timfile'][i])
         if os.path.exists(meta['tbgfile'][i]): os.remove(meta['tbgfile'][i])
         if os.path.exists(meta['twtfile'][i]): os.remove(meta['twtfile'][i])
@@ -959,7 +1017,14 @@ def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average',
     # Final header
     #  scales, weights, image names, mean backgrounds
     fhead = outhead.copy()
-
+    fhead['NIMAGES'] = len(imagefiles)
+    for i in range(len(meta)):
+        fhead['FILE'+str(i+1)] = imagefiles[i]
+        fhead['WTFL'+str(i+1)] = weightfiles[i]
+        fhead['WEIT'+str(i+1)] = meta['weight'][i]
+        fhead['SCAL'+str(i+1)] = meta['scale'][i]
+        fhead['EXPT'+str(i+1)] = meta['exptime'][i]
+        fhead['FWHM'+str(i+1)] = meta['fwhm'][i]
 
     # Output final file
     if outfile is not None:
