@@ -807,13 +807,13 @@ def stack(meta):
         binstr['NY'][b] = head['SUBNY']
 
     # Final image
-    final = np.zeros((fnx,fny),float)
-    error = np.zeros((fnx,fny),float)    
+    final = np.zeros((fny,fnx),float)
+    error = np.zeros((fny,fnx),float)    
         
     # Loop over bins
     for b in range(nbin):
-        imcube = np.zeros((substr['NX'][b],substr['NY'][b],nimages),np.float64)
-        wtcube = np.zeros((substr['NX'][b],substr['NY'][b],nimages),np.float64)        
+        imcube = np.zeros((substr['NY'][b],substr['NX'][b],nimages),np.float64)
+        wtcube = np.zeros((substr['NY'][b],substr['NX'][b],nimages),np.float64)        
         # Loop over images
         for f in range(nimages):
             im,head = fits.getheader(imagefiles[f],b,header=True)
@@ -827,13 +827,13 @@ def stack(meta):
         # Do the weighted combination
         avgim,errim = meancube(imcube,wtcube,weights=weights)
         # Stuff into final image
-        final[substr['X0'][b]:substr['X1'][b]+1,substr['Y0'][b]:substr['Y1'][b]+1] = avgim
-        error[substr['X0'][b]:substr['X1'][b]+1,substr['Y0'][b]:substr['Y1'][b]+1] = errim
+        final[substr['Y0'][b]:substr['Y1'][b]+1,substr['X0'][b]:substr['X1'][b]+1] = avgim
+        error[substr['Y0'][b]:substr['Y1'][b]+1,substr['X0'][b]:substr['X1'][b]+1] = errim
 
     return final,error
 
 
-def mktempfile(im,wt,bg,outhead,scale=1.0,weight=1.0,nbin=2):
+def mktempfile(im,head,bg,wt,outhead,scale=1.0,weight=1.0,nbin=2):
     """ Break up into bins and save to temporary file """
 
     ny,nx = im.shape
@@ -846,59 +846,60 @@ def mktempfile(im,wt,bg,outhead,scale=1.0,weight=1.0,nbin=2):
     twtfile = "/tmp/"+tbase+"_wt.fits"
     tbgfile = "/tmp/"+tbase+"_bg.fits"
 
-    timhdu = fits.open(timfile)
-    twthdu = fits.open(twtfile)
-    tbghdu = fits.open(tbgfile)        
+    timhdu = fits.HDUList()
+    twthdu = fits.HDUList()
+    tbghdu = fits.HDUList()
 
     xbin = ybin = nbin
     dx = nx // xbin
     dy = ny // ybin
-        
+
     # Put information in header
     # ONAXIS1, ONAXIS2, SUBX0, SUBX1, SUBY0, SUBY1, SUBNX, SUBNY
     for i in range(xbin):
         x0 = i*dx
-        x1 = x0 + dx-1
-        if i==(xbin-1): x1=(nx-1)
+        x1 = x0 + dx
+        if i==(xbin-1): x1=nx
         for j in range(ybin):
             y0 = j*dy
-            y1 = y0 + dy-1
-            if j==(ybin-1): y1=(fny-1)
-            newhead = outhead.copy()
+            y1 = y0 + dy
+            if j==(ybin-1): y1=ny
+            newhead = head.copy()
             newhead['SCALE'] = scale
             newhead['WEIGHT'] = weight
             newhead['ONAXIS1'] = newhead['NAXIS1']
             newhead['ONAXIS2'] = newhead['NAXIS2']
             newhead['SUBX0'] = x0
-            newhead['SUBX1'] = x1
-            newhead['SUBNX'] = x1-x0+1               
+            newhead['SUBX1'] = x1-1
+            newhead['SUBNX'] = x1-x0               
             newhead['SUBY0'] = y0
-            newhead['SUBY1'] = y1
-            newhead['SUBNY'] = y1-y0+1
+            newhead['SUBY1'] = y1-1
+            newhead['SUBNY'] = y1-y0
             # Flux
-            subim = im[y0:y1+1,x0:x1+1].copy()
+            subim = im[y0:y1,x0:x1].copy()
             hdu1 = fits.PrimaryHDU(subim,newhead.copy())
             timhdu.append(hdu1)
-            # Weight
-            subwt = wt[y0:y1+1,x0:x1+1].copy()
-            hdu1 = fits.PrimaryHDU(subwt,newhead.copy())
-            twthdu.append(hdu1)
             # Background
-            subbg = bg[y0:y1+1,x0:x1+1].copy()
-            hdu1 = fits.PrimaryHDU(subbg,newhead.copy())
-            timhdu.append(hdu1)                
+            subbg = bg[y0:y1,x0:x1].copy()
+            hdu2 = fits.PrimaryHDU(subbg,newhead.copy())
+            tbghdu.append(hdu2)                
+            # Weight
+            subwt = wt[y0:y1,x0:x1].copy()
+            hdu3 = fits.PrimaryHDU(subwt,newhead.copy())
+            twthdu.append(hdu3)
 
     timhdu.writeto(timfile,overwrite=True)
     timhdu.close()
-    twthdu.writeto(twtfile,overwrite=True)
-    twthdu.close()
     tbghdu.writeto(tbgfile,overwrite=True)
     tbghdu.close()        
-                
-    return timfile,twtfile,tbgfile
+    twthdu.writeto(twtfile,overwrite=True)
+    twthdu.close()
+
+    return timfile,tbgfile,twtfile
 
     
-def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average',nbin=2,outfile=None):
+def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average',
+          nbin=2,outfile=None,verbose=False):
     """
     Create a coadd given a list of images.
     """
@@ -930,7 +931,7 @@ def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average',nbin=2,outfile
     for f in range(nimages):
 
         # Step 1. Interpolate image
-        fim, fhead, fbg, fwt = image_interp(imagefiles[f],outhead,weightfile=weightfiles[f])
+        fim, fhead, fbg, fwt = image_interp(imagefiles[f],outhead,weightfile=weightfiles[f],verbose=verbose)
         ny,nx = fim.shape
 
         # Step 2. Scale the image
@@ -940,11 +941,11 @@ def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average',nbin=2,outfile
         fwt *= scales[i]**2
 
         # Step 3. Break up image and save to temporary files
-        timfile,twtfile,tbgfile = mktempfile(fim,fwt,fbg,outhead,scale=scales[i],
+        timfile,tbgfile,twtfile = mktempfile(fim,fhead,fbg,fwt,outhead,scale=scales[i],
                                              weight=weights[i],nbin=nbin)
         meta['timfile'][f] = timfile
-        meta['twtfile'][f] = twtfile
         meta['tbgfile'][f] = tbgfile
+        meta['twtfile'][f] = twtfile
         
     # Step 4. Stack the images
     final,error = stack(meta)
@@ -952,8 +953,8 @@ def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average',nbin=2,outfile
     # Delete temporary files
     for i in range(meta):
         if os.path.exists(meta['timfile'][i]): os.remove(meta['timfile'][i])
-        if os.path.exists(meta['twtfile'][i]): os.remove(meta['twtfile'][i])
         if os.path.exists(meta['tbgfile'][i]): os.remove(meta['tbgfile'][i])
+        if os.path.exists(meta['twtfile'][i]): os.remove(meta['twtfile'][i])
 
     # Final header
     #  scales, weights, image names, mean backgrounds
