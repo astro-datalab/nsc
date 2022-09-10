@@ -916,6 +916,7 @@ def mktempfile(im,head,bg,wt,outhead,scale=1.0,weight=1.0,nbin=2):
     tbghdu.close()        
     twthdu.writeto(twtfile,overwrite=True)
     twthdu.close()
+    if os.path.exists(tfile): os.remove(tfile)
 
     return timfile,tbgfile,twtfile
 
