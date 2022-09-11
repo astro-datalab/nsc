@@ -731,7 +731,7 @@ def image_interp(imagefile,outhead,weightfile=None,masknan=False,verbose=False):
         return oim,ohead,obg
 
     
-def meancube(imcube,wtcube,weights=None,crreject=False):
+def meancube(imcube,wtcube,weights=None,crreject=False,statistic='mean'):
     """ This does the actual stack of an image cube.  The images must already be background-subtracted and scaled."""
     # Weights should be normalized, e.g., sum(weights)=1
     # pixels to be masked in an image should have wtcube = 0
@@ -759,6 +759,11 @@ def meancube(imcube,wtcube,weights=None,crreject=False):
     final = finaltot/finaltotwt
     # Create final error image
     error = np.sqrt(totvarim)
+
+    # Sum
+    if statistic == 'sum':
+        final *= nimages
+        error *= nimages
     
     # CR rejection
     if crreject is True:
@@ -767,7 +772,7 @@ def meancube(imcube,wtcube,weights=None,crreject=False):
     return final,error
 
 
-def stack(meta):
+def stack(meta,statistic='mean'):
     """
     Actually do the stacking/averaging of multiple images already reprojected.
 
@@ -776,6 +781,9 @@ def stack(meta):
     meta : table
        Table that contains all of the information to perform the stacking.
          Required columns are : "timfile", "twtfile", "tbgfile", "weight"
+    statistic : str, optional
+       The statistic to use when combining the images: 'mean' or 'sum'.  Default
+         is 'mean'.
 
     Returns
     -------
@@ -847,7 +855,7 @@ def stack(meta):
             imcube[:,:,f] = im
             wtcube[:,:,f] = wt
         # Do the weighted combination
-        avgim,errim = meancube(imcube,wtcube,weights=weights)
+        avgim,errim = meancube(imcube,wtcube,weights=weights,statistic=statistic)
         # Stuff into final image
         final[bintab['Y0'][b]:bintab['Y1'][b]+1,bintab['X0'][b]:bintab['X1'][b]+1] = avgim
         error[bintab['Y0'][b]:bintab['Y1'][b]+1,bintab['X0'][b]:bintab['X1'][b]+1] = errim
@@ -921,7 +929,7 @@ def mktempfile(im,head,bg,wt,outhead,scale=1.0,weight=1.0,nbin=2):
     return timfile,tbgfile,twtfile
 
     
-def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average',
+def coadd(imagefiles,weightfiles,meta,outhead,statistic='mean',
           nbin=2,outfile=None,verbose=False):
     """
     Create a coadd given a list of images.
@@ -937,8 +945,8 @@ def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average',
          "exptime", and "fwhm".
     outhead : header or WCS
        Header with projection for the output image.
-    coaddtype : str, optional
-       Statistic to use for coaddition.  Default is 'average'.
+    statistic : str, optional
+       Statistic to use for coaddition: 'mean' or 'sum'.  Default is 'mean'.
     nbin : int, optional
        Number of bins to use (in X and Y) when splitting up the
          image for the temporary files.  Default is 2.
@@ -1009,7 +1017,7 @@ def coadd(imagefiles,weightfiles,meta,outhead,coaddtype='average',
         meta['twtfile'][f] = twtfile
         
     # Step 4. Stack the images
-    final,error = stack(meta)
+    final,error = stack(meta,statistic=statistic)
 
     # Delete temporary files
     for i in range(len(meta)):
