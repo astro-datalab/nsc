@@ -754,6 +754,43 @@ def meancube(imcube,wtcube,weights=None,crreject=False,statistic='mean'):
     return final,error
 
 
+def reassemble(filename):
+    """ Reassemble an image that has been split into subregions."""
+
+    if os.path.exists(filename)==False:
+        raise ValueError(filename+' not found')
+    
+    hdu = fits.open(filename)
+    head0 = hdu[0].header
+    fnx = head0['ONAXIS1']
+    fny = head0['ONAXIS2']    
+    image = np.zeros((fny,fnx),float)
+    
+    for i in range(len(hdu)-1):
+        head1 = hdu[i+1].header
+        im1 = hdu[i+1].data        
+        x0 = head1['SUBX0']
+        x1 = head1['SUBX1']
+        nx = head1['SUBNX']
+        y0 = head1['SUBY0']
+        y1 = head1['SUBY1']
+        ny = head1['SUBNY']
+        # Stuff into final image
+        image[y0:y1+1,x0:x1+1] = im1
+
+    head = head0.copy()
+    head['NAXIS1'] = fnx
+    head['NAXIS2'] = fny    
+
+    # Delete temporary header keys
+    for c in ['SUBX0','SUBX1','SUBNX','SUBY0','SUBY1','SUBNY','ONAXIS1','NAXIS2']:
+        del head[c]
+
+    hdu.close()
+        
+    return image,head
+
+
 def stack(meta,statistic='mean'):
     """
     Actually do the stacking/averaging of multiple images already reprojected.
