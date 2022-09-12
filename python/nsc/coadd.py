@@ -502,19 +502,31 @@ def image_reproject_swarp(im,head,outhead,wtim=None,tmproot='.',verbose=False):
         retcode = subprocess.run(["swarp",imfile,"-c",configfile],shell=False,stderr=subprocess.STDOUT)        
                 
     # Load the output file
-    oim,ohead = fits.getdata(imoutfile,header=True)
+    oim,shead = fits.getdata(imoutfile,header=True)
     # By default swarp makes it sky-right, flip
-    if ohead['CD1_1'] < 0:
+    if shead['CD1_1'] < 0:
         if verbose:
             print('Flipping swarp image in RA axis')
         oim = oim[:,::-1]
-        ohead['CD1_1'] = -ohead['CD1_1']
+        shead['CD1_1'] = -shead['CD1_1']
+
+    # Contruct the final header
+    ohead = head.copy()
+    # Delete any previous WCS keywords
+    for n in ['CRVAL1','CRVAL2','CRPIX1','CRPIX2','CDELT1','CDELT2','CTYPE1','CTYPE2','CD1_1','CD1_2','CD2_1','CD2_2']:
+        if n in ohead:
+            del ohead[n]
+    cards = [f[0] for f in ohead.cards]
+    pvnames = dln.grep(cards,'PV[0-9]_+[0-9]')
+    for p in pvnames:
+        del ohead[p]
+    # Add the new Swarp header
+    ohead.extend(shead)
+
     out = (oim,ohead)
     if wtim is not None:
         owtim,owthead = fits.getdata(wtoutfile,header=True)
         out = (oim,ohead,owtim)
-
-    # Add information in the original header!!
 
     # Delete temporary directory and files??
     tmpfiles = glob.glob('*')
@@ -530,36 +542,6 @@ def image_reproject_swarp(im,head,outhead,wtim=None,tmproot='.',verbose=False):
         print('dt = %8.2f sec' % dt)
 
     return out
-
-    #ny1,nx1 = im.shape
-    ## The coordinates vary smoothly, only get coordinate in new system for a sparse matrix
-    ##  using the wcs to go from pix->world->pix takes 15 sec for 2046x4098 image
-    ##  this way takes 4 sec
-    #x1, y1 = np.mgrid[0:nx1+100:100,0:ny1+100:100]
-    #ra,dec = wcs.all_pix2world(x1,y1,0)
-    #x2,y2 = outwcs.wcs_world2pix(ra,dec,0)
-    ## Now interpolate this for all pixels
-    #from scipy import interpolate
-    #xfn = interpolate.interp2d(x1.flatten(),y1.flatten(),x2.flatten(),kind='cubic',bounds_error=True,copy=False)
-    #yfn = interpolate.interp2d(x1.flatten(),y1.flatten(),y2.flatten(),kind='cubic',bounds_error=True,copy=False)
-    ##x1all,y1all = np.mgrid[0:nx1,0:ny1]  # slow
-    #x1all = np.arange(nx1).repeat(ny1).reshape(nx1,ny1).T
-    #y1all = np.arange(ny1).repeat(nx1).reshape(ny1,nx1)
-    #x2all = xfn(np.arange(nx1),np.arange(ny1))
-    #y2all = yfn(np.arange(nx1),np.arange(ny1))
-    ## Interpolate the image
-    #from scipy import ndimage
-
-    #import pdb; pdb.set_trace()
-    ## coords = [1d x array, 1d y array]
-    ##  coords in 2D image IM where we want interpolated values
-    ## so we actually want to go the OTHER for this, what are the final x/y values in the ORIGINAL image
-    #newim = ndimage.map_coordinates(im,[[0.5,2],[0.5,1]],order=1)
-    #newim = ndimage.map_coordinates(im, coords, order=1, cval=0, output=bool)
-    #imfx = interpolate.interp2d(x2all.flatten(),y2all.flatten(),im.flatten(),kind='cubic',bounds_error=True,copy=False)
-    #tck = interpolate.bisplrep(x2all.flatten(),y2all.flatten(),im.flatten())
-    
-    #znew = interpolate.bisplev(xnew[:,0], ynew[0,:], tck)
 
 def image_reproject(im,head,outhead,wtim=None,kind='swarp',tmproot='.',verbose=False):
     """
@@ -1015,6 +997,9 @@ def coadd(imagefiles,weightfiles,meta,outhead,statistic='mean',
         meta['timfile'][f] = timfile
         meta['tbgfile'][f] = tbgfile
         meta['twtfile'][f] = twtfile
+
+
+    import pdb; pdb.set_trace()
         
     # Step 4. Stack the images
     final,error = stack(meta,statistic=statistic)
