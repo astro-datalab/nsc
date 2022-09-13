@@ -762,7 +762,7 @@ def stack(meta,statistic='mean'):
     ----------
     meta : table
        Table that contains all of the information to perform the stacking.
-         Required columns are : "timfile", "twtfile", "tbgfile", "weight"
+         Required columns are : "flxfile", "wtfile", "bgfile", "weight"
     statistic : str, optional
        The statistic to use when combining the images: 'mean' or 'sum'.  Default
          is 'mean'.
@@ -782,10 +782,11 @@ def stack(meta,statistic='mean'):
     """
 
     nimages = len(meta)
-    imagefiles = meta['timfile']
-    weightfiles = meta['twtfile']
-    bgfiles = meta['tbgfile']
+    imagefiles = meta['flxfile']
+    weightfiles = meta['wtfile']
+    bgfiles = meta['bgfile']
     weights = meta['weight']
+    scales = meta['scale']
 
     # DO NOT use the error maps for the weighted average.  Use scalar weights for each exposure.
     #  otherwise you'll get screwy images
@@ -830,9 +831,15 @@ def stack(meta,statistic='mean'):
         for f in range(nimages):
             im,head = fits.getdata(imagefiles[f],b,header=True)
             wt,whead = fits.getdata(weightfiles[f],b,header=True)
-            # Background subtraction here???
             # Deal with NaNs
             wt[~np.isfinite(im)] = 0
+
+            # Scale the image
+            #  divide image by "scale"
+            im /= scales[f]
+            #  wt = 1/err^2, need to perform same operation on err as on image
+            wt *= scales[f]**2
+
             # Stuff into the cube
             imcube[:,:,f] = im
             wtcube[:,:,f] = wt
@@ -845,7 +852,7 @@ def stack(meta,statistic='mean'):
     return final,error
 
 
-def mktempfile(im,head,bg,wt,outhead,scale=1.0,weight=1.0,nbin=2):
+def mktempfile(im,head,bg,wt,outhead,nbin=2):
     """ Break up into bins and save to temporary file """
 
     ny,nx = im.shape
@@ -877,8 +884,6 @@ def mktempfile(im,head,bg,wt,outhead,scale=1.0,weight=1.0,nbin=2):
             y1 = y0 + dy
             if j==(ybin-1): y1=ny
             newhead = head.copy()
-            newhead['SCALE'] = scale
-            newhead['WEIGHT'] = weight
             newhead['ONAXIS1'] = newhead['NAXIS1']
             newhead['ONAXIS2'] = newhead['NAXIS2']
             newhead['SUBX0'] = x0
@@ -981,34 +986,28 @@ def coadd(imagefiles,weightfiles,meta,outhead,statistic='mean',
         if verbose:
             print(str(f+1)+' '+imagefiles[f]+' '+weightfiles[f])
 
-        # Step 1. Interpolate image
+        # Interpolate image
         fim, fhead, fbg, fwt = image_interp(imagefiles[f],outhead,weightfile=weightfiles[f],verbose=verbose)
         ny,nx = fim.shape
 
-        # Step 2. Scale the image
-        #  divide image by "scales"
-        fim /= scales[f]
-        #  wt = 1/err^2, need to perform same operation on err as on image
-        fwt *= scales[f]**2
-
-        # Step 3. Break up image and save to temporary files
-        timfile,tbgfile,twtfile = mktempfile(fim,fhead,fbg,fwt,outhead,scale=scales[f],
-                                             weight=weights[f],nbin=nbin)
-        meta['timfile'][f] = timfile
-        meta['tbgfile'][f] = tbgfile
-        meta['twtfile'][f] = twtfile
+        # Break up image and save to temporary files
+        tflxfile,tbgfile,twtfile = mktempfile(fim,fhead,fbg,fwt,outhead,nbin=nbin)
+        meta['flxfile'][f] = tflxfile
+        meta['bgfile'][f] = tbgfile
+        meta['wtfile'][f] = twtfile
 
 
     import pdb; pdb.set_trace()
         
     # Step 4. Stack the images
+    #   this does the scaling and weighting
     final,error = stack(meta,statistic=statistic)
 
     # Delete temporary files
     for i in range(len(meta)):
-        if os.path.exists(meta['timfile'][i]): os.remove(meta['timfile'][i])
-        if os.path.exists(meta['tbgfile'][i]): os.remove(meta['tbgfile'][i])
-        if os.path.exists(meta['twtfile'][i]): os.remove(meta['twtfile'][i])
+        if os.path.exists(meta['flxfile'][i]): os.remove(meta['flxfile'][i])
+        if os.path.exists(meta['bgfile'][i]): os.remove(meta['bgfile'][i])
+        if os.path.exists(meta['wtfile'][i]): os.remove(meta['wtfile'][i])
 
     # Final header
     #  scales, weights, image names, mean backgrounds
