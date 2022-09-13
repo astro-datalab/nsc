@@ -698,6 +698,9 @@ def image_interp(imagefile,outhead,weightfile=None,masknan=False,verbose=False):
 
         noverlap += 1
 
+    ohead['NAXIS1'] = bricknx
+    ohead['NAXIS2'] = brickny
+
     dt = time.time()-t0
     if verbose:
         print('dt = %8.2f sec' % dt)
@@ -1016,9 +1019,9 @@ def coadd(imagefiles,weightfiles,meta,outhead,statistic='mean',
     meta['weight'] = weights
 
     # Loop over the images
-    meta['timfile'] = 100*' '  # add columns for temporary file names
-    meta['twtfile'] = 100*' '
-    meta['tbgfile'] = 100*' '
+    meta['flxfile'] = 100*' '  # add columns for temporary file names
+    meta['wtfile'] = 100*' '
+    meta['bgfile'] = 100*' '
     for f in range(nimages):
         if verbose:
             print(str(f+1)+' '+imagefiles[f]+' '+weightfiles[f])
@@ -1032,9 +1035,6 @@ def coadd(imagefiles,weightfiles,meta,outhead,statistic='mean',
         meta['flxfile'][f] = tflxfile
         meta['bgfile'][f] = tbgfile
         meta['wtfile'][f] = twtfile
-
-
-    import pdb; pdb.set_trace()
         
     # Step 4. Stack the images
     #   this does the scaling and weighting
