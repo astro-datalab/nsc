@@ -5,7 +5,7 @@ import time
 import numpy as np
 import socket
 from astropy.io import fits,ascii
-from astropy.table import Table,vstack
+from astropy.table import Table,vstack,Column
 import subprocess
 from dlnpyutils import utils as dln,coords
 from dustmaps.sfd import SFDQuery
@@ -17,40 +17,40 @@ from . import utils,modelmag
 
 Vizier.TIMEOUT = 600
 Vizier.ROW_LIMIT = -1
-Vizier.cache_location = None
+Vizier._cache_location = None
 
 def tempest_query(cenra,cendec,radius,refcat,nside=32,silent=False,logger=None):
     """
     Get reference catalog information from FITS files on tempest.
- 
+
     Parameters
     ----------
     cenra : float
-       Central RA for the search. 
+       Central RA for the search.
     cendec : float
-       Central DEC for the search. 
+       Central DEC for the search.
     radius : float
-       Search radius in degrees. 
+       Search radius in degrees.
     refcat : table
        Reference catalog name (e.g. 2MASS, Gaia, etc.)
     silent : bool, optional
-       Don't print anything to the screen. 
+       Don't print anything to the screen.
     logger : logging object, optional
        Logging object to use for printing messages.
- 
+
     Returns
     -------
     ref : astropy table
-        Search results from the reference catalog. 
- 
+        Search results from the reference catalog.
+
     Example
     -------
 
-    cat = tempest_query(cenra,cendec,radius,refcat) 
- 
+    cat = tempest_query(cenra,cendec,radius,refcat)
+
     """
 
-    t0 = time.time() 
+    t0 = time.time()
 
     if logger is None:
         logger = dln.basiclogger()
@@ -61,7 +61,7 @@ def tempest_query(cenra,cendec,radius,refcat,nside=32,silent=False,logger=None):
         refname = 'ps1'
     if refname=='2mass-psc':
         refname = '2mass'
-    
+
     # What healpix do we need to load
     upix = hp.ang2pix(nside,cenra,cendec,lonlat=True)
     cenvec = hp.ang2vec(cenra,cendec,lonlat=True)
@@ -70,10 +70,13 @@ def tempest_query(cenra,cendec,radius,refcat,nside=32,silent=False,logger=None):
     # Loop over healpix
     ref = None
     for p in allpix:
-        reffile = '/home/x51j468/catalogs/'+refname+'/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'
+        print("pix ",p)
+        if refname=="gsynth-phot": reffile = '/home/x25h971/catalogs/gaia_synth_phot/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'
+        else: reffile = '/home/x51j468/catalogs/'+refname+'/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'
         if os.path.exists(reffile)==False:
-            #print(reffile,' NOT FOUND')
+            print(reffile,' NOT FOUND')
             continue
+        print("reading from file ",reffile)
         tab = Table.read(reffile)
         # Sometimes the catalog files have a 2nd dimension
         for n in tab.colnames:
@@ -94,22 +97,33 @@ def tempest_query(cenra,cendec,radius,refcat,nside=32,silent=False,logger=None):
         ref['r'].name = 'rmag'
         ref['i'].name = 'imag'
         ref['z'].name = 'zmag'
-        ref['y'].name = 'ymag'        
+        ref['y'].name = 'ymag'
 
     # Fix mag names for GLIMPSE
     if refname=='glimpse':
         ref['_3.6mag'].name = '_3_6mag'
-        ref['e_3.6mag'].name = 'e_3_6mag'        
+        ref['e_3.6mag'].name = 'e_3_6mag'
         ref['_4.5mag'].name = '_4_5mag'
         ref['e_4.5mag'].name = 'e_4_5mag'
-    
+
+    # Fix masked columns for GSYNTH-PHOT
+    if refname=="gsynth-phot":
+        for colname in ref.colnames:
+            try:
+                ref[colname][ref[colname].mask] = 99.99
+                #bl = [not i for i in ref[colname].mask]
+                #ref = ref[bl]
+                ref[colname] = Column(ref[colname])
+            except:
+                ref[colname] = Column(ref[colname])
+
     # Do radius cut
     dist = coords.sphdist(cenra,cendec,ref['ra'],ref['dec'])
     if dist.ndim==2:
         dist = dist.flatten()
     gd, = np.where(dist <= radius)
     ref = ref[gd]
-    
+
     return ref
 
 
@@ -362,7 +376,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
             #if refcat == 'SAGE': 
             #    cfa = 0 
             result = Vizier.query_region(SkyCoord(ra=cenra, dec=cendec, unit='deg'),
-                                         radius=Angle(radius, "deg"), catalog=refname)
+                                         radius=Angle(radius, "deg"), catalog=refname,cache=False)
             # Check for failure 
             if len(result)==0:
                 if silent==False : 
@@ -390,8 +404,8 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
             elif refname == 'TMASS': 
                 nref = len(ref) 
                 orig = ref.copy()
-                dt = [('designation',(np.str,50)),('raj2000',float),('dej2000',float),('jmag',float),('e_jmag',float),
-                      ('hmag',float),('e_hmag',float),('kmag',float),('e_kmag',float),('qflg',(np.str,20))]
+                dt = [('designation',('str',50)),('raj2000',float),('dej2000',float),('jmag',float),('e_jmag',float),
+                      ('hmag',float),('e_hmag',float),('kmag',float),('e_kmag',float),('qflg',('str',20))]
                 ref = np.zeros(nref,dtype=np.dtype(dt))
                 for n in orig.colnames:
                     ref[n] = orig[n]
@@ -486,7 +500,7 @@ def getexttype(cenra,cendec,radius):
         cnt = 0
         while (nresult == 0) and (cnt < 9): 
             result = Vizier.query_region(SkyCoord(ra=rr[cnt],dec=dd[cnt],unit='deg'),
-                                         radius=Angle(1.0,"arcmin"),catalog='II/293/glimpse')
+                                         radius=Angle(1.0,"arcmin"),catalog='II/293/glimpse',cache=False)
             nresult = len(result)
             cnt += 1 
         if nresult > 0: 
@@ -506,7 +520,7 @@ def getexttype(cenra,cendec,radius):
         cnt = 0
         while (nresult == 0) and (cnt < 9): 
             result = Vizier.query_region(SkyCoord(ra=rr[cnt],dec=dd[cnt],unit='deg'),
-                                         radius=Angle(1.0,"arcmin"),catalog='II/305/archive')
+                                         radius=Angle(1.0,"arcmin"),catalog='II/305/archive',cache=False)
             nresult = len(result)
             cnt += 1 
         if nresult > 0: 
@@ -523,23 +537,23 @@ def getexttype(cenra,cendec,radius):
      
     return ext_type 
 
-                          
+
 def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
                dcr=0.5,eqnfile=None,modelmags=False,logger=None):
     """
-    Get reference catalog information needed for a given filter. 
- 
+    Get reference catalog information needed for a given filter.
+
     Parameters
     ----------
     filt : str
-       Filter and instrument name, e.g. "c4d-u". 
-         This can be an array of multiple filters and 
-         then all the reference needed for all the filters 
-         will be included. 
+       Filter and instrument name, e.g. "c4d-u".
+         This can be an array of multiple filters and
+         then all the reference needed for all the filters
+         will be included.
     cenra : float
-       Central RA for the search. 
+       Central RA for the search.
     cendec : float
-       Central DEC for the search. 
+       Central DEC for the search.
     radius : float
        Search radius in degrees. 
     dcr : float, optional
@@ -610,89 +624,89 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
             logger.info('Extinction Type: 3 - RJCE GLIMPSE')
         elif ext_type==4:
             logger.info('Extinction Type: 4 - RJCE SAGE')
- 
-     
-    # Load the reference catalogs 
-    #----------------------------- 
-    # Figure out the reference catalogs that we need based on 
+
+
+    # Load the reference catalogs
+    #-----------------------------
+    # Figure out the reference catalogs that we need based on
     #  filter-instrument combination
     refcat = []
-    for i in range(len(filt)): 
-        instfilt = filt[i] 
-        # If no instrument information then assume it's DECam 
-        if instfilt.find('-') == -1: 
-            instfilt = 'c4d-'+instfilt 
+    for i in range(len(filt)):
+        instfilt = filt[i]
+        # If no instrument information then assume it's DECam
+        if instfilt.find('-') == -1:
+            instfilt = 'c4d-'+instfilt
         # Check the cases
-        # DECam u-band                           
+        # DECam u-band
         if instfilt=='c4d-u':
-            # Use GAIA, 2MASS and GALEX to calibrate 
-            refcat += ['2MASS-PSC','II/312/ais'] 
-            if cendec <= 0: 
+            # Use GAIA, 2MASS and GALEX to calibrate
+            refcat += ['2MASS-PSC','II/312/ais']
+            if cendec <= 0:
                 refcat += ['Skymapper']
         # DECam g-band
         elif instfilt=='c4d-g':
-            # Use PS1 if possible 
-            if cendec > -29: 
-                refcat += ['2MASS-PSC','PS'] 
-            else: 
-                # Use 2MASS and Skymapper to calibrate 
-                #push,refcat,['2MASS-PSC','Skymapper'] 
-                refcat += ['2MASS-PSC','ATLAS'] 
+            # Use PS1 if possible
+            if cendec > -29:
+                refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
+            else:
+                # Use 2MASS and Skymapper to calibrate
+                #push,refcat,['2MASS-PSC','Skymapper']
+                refcat += ['2MASS-PSC','GSYNTH-PHOT','ATLAS']
         # DECam r-band
         elif instfilt=='c4d-r':
-            # Use PS1 if possible 
-            if cendec > -29: 
-                refcat += ['2MASS-PSC','PS'] 
-            else: 
-                # Use 2MASS and Skymapper to calibrate 
-                #push,refcat,['2MASS-PSC','Skymapper'] 
-                refcat += ['2MASS-PSC','ATLAS'] 
+            # Use PS1 if possible
+            if cendec > -29:
+                refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
+            else:
+                # Use 2MASS and Skymapper to calibrate
+                #push,refcat,['2MASS-PSC','Skymapper']
+                refcat += ['2MASS-PSC','GSYNTH-PHOT','ATLAS']
         # DECam i-band
         elif instfilt=='c4d-i':
-            # Use PS1 if possible 
-            if cendec > -29: 
-                refcat += ['2MASS-PSC','PS'] 
-            else: 
-                # Use Skymapper and 2MASS to calibrate 
-                #push,refcat,['2MASS-PSC','Skymapper'] 
-                refcat += ['2MASS-PSC','ATLAS'] 
-        # DECam z-band 
+            # Use PS1 if possible
+            if cendec > -29:
+                refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
+            else:
+                # Use Skymapper and 2MASS to calibrate
+                #push,refcat,['2MASS-PSC','Skymapper']
+                refcat += ['2MASS-PSC','GSYNTH-PHOT','ATLAS']
+        # DECam z-band
         elif instfilt=='c4d-z':
-            # Use PS1 if possible 
-            if cendec > -29: 
-                refcat += ['2MASS-PSC','PS'] 
-            else: 
-                # Use Skymapper and 2MASS to calibrate 
-                #push,refcat,['2MASS-PSC','Skymapper'] 
-                refcat += ['2MASS-PSC','ATLAS'] 
-        # DECam Y-band 
+            # Use PS1 if possible
+            if cendec > -29:
+                refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
+            else:
+                # Use Skymapper and 2MASS to calibrate
+                #push,refcat,['2MASS-PSC','Skymapper']
+                refcat += ['2MASS-PSC','GSYNTH-PHOT','ATLAS']
+        # DECam Y-band
         elif instfilt=='c4d-Y':
-            # Use PS1 if possible 
-            if cendec > -29: 
-                refcat += ['2MASS-PSC','PS'] 
-            else: 
-                # Use 2MASS to calibrate 
-                refcat += ['2MASS-PSC'] 
-        # DECam VR-band 
+            # Use PS1 if possible
+            if cendec > -29:
+                refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
+            else:
+                # Use 2MASS to calibrate
+                refcat += ['2MASS-PSC','GSYNTH-PHOT']
+        # DECam VR-band
         elif instfilt=='c4d-VR':
-            # Use PS1 if possible 
-            if cendec > -29: 
-                refcat += ['2MASS-PSC','PS'] 
-            else: 
-                refcat += ['2MASS-PSC','ATLAS'] 
-        # Bok+90Prime g-band 
+            # Use PS1 if possible
+            if cendec > -29:
+                refcat += ['2MASS-PSC','PS']
+            else:
+                refcat += ['2MASS-PSC','ATLAS']
+        # Bok+90Prime g-band
         elif instfilt=='ksb-g':
-            # Use PS1 
-            refcat += ['2MASS-PSC','PS'] 
-        # Bok+90Prime r-band 
+            # Use PS1
+            refcat += ['2MASS-PSC','PS']
+        # Bok+90Prime r-band
         elif instfilt=='ksb-r':
-            # Use PS1 
-            refcat += ['2MASS-PSC','PS'] 
-        # Mosaic3 g-band 
+            # Use PS1
+            refcat += ['2MASS-PSC','PS']
+        # Mosaic3 g-band
         elif instfilt=='k4m-g':
-            # Use PS1 
-            refcat += ['2MASS-PSC','PS'] 
-        # Mosaic3 r-band 
+            # Use PS1
+            refcat += ['2MASS-PSC','PS']
+        # Mosaic3 r-band
         elif instfilt=='k4m-r':
             # Use PS1 
             refcat += ['2MASS-PSC','PS'] 
@@ -731,52 +745,57 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
         refcat = ['GAIAEDR3']+list(refcat)
     else:
         refcat = ['GAIAEDR3']
-    nrefcat = len(refcat) 
- 
-    # Figure out the new columns that need to be added 
+    nrefcat = len(refcat)
+
+    # Figure out the new columns that need to be added
     newcols = []
     for i in range(nrefcat):
         if refcat[i]=='GAIADR2' or refcat[i]=='GAIAEDR3':
             newcols +=['source','ra','ra_error','dec','dec_error','pmra','pmra_error','pmdec','pmdec_error','gmag','e_gmag','bp','e_bp','rp','e_rp'] 
+        elif refcat[i]=='GSYNTH-PHOT':
+            newcols +=['gsynth_g','gsynth_r','gsynth_i','gsynth_z','gsynth_y']
+            #newcols +=['Decam_mag_g','Decam_mag_r','Decam_mag_i','Decam_mag_z','Decam_mag_Y','Decam_flux_g','Decam_flux_r','Decam_flux_i','Decam_flux_z','Decam_flux_Y','Decam_flux_error_g','Decam_flux_error_r','Decam_flux_error_i','Decam_flux_error_z','Decam_flux_error_Y']
         elif refcat[i]=='2MASS-PSC':
-            newcols += ['jmag','e_jmag','hmag','e_hmag','kmag','e_kmag','qflg'] 
+            newcols += ['jmag','e_jmag','hmag','e_hmag','kmag','e_kmag','qflg']
         elif refcat[i]=='PS':
-            newcols += ['ps_gmag','ps_rmag','ps_imag','ps_zmag','ps_ymag'] 
+            newcols += ['ps_gmag','ps_rmag','ps_imag','ps_zmag','ps_ymag']
         elif refcat[i]=='APASS':
-            newcols += ['apass_gmag','e_apass_gmag','apass_rmag','e_apass_rmag'] 
+            newcols += ['apass_gmag','e_apass_gmag','apass_rmag','e_apass_rmag']
         elif refcat[i]=='II/312/ais':
-            newcols += ['nuv','e_nuv']  # Galex 
+            newcols += ['nuv','e_nuv']  # Galex
         elif refcat[i]=='Skymapper':
             newcols += ['sm_umag','e_sm_umag','sm_gmag','e_sm_gmag','sm_rmag','e_sm_rmag','sm_imag','e_sm_imag','sm_zmag','e_sm_zmag']  # Skymapper DR1 
         elif refcat[i]=='ALLWISE':
-            newcols += ['w1mag','e_w1mag','w2mag','e_w2mag'] 
+            newcols += ['w1mag','e_w1mag','w2mag','e_w2mag']
         elif refcat[i]=='GLIMPSE':
-            newcols += ['gl_36mag','e_gl_36mag','gl_45mag','e_gl_45mag'] 
+            newcols += ['gl_36mag','e_gl_36mag','gl_45mag','e_gl_45mag']
         elif refcat[i]=='SAGE':
-            newcols += ['sage_36mag','e_sage_36mag','sage_45mag','e_sage_45mag'] 
+            newcols += ['sage_36mag','e_sage_36mag','sage_45mag','e_sage_45mag']
         elif refcat[i]=='ATLAS':
             newcols += ['atlas_gmag','e_atlas_gmag','atlas_gcontrib','atlas_rmag','e_atlas_rmag','atlas_rcontrib',
-                        'atlas_imag','e_atlas_imag','atlas_icontrib','atlas_zmag','e_atlas_zmag','atlas_zcontrib'] 
+                        'atlas_imag','e_atlas_imag','atlas_icontrib','atlas_zmag','e_atlas_zmag','atlas_zcontrib']
         else:
             raise ValueError(refcat[i]+' NOT SUPPORTED')
-    newcols += ['ebv_sfd','ejk','e_ejk','ext_type'] 
+    newcols += ['ebv_sfd','ejk','e_ejk','ext_type']
     if modelmags:
         newcols += ['model_mag','model_magerr','model_color']
-    nnewcols = len(newcols) 
-    
-    # Load the necessary catalogs 
-    nrefcat = len(refcat) 
-    if silent==False: 
+    nnewcols = len(newcols)
+
+    # Load the necessary catalogs
+    nrefcat = len(refcat)
+    if silent==False:
         logger.info(str(nrefcat)+' reference catalogs to load: '+', '.join(refcat))
     ref = None
-    for i in range(nrefcat): 
-        t0 = time.time() 
-        if silent==False: 
+    for i in range(nrefcat):
+        t0 = time.time()
+        if silent==False:
                 logger.info('Loading '+refcat[i]+' reference catalog')
-        # Load the catalog 
-        ref1 = getrefcat(cenra,cendec,radius,refcat[i],silent=silent,logger=logger) 
+        # Load the catalog
+        nsd = 32
+        ref1 = getrefcat(cenra,cendec,radius,refcat[i],nside=nsd,silent=silent,logger=logger)
         nref1 = len(ref1)
-        if nref1 == 0: 
+        logger.info("ref1 length = "+str(nref1))
+        if nref1 == 0:
             continue
 
         # Convert RAJ2000/DEJ2000 to RA/DEC
@@ -784,61 +803,67 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
             ref1['raj2000'].name = 'ra'
         if 'dej2000' in ref1.colnames:
             ref1['dej2000'].name = 'dec'
-        
+
         # Initialize the catalog 
         dt = []
         for j in range(nnewcols): 
             dtype1 = float
             if newcols[j] == 'qflg': 
-                dtype1 = (np.str,20)
+                dtype1 = ('str',20)
             if newcols[j] == 'ext_type': 
                 dtype1 = int
             if newcols[j] == 'source': 
                 dtype1 = int
             if newcols[j] == 'ra': 
-                dtype1 = float 
-            if newcols[j] == 'dec': 
+                dtype1 = float
+            if newcols[j] == 'dec':
                 dtype1 = float
             if newcols[j].find('contrib') > -1:
                 dtype1 = int
             dt += [(newcols[j],dtype1)]
- 
-        # First successful one, initialize the catalog 
+
+        # First successful one, initialize the catalog
         if ref is None:
             ref = np.zeros(nref1,dtype=np.dtype(dt))
             ref = Table(ref)
             for n in ref.colnames:
                 if n in ref1.colnames:
                     ref[n] = ref1[n]
-            #ref = replicate(schema,nref1) 
+            #ref = replicate(schema,nref1)
             #struct_assign,ref1,ref,/nozero
             if 'ra' not in ref1.colnames:
                 ref['ra'] = ref['ra_icrs']
                 ref['dec'] = ref['de_icrs']
-            ind1 = np.arange(nref1).astype(int) 
+            ind1 = np.arange(nref1).astype(int)
             ind2 = np.arange(nref1).astype(int)
-            nmatch = nref1 
- 
-        # Second and later 
-        else: 
-                        
-            # Crossmatch 
-            ind1,ind2,dist = coords.xmatch(ref['ra'],ref['dec'],ref1['ra'],ref1['dec'],dcr)
-            if silent==False: 
+            nmatch = nref1
+
+        # Second and later
+        else:
+
+            # Crossmatch
+            ind1,ind2,dist = coords.xmatch(ref['ra'],ref['dec'],Column(ref1['ra']),Column(ref1['dec']),dcr)
+            if silent==False:
                 logger.info(str(nmatch)+' matches')
- 
-        # Add magnitude columns 
+
+        # Add magnitude columns
         if nmatch > 0:
             if refcat[i]=='GAIADR2' or refcat[i]=='GAIAEDR3':
                 temp = ref[ind1]
                 for n in temp.colnames:
                     if n in ref1.colnames:
                         temp[n] = ref1[n][ind2]
-                #struct_assign,ref1[ind2],temp,/nozero 
-                temp['e_gmag'] = 2.5*np.log10(1.0+ref1['e_fg'][ind2]/ref1['fg'][ind2]) 
-                temp['e_bp'] = 2.5*np.log10(1.0+ref1['e_fbp'][ind2]/ref1['fbp'][ind2]) 
-                temp['e_rp'] = 2.5*np.log10(1.0+ref1['e_frp'][ind2]/ref1['frp'][ind2]) 
-                ref[ind1] = temp 
+                #struct_assign,ref1[ind2],temp,/nozero
+                temp['e_gmag'] = 2.5*np.log10(1.0+ref1['e_fg'][ind2]/ref1['fg'][ind2])
+                temp['e_bp'] = 2.5*np.log10(1.0+ref1['e_fbp'][ind2]/ref1['fbp'][ind2])
+                temp['e_rp'] = 2.5*np.log10(1.0+ref1['e_frp'][ind2]/ref1['frp'][ind2])
+                ref[ind1] = temp
+            elif refcat[i]=='GSYNTH-PHOT':
+                ref['gsynth_g'][ind1] = ref1['Decam_mag_g'][ind2]
+                ref['gsynth_r'][ind1] = ref1['Decam_mag_r'][ind2]
+                ref['gsynth_i'][ind1] = ref1['Decam_mag_i'][ind2]
+                ref['gsynth_z'][ind1] = ref1['Decam_mag_z'][ind2]
+                ref['gsynth_y'][ind1] = ref1['Decam_mag_Y'][ind2]
             elif refcat[i]=='2MASS-PSC':
                 ref['jmag'][ind1] = ref1['jmag'][ind2]
                 ref['e_jmag'][ind1] = ref1['e_jmag'][ind2]
@@ -905,7 +930,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
                 ref['sage_45mag'][ind1] = ref1['__4_5_'][ind2]
                 ref['e_sage_45mag'][ind1] = ref1['e__4_5_'][ind2]
             else:
-                raise ValueError(catname+' NOT SUPPORTED')
+                raise ValueError(refcat[i]+' NOT SUPPORTED')
  
  
         # Add leftover ones 
@@ -926,6 +951,8 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
                 new['e_gmag'] = 2.5*np.log10(1.0+left1['e_fg']/left1['fg']) 
                 new['e_bp'] = 2.5*np.log10(1.0+left1['e_fbp']/left1['fbp']) 
                 new['e_rp'] = 2.5*np.log10(1.0+left1['e_frp']/left1['frp']) 
+            elif refcat[i]=='GSYNTH-PHOT':
+                print("any more columns from gsynth-phot to add?") # no other columns to add?
             elif refcat[i]=='2MASS-PSC':
                 new['jmag'] = left1['jmag']
                 new['e_jmag'] = left1['e_jmag']
@@ -992,7 +1019,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
                 new['sage_45mag'] = left1['__4_5_']
                 new['e_sage_45mag'] = left1['e__4_5_']
             else:
-                raise ValueError(catname+' NOT SUPPORTED')
+                raise ValueError(refcat[i]+' NOT SUPPORTED')
  
  
             # Combine the two 
@@ -1023,19 +1050,21 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
         gdmodel, = np.where(ref['model_mag'] < 50)
         if silent==False:
             logger.info(str(len(gdmodel))+' stars with good model magnitudes')
-    
-    count = len(ref) 
- 
+
+    count = len(ref)
+
     logger.info('dt=%.1f sec' % (time.time()-t0))
 
-    return ref 
- 
+    #ref_test = ref[ref['gsynth_r']!=0.0]
+
+    return ref
+
 
 def getreddening(ref,ext_type):
     """
     This calculates E(J-Ks) reddening using reference catalog data for 
     the NSC. 
- 
+
     Parameters
     ----------
     ref : catalog

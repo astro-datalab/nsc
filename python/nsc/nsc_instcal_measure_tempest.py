@@ -193,7 +193,7 @@ class Exposure:
         # Check that the working files set by "setup"
         if (self.fluxfile is None) | (self.wtfile is None) | (self.maskfile is None):
             self.logger.warning("Local working filenames not set.  Make sure to run setup() first")
-            return
+            return(False)
         try:
             flux,fhead = fits.getdata(self.fluxfile,extension,header=True)
             fhead0 = fits.getheader(self.fluxfile,0)  # add PDU info
@@ -202,7 +202,7 @@ class Exposure:
             mask,mhead = fits.getdata(self.maskfile,extension,header=True)
         except:
             self.logger.error("No extension "+str(extension))
-            return
+            return(False)
         # Write the data to the appropriate files
         if os.path.exists(fluxfile):
             os.remove(fluxfile)
@@ -220,6 +220,7 @@ class Exposure:
         self.chip.outdir = self.outdir
         # Add logger information
         self.chip.logger = self.logger
+        return(True)
 
 
     # Process all chips
@@ -236,15 +237,16 @@ class Exposure:
             self.logger.info(" ")
             self.logger.info("=== Processing subimage "+str(i)+" ===")
             # Load the chip
-            self.loadchip(i)
+            bl = self.loadchip(i)
             self.logger.info("CCDNUM = "+str(self.chip.ccdnum))
-            # Process it
-            self.chip.process()
-            # Clean up 
-            self.chip.cleanup()
+            if bl==True:
+                # Process it
+                self.chip.process()
+                # Clean up
+                self.chip.cleanup()
             self.logger.info("dt = "+str(time.time()-t0)+" seconds")
 
-    
+
     # Teardown
     def teardown(self):
         # Delete files and temporary directory
@@ -255,9 +257,24 @@ class Exposure:
         tmpfiles = glob.glob("*")
         for f in tmpfiles: os.remove(f)
         os.rmdir(self.wdir)
+        # Compress exposure directory
+        os.chdir("/".join(self.outdir.split("/")[:-2])) #go to one directory above outdir
+        reponame = self.outdir.split("/")[-2]+".tar"
+        outdirname = self.outdir.split("/")[-2]
+        #print(reponame,outdirname)
+        if os.path.exists(reponame+".gz"): os.remove(reponame+".gz") #get rid of old compressed folder if present
+        os.system("tar -cvf "+reponame+" "+outdirname)
+        self.logger.info("tarred exposure directory")
+        os.system("gzip "+reponame)
+        self.logger.info("gzipped exposure tar folder")
+        ## Remove uncompressed files & directory
+        #old_files = glob.glob(self.outdir+"*")
+        #for f in old_files: os.remove(f)
+        ##os.listdir(self.outdir) # outdir contents
+        #shutil.rmtree(self.outdir)
         # CD back to original directory
         os.chdir(self.origdir)
-        
+
 
     # RUN all steps to process this exposure
     def run(self):
@@ -980,11 +997,10 @@ class Chip:
         # Delete temporary directory/files
         self.logger.info("  Cleaning up")
         files1 = glob.glob("flux*")
-        files2 = glob.glob("default*")        
+        files2 = glob.glob("default*")
         files = files1+files2+["flux.fits","wt.fits","mask.fits","daophot.opt","allstar.opt"]
         for f in files:
             if os.path.exists(f): os.remove(f)
-
 
 # Main command-line program
 if __name__ == "__main__":
@@ -1029,7 +1045,7 @@ if __name__ == "__main__":
         print(wtfile+" file NOT FOUND")
         sys.exit()
     if os.path.exists(maskfile) is False:
-        print(maskile+" file NOT FOUND")
+        print(maskfile+" file NOT FOUND")
         sys.exit()
 
     # Create the Exposure object

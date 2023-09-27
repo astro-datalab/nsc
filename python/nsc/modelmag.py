@@ -207,7 +207,7 @@ def modelmag(tab,instfilt,dec,eqnfile):
     ##  Each magnitude has an E_MAG error except for PS and Gaia GMAG
     ## If we are using PS or GMAG then add the errors for the
     adderrcols = []
-    psmagind, = np.where((dln.find(cols,'^PS_') > -1) & (dln.find(cols,'MAG$') > -1))
+    psmagind, = np.where(((dln.find(cols,'^PS_') > -1) & (dln.find(cols,'MAG$') > -1)) | (dln.find(cols,'GSYNTH_') > -1))
     if len(psmagind) > 0:
         adderrcols += list('E_'+cols[psmagind])
     nadderrcols = len(adderrcols)

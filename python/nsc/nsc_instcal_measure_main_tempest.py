@@ -26,9 +26,11 @@ from argparse import ArgumentParser
 from astropy.table import Table,Column
 from astropy.io import fits
 from dlnpyutils import utils as dln, coords
+import glob
 import logging
 import numpy as np
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -72,6 +74,7 @@ def write_jscript(job_name,partition,cmds,dir,single=True):
             job filename the job script is written to
     '''
     job_file = dir+job_name+".sh"
+    job_num = int(job_name.split("_")[-1])
     # The following code writes lines to the "job_name.sh" file.
     # Lines starting with #SBATCH are read by Slurm. Lines starting with ## are comments.
     # All other lines are read by the shell
@@ -82,12 +85,16 @@ def write_jscript(job_name,partition,cmds,dir,single=True):
         fh.writelines("#SBATCH --output="+dir+job_name+".out\n") # output file (%j = jobid)
         fh.writelines("#SBATCH --error="+dir+job_name+".err\n")  # error file
         fh.writelines("#SBATCH --partition="+partition+"\n")     # queue partition to run the job in
+        #fh.writelines("#SBATCH --nodes=1\n")
         if single==True: fh.writelines("#SBATCH --ntasks=1\n")   # for running in parallel
         else: fh.writelines("#SBATCH --ntasks="+str(len(cmds))+"\n")
         fh.writelines("#SBATCH --cpus-per-task 2\n")             # number of cores to allocate; set with care
-        fh.writelines("#SBATCH --mem-per-cpu=3000\n")           # memory, set --mem with care!!!!! refer to hyalite quickstart guide
-        if single==True: fh.writelines("#SBATCH --time=48:00:00\n")
+        fh.writelines("#SBATCH --mem-per-cpu=9G\n")           # memory, set --mem with care!!!!! refer to hyalite quickstart guide
+        if single==True: fh.writelines("#SBATCH --time=36:00:00\n")
         else: fh.writelines("#SBATCH --time=00:05:00\n")         # Maximum job run time
+        if job_num % 1000 == 0:
+            fh.writelines("#SBATCH --mail-user katiefasbender@montana.edu\n")
+            fh.writelines("#SBATCH --mail-type BEGIN\n")
         fh.writelines("module load Anaconda3\n")                 # load anaconda, needed for running python on hyalite/tempest
         fh.writelines("module load GCC\n")                       # load GCC module
         fh.writelines("source activate $HOME/condaenv/\n")       # activate conda environment
@@ -99,7 +106,7 @@ def write_jscript(job_name,partition,cmds,dir,single=True):
         fh.writelines("conda deactivate")
     return job_file
 
-def sacct_cmd(job_name,outputs):
+def sacct_cmd(job_name,outputs,c=False,m=False):
     '''parses the output of a sacct command, returning specified information
     Arguments:
     ----------
@@ -108,6 +115,10 @@ def sacct_cmd(job_name,outputs):
     outputs (str list)
             a list of information to get with the sacct command
             see sacct manual page for options
+    c (bool)
+            if job is known to be completed, default=False
+    m (bool)
+            if multiple tasks in the job, default=False
     Returns:
     --------
     outputs (list)
@@ -116,11 +127,50 @@ def sacct_cmd(job_name,outputs):
     if len(outputs)>1: spref = "sacct -n -P --delimiter=',' --format "
     else: spref = "sacct -n -X --format "
     scommand = (''.join([spref]+[i+"," for i in outputs]))[:-1]+" --name "+job_name
-    job_info = (subprocess.getoutput(scommand).split("\n")[0]).split(",")
+    if c and not m: jindex=1
+    elif c and m: jindex=2
+    else: jindex=0
+    job_info = (subprocess.getoutput(scommand).split("\n")[jindex]).split(",")
     jinfo = [i.strip() for i in job_info]
+    print("sacct cmd = ",scommand)
+    print("sacct output = ",jinfo)
     if len(outputs)>1 and len(jinfo)>1: return(jinfo)
     elif len(outputs)>1 and len(jinfo)<=1: return(["" for ou in outputs])
     else: return(jinfo[0])
+
+def complete_job(struct,run_ind,lsub_ind,lsub_jname,base_dir,exp_dir,logger):
+    '''
+    '''
+    # -> get info about completed job
+    lj_cputime,lj_maxrss = sacct_cmd(lsub_jname,["cputimeraw","maxrss"],c=True)
+    struct['done'] = True
+    struct['cputime'][run_ind[lsub_ind]] = lj_cputime
+    struct['maxrss'][run_ind[lsub_ind]] = lj_maxrss
+    # -> delete uncompressed folder
+    outdir = struct['outdirectory'][run_ind[lsub_ind]][0].split(".tar.gz")[0]
+    print("outdir = ",outdir,os.path.exists(outdir))
+    if os.path.exists(outdir):
+        logger.info("Deleting uncompressed output directory for exposure "+str(struct['fluxfile'][run_ind[lsub_ind]]))
+        out_files = glob.glob(outdir+"/*")
+        for f in out_files:
+            try: os.remove(f)
+            except: logger.info("File "+f+" not found in exposure repo.")
+        shutil.rmtree(struct['outdirectory'][run_ind[lsub_ind]][0].split(".tar.gz")[0])
+    # -> remove downloaded files!                         XX
+    logger.info("Removing downloaded files for exposure "+str(struct['fluxfile'][run_ind[lsub_ind]]))
+    if os.path.exists(exp_dir+struct['fluxfile'][run_ind[lsub_ind]][0].strip()):
+        os.remove(exp_dir+struct['fluxfile'][run_ind[lsub_ind]][0].strip())
+    if os.path.exists(exp_dir+struct['maskfile'][run_ind[lsub_ind]][0].strip()):
+        os.remove(exp_dir+struct['maskfile'][run_ind[lsub_ind]][0].strip())
+    if os.path.exists(exp_dir+struct['wtfile'][run_ind[lsub_ind]][0].strip()):
+        os.remove(exp_dir+struct['wtfile'][run_ind[lsub_ind]][0].strip())
+    # -> remove leftover temporary directories            XX
+    odir = base_dir+"tmp/"+(struct['fluxfile'][run_ind[lsub_ind]][0].strip()).split(".")[0]+"."
+    for itt in [1,2,3]:                             #     XX
+        if os.path.exists(odir+str(itt)): shutil.rmtree(odir+str(itt),ignore_errors=True)
+    # -> check for actual existence of compressed folder
+    if os.path.exists(struct['outdirectory'][run_ind[lsub_ind]][0].strip()): return True
+    else: return False
 
 #-----------------------------------------------------------------------------
 # Main Code
@@ -152,13 +202,13 @@ if __name__ == "__main__":
     npar=len(partitions)                     # number of slurm partitions
     maxjobs = int(args.maxjobs[0])           # maximum number of jobs to maintain running at any time
     nchan = maxjobs//npar                    # number of job channels per partition cpar -> nchan
-    nexp = int(args.nexp)                   # number of exposures to download at once
+    nexp = int(args.nexp[0])                   # number of exposures to download at once
     sleep_time=10                            # seconds to sleep between checking job status
     inputlist = args.list                    # list of exposures to analyze
     if inputlist is not None:
         inputlist = inputlist[0]
 
-    # Establish necessary directories 
+    # Establish necessary directories
     # -tempest
     basedir = "/home/x25h971/nsc/instcal/"+version+"/"   # location of operations
     expdir = basedir+"exposures/"                        # where exposures will be
@@ -169,13 +219,13 @@ if __name__ == "__main__":
     for sub in subdirs:
         makedir(basedir+sub)
 
-    # Log File 
+    # Log File
     #---------
     # Create Log file name;
     # format is nsc_combine_main.DATETIME.log
     ltime = time.localtime()
-    # time.struct_time(tm_year=2019, tm_mon=7, tm_mday=22, 
-    #                  tm_hour=0, tm_min=30, tm_sec=20, 
+    # time.struct_time(tm_year=2019, tm_mon=7, tm_mday=22,
+    #                  tm_hour=0, tm_min=30, tm_sec=20,
     #                  tm_wday=0, tm_yday=203, tm_isdst=1)
     smonth = str(ltime[1])
     if ltime[1]<10: smonth = '0'+smonth
@@ -248,9 +298,9 @@ if __name__ == "__main__":
                              ('maskfile',str,100),('outfile',str,150),('logfile',str,150),('partition',str,100),
                              ('done',bool),('torun',bool),('ur',bool),('submitted',bool),
                              ('jobname',str,100),('jobid',str,100),('jobstatus',str,100),
-                             ('cmd',str,1000),('cputime',str,100),('maxrss',str,100),
+                             ('cmd',str,1000),('cputime',str,100),('maxrss',str,100),('esubmitted',bool),
                              ('exp_jobname',str,100),('exp_jobid',str,100),('exp_jobstatus',str,100),
-                             ('exp_cmd',str,1000),('exp_cputime',str,100),('exp_maxrss',str,100)])
+                             ('exp_cmd',str,1000),('exp_cputime',str,100),('exp_maxrss',str,100),('outdirectory',str,500),('exp',int)])
     expstr = np.zeros(ngdexp,dtype=dtype_expstr)  # string array for exposure info
     for i in range(ngdexp):
         if i % 50000 == 0: rootLogger.info("exposure "+str(i)+"/"+str(ngdexp))
@@ -287,21 +337,26 @@ if __name__ == "__main__":
         baseroot = base[0:base.find('.fits.fz')]
         outfile = basedir+instrument+'/'+night+'/'+baseroot+'/'+baseroot+'_1.fits' # outfile for first chip
         outlogfile = basedir+instrument+'/'+night+'/'+baseroot+'/'+baseroot+'.log' # logfile for complete exposure
+        outdirectory = basedir+instrument+'/'+night+'/'+baseroot+'.tar.gz'         # tarred and zipped exposure directory
         expstr['outfile'][i] = outfile
         expstr['logfile'][i] = outlogfile
+        expstr['outdirectory'][i] = outdirectory
 
-        # Does the output file exist?
-        expstr['done'][i] = False
-        if (os.path.exists(outfile) and os.path.exists(outlogfile)) or (expstr['fluxfile'][i]==expstr['wtfile'][i]):
-            expstr['done'][i] = True
+        ## Do the exposure output & logfiles files exist? (old)
+        #expstr['done'][i] = False
+        #if (os.path.exists(outfile) and os.path.exists(outlogfile)) or (expstr['fluxfile'][i]==expstr['wtfile'][i]):
+        #    expstr['done'][i] = True
+        #
+        # Does the tarred & zipped output exposure directory exist? (new)
+        if os.path.exists(outdirectory): expstr['done'][i] = True
 
-        # If no outfile exists or yes redo:
+        # If exposure is completed or yes redo:
         if (expstr['done'][i]==False) or (redo==True):
             #if file_test(file_dirname(outfile),/directory) eq 0 then file_mkdir,file_dirname(outfile)  ; make directory
-            expstr['cmd'][i] = 'python '+basedir+'nsc_instcal_meas.py '+fluxfile+' '+wtfile+' '+maskfile+' '+version
+            expstr['cmd'][i] = 'python '+basedir+'nsc_instcal_measure_tempest.py '+fluxfile+' '+wtfile+' '+maskfile+' '+version
             expstr['exp_cmd'][i] = 'python '+basedir+'get_exposures.py '+rawname+' '+fluxfile+' '+wtfile+' '+maskfile+' '+expdir
             expstr['torun'][i] = True
-        # If outfile exists and no redo:
+        # If exposure is completed and no redo:
         elif (expstr['done'][i]==True) and (redo==False):
             expstr['torun'][i] = False
 
@@ -315,13 +370,13 @@ if __name__ == "__main__":
         rootLogger.info('No exposures to process.')
         sys.exit()
     njchan = 0 #number of jobs per channel (divide evenly) njpar -> njchan
-    if ntorun!=0: njpar = (ntorun//nchan)+1
+    if ntorun!=0: njchan = (ntorun//nchan)+1
     rootLogger.info(str(ntorun)+' exposures to process, '+str(maxjobs)+' at a time on '+str(npar)+' slurm partitions.')
 
     # Split exposures evenly among defined "partitions" as run with nsc_meas_wrapper
     chans = np.reshape([[i+"_"+str(parchan) for i in partitions] for parchan in range(0,nchan)],maxjobs) # partions -> chans
-    nchans = len(chans)
-    print("job channels = ",chans)
+    nchantot = len(chans)
+    #print("job channels = ",chans)
     expstr['partition'][torun] = [chans[(i-maxjobs*(i//maxjobs))] for i in range(ntorun)]
 
 
@@ -330,166 +385,293 @@ if __name__ == "__main__":
     runfile = basedir+'lists/nsc_instcal_measure_main.'+logtime+'_run.fits'
     expstr['jobid']="-99.99"
     Table(expstr).write(runfile)
-    jb_flag = 0
-    jb = 0            # one for each exposure to analyze
-    ljinds = []       # hold exposures for download
-    part_counter = 0  # for looping through channel list
-    while jb_flag==0: # jb_flag = 1 when (jb = ntorun)
+    jb = 0            # one for each exposure to analyze, increment after adding exposure to queuee
+    jsub = 0          # one for each exposure to analyze, increment after submitting exposure processing job
+    jexp = 0          # one for each exposure download job submitted
+    jcomp = 0         # one for each exposure to analyze, increment after a job has finished running
+    #ljinds = []       # hold exposures for download
+    part_counter = 0  # for looping through job channel list
+    jb_flag = 0       # jb_flag = 1 when all exposures processing jobs that have been submitted are done running
+    while jb_flag==0: # jb_flag = 1 when (jcomp=jsub)
 
-        # -- Start New Batch of Jobs for Downloading --
-        rootLogger.info("--Starting New Batch of Jobs (3 exposures)--")
-        tjob_inds = []      # hold expstr indices for exposures to be included in This batch (get using tsub)
-        ljob_inds = ljinds  # hold expstr indices for exposures included in Last batch (get using lsub)
-        #print("lastjob_inds = ",ljob_inds)
-
-        # -- Loop through channels util nexp exposures are retrieved --
-        pc = part_counter
-        #print("pc = ",pc)
-        nji = len(tjob_inds)
-        while nji<nexp:
+        #-------------------------------------------------------#
+        # -- Start New Batch of Jobs for Exposure Downloading --#
+        #-------------------------------------------------------#
+        if jb<ntorun: rootLogger.info("--Starting New Batch of Jobs ("+str(nexp)+" exposures)--")
+        dload_inds = [] # indices of exposures to be submitted in the next downloading (dload) job
+        proc_inds = []  # indices of exposures to be submitted in the next round of processing (proc) jobs
+        #print("New start, dload_inds = ",dload_inds,", proc_inds = ",proc_inds)
+        #----------------------------------------------------------------------------------
+        #---------------------------------------------------------#
+        # -- Check Exposure Processing Stream, looping through -- #
+        # -- channels until nexp exposures are retrieved       -- #
+        #---------------------------------------------------------#
+        # For each channel, until nexp exposures are in dload queue:
+        pc = part_counter     # channel counter
+        nji = len(dload_inds) # exposure download counter
+        while nji<nexp:       # -> until we have nexp exposures to download...
             part = chans[pc]
             rootLogger.info("Checking partition "+part+" queue")
-            partition_ind = set(np.where(expstr['partition'][torun]==part)[0]) # indices for this partition
-            unsubmitted_ind = set(np.where(expstr['submitted'][torun]==0)[0])  # indices for unsubmitted exposures (to get tsub for this submisison round)
-            submitted_ind = set(np.where(expstr['submitted'][torun]==1)[0])    # indices for submitted exposures (to get lsub for last submission round)
-
-            #------------------------------------------------------------------------------
-            # Check Last Exposure Submitted to Channel (update tjob_inds & ljob_inds)
-            #------------------------------------------------------------------------------
-            # - Get index, id, & status of last exposure submitted to this channel
-            last_sub = list(partition_ind & submitted_ind)
-            if len(last_sub)==0: lsub=np.sort(list(partition_ind))[0]
-            else: lsub=np.sort(last_sub)[-1]
-            lj_name = expstr[torun[lsub]]['jobname']
-            if (len(last_sub)>1 and expstr[torun[lsub]]['ur']!=1): lj_status,lj_id = sacct_cmd(lj_name,["state","jobid"])
-            elif (expstr[torun[lsub]]['ur']!=1): lj_status,lj_id = ["UR","-99.99"] # last exposure is unreleased
-            else: lj_status,lj_id = ["NONE","-99.99"]                              # no jobs have been submitted
-            expstr[torun[lsub]]['jobstatus'] = lj_status
-            expstr[torun[lsub]]['jobid'] = lj_id
-            # - If last exposure is still running: skip to next partition!
-            if (lj_status=="RUNNING" or lj_status=="PENDING" or lj_status=="REQUEUED"):
-                rootLogger.info("Exposure "+str(expstr[torun[lsub]]['fluxfile'])
-                    +" (job id="+lj_id+", job name="+lj_name
-                    +") is still "+lj_status+", check next partition")
-                time.sleep(1)
-            # - Else: add next exposure to batch
+            # - Check last exposure processing job submitted (l)
+            #              (job status?)
+            # - Check next exposure up in the queue (n)
+            #              (exposures unreleased?)                   = nu
+            #              (been submitted as an exposure download?) = d
+            #              (exposure download job done?)             = x
+            #              (all files exist?)                        = e
+            partition_ind = set(np.where(expstr['partition'][torun]==part)[0])  # indices for this partition
+            unsubmitted_ind = set(np.where(expstr['submitted'][torun]==0)[0])   # indices for unsubmitted exposures (to get tsub for this submisison round)
+            submitted_ind = set(np.where(expstr['submitted'][torun]==1)[0])     # indices for submitted exposures (to get lsub for last submission round)
+            esubmitted_ind = set(np.where(expstr['esubmitted'][torun]==1)[0])   # indices for exposure-download-submitted exposures
+            released_ind = set(np.where(expstr['ur'][torun]!=1)[0])             # indices for released exposures
+            sub = list((partition_ind & submitted_ind) & released_ind)          # indices of exp_proc jobs submitted to channel (last_sub)
+            unsub = list(partition_ind & unsubmitted_ind)                       # indices of exp_proc jobs unsubmitted to channel (this_sub)
+            dloading = list(set(unsub) & esubmitted_ind)                        # indices of downloading exposures (unsubmitted for proc, but submitted for dload)
+            #print("sub, unsub, dloading = ",sub,unsub,dloading)
+            # get index of last exposure who's proc job was submitted to channel (l)
+            if len(sub)>0:
+                sub = np.sort(sub)
+                lsub = [sub[-1]]
+                #lsub = [sub[np.where(expstr['jobid'][torun[sub]] == max(expstr['jobid'][torun[sub]]))[0][0]]] # get by finding highest job id of exposure proc jobs submitted to channel (the latest one submitted)
+                #print("lsub = ",lsub)
+                lsub_jname = expstr['jobname'][torun[lsub]][0]
+                lsub_jstat_logged = expstr['jobstatus'][torun[lsub]][0].strip()
+                #print("lsub_jname = ",lsub_jname,lsub_jstat_logged)
+                # status of (l)'s proc job?                   = lsub_jstat
+                if lsub_jstat_logged!="COMPLETED" and lsub_jstat_logged!="FAILED": # if last job hasnt already been confirmed as complete
+                    if maxjobs<5:
+                        print("wait a sec before checking last proc job...")       #     check the status of last proc job
+                        time.sleep(10)
+                    lsub_jstat,lsub_jid = sacct_cmd(lsub_jname,["state","jobid"])
+                    expstr['jobstatus'][torun[lsub]] = lsub_jstat
+                    expstr['jobid'][torun[lsub]] = lsub_jid
+                    if lsub_jstat=="COMPLETED":                                    #     and if  (l) is completed:   c
+                        jcomp+=1
+                        compstat = complete_job(expstr,torun,lsub,lsub_jname,
+                                                basedir,expdir,rootLogger)         #         remove all that leftover exposure shit
+                        rootLogger.info("exposure "+str(expstr[torun[lsub]]['fluxfile'])+" processing completed!")
+                else:                                                          # else, if the last job is complete,
+                    lsub_jstat = lsub_jstat_logged                             # just grab the necessary info
+                    lsub_jid = expstr['jobid'][torun[lsub]]
+                #print("last exp proc job in this partition is ",lsub_jstat)
+            else: lsub = False
+            # get index of next exposure to check & submit to channel (n)
+            if len(unsub)>0:
+                nsub = [np.sort(unsub)[0]]
+                # exposures unreleased?                       = nu
+                if expstr[torun[nsub]]['ur']==1 or os.path.exists(basedir+"unavails/"+str(expstr['rawname'][torun[nsub]])+"_unavail.txt"):
+                    nu = True
+                    expstr[torun[nsub]]['ur'] = 1
+                    expstr[torun[nsub]]['submitted'] = 1
+                else: nu = False
+                # has (n) been submitted in an exp dload job? = d
+                if nsub in dloading: d=True
+                else: d=False
+                # is that exposure dload job complete?        = x
+                if d==True:
+                    nexp_jname = expstr['exp_jobname'][torun[nsub]][0]
+                    #print("next exposure up's dload job is being checked...",nexp_jname)
+                    nexp_jstat,nexp_jid = sacct_cmd(nexp_jname,["state","jobid"])
+                    if nexp_jstat != "RUNNING": x=True
+                    else: x=False
+                else: x=False
+                # do all (n)'s exposure files exist?          = e
+                exp_files = [expstr['fluxfile'][torun[nsub]],expstr['wtfile'][torun[nsub]],expstr['maskfile'][torun[nsub]]]
+                #print("exp_files = ",exp_files)
+                exp_bools = [os.path.exists(expdir+exp_files[i][0].strip()) for i in range(len(exp_files))]
+                if False in exp_bools: e=False
+                else: e=True
             else:
-                # -> if last exposure was completed, get some info about it
-                if lj_status=="COMPLETED":
-                    lj_cputime,lj_maxrss = sacct_cmd(lj_name,["cputimeraw","maxrss"])
-                    expstr['done'] = True
-                    expstr['cputime'][torun[lsub]] = lj_cputime
-                    expstr['maxrss'][torun[lsub]] = lj_maxrss
-                # -> remove downloaded files!
-                if lj_status!="NONE":
-                    if os.path.exists(expdir+expstr['fluxfile'][torun[lsub]].strip()):
-                        os.remove(expdir+expstr['fluxfile'][torun[lsub]].strip())
-                    if os.path.exists(expdir+expstr['maskfile'][torun[lsub]].strip()):
-                        os.remove(expdir+expstr['maskfile'][torun[lsub]].strip())
-                    if os.path.exists(expdir+expstr['wtfile'][torun[lsub]].strip()):
-                        os.remove(expdir+expstr['wtfile'][torun[lsub]].strip())
-                    os.system("rm -rf "+basedir+"/tmp/"+(expstr['fluxfile'][torun[lsub]].strip()).split(".")[0]+".*")
-                # -> get indices & info of next exposure to submit in channel queue
-                this_sub = list(partition_ind & unsubmitted_ind)
-                if len(this_sub)!=0:
-                    tsub = np.sort(this_sub)[0] # jbsub -> nesub
-                    # check to see whether all exposure files exist
-                    exp_files = [expstr['fluxfile'][torun[tsub]],expstr['wtfile'][torun[tsub]],expstr['maskfile'][torun[tsub]]]
-                    exp_bools = [os.path.exists(expdir+exp_files[i].strip()) for i in range(len(exp_files))]
-                    #print("exp_files = ",exp_files)
-                    #print("exp_bools = ",exp_bools)
-                    # --> If exposure not already in lineup, add to appropriate batch
-                    if (tsub not in tjob_inds) and (tsub not in ljob_inds):
-                        if (False in exp_bools): tjob_inds.append(tsub) # add exposure to this batch (submitted for processing next round)
-                        else: ljob_inds.append(tsub)                # add exposure to last batch (about to be submitted for processing)
-                        rootLogger.info("exposure "+expstr['fluxfile'][torun[tsub]]+" added to queue")
-                        jb+=1
-                    else: time.sleep(1)
-            # -Set up for next partition
+                nsub=False
+        # - Do the appropriate shit with that information:
+           #if (n) and no (l): #------------------------------------case at start of run
+            if nsub and (not lsub):
+                #print("nsub but no lsub")
+                rootLogger.info("Checking out next exposure up, "+str(expstr['fluxfile'][torun[nsub]])+"...")
+                if e:                                               # if all (n)'s files exist:              e(existance of exposure files check)
+                    rootLogger.info("All files exist, no need to download!")
+                    if nsub not in proc_inds:                       #     if (n) not in proc                 -  (p*)
+                        proc_inds.append(nsub[0])                      #         add (n) to proc queue          -
+                        jb+=1                                       #         increment jb                   -
+                        rootLogger.info("Adding new exposure "+str(expstr['fluxfile'][torun[nsub]])+" to processing queue")
+                    else:                                           #     else, if (n) in proc:
+                        rootLogger.info("full channel loop, moving on")
+                        nji=nexp                                    #                                        x(exit channel loop)
+                elif (not e) and (not nu):                          # elif (n)'s missing files & not unreleased:
+                    if (not d) and (nsub not in dload_inds):        #     if (n) not sub for or in dload:    -- (d*)
+                        dload_inds.append(nsub[0])                     #        add (n) to dload queue          --
+                        nji+=1                                      #        increment nji                   --
+                        rootLogger.info("Adding new exposure "+str(expstr['fluxfile'][torun[nsub]])+" to download queue")
+                    elif (not d) and (nsub in dload_inds):          #     elif (n) not submitted for but in dload
+                        rootLogger.info("full channel loop, moving on")
+                        nji=nexp                                    #                                        x
+                    else:                                           #     else, if (n) has been sub for dload:
+                        if x:                                       #         if that job is done (& files not there):
+                            expstr['esubmitted'][torun[nsub]]=0     #             re-assign exp for dload
+                            rootLogger.info("Exposure "+str(expstr['fluxfile'][torun[nsub]])+" download failed, re-queue")
+                        else:                                       #         else, if that job is not done: it's either still rolling or not submitted yet, so I think we can skip on over to the next partition?
+                            rootLogger.info("exposure "+str(expstr['fluxfile'][torun[nsub]])+" still downloading?")
+                elif (not e) and nu:                                               # else, if (n) unreleased, skip to next channel
+                    rootLogger.info("exposure "+str(expstr['fluxfile'][torun[nsub]])+" unreleased")
+           #elif (l) and (n): #-------------------------------------case while running
+            elif nsub and lsub:
+                #print("lsub and nsub")
+                rootLogger.info("Checking out next exposure up, "+str(expstr['fluxfile'][torun[nsub]])+"...")
+                if e:                                               # if all (n)'s files exist:              e
+                    rootLogger.info("All files exist, no need to download!")
+                    if (lsub_jstat=="RUNNING") or (lsub_jstat=="PENDING") or (lsub_jstat=="REQUEUED"):
+                                                                    #     if (l) is run/pend/rq:             r(un check)
+                        rootLogger.info("Exposure "+str(expstr[torun[lsub]]['fluxfile'])+" (job id="+lsub_jid
+                            +", job name="+lsub_jname+") is still "+lsub_jstat+", check next partition")
+                        if maxjobs<5: time.sleep(10)        #         if more exposures, next channel
+                    else:                                           #     else, if l is not running/pending/requeued:
+                        #print("last proc job status = ",lsub_jstat)
+                        if nsub not in proc_inds:                   #         if (n) not in proc:            -  (p*)
+                            proc_inds.append(nsub[0])                  #             add (n) to proc            -
+                            jb+=1                                   #             increment jb               -
+                            rootLogger.info("Adding new exposure "+str(expstr['fluxfile'][torun[nsub]])+" to processing queue")
+                        else:                                       #         else, if (n) in proc:
+                            rootLogger.info("full channel loop, moving on")
+                            nji=nexp                                #                                        x
+                elif (not e) and (not nu):                          # elif (n)'s files don't exist and n isn't unreleased:
+                    if (not d) and (nsub not in dload_inds):        #     if (n) not sub for or in dload:    -- (d*)
+                        dload_inds.append(nsub[0])                     #         add (n) to dload               --
+                        nji+=1                                      #         increment nji                  --
+                        rootLogger.info("Adding new exposure "+str(expstr['fluxfile'][torun[nsub]])+" to download queue")
+                    elif (not d) and (nsub in dload_inds):          #     elif (n) not sub for but in dload:
+                        rootLogger.info("full channel loop, moving on")
+                        nji = nexp                                  #                                        x
+                    else:                                           #     else, if (n) has been submitted for dload:
+                        if x:                                       #         if that job is done (& files not there):
+                            expstr['esubmitted'][torun[nsub]]=0      #             re-assign exp for dload
+                            rootLogger.info("Exposure "+str(expstr['fluxfile'][torun[nsub]])+" download failed, re-queue")
+                        else:                                       #         else, if that job is not done: it's either still rolling or not submitted yet, so I think we can skip on over to the next partition?
+                            rootLogger.info("exposure "+str(expstr['fluxfile'][torun[nsub]])+" still downloading?")
+                elif (not e) and nu:                                # else, add nothing and skip to next partition
+                    rootLogger.info("exposure "+str(expstr['fluxfile'][torun[nsub]])+" unreleased")
+           #elif (l) and no (n): #----------------------------------case at end of run
+            elif (not nsub) and lsub:
+                #print("lsub but not nsub")
+                if (lsub_jstat=="RUNNING") or (lsub_jstat=="PENDING") or (lsub_jstat=="REQUEUED"):
+                                                                   # if (l) is run/pend/rq:                 r(un check)
+                    rootLogger.info("Exposure "+str(expstr[torun[lsub]]['fluxfile'])+" (job id="+lsub_jid
+                        +", job name="+lsub_jname+") is still "+lsub_jstat+", check next partition")
+                    if maxjobs<5: time.sleep(10)           #     if more exposures, next channel
+                else:                                              # else,
+                    if jcomp==jsub:                                #     if all exposure proc jobs are done:
+                        rootLogger.info("All exposures processed, ending now!")
+                        jb_flag = 1                                #                                         f(inished processing exposures)
+                        nji = nexp                                 #                                         x
+                        sys.exit(0)
+                    # else:                                        #     else, skip to the next partition
+        # - Set up for next partition
+            print("checked partition, proc_inds = ",proc_inds,", dload_inds = ",dload_inds)
             pc+=1
-            pc = pc-(pc//nchans)*nchans # stay within range of partitions list
-            nji = len(tjob_inds) # check to see if we've reached nexp exposures
-            #print("nji = ",nji,", jb = ",jb)
-            if jb==ntorun-1:
-                nji=nexp  # to keep within range of exposure list
-            #------------------------------------------------------------------------------
-
+            pc = pc-(pc//nchantot)*nchantot # stay within range of partitions list
+            if len(proc_inds)==maxjobs or len(dload_inds)==nexp: nji = nexp
+            #print("nji = ",nji,", jb = ",jb,", jcomp = ",jcomp)
+            if maxjobs<5:
+                print("sleeping for ten...")
+                time.sleep(10)
         #----------------------------------------------------------------------------------
-        # Update Exposure Downloading Job Stream
+        #------------------------------------------------
+        # -- Update Exposure Processing Job Streams  -- #
+        # -- (Submit jobs in proc queue)             -- #
+        #------------------------------------------------
+        # - Loop through exposures in processing queue, Write/Submit jobs
+        if len(proc_inds)>0:
+            rootLogger.info("-- Submitting jobs in processing queue...")
+            for jbsb in proc_inds:
+                if os.path.exists(basedir+"unavails/"+str(expstr['rawname'][torun[jbsb]])+"_unavail.txt"):
+                    expstr['submitted'][torun[jbsb]] = True
+                    expstr['ur'][torun[jbsb]] = True
+                    rootLogger.info("Exposure unreleased, skip")
+                else:
+                    cmd = expstr['cmd'][torun[jbsb]]
+                    partition = expstr['partition'][torun[jbsb]].split("_")[0]
+                    rootLogger.info("--Submit Processing Job for Exposure "+str(expstr['fluxfile'][torun[jbsb]].split("/")[-1])+"--")
+                    # -> Write exposure processing job script to file
+                    job_name = 'nsc_meas_'+str(logtime)+'_'+str(jsub) #jsub, not jbsb!!!!!
+                    job_file=write_jscript(job_name,partition,cmd,outfiledir,single=True)
+                    # -> Submit exposure processing job to slurm queue
+                    os.system("sbatch "+str(job_file))
+                    expstr['submitted'][torun[jbsb]] = True
+                    jsub+=1
+                    rootLogger.info("Job "+job_name+"  submitted to "+partition+" partition")
+                    expstr['jobname'][torun[jbsb]] = job_name
         #----------------------------------------------------------------------------------
-        # -- Write exp_job script to file --
-        #print("Indices of next 3 exposures to download: = ",tjob_inds)
-        exp_job_name = 'exp_dload_'+str(logtime)+'_'+str(jb//nexp)
-        expstr['exp_jobname'][torun[tjob_inds]] = exp_job_name
-        #print(" -> Exposure names",expstr['fluxfile'][torun[tjob_inds]])
-        exp_cmds = list(expstr['exp_cmd'][torun[tjob_inds]])
-        exp_job_file=write_jscript(exp_job_name,"priority",exp_cmds,outfiledir,single=False)
-
-        # -- Check status of last exp_job, wait until not runnning/pending/requeued --
-        #print("again, last job indices = ",ljob_inds)
-        if len(ljob_inds)!=0: # if there was a previously submitted download job,
-            lexps = ljob_inds[:3] # check the exposures being downloaded for completeness
-            rootLogger.info("checking on status of last exposure-download job")
-            le_name = expstr['exp_jobname'][torun[lexps]][0]
-            #print("le_name = ",le_name)
-            time.sleep(5)
-            # check last exposure dload job
-            le_stat,le_id = sacct_cmd(le_name,["state","jobid"])
-            #print("last exp_download jobID = ",le_id,", status = ",le_stat)
-            expstr['exp_jobid'][torun[lexps]] = le_id
-            while (le_stat=="RUNNING" or le_stat=="PENDING" or le_stat=="REQUEUED"):
-                expstr['exp_jobstatus'][torun[lexps]] = le_stat
-                rootLogger.info("Job id="+le_id+" is still "+le_stat+", sleepin for "+str(sleep_time))
-                time.sleep(sleep_time)
-                le_stat = sacct_cmd(le_name,["state"]).strip()
-                #print("le_stat = ",le_stat)
+        #-------------------------------------------------#
+        # -- Check and Update Exposure Download Stream -- #
+        # -- (Submit jobs in the dload queue)          -- #
+        #-------------------------------------------------#
+        # - Get last exposure job to be submitted (le)
+        esub_ind = np.where(expstr['esubmitted'][torun]==1)[0]   # indices for exposure-dload-submitted exposures
+        if len(list(esub_ind))>0:                                # if there were exposure dload jobs submitted, get indices of latest one
+            lesub = list(esub_ind[np.where(expstr['exp'][torun[esub_ind]] == max(expstr['exp'][torun[esub_ind]]))[0]]) # get by finding highest job id of exp dload jobs submitted (the latest one submitted)
+            #print("lesub = ",lesub)
+            # get status of that job
+            lesub_jname = expstr['exp_jobname'][torun[lesub]][0].strip()
+            if maxjobs<5: time.sleep(5)
+            lesub_jstat,lesub_jid = sacct_cmd(lesub_jname,["state","jobid"]) # check last exposure dload job
+            expstr['exp_jobid'][torun[lesub]] = lesub_jid
+            expstr['exp_jobstatus'][torun[lesub]] = lesub_jstat
+            #print("last exp download job = ",lesub_jstat)
+        else: lesub = False
+        # - Get next exposures up in dload queue (ne)
+        if len(dload_inds)>0:
+            nesub = list(dload_inds)
+            # - Write exp_job script to file
+            exp_job_name = 'exp_dload_'+str(logtime)+'_'+str(jexp) # set up an exp dload job
+            expstr['exp_jobname'][torun[dload_inds]] = exp_job_name
+            #print(" -> Exposure names",expstr['fluxfile'][torun[tjob_inds]])
+            exp_cmds = list(expstr['exp_cmd'][torun[dload_inds]])
+            exp_job_file=write_jscript(exp_job_name,"priority",exp_cmds,outfiledir,single=False)
+        else: nesub = False
+        #print("nesub,lesub = ",nesub,lesub)
+        # - Do the relevant shit with that information:
+        # if (le): -------------------------------------------------------# if there was a dload job submitted:
+        if lesub:                                                  # if (le):
+            # while (le) is still running:......
+            while (lesub_jstat=="RUNNING" or lesub_jstat=="PENDING" or lesub_jstat=="REQUEUED"):
+                rootLogger.info("waiting for last exposure download job to finish...")
+                expstr['exp_jobstatus'][torun[lesub]] = lesub_jstat
+                rootLogger.info("Job id="+lesub_jid+" is still "+lesub_jstat+", sleepin for "+str(10)+" sec...")
+                time.sleep(10)
+                lesub_jstat = sacct_cmd(lesub_jname,["state"]).strip()
             # if last exposure dload job completed, get some info about it
-            expstr['exp_jobstatus'][torun[lexps]] = le_stat
-            if le_stat=="COMPLETED":
-                le_info = sacct_cmd(le_name,["cputimeraw","maxrss"])
-                expstr['exp_cputime'][torun[lexps]] = le_info[0]
-                expstr['exp_maxrss'][torun[lexps]] = le_info[1]
+            expstr['exp_jobstatus'][torun[lesub]] = lesub_jstat        #     wait until (le) is done, then get info about it
+            if lesub_jstat=="COMPLETED":
+                le_info = sacct_cmd(lesub_jname,["cputimeraw","maxrss"],c=True,m=True)
+                expstr['exp_cputime'][torun[lesub]] = le_info[0]
+                expstr['exp_maxrss'][torun[lesub]] = le_info[1]
                 rootLogger.info("Exposure download job completed, go ahead!")
-
-        # -- Check contents of exposure repo, sleep until empty enough --
-
-        # -- Submit new exp_job script to slurm queue --
-        rootLogger.info("--Submitting new Exposure Download job--")
-        os.system("sbatch "+str(exp_job_file))
-        rootLogger.info("Job "+exp_job_name+" submitted")
         #----------------------------------------------------------------------------------
-
+        # -- Check status of last exp_job, wait until not runnning/pending/requeued --
+            # -- Check contents of exposure repo, sleep until empty enough --
+            #exp_rest = 0
+            #while exp_rest==0:
+                #rootLogger.info("----checking contents of exposure repository----")
+                #exp_mem = int((subprocess.getoutput("du "+expdir+" --si -hb")).split('\t')[0])
+                #if exp_mem>92274688000: #if /exposures repo has more than 86GB of files, sleep and check again.
+                    #rootLogger.info("----/exposures repo has "+str(exp_mem)+" bytes of files, sleep for a few seconds----")
+                    #time.sleep(20)
+                #else: exp_rest = 1
         #----------------------------------------------------------------------------------
-        # Update Exposure Processing Job Streams
+        # if (ne): -------------------------------------------------------# if there is a new dload job:
+        if nesub:                                                  # if (ne):
+            # -- Submit new exp_job script to slurm queue --
+            rootLogger.info("--Submitting new Exposure Download job--")
+            os.system("sbatch "+str(exp_job_file))                 #     submit (ne)
+            expstr['esubmitted'][torun[nesub]] = True
+            expstr['exp'][torun[nesub]] = jexp
+            jexp+=1
+            rootLogger.info("Job "+exp_job_name+" submitted")
+            if maxjobs<10: time.sleep(10)
         #----------------------------------------------------------------------------------
-        # -- Loop through last batch's exposures, Write/Submit jobs --
-        for jbsb in ljob_inds:
-            # - Check to see if the exposures were correctly downloaded
-            # - if they have, create and submit the job!
-            jb_files = [expstr['fluxfile'][torun[jbsb]],expstr['wtfile'][torun[jbsb]],expstr['maskfile'][torun[jbsb]]]
-            jb_bools = [os.path.exists(expdir+jb_files[i].strip()) for i in range(len(jb_files))]
-            if False not in jb_bools: 
-                cmd = expstr['cmd'][torun[jbsb]]
-                partition = expstr['partition'][torun[jbsb]].split("_")[0]
-                rootLogger.info("--Submit Processing Job for Exposure "+jb_files[0].split("/")[-1])
-                # -> Write exposure processing job script to file
-                job_name = 'nsc_meas_'+str(logtime)+'_'+str(jb)
-                job_file=write_jscript(job_name,partition,cmd,outfiledir,single=True)
-                # -> Submit exposure processing job to slurm queue
-                os.system("sbatch "+str(job_file))
-                expstr['submitted'][torun[jbsb]] = True
-                rootLogger.info("Job "+job_name+"  submitted to "+part+" partition")
-                expstr['jobname'][torun[jbsb]] = job_name
-            # - if not, ?????????????? just fuckin skip i guess 
-            elif os.path.exists(basedir+"unavails/"+str(expstr['rawname'][torun[jbsb]])+"_unavail.txt"):
-                expstr['submitted'][torun[jbsb]] = True
-                rootLogger.info("Exposure unreleased, skip")
-                expstr['ur'][torun[jbsb]] = True
-            else: rootLogger.info("Exposure files not all downloaded, skip for now")
-        #----------------------------------------------------------------------------------
-
-        # -- Save job structure --
         part_counter = pc  # save where we left off looping through the partition channels
-        ljinds = tjob_inds # put exposures in the next batch to be submitted for processing        
+        # -- Save job structure --
         Table(expstr).write(runfile,overwrite=True)
-        if jb==ntorun: jb_flag=1
+        if ntorun<10 or maxjobs<5:
+           print("wait a sec...")
+           time.sleep(15)
+        else: time.sleep(1)
