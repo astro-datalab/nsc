@@ -19,6 +19,9 @@ from astropy.table import Table, Column
 import time
 import shutil
 import subprocess
+import requests
+import urllib.request
+import pandas as pd
 import logging
 #from scipy.signal import convolve2d
 from dlnpyutils.utils import *
@@ -26,11 +29,126 @@ from scipy.ndimage.filters import convolve
 import astropy.stats
 import struct
 import tempfile
+import time
+
+pd.set_option('display.max_columns',None)
 
 # Ignore these warnings, it's a bug
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
+# Download exposures from Astro Data Archive
+def getdata(rawname,fluxfile,wtfile,maskfile,outdir,listtype="a"):
+    '''Download exposures from Astro Data Archive'''
+    natroot = 'https://astroarchive.noirlab.edu'
+    adsurl = f'{natroot}/api/adv_search'
+    if listtype=="b": basedir = "/home/x25h971/nsc/instcal/v4/"
+    else: basedir = "/home/group/davidnidever/nsc/instcal/v4/"
+
+    t0 = time.time()
+    unavails = basedir+"unavails/unavail_exposures.txt" # file for storing unreleased file bases
+
+    fluxbase = os.path.basename(fluxfile)
+    wtbase = os.path.basename(wtfile)
+    maskbase = os.path.basename(maskfile)
+
+    print('Downloading data for exposure RAWNAME = ',rawname)
+    # Do the query
+    jj = {"outfields" : ["original_filename", "archive_filename", "proc_type", "url"],"search" : [["original_filename",rawname, 'icontains'],]}
+    query_eflag = 0
+    while query_eflag==0:
+        try:
+            print(f'{adsurl}/find/?limit=100',jj)
+            res =  pd.DataFrame(requests.post(f'{adsurl}/find/?limit=100',json=jj).json()[1:])
+        except Exception as e:
+            print("exception = ",e)
+            if "not available" in str(e):
+                print("file not available, goodbye")
+                with open(basedir+"unavails/"+rawname+"_unavail.txt","w") as fl:
+                    fl.writelines(rawname+"\n")
+                    fl.close()
+                with open(unavails,'a') as fl:
+                    fl.writelines(rawname+"\n")
+                    fl.close()
+                sys.exit(0)
+            else:
+                print("request denied, sleep and try again")
+                time.sleep(np.random.randint(1,10))
+        else:
+            print("rawname query done")
+            query_eflag = 1
+    print(len(res)," = length of query output")
+    print(res)
+    if len(res)<3:
+        for fl in [fluxbase,wtbase,maskbase]:
+            jj_fl = {"outfields" : ["original_filename", "archive_filename", "proc_type", "url"],"search" : [["archive_filename",fl, 'icontains'],]}
+            query_eflag2=0
+            while query_eflag2==0:
+                try:
+                    res_fl =  pd.DataFrame(requests.post(f'{adsurl}/find/?limit=100',json=jj_fl).json()[1:])
+                except Exception as e:
+                    print("Exception = ",e)
+                    if "not available" in str(e):
+                        print("file not available, goodbye")
+                        with open(basedir+"unavails/"+rawname+"_unavail.txt","w") as fl:
+                            fl.writelines(rawname+"\n")
+                            fl.close()
+                        with open(unavails,'a') as fil:
+                            fil.writelines(fl+"\n")
+                            fil.close()
+                        sys.exit(0)
+                    else:
+                        print("request denied, sleep and try again")
+                        time.sleep(np.random.randint(1,10))
+                else:
+                    print("sub-query done")
+                    query_eflag2 = 1
+            res = pd.concat([res,res_fl],axis=0,ignore_index=True)
+#    res=res.drop(res[res.proc_type != "instcal"].index)
+#    res=res.reset_index(drop=True)
+    #print("query proc_type =\n",res.values) #,"\n",res.archive_filename.values)
+    #print("res[1] = ",res['url'][1])
+    #print("res =\n",res.url)
+    # Get the base names and compare to our filenames
+    base = [os.path.basename(f) for f in res.archive_filename]
+    #print("base =/n",base)
+    fluxind = np.where(np.array(base)==fluxbase)[0]
+    maskind = np.where(np.array(base)==maskbase)[0]
+    wtind = np.where(np.array(base)==wtbase)[0]
+    #print("indices = ",fluxind,maskind,wtind)
+    # Download the files
+    # 'https://astroarchive.noirlab.edu/api/retrieve/26e44fdb72ae8c6123511bead4caa97a/'
+
+    for fl,fname,findd,fbase in zip ([fluxfile,maskfile,wtfile],["fluxfile","maskfile","wtfile"],[fluxind,maskind,wtind],[fluxbase,maskbase,wtbase]):
+        dload_eflag = 0
+        while dload_eflag==0:
+            #print(findd[0])
+            print('Downloading ',fname,' =',fl,' url =',res.url[findd[0]])
+            try:
+                urllib.request.urlretrieve(res['url'][findd[0]],outdir+'/'+fbase)   # save to fluxfile
+            #except:
+            except Exception as e:
+                print("exception = ",e)
+                if "out of bounds" in str(e):
+                    print("no url found")
+                    dload_eflag = 1
+                elif "not available" in str(e):
+                    print("file not available, goodbye")
+                    with open(basedir+"unavails/"+rawname+"_unavail.txt","w") as fl:
+                        fl.writelines(rawname+"\n")
+                        fl.close()
+                    with open(unavails,'a') as fl:
+                        fl.writelines(fbase+"\n")
+                        fl.close()
+                    sys.exit(0)
+                else:
+                    print("request denied, sleep and try again")
+                    time.sleep(np.random.randint(1,10))
+            else: dload_eflag = 1
+
+    t1 = time.time()
+    print("time elapsed = ",t1-t0)
+    return(res)
 
 # Parse the DAOPHOT PSF profile errors
 def parseprofs(lines):
@@ -80,7 +198,7 @@ def parseprofs(lines):
                 id1 = line1[0:7]
                 sig1 = line1[7:14]
                 flag1 = line1[14:17]
-                if sig1 == " satura":
+                if sig1 == " satura" or sig1 == " defect":
                     sig1 = 99.99
                     flag1 = "saturated"
                 if id1.strip() != "":
@@ -266,7 +384,7 @@ def daoread(fil):
             for j in range(len(names)):
                 cat[i][names[j]] = np.array(line1[lo[j]:hi[j]],dtype=dtype[names[j]])
     # NL = 1  tot file
-    if (nl==1) & (ncols==9) & (arr1[-1].isdigit() is True):
+    elif (nl==1) & (ncols==9) & (arr1[-1].isdigit() is True):
         # NL    NX    NY  LOWBAD HIGHBAD  THRESH     AP1  PH/ADU  RNOISE    FRAD
         #  1  2046  4094   117.7 38652.0   13.12    3.00    3.91    1.55    6.00
         #  
@@ -415,7 +533,7 @@ def makemeta(fluxfile=None,header=None):
         return
     # Initialize meta using the header
     if fluxfile is not None:
-        header = fits.getheader(fluxfile,0)
+        header = fits.getheader(fluxfile)
     meta = header
 
     #- INSTCODE -
@@ -654,7 +772,8 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",naxis1=None,naxis2=Non
 
 # Run Source Extractor
 #---------------------
-def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,configdir=None,logfile=None,logger=None):
+#def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,configdir=None,logfile=None,logger=None):
+def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,configdir=None,offset=0,sexiter=1,dthresh=2.0,logfile=None,logger=None): #ktedit:sex2
     '''
     Run Source Extractor on an exposure.  The program is configured to work with files
     created by the NOAO Community Pipeline.
@@ -674,6 +793,8 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
     configdir : str
               The directory that contains the Source Extractor configuration files.
               default.config, default.conv, default.nnw, default.param
+    offset : int
+           The value to add to the star id number, default=0
     logfile : str, optional
             The name to use for the logfile.  If this is not input then the name will
             be the base name of `fluxfile` with the suffix "_sex.log".
@@ -700,6 +821,7 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
 
     if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     logger.info("-- Running SExtractor --")
+    logger.info("input file: "+str(fluxfile))    
 
     # Not enough inputs
     if fluxfile is None:
@@ -814,6 +936,10 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
     # GAIN            43.52             # detector gain in e-/ADU.
     # SEEING_FWHM     1.46920            # stellar FWHM in arcsec
     # WEIGHT_IMAGE  F4-00507860_01_comb.mask.fits
+    # CHECKIMAGE_TYPE  SEGMENTATION
+    # CHECKIMAGE_NAME segment.fits
+    # DETECT_THRESH    1.1 originally, will be changed depending on density/fwhm #ktedit:sex2
+    # ANALYSIS_THRESH   same as DETECT_THRESH                                    #ktedit:sex2
 
     filter_name = ''
     cnt = 0
@@ -838,6 +964,27 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
         m = re.search('^GAIN',l)
         if m != None:
             lines[cnt] = "GAIN            "+str(meta["gain"])+"            # detector gain in e-/ADU.\n"
+       
+        #-----------------------------------------------------------#ktedit:sex2 T
+        # Check_image                                               #ktedit:sex2 (for visual analysis purposes)
+        m = re.search('^CHECKIMAGE_TYPE',l)
+        if m != None:
+            lines[cnt] = "CHECKIMAGE_TYPE SEGMENTATION"
+        # Check_image name 
+        m = re.search('^CHECKIMAGE_NAME',l)
+        if m != None:
+            lines[cnt] = "CHECKIMAGE_NAME seg_"+str(sexiter)+".fits"
+        
+        # DETECT_THRESH                                             #ktedit:sex2 (may be changed after first sexiteration)
+        m = re.search('^DETECT_THRESH',l)
+        if m != None:
+            lines[cnt] = "DETECT_THRESH   "+str(dthresh)+"             # <sigmas> or <threshold>,<ZP> in mag.arcsec-2"
+        # ANALYSIS_THRESH
+        m = re.search('^ANALYSIS_THRESH',l)
+        if m != None:
+            lines[cnt] = "ANALYSIS_THRESH "+str(dthresh)+"             # <sigmas> or <threshold>,<ZP> in mag.arcsec-2"
+        #-----------------------------------------------------------#ktedit:sex2 B        
+
         # SEEING_FWHM
         m = re.search('^SEEING_FWHM',l)
         if m != None:
@@ -896,7 +1043,7 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
     try:
         # Save the SExtractor info to a logfile
         sf = open(logfile,'w')
-        retcode = subprocess.call(["sex",sfluxfile,"-c","default.config"],stdout=sf,stderr=subprocess.STDOUT)
+        retcode = subprocess.call(["/home/x25h971/bin/sex",sfluxfile,"-c","default.config"],stdout=sf,stderr=subprocess.STDOUT)
         sf.close()
         if retcode < 0:
             logger.error("Child was terminated by signal"+str(-retcode))
@@ -927,10 +1074,12 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
         ind1 = grep(arr,'Background:',index=True)
         ind2 = grep(arr,'RMS',index=True)
         ind3 = grep(arr,'Threshold',index=True)
-        background = np.float(arr[ind1[0]+1])
-        rms = np.float(arr[ind2[0]+1])
+        background = float(arr[ind1[0]+1])
+        rms = float(arr[ind2[0]+1])
         meta["SKYMED"] = (background,"Median sky background")
         meta["SKYRMS"] = (rms,"RMS of sky")
+        # offset the star id (if this is not the first sextractor run #ktedit:sex2
+        cat['NUMBER'] = cat['NUMBER']+offset
     else:
         cat = None
         maglim = None
@@ -940,7 +1089,7 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
     if os.path.exists(smaskfile): os.remove(smaskfile)
     if os.path.exists(smaskfile): os.remove(swtfile)
     #os.remove("default.conv")
-
+    
     return cat,maglim
 
 
@@ -1110,7 +1259,7 @@ def sexpickpsf(cat=None,fwhm=None,meta=None,outfile=None,nstars=100,logger=None)
 # Make DAOPHOT option files
 #--------------------------
 def mkopt(base=None,meta=None,VA=1,LO=7.0,TH=3.5,LS=0.2,HS=1.0,LR=-1.0,HR=1.0,
-          WA=-2,AN=-6,EX=5,PE=0.75,PR=5.0,CR=2.5,CE=6.0,MA=50.0,RED=1.0,WA2=0.0,
+          WA=-2,AN=-7,EX=5,PE=0.75,PR=5.0,CR=2.5,CE=6.0,MA=50.0,RED=1.0,WA2=0.0,
           fitradius_fwhm=1.0,HI=None,RD=None,GA=None,FW=None,logger=None):
     '''
     Create the DAOPHOT and ALLSTAR option files (.opt and .als.opt) for an exposure.
@@ -1426,7 +1575,7 @@ def mkdaoim(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,logge
     if meta.get("plver") is not None:      # CP data
         # V3.5.0 and on, Integer masks
         versnum = meta["plver"].split('.')
-        if (int(versnum[0])>3) | ((int(versnum[0])==3) & (int(versnum[1])>=5)):
+        if (int(versnum[0][-1])>3) | ((int(versnum[0][-1])==3) & (int(versnum[1])>=5)):
             bdpix = (mask == 7)
             nbdpix = np.sum(bdpix)
             if nbdpix > 0: mask[bdpix]=0
@@ -1532,7 +1681,7 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            "daophot << END_DAOPHOT >> "+logfile+"\n" \
+            "/home/x25h971/bin/daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
             ""+toptfile+"\n" \
             "\n" \
@@ -1717,7 +1866,7 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            "daophot << END_DAOPHOT >> "+logfile+"\n" \
+            "/home/x25h971/bin/daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
             ""+toptfile+"\n" \
             "\n" \
@@ -1779,7 +1928,7 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
                 l1 = l1[0:len(l1)-7]   # strip BELL at end \x07\n
                 lo = l1.find(":")
                 hi = l1.find("+-")
-                maglim = np.float(l1[lo+1:hi])
+                maglim = float(l1[lo+1:hi])
                 logger.info(l1.strip())   # clip leading/trailing whitespace
     # Failure
     else:
@@ -1884,7 +2033,7 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            "daophot << END_DAOPHOT >> "+logfile+"\n" \
+            "/home/x25h971/bin/daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
             ""+toptfile+"\n" \
             "\n" \
@@ -1966,7 +2115,7 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
             with a ".nei" suffix.
     outfile : str, optional
             The output filename of the aperture photometry catalog.  By default this is
-            the base name of `imfile` with a ".psf" suffix.
+            the base name of `imfile` with a ".psf" suffix. #ktedit:cpsf; changed so it's "<subiter>.psf"
     logfile : str, optional
             The name of the logfile to constrain the output of the DAOPHOT FIND
             run.  By default this is the base name of `imfile` with a ".psf.log" suffix.
@@ -2006,6 +2155,8 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
     if listfile is None:
         logger.warning("No list filename input")
         return None
+    
+    logger.info("Input file = "+imfile) #ktedit:cpsf
 
     # Set up filenames, make sure they don't exist
     base = os.path.basename(imfile)
@@ -2043,7 +2194,7 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            "daophot << END_DAOPHOT >> "+logfile+"\n" \
+            "/home/x25h971/bin/daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
             ""+toptfile+"\n" \
             "\n" \
@@ -2078,7 +2229,7 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
         raise Exception("DAOPHOT failed")
 
     # Check that the output file exists
-    if os.path.exists(toutfile) is True:
+    if (os.path.exists(toutfile)) is True and (os.path.getsize(toutfile)!=0):
         # Move output file to the final filename
         os.rename(toutfile,outfile)
         os.rename(tneifile,neifile)
@@ -2226,7 +2377,7 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            "daophot << END_DAOPHOT >> "+logfile+"\n" \
+            "/home/x25h971/bin/daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
             ""+toptfile+"\n" \
             "\n" \
@@ -2292,7 +2443,8 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
 # Create DAOPHOT PSF
 #-------------------
 def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,maxiter=5,minstars=6,nsigrej=2,subneighbors=True,
-              subfile=None,optfile=None,neifile=None,nstfile=None,grpfile=None,meta=None,logfile=None,verbose=False,logger=None):
+              subfile=None,optfile=None,neifile=None,nstfile=None,grpfile=None,meta=None,logfile=None,verbose=False,logger=None,
+              submaxit=5,subminit=2):#ktedit:cpsf
     '''
     Iteratively create a DAOPHOT PSF for an image.
 
@@ -2343,10 +2495,15 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
             Verbose output of the DAOPHOT PSF parameter errors and PSF star profile errors.
     logger : logging object
            The logger to use for the loggin information.
+    submaxit : int, optional, default = 5 #ktedit:cpsf
+           The maximum number of times to iterate the entire flag & neighbor subtraction process
+    subminit : int, optional, default = 2 #ktedit:cpsf
+           The minimum number of times to iterate the entire flag & neighbor subtraction process
 
     Returns
     -------
-    Nothing is returned.  The PSF, subtracted image and logfile are created.
+    #Nothing is returned.  The PSF, subtracted image and logfile are created.
+    subiter is returned #ktedit:cpsf; so all the neighbor-subtracted images are saved (for now)
 
     Example
     -------
@@ -2395,71 +2552,151 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
     if os.path.exists(listfile+".orig"): os.remove(listfile+".orig")
     shutil.copy(listfile,listfile+".orig")
 
-    # Iterate
-    #---------
-    if doiter is False: maxiter=1
-    iter = 1
-    endflag = 0
-    lastchi = 99.99
-    dchi_thresh = 0.002
-    while (endflag==0):
-        logger.info("Iter = "+str(iter))
 
-        # Run DAOPSF
-        try:
-            pararr, parchi, profs = daopsf(imfile,wlistfile,apfile,logger=logger)
-            chi = np.min(parchi)
-        except:
-            logger.error("Failure in DAOPSF")
-            raise
+    #---------------------------------------------------------------- #ktedit:cpsf; start of changed section
+    # Iterate entire flag & neighbor subtraction process 
+    #----------------------------------------------------------------
+    subiter = 1 
+    subendflag = 0 
+    sublastchi = 99.99
+    mean_subchi_last = 0
+    subdchi_thresh = 0.002
+    while (subendflag==0):    
+        logger.info("Flag & neighbor subtraction iter = "+str(subiter)) 
+    #---------------------------------------------------------------- #ktedit:cpsf b
 
-        # Check for bad stars
-        nstars = len(profs)
-        gdstars = (profs['FLAG'] != 'saturated')
-        medsig = np.median(profs['SIG'][gdstars])
-        bdstars = (profs['FLAG'] != '') | (profs['SIG']>nsigrej*medsig)
-        nbdstars = np.sum(bdstars)
-        # Make sure we have enough stars left
-        if (nstars-nbdstars < minstars):
-            nbdstars = nstars-minstars
-            si = np.argsort(profs['SIG'])[::-1]
-            bdstars = si[0:nbdstars]  # take the worse ones
-        logger.info("  "+str(nbdstars)+" stars with flag or high sig")
-        # Delete stars with flags or high SIG values
-        if (nbdstars>0) & (nstars>minstars):
-            listlines = readlines(wlistfile)
-            # Read the list
-            lstcat = daoread(wlistfile)
-            # Match up with the stars we are deleting
-            mid, ind1, ind2 = np.intersect1d(profs[bdstars]['ID'],lstcat['ID'],return_indices=True)
-            # Remove the lines from listlines
-            newlistlines = remove_indices(listlines,ind2+3)
-            # Write new list
-            writelines(wlistfile,newlistlines,overwrite=True)
-            logger.info("  Removing IDs="+str(" ".join(profs[bdstars]['ID'].astype(str))))
-            logger.info("  "+str(nbdstars)+" bad stars removed. "+str(nstars-nbdstars)+" PSF stars left")
-        # Should we end
-        if (iter==maxiter) | (nbdstars==0) | (nstars<=minstars) | (np.abs(lastchi-chi)<dchi_thresh): endflag=1
-        iter = iter+1
-        lastchi = chi
+        # Iterate subtraction of flagged PSF sources from psf list #ktedit:cpsf
+        #---------
+        if doiter is False: maxiter=1
+        iter = 1
+        endflag = 0
+        lastchi = 99.99
+        dchi_thresh = 0.002
 
-    # Subtract PSF star neighbors
-    if subneighbors:
-        subfile = base+"a.fits"
-        try:
-            subpsfnei(imfile,wlistfile,neifile,subfile,psffile=psffile,logger=logger)
-        except:
-            logger.error("Subtracting neighbors failed.  Keeping original PSF file")
-        # Check that the subtracted image exist and rerun DAOPSF
-        if os.path.exists(subfile):
-            # Final run of DAOPSF
-            logger.info("Final DAOPSF run")
+    #---------------------------------------------------------------- #ktedit:cpsf t
+        # check subiter to make sure psf is being run on the neighbor-subtracted 
+        # image from the last iteration, if subiter>1
+        psfnames=["GAUSSIAN","MOFFAT15","MOFFAT25","MOFFAT35","LORENTZ","PENNY1","PENNY2"]
+        if (subiter>1):
+            imfile_new = base+str(subiter-1)+"a.fits" #nei-sub image from last iter.
+            os.rename(imfile,"temp_"+imfile) #move the image to a temporary name
+            os.rename(imfile_new,imfile) #move the subimage from last iter to image's filename
+            logger.info(imfile+" moved to temp_"+imfile+", "+imfile_new+" moved to "+imfile)
+
+        # make sure AN != -6 (in the opt file) after the first iteration 
+        if (subiter==2):
+            psfan = readlines(psffile)[0][0:10].strip() #the analytic function chosen for the psf
+            lookup_index=psfnames.index(psfan)+1 #the number to make AN based on the analytic function chosen
+            logger.info("new AN = "+str(lookup_index))
+            opttable=readlines(optfile) #the option file that you need to change the AN value in
+            opttable[14]="AN = %8.2f"%(lookup_index)
+            writelines(optfile,opttable,overwrite=True)
+    #---------------------------------------------------------------- #ktedit:cpsf b
+
+        while (endflag==0):
+            logger.info("Iter = "+str(iter))
+
+            # Run DAOPSF
             try:
                 pararr, parchi, profs = daopsf(imfile,wlistfile,apfile,logger=logger)
                 chi = np.min(parchi)
+                mean_chi = np.mean(profs['SIG'])                         #ktedit:cpsf
+                logger.info("mean chi = "+str(mean_chi))                 #ktedit:cpsf     
             except:
                 logger.error("Failure in DAOPSF")
                 raise
+
+            # Check for bad stars
+            nstars = len(profs)
+            gdstars = (profs['FLAG'] != 'saturated')
+            medsig = np.median(profs['SIG'][gdstars])
+            bdstars = (profs['FLAG'] != '') | (profs['SIG']>nsigrej*medsig)
+            nbdstars = np.sum(bdstars)
+            # Make sure we have enough stars left
+            if (nstars-nbdstars < minstars):
+                nbdstars = nstars-minstars
+                si = np.argsort(profs['SIG'])[::-1]
+                bdstars = si[0:nbdstars]  # take the worse ones
+            logger.info("  "+str(nbdstars)+" stars with flag or high sig")
+            # Delete stars with flags or high SIG values
+            if (nbdstars>0) & (nstars>minstars):
+                listlines = readlines(wlistfile)
+                # Read the list
+                lstcat = daoread(wlistfile)
+                # Match up with the stars we are deleting
+                mid, ind1, ind2 = np.intersect1d(profs[bdstars]['ID'],lstcat['ID'],return_indices=True)
+                # Remove the lines from listlines
+                newlistlines = remove_indices(listlines,ind2+3)
+                # Write new list
+                writelines(wlistfile,newlistlines,overwrite=True)
+                logger.info("  Removing IDs="+str(" ".join(profs[bdstars]['ID'].astype(str))))
+                logger.info("  "+str(nbdstars)+" bad stars removed. "+str(nstars-nbdstars)+" PSF stars left")
+            # Should we end flagged star subtraction? #ktedit:cpsf
+            if (iter==maxiter) | (nbdstars==0) | (nstars<=minstars) | (np.abs(lastchi-chi)<dchi_thresh): endflag=1
+            iter = iter+1
+            lastchi = chi
+        
+    #---------------------------------------------------------------- #ktedit:cpsf t
+        # copy image fil & last iteration's subtracted file back to their og names
+        if (subiter>1):
+            os.rename(imfile,imfile_new) # put last iteration's subfile back        
+            os.rename("temp_"+imfile,imfile) # put the imfile back
+            logger.info(imfile+" moved to "+imfile_new+", "+"temp_"+imfile+" moved back to "+imfile)
+    #---------------------------------------------------------------- #ktedit:cpsf b
+
+        # Subtract PSF star neighbors
+        if subneighbors:
+            subfile = base+"a.fits"
+            #subfile = base+str(subiter)+"a.fits" #ktedit:cpsf
+            try:
+                subpsfnei(imfile,wlistfile,neifile,subfile,psffile=psffile,logger=logger)
+            except:
+                logger.error("Subtracting neighbors failed.  Keeping original PSF file")
+            # Check that the subtracted image exist and rerun DAOPSF
+            if os.path.exists(subfile):
+                # Final run of DAOPSF
+                logger.info("Final DAOPSF run (on subtracted image)") #ktedit:cpsf
+
+    #---------------------------------------------------------------- #ktedit:cpsf t
+                # copy the imfile somewhere temporary, again, and replace with THIS iteration's subfile that was just created
+                os.rename(imfile,"temp_"+imfile)  
+                os.rename(subfile,imfile) 
+                logger.info(imfile+" once again moved to temp_"+imfile+", "+subfile+" moved to "+imfile) 
+    #---------------------------------------------------------------- #ktedit:cpsf b
+
+                try:
+                    spararr, sparchi, sprofs = daopsf(imfile,wlistfile,apfile,logger=logger)
+                    chi = np.min(sparchi)
+
+    #---------------------------------------------------------------- #ktedit:cpsf t
+                    subsigs, profsind, sprofsind = np.intersect1d(profs['ID'],sprofs['ID'],return_indices=True)  
+                    profsigs=profs['SIG'][profsind]                                                              
+                    sprofsigs=sprofs['SIG'][sprofsind]                                                           
+                    diffsigs=np.absolute(profsigs-sprofsigs)                                                     
+                    mean_diffchi=np.mean(diffsigs)
+                    mean_subchi=np.mean(sprofs['SIG'])                    
+                    logger.info("mean (diff in individual chi values) = "+str(mean_diffchi))                              
+                    logger.info("mean subchi, chi, last subchi values= "+str(mean_subchi)+", "+str(mean_chi)+", "+str(mean_subchi_last)) 
+                    logger.info("diff between mean chi and mean subchi values = "+str(abs(mean_chi-mean_subchi)))
+                    logger.info("diff between this and last mean subchi values = "+str(abs(mean_subchi_last-mean_subchi)))
+                    mean_subchi_last = mean_subchi
+    #---------------------------------------------------------------- #ktedit:cpsf b
+
+                except:
+                    logger.error("Failure in DAOPSF")
+                    raise
+                
+    #---------------------------------------------------------------- #ktedit:cpsf t
+        finalsubfile=base+str(subiter)+"a.fits"
+        if ((subiter==submaxit) | (np.abs(sublastchi-chi)<dchi_thresh)) & (subiter>=subminit): 
+            subendflag=1
+            finalsubfile=base+"a.fits"
+        sublastchi=chi
+        os.rename(imfile,finalsubfile)  #copy subfile to a version that marks the iteration
+        os.rename("temp_"+imfile,imfile) #copy the image file back to its name
+        logger.info(imfile+" moved back to "+finalsubfile+", temp_"+imfile+" moved back to "+imfile)
+        subiter=subiter+1        
+    #---------------------------------------------------------------- #ktedit:cpsf; end of changed section
 
     # Put information in meta
     if meta is not None:
@@ -2470,6 +2707,8 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
     if os.path.exists(listfile): os.remove(listfile)
     shutil.move(wlistfile,listfile)
     logger.info("Final list of PSF stars in "+listfile+".  Original list in "+listfile+".orig")
+    
+    return subiter #ktedit:cpsf
 
 
 # Run ALLSTAR
@@ -2564,9 +2803,11 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
 
     # Load the option file lines
     optlines = readlines(optfile)
+    print("optfile = ",optfile)
+    optlines=[line +'\n' for line in optlines]
     # Lines for the DAOPHOT ALLSTAR script
     lines = ["#!/bin/sh\n",
-             "allstar << END_ALLSTAR >> "+logfile+"\n"]
+             "/home/x25h971/bin/allstar << END_ALLSTAR >> "+logfile+"\n"]
     lines += optlines
     lines += ["\n",
               timfile+"\n",
@@ -2609,6 +2850,7 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
         num = numlines(outfile)-3
         logger.info(str(num)+" stars converged")
         logger.info("Output file = "+outfile)
+        logger.info("Subfile = "+subfile)
     # Failure
     else:
         logger.error("Output file "+outfile+" NOT Found")
@@ -2735,7 +2977,7 @@ def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=Non
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            "daogrow << DONE >> "+logfile+"\n" \
+            "/home/x25h971/bin/daogrow << DONE >> "+logfile+"\n" \
             ""+taperfile+"\n" \
             "\n" \
             ""+tinffile+"\n" \
@@ -2771,7 +3013,7 @@ def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=Non
         if os.path.exists(tbase+".gro"): os.rename(tbase+".gro",base+".gro")
         if os.path.exists(tbase+".crl"): os.rename(tbase+".crl",base+".crl")
         # Remove the temporary links
-        for f in [tfile,tphotfile,taperfile,tinffile,textfile]: os.remove(f)
+        ###for f in [tfile,tphotfile,taperfile,tinffile,textfile]: os.remove(f)
 
     # Failure
     else:
@@ -2779,7 +3021,7 @@ def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=Non
         raise Exception("Output not found")
 
     # Delete the script
-    os.remove(scriptfile)
+    ###os.remove(scriptfile)
 
     # Load and return the catalog
     logger.info("Output file = "+outfile)

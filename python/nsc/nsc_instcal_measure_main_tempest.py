@@ -202,7 +202,7 @@ if __name__ == "__main__":
     npar=len(partitions)                     # number of slurm partitions
     maxjobs = int(args.maxjobs[0])           # maximum number of jobs to maintain running at any time
     nchan = maxjobs//npar                    # number of job channels per partition cpar -> nchan
-    nexp = int(args.nexp[0])                   # number of exposures to download at once
+    nexp = int(args.nexp[0])                 # number of exposures to download at once
     sleep_time=10                            # seconds to sleep between checking job status
     inputlist = args.list                    # list of exposures to analyze
     if inputlist is not None:
@@ -210,9 +210,12 @@ if __name__ == "__main__":
 
     # Establish necessary directories
     # -tempest
-    basedir = "/home/x25h971/nsc/instcal/"+version+"/"   # location of operations
+    ltype = inputlist.split("_")[1]
+    if ltype=="a": basedir = "/home/x25h971/nsc/instcal/"+version+"/"    # location of operations
+    else: basedir = "/home/group/davidnidever/nsc/instcal/"+version+"/"  # location of extra output
+    scriptdir = "/home/x25h971/nsc/instcal/"+version+"/"      # location of scripts
     expdir = basedir+"exposures/"                        # where exposures will be
-    outfiledir = basedir+"outfiles/"                     # a place for the job files
+    outfiledir = basedir+"outfiles/"
     makedir(expdir)
     makedir(outfiledir)
     subdirs = ['logs','c4d','k4m','ksb']
@@ -335,9 +338,10 @@ if __name__ == "__main__":
         if type(dateobs) is np.bytes_: dateobs=dateobs.decode()
         night = dateobs[0:4]+dateobs[5:7]+dateobs[8:10]
         baseroot = base[0:base.find('.fits.fz')]
-        outfile = basedir+instrument+'/'+night+'/'+baseroot+'/'+baseroot+'_1.fits' # outfile for first chip
-        outlogfile = basedir+instrument+'/'+night+'/'+baseroot+'/'+baseroot+'.log' # logfile for complete exposure
-        outdirectory = basedir+instrument+'/'+night+'/'+baseroot+'.tar.gz'         # tarred and zipped exposure directory
+        outroot =      basedir+instrument+'/'+night+'/'+baseroot
+        outfile =      outroot+"/"+baseroot+'_1.fits' # outfile for first chip
+        outlogfile =   outroot+"/"+baseroot+'.log' # logfile for complete exposure
+        outdirectory = outroot+'.tar.gz'         # tarred and zipped exposure directory
         expstr['outfile'][i] = outfile
         expstr['logfile'][i] = outlogfile
         expstr['outdirectory'][i] = outdirectory
@@ -353,8 +357,8 @@ if __name__ == "__main__":
         # If exposure is completed or yes redo:
         if (expstr['done'][i]==False) or (redo==True):
             #if file_test(file_dirname(outfile),/directory) eq 0 then file_mkdir,file_dirname(outfile)  ; make directory
-            expstr['cmd'][i] = 'python '+basedir+'nsc_instcal_measure_tempest.py '+fluxfile+' '+wtfile+' '+maskfile+' '+version
-            expstr['exp_cmd'][i] = 'python '+basedir+'get_exposures.py '+rawname+' '+fluxfile+' '+wtfile+' '+maskfile+' '+expdir
+            expstr['cmd'][i] = 'python '+scriptdir+'nsc_instcal_measure_tempest.py '+fluxfile+' '+wtfile+' '+maskfile+' '+version+' '+ltype
+            expstr['exp_cmd'][i] = 'python '+scriptdir+'get_exposures.py '+rawname+' '+fluxfile+' '+wtfile+' '+maskfile+' '+expdir+' '+ltype
             expstr['torun'][i] = True
         # If exposure is completed and no redo:
         elif (expstr['done'][i]==True) and (redo==False):
@@ -666,7 +670,9 @@ if __name__ == "__main__":
             expstr['exp'][torun[nesub]] = jexp
             jexp+=1
             rootLogger.info("Job "+exp_job_name+" submitted")
-            if maxjobs<10: time.sleep(10)
+            if 1==1: #maxjobs<10: 
+                print("sleepin for ten...[sec]...")
+                time.sleep(10)
         #----------------------------------------------------------------------------------
         part_counter = pc  # save where we left off looping through the partition channels
         # -- Save job structure --
