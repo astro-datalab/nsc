@@ -1,0 +1,15 @@
+# BAND INSTRUMENT DECRANGE       COLOREQN           COLORANGE    MODELMAGEQN                                                    QUALITYCUTS
+  u      c4d      [-90,90]   GMAG-JMAG-3.27*EJK     [0.0,3.0]   GSYNTH_U                                                       QFLG='AAA'
+  g      c4d      [-90,90]   GSYNTH_G-GSYNTH_I      [0.0,3.0]    GSYNTH_G                                                       GSYNTH_G<21.0
+  r      c4d      [-90,90]   GSYNTH_G-GSYNTH_I      [0.0,3.0]    GSYNTH_R                                                       GSYNTH_R<21.0
+  i      c4d      [-90,90]   GSYNTH_G-GSYNTH_I      [0.0,3.0]    GSYNTH_I                                                       GSYNTH_I<21.0
+  z      c4d      [-90,90]   GSYNTH_G-GSYNTH_I      [0.0,3.0]    GSYNTH_Z                                                       GSYNTH_Z<21.0
+  Y      c4d      [-90,90]   GSYNTH_G-GSYNTH_I      [0.0,3.0]    GSYNTH_Y                                                       GSYNTH_Y<21.0
+  VR     c4d      [-90,90]   GSYNTH_G-GSYNTH_I      [0.0,3.0]    GSYNTH_VR                                                      GSYNTH_G<20.5
+  g      ksb      [-29,90]   GSYNTH_G-GSYNTH_I      [0.0,3.0]    GSYNTH_G                                                       GSYNTH_G<21.0
+  r      ksb      [-29,90]   GSYNTH_G-GSYNTH_I      [0.0,3.0]    GSYNTH_R                                                       GSYNTH_R<21.0
+  g      k4m      [-29,90]   GSYNTH_G-GSYNTH_I      [0.0,3.0]    GSYNTH_G                                                       GSYNTH_G<21.0
+  r      k4m      [-29,90]   GSYNTH_G-GSYNTH_I      [0.0,3.0]    GSYNTH_R                                                       GSYNTH_R<21.0
+  i      k4m      [-29,90]   GSYNTH_G-GSYNTH_I      [0.0,3.0]    GSYNTH_I                                                       GSYNTH_I<21.0
+  z      k4m      [-29,90]   GSYNTH_G-GSYNTH_I      [0.0,3.0]    GSYNTH_Z                                                       GSYNTH_Z<21.0
+  VR     k4m      [-29,90]   GSYNTH_G-GSYNTH_I      [0.0,3.0]    GSYNTH_VR                                                      GSYNTH_G<20.5

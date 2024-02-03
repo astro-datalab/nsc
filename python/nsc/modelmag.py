@@ -86,7 +86,7 @@ def modelmag(tab,instfilt,dec,eqnfile):
         gd = gd[0]
     eqnstr1 = eqnstr[gd]
     eqnstr1 = dict(zip(eqnstr1.colnames, eqnstr1[0]))  # convert to dictionary
-
+    print("eqnstr1 = ",eqnstr1)
     ## No parentheses allowed
     if eqnstr1['coloreqn'].find('(') != -1 or eqnstr1['coloreqn'].find(')') != -1 or \
        eqnstr1['modelmageqn'].find('(') != -1 or eqnstr1['modelmageqn'].find(')') != -1:

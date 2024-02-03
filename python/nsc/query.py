@@ -632,7 +632,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
     #  filter-instrument combination
     refcat = []
     for i in range(len(filt)):
-        instfilt = filt[i]
+        instfilt = filt[i].strip()
         # If no instrument information then assume it's DECam
         if instfilt.find('-') == -1:
             instfilt = 'c4d-'+instfilt
