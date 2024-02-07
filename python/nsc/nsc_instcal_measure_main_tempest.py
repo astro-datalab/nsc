@@ -510,11 +510,11 @@ if __name__ == "__main__":
                         rootLogger.info("full channel loop, moving on")
                         nji=nexp                                    #                                        x
                     else:                                           #     else, if (n) has been sub for dload:
-                        if x:                                       #         if that job is done (& files not there):
+                        if x and (not nu):                          #         if that job is done (& files not there):
                             expstr['esubmitted'][torun[nsub]]=0     #             re-assign exp for dload
                             rootLogger.info("Exposure "+str(expstr['fluxfile'][torun[nsub]])+" download failed, re-queue")
                         else:                                       #         else, if that job is not done: it's either still rolling or not submitted yet, so I think we can skip on over to the next partition?
-                            rootLogger.info("exposure "+str(expstr['fluxfile'][torun[nsub]])+" still downloading?")
+                            rootLogger.info("exposure "+str(expstr['fluxfile'][torun[nsub]])+" still downloading or unreleased")
                 elif (not e) and nu:                                               # else, if (n) unreleased, skip to next channel
                     rootLogger.info("exposure "+str(expstr['fluxfile'][torun[nsub]])+" unreleased")
            #elif (l) and (n): #-------------------------------------case while running
@@ -546,11 +546,11 @@ if __name__ == "__main__":
                         rootLogger.info("full channel loop, moving on")
                         nji = nexp                                  #                                        x
                     else:                                           #     else, if (n) has been submitted for dload:
-                        if x:                                       #         if that job is done (& files not there):
+                        if x and (not nu):                          #         if that job is done (& files not there):
                             expstr['esubmitted'][torun[nsub]]=0      #             re-assign exp for dload
                             rootLogger.info("Exposure "+str(expstr['fluxfile'][torun[nsub]])+" download failed, re-queue")
                         else:                                       #         else, if that job is not done: it's either still rolling or not submitted yet, so I think we can skip on over to the next partition?
-                            rootLogger.info("exposure "+str(expstr['fluxfile'][torun[nsub]])+" still downloading?")
+                            rootLogger.info("exposure "+str(expstr['fluxfile'][torun[nsub]])+" still downloading or unreleased")
                 elif (not e) and nu:                                # else, add nothing and skip to next partition
                     rootLogger.info("exposure "+str(expstr['fluxfile'][torun[nsub]])+" unreleased")
            #elif (l) and no (n): #----------------------------------case at end of run
