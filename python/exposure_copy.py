@@ -3,7 +3,18 @@
 # exposure_copy.py copies exposures from the NSC DR3 decam_instcal_list
 # to a common repository in your current working directory (wherever this
 # script is), to allow for easy but manual Globus transfers of exposures to
-# the CCA.  
+# the CCA.
+
+# Arguments:
+#    explist - fits file with table of exposures to copy/transfer, with
+#              fluxfile, wtfile, and maskfile columns
+#    transfer_lim - maximum amount of data [MB] per transfer (sets the number
+#                   of exposures per repository)
+
+# The script will create a directory called "copy_group/YYYYMMDDHHMMSS/" in
+# your current working directory, and in there will be X number of repositories
+# with Y exposures each.  Each repository contains all the files for one manual
+# Globus transfer of <transfer_lim> MB
 
 #-----------------------------------------------------------------------------
 # Imports
