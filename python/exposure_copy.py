@@ -111,7 +111,7 @@ if __name__ == "__main__":
     nexposures_per_repo = transfer_limit//exposuresize  # Nmber of files per repository
     ####nrepos = (nexposures//nexposures_per_repo)+1        # Number of repositories/transfers
     ####subdir_list = np.array([copydir+"expgroup_"+str(i).zfill(len(str(nrepos))) for i in range(nrepos)]) # list of subdirectories in copydir
-    subdir_list = np.array([copydir+"ring32_"+str(i).zfill(len(str(nhpix))) for i in range(nhpix)]) # list of subdirectories in copydir
+    subdir_list = np.array([copydir+"ring32_"+str(i).zfill(len(str(nhpix))) for i in np.unique(exposures['ring'+str(ns)])]) # list of subdirectories in copydir
     print("splitting ",nexposures," exposures into ",np.unique(subdir_list)," HPix repositories")
     #exposures['copydir'] = [subdir_list[(i-nrepos*(i//nrepos))] for i in range(nexposures)]
     #print(exposures['copydir'])
