@@ -27,6 +27,7 @@ from astropy.table import Table,Column
 from astropy.io import fits
 from dlnpyutils import utils as dln, coords
 import glob
+import healpy as hp
 import logging
 import numpy as np
 import os
@@ -217,6 +218,7 @@ if __name__ == "__main__":
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
     parser.add_argument('--maxjobs', type=int, nargs=1, default=1, help='Max number of exposures to process at any given time')
     parser.add_argument('--list',type=str,nargs=1,default=None,help='Input list of exposures to use')
+    parser.add_argument('--nside',type=str,nargs=1,default=32,help='HEALPix NSIDE to sort list for processing order')
     args = parser.parse_args()
 
     # Start time, get hostname (should be tempest)
@@ -228,6 +230,7 @@ if __name__ == "__main__":
     version = dln.first_el(args.version)     # NSC version
     redo = args.redo                         # if called, redo = True
     partitions=args.partition[0].split(',')  # the slurm partitions to submit jobs to
+    ns = int(args.nside)                          # HEALPix nside
     npar=len(partitions)                     # number of slurm partitions
     maxjobs = int(args.maxjobs[0])           # maximum number of jobs to maintain running at any time
     nchan = maxjobs//npar                    # number of job channels per partition cpar -> nchan
@@ -303,27 +306,19 @@ if __name__ == "__main__":
         rootLogger.info('Using input list: '+inputlist)
         lstr = fits.getdata(inputlist,1) # r for random (about to do)
         # Check that it has all the columns that we need
-        needcols = ['INSTRUMENT','FLUXFILE','MASKFILE','WTFILE','DATE_OBS']
+        needcols = ['INSTRUMENT','FLUXFILE','MASKFILE','WTFILE','DATE_OBS','RA','DEC']
         for n in needcols:
             if n not in lstr.dtype.names:
                 raise ValueError('Column '+n+' not in '+inputlist)
     nlstr = dln.size(lstr)
     rootLogger.info(str(nlstr)+' InstCal images')
-
-    # Putting them in RANDOM but REPEATABLE order
-    rootLogger.info('RANDOMIZING WITH SEED=1')
-    rnd = np.arange(nlstr)
-    np.random.seed(1)
-    np.random.shuffle(rnd)
-    lstr = lstr[rnd]
     gdexp = np.arange(nlstr)
     ngdexp = nlstr
-
 
     # Check the exposures
     #--------------------
     rootLogger.info('Checking on the exposures')
-    dtype_expstr = np.dtype([('instrument',str,100),('rawname',str,100),('fluxfile',str,100),('wtfile',str,100),
+    dtype_expstr = np.dtype([('instrument',str,100),('ring'+str(ns),int),('rawname',str,100),('fluxfile',str,100),('wtfile',str,100),
                              ('maskfile',str,100),('outfile',str,150),('logfile',str,150),('partition',str,100),
                              ('done',bool),('torun',bool),('submitted',bool),('jobname',str,100),('jobid',str,100),('jobstatus',str,100),
                              ('cmd',str,1000),('cputime',str,100),('maxrss',str,100),('outdirectory',str,500),('exp',int)])
@@ -351,6 +346,7 @@ if __name__ == "__main__":
         maskfile = maskfile.split('/')[-1]
 
         expstr['instrument'][i] = instrument
+        expstr['ring'+str(ns)][i] = hp.ang2pix(ns,lstr['RA'][gdexp[i]],lstr['DEC'][gdexp[i]],lonlat=True)
         expstr['rawname'][i] = rawname
         expstr['fluxfile'][i] = fluxfile
         expstr['wtfile'][i] = wtfile
@@ -385,7 +381,9 @@ if __name__ == "__main__":
         # If exposure is completed and no redo:
         elif (expstr['done'][i]==True) and (redo==False):
             expstr['torun'][i] = False
-
+    # 
+    expstr = np.sort(expstr,order="pix"+str(ns))
+    
     # Parcel out jobs
     #----------------
     # Define exposures to run & total #jobs/partition
@@ -403,7 +401,8 @@ if __name__ == "__main__":
     chans = np.reshape([[i+"_"+str(parchan) for i in partitions] for parchan in range(0,nchan)],maxjobs) # partions -> chans
     nchantot = len(chans)
     #print("job channels = ",chans)
-    expstr['partition'][torun] = [chans[(i-maxjobs*(i//maxjobs))] for i in range(ntorun)]
+    partis = np.array([chans[(i-maxjobs*(i//maxjobs))] for i in range(ntorun)])
+    expstr['partition'][torun] = partis
 
 
     # Start submitting jobs
