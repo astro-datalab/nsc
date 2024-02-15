@@ -30,7 +30,7 @@ from scipy.ndimage import convolve
 #from scipy.ndimage.filters import convolve
 import astropy.stats
 import struct
-from dln.pyutils.utils import *
+from dlnpyutils.utils import *
 from phot_cca import *
 import glob
 
@@ -39,7 +39,7 @@ warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
 # Get NSC directories
-def getnscdirs(version=None,listtype="a"):
+def getnscdirs(version=None):
     # Host
     hostname = socket.gethostname()
     host = hostname.split('.')[0].strip()
@@ -48,8 +48,8 @@ def getnscdirs(version=None,listtype="a"):
     verdir = ""
     if version is not None:
        verdir = version if version.endswith('/') else version+"/"
-    basedir = os.getcwd()+"/"+verdir
-    tmproot = basedir+"tmp/"
+    basedir = '/mnt/home/dnidever/ceph/nsc/instcal/'+verdir
+    tmproot = '/mnt/home/dnidever/ceph/nsc/'+verdir+'tmp/'
     return basedir,tmproot
 
 
@@ -57,7 +57,7 @@ def getnscdirs(version=None,listtype="a"):
 class Exposure:
 
     # Initialize Exposure object
-    def __init__(self,fluxfile,wtfile,maskfile,nscversion,listtype): #"t3a"):
+    def __init__(self,fluxfile,wtfile,maskfile,nscversion): #"t3a"):
         # Check that the files exist
         if os.path.exists(fluxfile) is False:
             print(fluxfile+" NOT found")
@@ -79,7 +79,7 @@ class Exposure:
         base = os.path.splitext(os.path.splitext(base)[0])[0]
         self.base = base
         self.nscversion = nscversion
-        self.listtype = listtype
+        #self.listtype = listtype
         self.logfile = base+".log"
         self.logger = None
         self.origdir = None
@@ -109,14 +109,14 @@ class Exposure:
         night = dateobs[0:4]+dateobs[5:7]+dateobs[8:10]
         self.night = night
         # Output directory
-        basedir,tmpdir = getnscdirs(nscversion,listtype)
+        basedir,tmpdir = getnscdirs(nscversion)
         self.outdir = basedir+self.instrument+"/"+self.night+"/"+self.base+"/"
 
         
     # Setup
     def setup(self):
         #print("nscversion = ",version)
-        basedir,tmproot = getnscdirs(version,self.listtype)
+        basedir,tmproot = getnscdirs(version)
         print("dirs, setup = ",basedir,tmproot)
         # Prepare temporary directory
         tmpcntr = 1#L 
@@ -1007,14 +1007,12 @@ if __name__ == "__main__":
     if len(sys.argv) > 4:
     #if len(sys.argv) > 6: #ktedit:createpsf_test
        version = sys.argv[4]
-       ltype = sys.argv[5]
-       print("version = ",version,", ltype = ",ltype)
+       print("version = ",version)
        verdir = version if version.endswith('/') else version+"/"
     else:
         version = None
-        ltype="a"
     # Get NSC directories
-    basedir, tmpdir = getnscdirs(version,listtype=ltype)
+    basedir, tmpdir = getnscdirs(version)
 
     # Make sure the directories exist
     if not os.path.exists(basedir):
@@ -1050,7 +1048,7 @@ if __name__ == "__main__":
         sys.exit()
 
     # Create the Exposure object
-    exp = Exposure(fluxfile,wtfile,maskfile,nscversion=version,listtype=ltype)
+    exp = Exposure(fluxfile,wtfile,maskfile,nscversion=version)
     # Run
     exp.run()
 
