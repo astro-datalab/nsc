@@ -19,7 +19,7 @@ Vizier.TIMEOUT = 600
 Vizier.ROW_LIMIT = -1
 Vizier._cache_location = None
 
-def tempest_query(cenra,cendec,radius,refcat,nside=32,silent=False,logger=None):
+def local_query(cenra,cendec,radius,refcat,server,nside=32,silent=False,logger=None):
     """
     Get reference catalog information from FITS files on tempest.
 
@@ -33,6 +33,8 @@ def tempest_query(cenra,cendec,radius,refcat,nside=32,silent=False,logger=None):
        Search radius in degrees.
     refcat : table
        Reference catalog name (e.g. 2MASS, Gaia, etc.)
+    server : str
+       Server name.  Either "tempest" or "rusty".
     silent : bool, optional
        Don't print anything to the screen.
     logger : logging object, optional
@@ -71,8 +73,16 @@ def tempest_query(cenra,cendec,radius,refcat,nside=32,silent=False,logger=None):
     ref = None
     for p in allpix:
         print("pix ",p)
-        if refname=="gsynth-phot": reffile = '/home/x25h971/catalogs/gaia_synth_phot/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'
-        else: reffile = '/home/x51j468/catalogs/'+refname+'/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'
+        if server=='tempest':
+            if refname=="gsynth-phot":
+                reffile = '/home/x25h971/catalogs/gaia_synth_phot/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'
+            else:
+                reffile = '/home/x51j468/catalogs/'+refname+'/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'
+        elif server=='rusty':
+            if refname=="gsynth-phot":
+                reffile = '/mnt/home/dnidever/ceph/nsc/catalogs/gaia_synth_phot/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'
+            else:
+                reffile = '/mnt/home/dnidever/ceph/nsc/catalogs/'+refname+'/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'                
         if os.path.exists(reffile)==False:
             print(reffile,' NOT FOUND')
             continue
@@ -172,17 +182,24 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
 
     host = socket.gethostname()
     host = host.split('.')[0]
+    server = ''
     if 'tempest' in host.lower():
         tempest = True
+        server = 'tempest'
     else:
         tempest = False
-
-    # Run query on tempest
-    if tempest:
-        return tempest_query(cenra,cendec,radius,refcat,nside=nside,silent=silent,logger=logger)
-
+    if 'worker' in host.lower():
+        rusty = True
+        server = 'rusty'
+    else:
+        rusty = False
+        
     if logger is None:
         logger = dln.basiclogger()
+        
+    # Run query on local catalogs on disk
+    if tempest or rusty:
+        return local_query(cenra,cendec,radius,refcat,server,nside=nside,silent=silent,logger=logger)
     
     # Check that we have psql installed 
     out = subprocess.check_output(['which','psql'],shell=False)
