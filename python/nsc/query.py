@@ -753,7 +753,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
         if refcat[i]=='GAIADR2' or refcat[i]=='GAIAEDR3':
             newcols +=['source','ra','ra_error','dec','dec_error','pmra','pmra_error','pmdec','pmdec_error','gmag','e_gmag','bp','e_bp','rp','e_rp'] 
         elif refcat[i]=='GSYNTH-PHOT':
-            newcols +=['gsynth_g','gsynth_r','gsynth_i','gsynth_z','gsynth_y']
+            newcols +=['gsynth_u','gsynth_g','gsynth_r','gsynth_i','gsynth_z','gsynth_y','gsynth_vr']
             #newcols +=['Decam_mag_g','Decam_mag_r','Decam_mag_i','Decam_mag_z','Decam_mag_Y','Decam_flux_g','Decam_flux_r','Decam_flux_i','Decam_flux_z','Decam_flux_Y','Decam_flux_error_g','Decam_flux_error_r','Decam_flux_error_i','Decam_flux_error_z','Decam_flux_error_Y']
         elif refcat[i]=='2MASS-PSC':
             newcols += ['jmag','e_jmag','hmag','e_hmag','kmag','e_kmag','qflg']
@@ -859,11 +859,13 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
                 temp['e_rp'] = 2.5*np.log10(1.0+ref1['e_frp'][ind2]/ref1['frp'][ind2])
                 ref[ind1] = temp
             elif refcat[i]=='GSYNTH-PHOT':
-                ref['gsynth_g'][ind1] = ref1['Decam_mag_g'][ind2]
-                ref['gsynth_r'][ind1] = ref1['Decam_mag_r'][ind2]
-                ref['gsynth_i'][ind1] = ref1['Decam_mag_i'][ind2]
-                ref['gsynth_z'][ind1] = ref1['Decam_mag_z'][ind2]
-                ref['gsynth_y'][ind1] = ref1['Decam_mag_Y'][ind2]
+                ref['gsynth_u'][ind1] = ref1['USER_Decam_mag_u'][ind2]
+                ref['gsynth_g'][ind1] = ref1['USER_Decam_mag_g'][ind2]
+                ref['gsynth_r'][ind1] = ref1['USER_Decam_mag_r'][ind2]
+                ref['gsynth_i'][ind1] = ref1['USER_Decam_mag_i'][ind2]
+                ref['gsynth_z'][ind1] = ref1['USER_Decam_mag_z'][ind2]
+                ref['gsynth_y'][ind1] = ref1['USER_Decam_mag_Y'][ind2]
+                ref['gsynth_vr'][ind1] = ref1['USER_Decam_mag_VR'][ind2]
             elif refcat[i]=='2MASS-PSC':
                 ref['jmag'][ind1] = ref1['jmag'][ind2]
                 ref['e_jmag'][ind1] = ref1['e_jmag'][ind2]
