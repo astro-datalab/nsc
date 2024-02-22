@@ -469,7 +469,7 @@ if __name__ == "__main__":
                 partition = expstr['partition'][torun[nsub]].split("_")[0]
                 rootLogger.info("--Submit Processing Job for Exposure "+str(expstr['fluxfile'][torun[nsub]].split("/")[-1])+"--")
                 # -> Write exposure processing job script to file
-                job_name = 'nsc_meas_'+str(logtime)+'_'+str(nsub) #jsub, not jbsb!!!!!
+                job_name = 'nsc_meas_'+str(logtime)+'_'+str(jsub) #jsub, not jbsb!!!!!
                 job_file = write_jscript(job_name,jsub,partition,[cmd],outfiledir,"david.nidever@montana.edu")
                 # -> Submit exposure processing job to slurm queue
                 os.system("sbatch "+str(job_file))
