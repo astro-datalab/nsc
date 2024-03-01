@@ -12,7 +12,7 @@ setup(name='noaosourcecatalog',
       package_dir={'':'python'},
       package_data={'nsc': ['data/*','data/params/*','data/params/*/*']},
       scripts=['bin/nsc_instcal_calibrate','bin/nsc_instcal_calibrate_healpix','bin/nsc_instcal_combine',
-               'bin/nsc_archive_search'],
+               'bin/nsc_archive_search','bin/decam_archive_search','bin/decam_parse_archive_searc'],
       #py_modules=['nsc_instcal',''],
       requires=['numpy','astropy','scipy','dlnpyutils','sep','healpy','dustmaps','astroquery'],
       include_package_data=True

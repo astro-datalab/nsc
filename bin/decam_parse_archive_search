@@ -1,0 +1,116 @@
+#!/usr/bin/env python
+
+# Parse the archive search output and output a catalog
+
+import os
+import sys
+import numpy as np
+from astropy.io import fits
+from astropy.table import Table
+from dlnpyutils import utils as dln
+
+def parse_archive_file(filename):
+    archive = fits.getdata(filename,1)
+    n = len(archive)
+
+    # Fix URI
+    for i in range(n):
+        uri = archive['uri'][i]
+        uri = uri.replace('irods:///noao-tuc-z1/', '/net/mss1/archive/')
+        archive['uri'][i] = uri
+    # expnum for all archive rows
+    expnum = archive['uri'].copy()
+    for i in range(len(archive)):
+        rawbase = os.path.basename(archive['dtacqnam'][i])
+        if rawbase[-8:]=='.fits.fz': rawbase=rawbase[:-8]  # trim .fits.fz                                                                                                            
+        expnum[i] = rawbase[6:]
+
+    # Fix blank plver
+    bd, = np.where((archive['plver']=='') | (archive['plver']=='N/A'))
+    nbd = len(bd)
+    if nbd>0:
+        archive['plver'][bd] = 'V1.0.0'
+
+    # Get only images
+    gdim, = np.where((archive['proctype'] == 'InstCal') & (archive['prodtype'] == 'image'))
+    ngdim = len(gdim)
+    imstr = archive[gdim]
+
+    # Initialize the final output catalog
+    dt = np.dtype([('instrument',np.str,10),('base',np.str,100),('expnum',np.str,20),('rawname',np.str,100),('date_obs',np.str,50),('mjd_obs',np.float64),
+                   ('filter',np.str,50),('prop_id',np.str,50),('ra',np.float64),('dec',np.float64),('exposure',float),('release_date',np.str,50),
+                   ('plver',np.str,20),('proctype',np.str,20),('fluxfile',np.str,200),('maskfile',np.str,200),('wtfile',np.str,200)])
+    cat = np.zeros(ngdim,dtype=dt)
+    cat['instrument'] = 'c4d'
+    cat['fluxfile'] = imstr['uri']
+    # Copy over most of the columns
+    cols = ['date_obs','mjd_obs','filter','prop_id','ra','dec','exposure','release_date','plver','proctype']
+    for c in cols: cat[c] = imstr[c].copy()
+
+    # rawname and expnum
+    for i in range(ngdim):
+        rawbase = os.path.basename(imstr['dtacqnam'][i])
+        if rawbase[-8:]=='.fits.fz': rawbase=rawbase[:-8]  # trim .fits.fz
+        cat['rawname'][i] = rawbase
+        cat['expnum'][i] = rawbase[6:]
+        base = os.path.basename(cat['fluxfile'][i])
+        if base[-8:]=='.fits.fz': base=base[:-8]  # trim .fits.fz
+        cat['base'][i] = base
+
+    # match to mask and wt files
+
+
+    # mask file
+    mind, = np.where((archive['proctype'] == 'InstCal') & (archive['prodtype']=='dqmask'))
+    marchive = archive[mind]
+    mexpnum = expnum[mind].copy()
+    id = dln.strjoin(cat['expnum'],cat['plver'])
+    mid = dln.strjoin(mexpnum,marchive['plver'])
+    ind1,ind2 = dln.match(mid,id)
+    if len(ind1)>0:
+        cat['maskfile'][ind2] = marchive['uri'][ind1].copy()
+    # wt file
+    wind, = np.where((archive['proctype'] == 'InstCal') & (archive['prodtype']=='wtmap'))
+    warchive = archive[wind]
+    wexpnum = expnum[wind].copy()
+    id = dln.strjoin(cat['expnum'],cat['plver'])
+    wid = dln.strjoin(wexpnum,warchive['plver'])
+    ind1,ind2 = dln.match(wid,id)
+    if len(ind1)>0:
+        cat['wtfile'][ind2] = warchive['uri'][ind1].copy()
+
+    # Only keep images with flux, mask and wt files
+    gd, = np.where((cat['fluxfile'] != '') & (cat['maskfile'] != '') & (cat['wtfile'] != ''))
+    ngd = len(gd)
+    print(str(ngd)+' exposures out of '+str(len(cat))+' have flux/mask/wt files')
+    cat = cat[gd]
+
+    # Deal with duplicates??
+    nu = len(np.unique(cat['date_obs']))
+    ndup = len(cat)-nu
+    if ndup>0:
+        print('Dealing with '+str(ndup)+' duplicates')
+        indx = dln.create_index(cat['date_obs'])
+        bd, = np.where(indx['num']>1)
+        nbd = len(bd)
+        torem = np.zeros(np.sum(indx['num'][bd]-1),int)-1
+        cnt = 0
+        for i in range(nbd):
+            ind = indx['index'][indx['lo'][bd[i]]:indx['hi'][bd[i]]+1]
+            plver = cat['plver'][ind].copy()
+            bestind = np.flip(np.argsort(plver),axis=0)[0]
+            torem[cnt:cnt+len(ind)-1] = np.delete(ind,bestind)
+            cnt += len(ind)-1
+        cat = np.delete(cat,torem)
+    else:
+        print('There are no duplicates')
+
+    return cat
+
+if __name__ == "__main__":
+    filename = sys.argv[1]
+    outfile = sys.argv[2]
+    cat = parse_archive_file(filename)
+    if os.path.exists(outfile): os.remove(outfile)
+    print('Writing catalog to '+outfile)
+    Table(cat,copy=False).write(outfile)

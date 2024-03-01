@@ -1,0 +1,56 @@
+#!/bin/bash
+if [ "$#" -gt 0 ]; then
+  export FILE=${1}
+else
+  export FILE="decam_instcal_data"
+fi
+echo "Writing NOIRLAB Archive DECam Instcal search results to >>${FILE}<<"
+\rm ${FILE}.txt ${FILE}.fits ${FILE}.fits.gz >& /dev/null
+echo "Input password for dbreader:"
+read -s password
+export PGPASSWORD=${password}
+export PSQL="psql -h db.sdm.noao.edu -p 5432 -U dbreader -d metadata"
+# Get header line
+$PSQL -E  -c "select b.instrument,a.dtnsanam,a.dtacqnam, \
+                a.uri,b.prop_id,b.ra,b.dec,b.exposure,b.release_date,b.date_obs,b.filter, \
+                b.mjd_obs,b.plver,b.proctype,b.prodtype \
+                from edu_noao_nsa.data_product a, voi.siap b where a.data_product_id=b.fits_data_product_id limit 1;" | head -1  > ${FILE}.txt
+# Get the data
+# Date range input
+if [ "$#" -gt 1 ]; then
+  date1=${2}
+  # upper and lower dates
+  if [ "$#" -gt 2 ]; then
+    date2=${3}
+    echo "Selecting exposures with ${date1} <= DATE_OBS <= ${date2}"
+    $PSQL -E -t -c "select b.instrument,a.dtnsanam,a.dtacqnam, \
+                    a.uri,b.prop_id,b.ra,b.dec,b.exposure,b.release_date,b.date_obs,b.filter, \
+                    b.mjd_obs,b.plver,b.proctype,b.prodtype \
+                    from edu_noao_nsa.data_product a, voi.siap b where a.data_product_id=b.fits_data_product_id \
+                    and b.instrument = 'decam' and b.proctype = 'InstCal' and b.date_obs >= '${date1}' and b.date_obs <= '${date2}';" >> ${FILE}.txt
+  # Only lower dates
+  else
+    echo "Selecting exposures with DATE_OBS >= ${date1}"
+    $PSQL -E -t -c "select b.instrument,a.dtnsanam,a.dtacqnam, \
+                    a.uri,b.prop_id,b.ra,b.dec,b.exposure,b.release_date,b.date_obs,b.filter, \
+                    b.mjd_obs,b.plver,b.proctype,b.prodtype \
+                    from edu_noao_nsa.data_product a, voi.siap b where a.data_product_id=b.fits_data_product_id \
+                    and b.instrument = 'decam' and b.proctype = 'InstCal' and b.date_obs >= '${date1}';" >> ${FILE}.txt
+  fi
+# No date range input
+else
+  $PSQL -E -t -c "select b.instrument,a.dtnsanam,a.dtacqnam, \
+                  a.uri,b.prop_id,b.ra,b.dec,b.exposure,b.release_date,b.date_obs,b.filter, \
+                  b.mjd_obs,b.plver,b.proctype,b.prodtype \
+                  from edu_noao_nsa.data_product a, voi.siap b where a.data_product_id=b.fits_data_product_id \
+                  and b.instrument = 'decam' and b.proctype = 'InstCal';" >> ${FILE}.txt
+fi
+if [ -s ${FILE}.txt ]; then
+  python -c "from astropy.table import Table; dat=Table.read('${FILE}.txt',format='ascii',delimiter='|'); dat.write('${FILE}_all.fits')"
+  decam_parse_archive_search ${FILE}_all.fits ${FILE}.fits
+  gzip ${FILE}.fits
+  #\rm ${FILE}.txt
+  #\rm ${FILE}_all.fits
+else
+  echo "No ${FILE}.txt file"
+fi
