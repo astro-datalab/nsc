@@ -439,7 +439,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
      
     # Check for output file 
     if os.path.exists(outfile) == True and redo==False:
-        logger.info(outfile+' already exists and /redo not set.')
+        logger.info(outfile+' already exists and redo not set.')
         return
 
     # What instrument is this? 
@@ -1221,9 +1221,6 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
         logger.info('10sigma depth = %.2f mag' % depth10sig)
         expinfo['depth10sig'] = depth10sig 
         chinfo['depth10sig'] = depth10sig 
-
-
-    import pdb; pdb.set_trace()
         
     # Step 5. Write out the final catalogs and metadata 
     #-------------------------------------------------- 
