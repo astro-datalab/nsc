@@ -885,16 +885,6 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
                 temp['e_rp'] = 2.5*np.log10(1.0+ref1['e_frp'][ind2]/ref1['frp'][ind2])
                 ref[ind1] = temp
             elif refcat[i]=='GSYNTH-PHOT':
-                #ref['gsynth_gmag'][ind1] = ref1['Decam_mag_g'][ind2]
-                #ref['e_gsynth_gmag'][ind1] = 2.5*np.log10(1+ref1['Decam_flux_error_g'][ind2]/ref1['Decam_flux_g'][ind2])
-                #ref['gsynth_rmag'][ind1] = ref1['Decam_mag_r'][ind2]
-                #ref['e_gsynth_rmag'][ind1] = 2.5*np.log10(1+ref1['Decam_flux_error_r'][ind2]/ref1['Decam_flux_r'][ind2])
-                #ref['gsynth_imag'][ind1] = ref1['Decam_mag_i'][ind2]
-                #ref['e_gsynth_imag'][ind1] = 2.5*np.log10(1+ref1['Decam_flux_error_i'][ind2]/ref1['Decam_flux_i'][ind2])
-                #ref['gsynth_zmag'][ind1] = ref1['Decam_mag_z'][ind2]
-                #ref['e_gsynth_zmag'][ind1] = 2.5*np.log10(1+ref1['Decam_flux_error_z'][ind2]/ref1['Decam_flux_z'][ind2])
-                #ref['gsynth_ymag'][ind1] = ref1['Decam_mag_Y'][ind2]
-                #ref['e_gsynth_ymag'][ind1] = 2.5*np.log10(1+ref1['Decam_flux_error_Y'][ind2]/ref1['Decam_flux_Y'][ind2])
                 ref['gsynth_umag'][ind1] = ref1['USER_Decam_mag_u'][ind2]
                 ref['e_gsynth_umag'][ind1] = 2.5*np.log10(1+ref1['USER_Decam_flux_error_u'][ind2]/
                                                           ref1['USER_Decam_flux_u'][ind2])

@@ -1426,7 +1426,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     #return(ref1,ref2,mmags,mmags2)
 
 
-def calibrate_healpix(pix,version,nside=64,redo=False):
+def calibrate_healpix(pix,version,nside=64,redo=False,logger=None):
     """
     This program is a wrapper around NSC_INSTCAL_CALIBRATE
     for all exposures in the same region of the sky.
@@ -1464,6 +1464,8 @@ def calibrate_healpix(pix,version,nside=64,redo=False):
     if os.path.exists(tmpdir)==False:
         os.mkdir(tmpdir)
     t00 = time.time()
+    
+    
 
     # Load the list of exposures
     listfile = basedir+'/lists/nsc_calibrate_healpix_list.fits.gz'
@@ -1528,7 +1530,7 @@ def calibrate_healpix(pix,version,nside=64,redo=False):
     print('')
     ref = query.getrefdata(filters,cenra,cendec,radius)
 
-    # Loop over the exposures
+    # Loop over the exposures that have been transferred
     for i in range(nind):
         print('')
         print('---- EXPOSURE '+str(i+1)+' OF '+str(nind)+' ----')
@@ -1540,24 +1542,29 @@ def calibrate_healpix(pix,version,nside=64,redo=False):
         #expdir = dldir + expdir[lo+5:]
         print("expdir = ",expdir)
         # Unzip and untar the exposure repo
+        runexp = False
         if os.path.exists(expdir): # if exp.tar.gz,
             print("tar -xzf "+expdir+" -C "+"/".join(expdir.split("/")[:-1])+"/")
             os.system("tar -xzf "+expdir+" -C "+"/".join(expdir.split("/")[:-1])+"/")
+            runexp = True
         elif os.path.exists(expdir.split(".gz")[0]): # elif exp.tar, (already unzipped)
             print("tar -xf "+expdir.split(".gz")[0]+" -C "+"/".join(expdir.split("/")[:-1])+"/")
             os.system("tar -xf "+expdir.split(".gz")[0]+" -C "+"/".join(expdir.split("/")[:-1])+"/")
+            runexp = True
         elif os.path.exists(expdir.split(".tar.gz")[0]): # elif exp (aleady unzipped and untarred)
             print("exposure ",expdir," already untarred and unzipped")
+            runexp = True
         else: # else if not there,
             print("exposure directory does not exist!")
+            runexp = False
         # Calibrate the exposure
-        print("calibrate("+str(expdir.split(".tar.gz")[0])+",ref,redo="+str(redo)+",gsynthphot=True,psf=True)")
-        calibrate(expdir.split(".tar.gz")[0],ref,redo=redo,gsynthphot=True,psf=True)
-        # Re-tar and re-zip the exposure repo
-        print("tar -czf "+expdir+" "+expdir.split(".tar.gz")[0])
-        os.system("tar -czf "+expdir+" "+expdir.split(".tar.gz")[0])
-
-    print('')
+        if runexp:
+            print("calibrate("+str(expdir.split(".tar.gz")[0])+",ref,redo="+str(redo)+",gsynthphot=True,psf=True)")
+            calibrate(expdir.split(".tar.gz")[0],ref,redo=redo,gsynthphot=True,psf=True)
+            # Re-tar and re-zip the exposure repo
+            print("tar -czf "+expdir+" "+expdir.split(".tar.gz")[0])
+            os.system("tar -czf "+expdir+" "+expdir.split(".tar.gz")[0])
+        else: print("exposure can't be processed!")
     print('Total time = %.2f sec' % (time.time()-t00))
 
 
