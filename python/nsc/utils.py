@@ -67,7 +67,11 @@ def rootdirs():
         localdir = '/data0/'
     elif host.find('tempest') > -1:
         dldir = '/home/x25h971/'
-        mssdir = None
+        mssdir = '/net/mss1/'
+        localdir = '/tmp/'
+    elif host.find('rusty') > -1 or host.find('worker') > -1:
+        dldir = '/mnt/ceph/users/'
+        mssdir = '/net/mss1/'
         localdir = '/tmp/'
     else:
         raise ValueError(host+' UNKNOWN')
