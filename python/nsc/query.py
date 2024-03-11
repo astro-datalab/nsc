@@ -128,11 +128,14 @@ def local_query(cenra,cendec,radius,refcat,server,nside=32,silent=False,logger=N
                 ref[colname] = Column(ref[colname])
 
     # Do radius cut
-    dist = coords.sphdist(cenra,cendec,ref['ra'],ref['dec'])
-    if dist.ndim==2:
-        dist = dist.flatten()
-    gd, = np.where(dist <= radius)
-    ref = ref[gd]
+    if 'ra' in ref.colnames:
+        dist = coords.sphdist(cenra,cendec,ref['ra'],ref['dec'])
+        if dist.ndim==2:
+            dist = dist.flatten()
+        gd, = np.where(dist <= radius)
+        ref = ref[gd]
+    else:
+        print('ra not found')
 
     return ref
 
@@ -188,7 +191,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
         server = 'tempest'
     else:
         tempest = False
-    if 'worker' in host.lower():
+    if 'worker' in host.lower() or 'rusty' in host.lower():
         rusty = True
         server = 'rusty'
     else:
@@ -771,7 +774,10 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
         if refcat[i]=='GAIADR2' or refcat[i]=='GAIAEDR3':
             newcols +=['source','ra','ra_error','dec','dec_error','pmra','pmra_error','pmdec','pmdec_error','gmag','e_gmag','bp','e_bp','rp','e_rp'] 
         elif refcat[i]=='GSYNTH-PHOT':
-            newcols +=['gsynth_u','gsynth_g','gsynth_r','gsynth_i','gsynth_z','gsynth_y','gsynth_vr']
+            newcols +=['gsynth_umag','e_gsynth_umag','gsynth_gmag','e_gsynth_gmag',
+                       'gsynth_rmag','e_gsynth_rmag','gsynth_imag','e_gsynth_imag',
+                       'gsynth_zmag','e_gsynth_zmag','gsynth_ymag','e_gsynth_ymag',
+                       'gsynth_vrmag','e_gsynth_vrmag']
             #newcols +=['Decam_mag_g','Decam_mag_r','Decam_mag_i','Decam_mag_z','Decam_mag_Y','Decam_flux_g','Decam_flux_r','Decam_flux_i','Decam_flux_z','Decam_flux_Y','Decam_flux_error_g','Decam_flux_error_r','Decam_flux_error_i','Decam_flux_error_z','Decam_flux_error_Y']
         elif refcat[i]=='2MASS-PSC':
             newcols += ['jmag','e_jmag','hmag','e_hmag','kmag','e_kmag','qflg']
@@ -859,8 +865,11 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
         # Second and later
         else:
 
-            # Crossmatch
-            ind1,ind2,dist = coords.xmatch(ref['ra'],ref['dec'],Column(ref1['ra']),Column(ref1['dec']),dcr)
+            # Crossmatch            
+            if refcat[i]!='GSYNTH-PHOT':
+                ind1,ind2,dist = coords.xmatch(ref['ra'],ref['dec'],Column(ref1['ra']),Column(ref1['dec']),dcr)
+            else:
+                ind1,ind2 = dln.match(ref['source'],ref1['source_id'])
             if silent==False:
                 logger.info(str(nmatch)+' matches')
 
@@ -877,13 +886,27 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
                 temp['e_rp'] = 2.5*np.log10(1.0+ref1['e_frp'][ind2]/ref1['frp'][ind2])
                 ref[ind1] = temp
             elif refcat[i]=='GSYNTH-PHOT':
-                ref['gsynth_u'][ind1] = ref1['USER_Decam_mag_u'][ind2]
-                ref['gsynth_g'][ind1] = ref1['USER_Decam_mag_g'][ind2]
-                ref['gsynth_r'][ind1] = ref1['USER_Decam_mag_r'][ind2]
-                ref['gsynth_i'][ind1] = ref1['USER_Decam_mag_i'][ind2]
-                ref['gsynth_z'][ind1] = ref1['USER_Decam_mag_z'][ind2]
-                ref['gsynth_y'][ind1] = ref1['USER_Decam_mag_Y'][ind2]
-                ref['gsynth_vr'][ind1] = ref1['USER_Decam_mag_VR'][ind2]
+                ref['gsynth_umag'][ind1] = ref1['USER_Decam_mag_u'][ind2]
+                ref['e_gsynth_umag'][ind1] = 2.5*np.log10(1+ref1['USER_Decam_flux_error_u'][ind2]/
+                                                          ref1['USER_Decam_flux_u'][ind2])
+                ref['gsynth_gmag'][ind1] = ref1['USER_Decam_mag_g'][ind2]
+                ref['e_gsynth_gmag'][ind1] = 2.5*np.log10(1+ref1['USER_Decam_flux_error_g'][ind2]/
+                                                          ref1['USER_Decam_flux_g'][ind2])
+                ref['gsynth_rmag'][ind1] = ref1['USER_Decam_mag_r'][ind2]
+                ref['e_gsynth_rmag'][ind1] = 2.5*np.log10(1+ref1['USER_Decam_flux_error_r'][ind2]/
+                                                          ref1['USER_Decam_flux_r'][ind2])
+                ref['gsynth_imag'][ind1] = ref1['USER_Decam_mag_i'][ind2]
+                ref['e_gsynth_imag'][ind1] = 2.5*np.log10(1+ref1['USER_Decam_flux_error_i'][ind2]/
+                                                          ref1['USER_Decam_flux_i'][ind2])
+                ref['gsynth_zmag'][ind1] = ref1['USER_Decam_mag_z'][ind2]
+                ref['e_gsynth_zmag'][ind1] = 2.5*np.log10(1+ref1['USER_Decam_flux_error_z'][ind2]/
+                                                          ref1['USER_Decam_flux_z'][ind2])
+                ref['gsynth_ymag'][ind1] = ref1['USER_Decam_mag_Y'][ind2]
+                ref['e_gsynth_ymag'][ind1] = 2.5*np.log10(1+ref1['USER_Decam_flux_error_Y'][ind2]/
+                                                          ref1['USER_Decam_flux_Y'][ind2])
+                ref['gsynth_vrmag'][ind1] = ref1['USER_Decam_mag_VR'][ind2]
+                ref['e_gsynth_vrmag'][ind1] = 2.5*np.log10(1+ref1['USER_Decam_flux_error_VR'][ind2]/
+                                                           ref1['USER_Decam_flux_VR'][ind2])
             elif refcat[i]=='2MASS-PSC':
                 ref['jmag'][ind1] = ref1['jmag'][ind2]
                 ref['e_jmag'][ind1] = ref1['e_jmag'][ind2]
@@ -951,8 +974,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
                 ref['e_sage_45mag'][ind1] = ref1['e__4_5_'][ind2]
             else:
                 raise ValueError(refcat[i]+' NOT SUPPORTED')
- 
- 
+
         # Add leftover ones 
         if nmatch < len(ref1): 
             left1 = ref1.copy()

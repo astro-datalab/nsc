@@ -14,6 +14,7 @@ from dlnpyutils import utils as dln,coords
 from dustmaps.sfd import SFDQuery
 from scipy.optimize import curve_fit
 from scipy import stats
+import subprocess
 from . import utils,query,modelmag
 
 def fitzpterm(mstr,expinfo,chinfo):
@@ -114,7 +115,8 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
     suminfo = Table.read(sumfile,1)
     for n in suminfo.colnames: suminfo[n].name = n.lower()  # lowercase names
     allinstfilt = np.char.array(suminfo['instrument'].astype(str))+'-'+np.char.array(suminfo['filter'].astype(str))
-    gdfilt, = np.where((allinstfilt == instfilt) & (suminfo['nrefmatch'] > 10) & (suminfo['success'] == 1) & (suminfo['fwhm'] < 2.0)) 
+    gdfilt, = np.where((allinstfilt == instfilt) & (suminfo['nrefmatch'] > 10) &
+                       (suminfo['success'] == 1) & (suminfo['fwhm'] < 2.0)) 
     if len(gdfilt) == 0: 
         if silent==False:
             logger.info('No good '+instfilt+' exposures')
@@ -344,8 +346,32 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
      
     return expinfo,chinfo
 
+def loadheader(headfile):
+    """
+    Load header file
+    """
 
-def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=False,ncpu=1,logger=None):
+    headlines = dln.readlines(headfile)
+    lo = dln.grep(headlines,'^SIMPLE  =',index=True)
+    begind = dln.grep(headlines,'^XTENSION',index=True)
+    begind = lo+begind
+    endind = dln.grep(headlines,'^END',index=True)
+    headdict = {}
+    # Loop over the extendions
+    for i in range(len(begind)):
+        lines = headlines[begind[i]:endind[i]+1]
+        if i==0:
+            headdict['main'] = lines
+        else:
+            numind = dln.grep(lines,'^CCDNUM',index=True)
+            line1 = lines[numind[0]]
+            ccdnum = int(line1.split('/')[0].split('=')[1])
+            extind = dln.grep(lines,'^EXTNUM',index=True)
+            headdict[ccdnum] = lines
+    return headdict
+    
+def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
+              saveref=False,ncpu=1,photmethod=None,logger=None):
     """
     Perform photometry and astrometric calibration of an NSC exposure using
     external catalogs.
@@ -353,7 +379,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     Parameters
     ----------
     expdir : str
-       The absolute path to the NSCexposure directory.
+       The absolute path to the NSC exposure directory.
     inpref : astropy table, optional
        Input reference catalog.
     eqnfile : str, optional
@@ -377,16 +403,16 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     Example
     -------
 
-    calibreate(expdir,inpref,eqnfile)
+    calibrate(expdir,inpref,eqnfile)
 
 
     Written by D. Nidever in Nov 2017
     Translated to Python by D. Nidever, April 2022
     """
-
+    
     # Calibrate catalogs for one exposure
     dldir,mssdir,localdir = utils.rootdirs()
-     
+    
     # Make sure the directory exists 
     if os.path.exists(expdir) == False:
         raise ValueError(expdir+' NOT FOUND')
@@ -403,13 +429,17 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     lo = expdir.find('nsc/instcal/') 
     dum = expdir[lo+12:] 
     version = dum[0:dum.find('/')]
-     
+    night = expdir.split('/')[-2]
+
+    if photmethod is None:
+        photmethod = 'gaiaxpsynth'
+    
     logger.info('Calibrate catalogs for exposure '+base+' in '+expdir)
     logger.info('Version = '+version)
      
     # Check for output file 
     if os.path.exists(outfile) == True and redo==False:
-        logger.info(outfile+' already exists and /redo not set.')
+        logger.info(outfile+' already exists and redo not set.')
         return
 
     # What instrument is this? 
@@ -419,7 +449,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     if expdir.find('/ksb/') > -1:
         instrument = 'ksb' 
     logger.info('This is a '+instrument+' exposure')
-     
+    
     # Model magnitude equation file
     if eqnfile is None:
         eqnfile = dldir+'dnidever/nsc/instcal/'+version+'/config/modelmag_equations.txt' 
@@ -428,26 +458,46 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         raise ValueError(eqnfile+' NOT FOUND')
     eqnlines = dln.readlines(eqnfile)
     for l in eqnlines: logger.info(l)
-     
-     
+
     # Step 1. Read in the catalogs 
     #----------------------------- 
     logger.info('')
     logger.info('Step 1. Read in the catalogs')
     logger.info('-----------------------------')
-    catfiles = []
-    catfiles1 = glob(expdir+'/'+base+'_[1-9].fits')
-    if len(catfiles1) > 0:
-        catfiles += catfiles1
-    catfiles2 = glob(expdir+'/'+base+'_[0-9][0-9].fits') 
-    if len(catfiles2) > 0:
-        catfiles += catfiles2
-    ncatfiles = len(catfiles) 
-    if ncatfiles == 0:
-        raise ValueError('No catalog files found')
-    nchips = ncatfiles
-    logger.info(str(ncatfiles)+' catalogs found')
-     
+    if expdir.endswith('.tar.gz'):
+        logger.info('tar file')
+        exposure = os.path.basename(expdir).replace('.tar.gz','')
+        result = subprocess.run(['tar','tvf',expdir],capture_output=True)
+        res = result.stdout
+        if type(res) is bytes: res = res.decode()
+        res = res.split('\n')
+        tarfiles = [d.split()[-1] for d in res if d!='']
+        fitsfiles = [f for f in tarfiles if f.find('.fits')>-1]
+        nchips = len(fitsfiles)
+        logfile = exposure+'.log'
+        logfiletest = logfile in ' '.join(tarfiles)
+    else:
+        catfiles = []
+        catfiles1 = glob(expdir+'/'+base+'_[1-9].fits')
+        if len(catfiles1) > 0:
+            catfiles += catfiles1
+        catfiles2 = glob(expdir+'/'+base+'_[0-9][0-9].fits') 
+        if len(catfiles2) > 0:
+            catfiles += catfiles2
+        catfiles.sort()
+        ncatfiles = len(catfiles)
+        if ncatfiles == 0:
+            raise ValueError('No catalog files found')
+        nchips = ncatfiles
+        # check log file
+        logfile = os.path.join(*[expdir,base+'.log'])
+        logfiletest = os.path.exists(logfile)
+    logger.info(str(nchips)+' catalogs found')
+    
+    if instrument=='c4d' and (nchips<59 or logfiletest==False):
+        print('problems with the files')
+        return
+    
     # Check that this isn't a problematic Mosaic3 exposure 
     if expdir.find('/k4m/') > -1:
         dum = fits.getdata(catfiles[0],1) 
@@ -460,12 +510,36 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         if wcscal is not None and str(wcscal) == 'Failed': 
             logger.info('This is a Mosaic3 exposure with failed WCS calibration')
             return 
-     
+
+    # v4+ use separate header file
+    if version >= 'v4':
+        headfile = os.path.join(expdir,base+'.hdr')
+        if os.path.exists(headfile)==False:
+            headfile = os.path.join(dldir,'dnidever','nsc','instcal',version,
+                                    'header',instrument,night,base+'.hdr')
+            if os.path.exists(headfile)==False:
+                raise ValueError(headfile+' not found')
+        headdict = loadheader(headfile)
+    else:
+        headdict = None
+
+
+    if version < 'v4':
+        racol = 'alpha_j2000'
+        deccol = 'delta_j2000'
+        xcol = 'x_image'
+        ycol = 'y_image'
+    else:
+        racol = 'rapsf'
+        deccol = 'decpsf'
+        xcol = 'xpsf'
+        ycol = 'ypsf'
+
     # Figure out the number of sources 
     ncat = 0 
     ncatarr = np.zeros(ncatfiles,int) 
     for i in range(ncatfiles):
-        head = fits.getheader(catfiles[i],2)
+        head = fits.getheader(catfiles[i],1)
         ncatarr[i] = head['NAXIS2']
     ncat = int(np.sum(ncatarr)) 
     logger.info(str(ncat)+' total sources')
@@ -474,17 +548,18 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         return 
     # Create structure, exten=1 has header now 
     ind, = np.where(ncatarr > 0)
-    cat1 = fits.getdata(catfiles[ind[0]],2)
+    cat1 = fits.getdata(catfiles[ind[0]],1)
+    #cat1 = fits.getdata(catfiles[ind[0]],2)    
     cdt = cat1.dtype.descr
     cdt += [('ccdnum',int),('ebv',float),('ra',float),('dec',float),('raerr',float),
-            ('decerr',float),('cmag',float),('cerr',float),('sourceid',(np.str,50)),
-            ('filter',(np.str,50)),('mjd',float)]
+            ('decerr',float),('cmag',float),('cerr',float),('sourceid',(str,50)),
+            ('filter',(str,50)),('mjd',float)]
     cat = np.zeros(ncat,dtype=np.dtype(cdt))
     cat = Table(cat)
     for c in cat.colnames:
         cat[c].name = c.lower()
     # Start the chips summary structure
-    dt = [('expdir',(np.str,300)),('instrument',(np.str,10)),('filename',(np.str,300)),('measfile',(np.str,300)),
+    dt = [('expdir',(str,300)),('instrument',(str,10)),('filename',(str,300)),('measfile',(str,300)),
           ('ccdnum',int),('nsources',int),('nmeas',int),('cenra',float),('cendec',float),('ngaiamatch',int),
           ('ngoodgaiamatch',int),('rarms',float),('rastderr',float),('racoef',(float,4)),('decrms',float),
           ('decstderr',float),('deccoef',(float,4)),('vra',(float,4)),('vdec',(float,4)),
@@ -504,8 +579,10 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     for i in range(ncatfiles):
         dum = os.path.splitext(os.path.basename(catfiles[i]))[0].split('_')
         ccdnum = int(dum[-1])
-        hd = fits.getheader(catfiles[i],2)
-        cat1 = Table.read(catfiles[i],2)
+        hd = fits.getheader(catfiles[i],1)
+        cat1 = Table.read(catfiles[i],1)
+        #hd = fits.getheader(catfiles[i],2)        
+        #cat1 = Table.read(catfiles[i],2)
         for c in cat1.colnames:
             cat1[c].name = c.lower()
         ncat1 = hd['naxis2']   # handles empty catalogs 
@@ -519,10 +596,14 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         #ncat1 = n_elements(cat1) 
         chinfo['filename'][i] = catfiles[i] 
         chinfo['ccdnum'][i] = ccdnum 
-        chinfo['nsources'][i] = ncat1 
+        chinfo['nsources'][i] = ncat1
         # Get the chip corners
-        dum = fits.getdata(catfiles[i],1)
-        hd1 = fits.Header.fromstring('\n'.join(dum[0][0]),sep='\n')
+        if version < 'v4':
+            dum = fits.getdata(catfiles[i],1)
+            hd1 = fits.Header.fromstring('\n'.join(dum[0][0]),sep='\n')
+        else:
+            dum = headdict[int(ccdnum)]
+            hd1 = fits.Header.fromstring('\n'.join(dum),sep='\n')
         nx = hd1['NAXIS1']
         ny = hd1['NAXIS2']
         try:
@@ -544,25 +625,25 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
             for n in cat1.colnames:
                 temp[n] = cat1[n]
             #STRUCT_ASSIGN,cat1,temp,/nozero 
-            temp['ccdnum'] = ccdnum 
+            temp['ccdnum'] = ccdnum
             temp['ra'] = cat1['alpha_j2000']  # add these here in case the astrometric correction fails later on 
-            temp['dec'] = cat1['delta_j2000'] 
+            temp['dec'] = cat1['delta_j2000']
             # Add coordinate uncertainties 
             #   sigma = 0.644*FWHM/SNR 
             #   SNR = 1.087/magerr 
             snr = 1.087/temp['magerr_auto']
             bderr, = np.where((temp['magerr_auto'] > 10) & (temp['magerr_iso'] < 10))
-            if len(bderr) > 0 : 
+            if len(bderr) > 0: 
                 snr[bderr] = 1.087/temp[bderr]['magerr_iso']
             bderr, = np.where((temp['magerr_auto'] > 10) & (temp['magerr_iso'] > 10))
-            if len(bderr) > 0 : 
+            if len(bderr) > 0: 
                 snr[bderr] = 1 
             coorderr = 0.664*(temp['fwhm_world']*3600)/snr 
             temp['raerr'] = coorderr 
             temp['decerr'] = coorderr 
             # Stuff into main structure 
-            cat[cnt:cnt+ncat1] = temp 
-            cnt += ncat1 
+            cat[cnt:cnt+ncat1] = temp
+            cnt += ncat1
             cenra = np.mean(dln.minmax(cat1['alpha_j2000'])) 
             # Wrapping around RA=0 
             if dln.valrange(cat1['alpha_j2000']) > 100: 
@@ -579,6 +660,9 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
             chinfo['cenra'][i] = cenra 
             chinfo['cendec'][i] = np.mean(dln.minmax(cat1['delta_j2000'])) 
 
+    # Sort by ccdnum
+    chinfo.sort('ccdnum')
+            
     # Exposure level values 
     gdchip, = np.where((chinfo['nsources'] > 0) & (chinfo['cenra'] < 400))
     if len(gdchip) == 0: 
@@ -623,6 +707,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     #glactc,cenra,cendec,2000.0,glon,glat,1,/deg 
     logger.info('GLON = %.5f' % glon)
     logger.info('GLAT = %.5f' % glat)
+
+    
     # Number of good sources 
     goodsources, = np.where((cat['imaflags_iso']==0) & (~((cat['flags']& 8)>0)) &
                             (~((cat['flags']&16)>0)) & (cat['mag_auto'] < 50))
@@ -634,11 +720,12 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     medfwhm = np.median(cat['fwhm_world'][gdcat]*3600.) 
     logger.info('FWHM = %.2f arcsec' % medfwhm)
          
-    # Load the logfile and get absolute flux filename 
+    # Load the logfile and get absolute flux filename
     loglines = dln.readlines(expdir+'/'+base+'.log')
-    ind = dln.grep(loglines,'Step #2: Copying InstCal images from mass store archive',index=True)
+    #ind = dln.grep(loglines,'Step #2: Copying InstCal images from mass store archive',index=True)
+    ind = dln.grep(loglines,'Copying InstCal images',index=True)
     fline = loglines[ind[0]+1] 
-    lo = fline.find('/archive') 
+    lo = fline.find('/archive')
     # make sure the mss1 directory is correct for this server 
     fluxfile = mssdir+str(fline[lo+1:]) 
     wline = loglines[ind[0]+2] 
@@ -648,11 +735,16 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     lo = mline.find('/archive') 
     maskfile = mssdir+str(mline[lo+1:]) 
          
-    # Load the meta-data from the original header 
-    #READLINE,expdir+'/'+base+'.head',head
-    head = fits.getheader(fluxfile,0)
+    # Load the meta-data from the original header
+    if headdict is None:
+        #READLINE,expdir+'/'+base+'.head',head
+        head = fits.getheader(fluxfile,0)
+    else:
+        dum = headdict['main']
+        head = fits.Header.fromstring('\n'.join(dum),sep='\n')        
     filterlong = head.get('filter')
     if filterlong is None:
+        raise ValueError('no filter in header')
         dum = fits.getdata(catfiles[0],1)
         hd1 = dum['field_header_card']
         filterlong = str(hd1.get('filter'))
@@ -676,6 +768,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         expnum = boknight+boknum  # concatenate the two numbers 
     exptime = head.get('exptime')
     if exptime is None:
+        raise ValueError('no exptime in header')
         dum = fits.getdata(catfiles[0],1)
         hd1 = dum['field_header_card']
         exptime = hd1['exptime']
@@ -687,16 +780,16 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     logger.info('FILTER = '+filt)
     logger.info('EXPTIME = %.2f sec.' % exptime)
     logger.info('MJD = %.4f' % mjd)
-
+    
     # Set some catalog values 
     cat['filter'] = filt
     cat['mjd'] = mjd 
     cat['sourceid'] = instrument+'.'+str(expnum)+'.'+np.char.array(cat['ccdnum'].astype(str))+'.'+np.char.array(cat['number'].astype(str))
          
-    # Start the exposure-level structure
-    edt = [('file',(np.str,300)),('wtfile',(np.str,300)),('maskfile',(np.str,300)),('instrument',(np.str,10)),
-           ('base',(np.str,100)),('expnum',int),('ra',float),('dec',float),('dateobs',(np.str,50)),('mjd',float),
-           ('filter',(np.str,50)),('exptime',float),('airmass',float),('wcscal',(np.str,50)),('nsources',int),
+    # Start the exposure-level table
+    edt = [('file',(str,300)),('wtfile',(str,300)),('maskfile',(str,300)),('instrument',(str,10)),
+           ('base',(str,100)),('expnum',int),('ra',float),('dec',float),('dateobs',(str,50)),('mjd',float),
+           ('filter',(str,50)),('exptime',float),('airmass',float),('wcscal',(str,50)),('nsources',int),
            ('ngoodsources',int),('nmeas',int),('fwhm',float),('nchips',int),('rarms',float),('decrms',float),
            ('ebv',float),('ngaiamatch',int),('ngoodgaiamatch',int),('zptype',int),('zpterm',float),('zptermerr',float),
            ('zptermsig',float),('zpspatialvar_rms',float),('zpspatialvar_range',float),('zpspatialvar_nccd',int),
@@ -729,7 +822,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     if wcscal is None:
         wcscal = 'NAN' 
     expinfo['wcscal'] = wcscal 
-         
+    
     # Step 2. Load the reference catalogs 
     #------------------------------------ 
     logger.info('')
@@ -739,7 +832,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     # Getting reference catalogs 
     if inpref is None: 
         # Search radius 
-        radius = 1.1 * np.sqrt( (0.5*rarange)**2 + (0.5*decrange)**2 ) 
+        radius = 1.1 * np.sqrt( (0.5*rarange)**2 + (0.5*decrange)**2 )
         ref = query.getrefdata(instrument+'-'+filt,cenra,cendec,radius) 
         if len(ref) == 0: 
             logger.info('No Reference Data')
@@ -748,22 +841,21 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     else: 
         logger.info('Reference catalogs input')
         if rawrap == False: 
-            gdref, = np.where((inpref['ra'] >= np.min(cat['alpha_j2000'])-0.01) & 
-                              (inpref['ra'] <= np.max(cat['alpha_j2000'])+0.01) &
-                              (inpref['dec'] >= np.min(cat['delta_j2000'])-0.01) & 
-                              (inpref['dec'] <= np.max(cat['delta_j2000'])+0.01))
+            gdref, = np.where((inpref['ra'] >= np.min(cat[racol])-0.01) & 
+                              (inpref['ra'] <= np.max(cat[racol])+0.01) &
+                              (inpref['dec'] >= np.min(cat[deccol])-0.01) & 
+                              (inpref['dec'] <= np.max(cat[deccol])+0.01))
         else: 
-            ra = cat['alpha_j2000']
+            ra = cat[racol]
             bdra, = np.where(ra > 180) 
             if len(bdra) > 0 : 
                 ra[bdra]-=360 
             gdref, = np.where((inpref['ra'] <= np.max(ra)-0.01) & 
                               (inpref['ra'] >= np.min(ra+360)-0.01) &
-                              (inpref['dec'] >= np.min(cat['delta_j2000'])-0.01) & 
-                              (inpref['dec'] <= np.max(cat['delta_j2000'])+0.01))
+                              (inpref['dec'] >= np.min(cat[deccol])-0.01) & 
+                              (inpref['dec'] <= np.max(cat[deccol])+0.01))
         ref = inpref[gdref] 
         logger.info(str(ngdref)+' reference stars in our region')
-         
          
     # Step 3. Astrometric calibration 
     #---------------------------------- 
@@ -773,17 +865,22 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     logger.info('--------------------------------') 
     # Get reference catalog with Gaia values 
     gdgaia, = np.where(ref['source'] > 0) 
-    gaia = ref[gdgaia] 
-    # Match everything to Gaia at once, this is much faster! 
-    ind1,ind2,dist = coords.xmatch(gaia['ra'],gaia['dec'],cat['alpha_j2000'],cat['delta_j2000'],1.0)
+    gaia = ref[gdgaia]
+    # Match everything to Gaia at once, this is much faster!
+    gdcat, = np.where(np.isfinite(cat[racol]) & np.isfinite(cat[deccol]))
+    if len(gdcat)==0:
+        logger.info('No catalog stars with good PSF coordinates')
+        return
+    ind1,ind2,dist = coords.xmatch(gaia['ra'],gaia['dec'],cat[racol][gdcat],cat[deccol][gdcat],1.0)
     ngmatch = len(ind1)
     if ngmatch == 0: 
         logger.info('No gaia matches')
         return 
-    allgaiaind = np.zeros(ncat,int)-1 
-    allgaiaind[ind2] = ind1 
+    allgaiaind = np.zeros(ncat,int)-1
+    allgaiaind[gdcat[ind2]] = ind1 
     allgaiadist = np.zeros(ncat,float)+999999. 
-    allgaiadist[ind2] = coords.sphdist(gaia['ra'][ind1],gaia['dec'][ind1],cat['alpha_j2000'][ind2],cat['delta_j2000'][ind2])*3600 
+    allgaiadist[gdcat[ind2]] = coords.sphdist(gaia['ra'][ind1],gaia['dec'][ind1],
+                                              cat[racol][gdcat[ind2]],cat[deccol][gdcat[ind2]])*3600 
     # CCD loop 
     for i in range(nchips): 
         if chinfo['nsources'][i]==0: 
@@ -808,12 +905,12 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         #gaia1b = gaia[ind1] 
         #cat1b = cat1[ind2] 
         gaia1b = gaia[gaiaind1[gmatch]] 
-        cat1b = cat1[gmatch] 
+        cat1b = cat1[gmatch]
         # Apply quality cuts 
         #  no bad CP flags 
         #  no SE truncated or incomplete data flags 
         #  must have good photometry
-        if 'pmra' in gaia1b and 'pmdec' in gaia1b:  # we have proper motion information 
+        if 'pmra' in gaia1b.colnames and 'pmdec' in gaia1b.colnames:  # we have proper motion information 
             qcuts1, = np.where((cat1b['imaflags_iso'] == 0) & (~((cat1b['flags'] & 8) > 0)) & (~((cat1b['flags'] & 16) > 0)) & 
                                (cat1b['mag_auto'] < 50) & np.isfinite(gaia1b['pmra']) & np.isfinite(gaia1b['pmdec']))
         else:
@@ -836,7 +933,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         # https://www.cosmos.esa.int/web/gaia/earlydr3#:~:text=The%20reference%20epoch%20for%20Gaia,full%20Gaia%20DR3)%20is%20J2016.
         # The reference epoch for Gaia DR3 (both Gaia EDR3 and the full Gaia DR3) is J2016.0.
 
-        if 'PMRA' in gaia2.colnames and 'PMDEC' in gaia2.colnames:
+        if 'pmra' in gaia2.colnames and 'pmdec' in gaia2.colnames:
             #gaiamjd = 57206.0   # 7/3/2015, J2015.5
             gaiamjd = 57388.0   # 1/1/2016, J2016.0, EDR3, DR3
             delt = (mjd-gaiamjd)/365.242170 # convert to years 
@@ -846,17 +943,17 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         else: 
             gra_epoch = gaia2['ra']
             gdec_epoch = gaia2['dec'] 
-             
+
         # Rotate to coordinates relative to the center of the field 
         #ROTSPHCEN,gaia2.ra,gaia2.dec,chinfo[i].cenra,chinfo[i].cendec,gaialon,gaialat,/gnomic 
         gaialon,gaialat = coords.rotsphcen(gra_epoch,gdec_epoch,chinfo['cenra'][i],chinfo['cendec'][i],gnomic=True)
-        lon1,lat1 = coords.rotsphcen(cat2['alpha_j2000'],cat2['delta_j2000'],chinfo['cenra'][i],chinfo['cendec'][i],gnomic=True)
+        lon1,lat1 = coords.rotsphcen(cat2[racol],cat2[deccol],chinfo['cenra'][i],chinfo['cendec'][i],gnomic=True)
         # ---- Fit RA as function of RA/DEC ---- 
         londiff = gaialon-lon1 
         err = None
-        if 'RA_ERROR' in gaia2.colnames:
+        if 'ra_error' in gaia2.colnames:
             err = np.sqrt(gaia2['ra_error']**2 + cat2['raerr']**2) 
-        if 'RA_ERROR' not in gaia2.colnames and 'E_RA_ICRS' in gaia2.colnames:
+        if 'ra_error' not in gaia2.colnames and 'e_ra_icrs' in gaia2.colnames:
             err = np.sqrt(gaia2['e_ra_icrs']**2 + cat2['raerr']**2) 
         if err is None:
             err = cat2['raerr']
@@ -869,7 +966,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
             npars = 1 
         initpars = np.zeros(npars,float) 
         initpars[0] = np.median([londiff]) 
-        racoef,racov = curve_fit(utils.func_poly2d_wrap,[lon1[gdlon],lat1[gdlon]],londiff[gdlon],sigma=err[gdlon],p0=initpars)
+        racoef,racov = curve_fit(utils.func_poly2d_wrap,[lon1[gdlon],lat1[gdlon]],
+                                 londiff[gdlon],sigma=err[gdlon],p0=initpars)
         yfitall = utils.func_poly2d(lon1,lat1,*racoef)
         rarms1 = dln.mad((londiff[gdlon]-yfitall[gdlon])*3600.) 
         rastderr = rarms1/np.sqrt(len(gdlon))
@@ -886,9 +984,9 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         # ---- Fit DEC as function of RA/DEC ----- 
         latdiff = gaialat-lat1 
         err = None
-        if 'DEC_ERROR' in gaia2.colnames: 
-            err = sqrt(gaia2['dec_error']**2 + cat2['decerr']**2) 
-        if 'DEC_ERROR' not in gaia2.colnames and 'E_DEC_ICRS' in gaia2.colnames:
+        if 'dec_error' in gaia2.colnames: 
+            err = np.sqrt(gaia2['dec_error']**2 + cat2['decerr']**2) 
+        if 'dec_error' not in gaia2.colnames and 'e_dec_icrs' in gaia2.colnames:
             err = np.sqrt(gaia2['e_de_icrs']**2 + cat2['decerr']**2) 
         if err is None: 
             err = cat2['decerr']
@@ -901,7 +999,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
             npars = 1 
         initpars = np.zeros(npars,float) 
         initpars[0] = np.median(latdiff) 
-        deccoef,deccov = curve_fit(utils.func_poly2d_wrap,[lon1[gdlat],lat1[gdlat]],latdiff[gdlat],sigma=err[gdlat],p0=initpars)
+        deccoef,deccov = curve_fit(utils.func_poly2d_wrap,[lon1[gdlat],lat1[gdlat]],
+                                   latdiff[gdlat],sigma=err[gdlat],p0=initpars)
         yfitall = utils.func_poly2d(lon1,lat1,*deccoef)
         decrms1 = dln.mad((latdiff[gdlat]-yfitall[gdlat])*3600.) 
         decstderr = decrms1/np.sqrt(len(gdlat))
@@ -915,7 +1014,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         logger.info('  CCDNUM=%3d  NSOURCES=%5d  %5d/%5d GAIA matches  RMS(RA/DEC)=%7.4f/%7.4f STDERR(RA/DEC)=%7.4f/%7.4f arcsec' % 
                     (chinfo['ccdnum'][i],nchmatch,len(gmatch),len(qcuts1),rarms,decrms,rastderr,decstderr))
         # Apply to all sources 
-        lon,lat = coords.rotsphcen(cat1['alpha_j2000'],cat1['delta_j2000'],chinfo['cenra'][i],chinfo['cendec'][i],gnomic=True)
+        lon,lat = coords.rotsphcen(cat1[racol],cat1[deccol],chinfo['cenra'][i],chinfo['cendec'][i],gnomic=True)
         lon2 = lon + utils.func_poly2d(lon,lat,*racoef)
         lat2 = lat + utils.func_poly2d(lon,lat,*deccoef) 
         ra2,dec2 = coords.rotsphcen(lon2,lat2,chinfo['cenra'][i],chinfo['cendec'][i],reverse=True,gnomic=True)
@@ -935,7 +1034,10 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         chinfo['decstderr'][i] = decstderr 
         chinfo['deccoef'][i] = deccoef 
 
-                 
+    # DO WE WANT TO USE THE SOURCE EXTRACTOR OF DAOPHOT COORDINATES
+    # AS THE DEFAULT RA/DEC???
+    # don't have daophot coordinates for all the sources, why?
+        
     # Get reddening
     coo = SkyCoord(ra=cat['ra'],dec=cat['dec'],unit='deg')
     sfd = SFDQuery()
@@ -951,8 +1053,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     #expinfo['gaianmatch'] = median(chinfo['gaianmatch']) 
     expinfo['ngaiamatch'] = np.sum(chinfo['ngaiamatch']) 
     expinfo['ngoodgaiamatch'] = np.sum(chinfo['ngoodgaiamatch']) 
-                 
-                 
+    
     # Step 4. Photometric calibration 
     #-------------------------------- 
     logger.info('')
@@ -962,41 +1063,85 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
                  
     # Now crossmatch with our catalog 
     dcr = 1.0
-    ind1,ind2,dist = coords.xmatch(ref['ra'],ref['dec'],cat['ra'],cat['dec'],dcr)
+    gdcat, = np.where(np.isfinite(cat['ra']) & np.isfinite(cat['dec']))
+    ind1,ind2,dist = coords.xmatch(ref['ra'],ref['dec'],cat['ra'][gdcat],cat['dec'][gdcat],dcr)
     nmatch = len(ind1)
     logger.info(str(nmatch)+' matches to reference catalog')
     if nmatch == 0: 
         logger.info('No matches to reference catalog')
-        goto,ENDBOMB 
-    ref1 = ref[ind1] 
-    cat1 = cat[ind2] 
+        return
+    ref1 = ref[ind1]
+    cat1 = cat[gdcat[ind2]]
+    # Use Gaia XP synthetic photometry
     # Get the model magnitudes 
     mmags = modelmag.modelmag(ref1,instfilt,cendec,eqnfile) 
     if len(mmags) == 1 and mmags[0] < -1000: 
         print('No good model mags')
-        return 
-    # Get the good sources 
-    gdcat, = np.where((cat1['imaflags_iso'] == 0) & (~((cat1['flags'] & 8) > 0)) & (~((cat1['flags'] & 16) > 0)) &
-                      (cat1['mag_auto'] < 50) &  (cat1['magerr_auto'] < 0.05) & (cat1['class_star'] > 0.8) &
-                      (cat1['fwhm_world']*3600 < 2*medfwhm) & (mmags[:,0] < 50) & (mmags[:,1] < 5))
-    #  if the seeing is bad then class_star sometimes doens't work well 
-    if medfwhm > 1.8 and len(gdcat) < 100:
+        return
+    # Using model magnitudes
+    if photmethod=='modelmag':
+        # Get the good sources 
         gdcat, = np.where((cat1['imaflags_iso'] == 0) & (~((cat1['flags'] & 8) > 0)) & (~((cat1['flags'] & 16) > 0)) &
-                          (cat1['mag_auto'] < 50) &  (cat1['magerr_auto'] < 0.05) & 
+                          (cat1['mag_auto'] < 50) &  (cat1['magerr_auto'] < 0.05) & (cat1['class_star'] > 0.8) &
                           (cat1['fwhm_world']*3600 < 2*medfwhm) & (mmags[:,0] < 50) & (mmags[:,1] < 5))
-    if len(gdcat) > 0: 
-        ref2 = ref1[gdcat] 
-        mmags2 = mmags[gdcat,:] 
-        cat2 = cat1[gdcat] 
-        # Matched structure 
-        mag2 = cat2['mag_auto'] + 2.5*np.log10(exptime)   # correct for the exposure time 
-        mstr = {'col':mmags2[:,2],'mag':mag2,'model':mmags2[:,0],'err':mmags2[:,1],'ccdnum':cat2['ccdnum']} 
-        # Measure the zero-point
-        expinfo,chinfo = fitzpterm(mstr,expinfo,chinfo)
-        expinfo['zptype'] = 1 
+        #  if the seeing is bad then class_star sometimes doesn't work well 
+        if medfwhm > 1.8 and len(gdcat) < 100:
+            gdcat, = np.where((cat1['imaflags_iso'] == 0) & (~((cat1['flags'] & 8) > 0)) & (~((cat1['flags'] & 16) > 0)) &
+                              (cat1['mag_auto'] < 50) &  (cat1['magerr_auto'] < 0.05) & 
+                              (cat1['fwhm_world']*3600 < 2*medfwhm) & (mmags[:,0] < 50) & (mmags[:,1] < 5))
+        if len(gdcat) > 0: 
+            ref2 = ref1[gdcat] 
+            mmags2 = mmags[gdcat,:] 
+            cat2 = cat1[gdcat]
+            # Matched structure
+            mag2 = cat2['mag_auto'] + 2.5*np.log10(exptime)   # correct for the exposure time
+            mstr = {'col':mmags2[:,2],'mag':mag2,'model':mmags2[:,0],
+                    'err':mmags2[:,1],'ccdnum':cat2['ccdnum']}
+            # Measure the zero-point
+            expinfo,chinfo = fitzpterm(mstr,expinfo,chinfo)
+            expinfo['zptype'] = 1
+        else:
+            logger.info('No good reference sources')
+
+    # Using Gaia XP synthetic photometry
+    elif photmethod=='gaiaxpsynth':
+        refmagcol = 'gsynth_'+filt.lower()+'mag'
+        referrcol = 'e_gsynth_'+filt.lower()+'mag'
+        # Get the good sources 
+        gdcat, = np.where((cat1['imaflags_iso'] == 0) & (~((cat1['flags'] & 8) > 0)) &
+                          (~((cat1['flags'] & 16) > 0)) & (cat1['magpsf'] < 50) &
+                          (cat1['errpsf'] < 0.05) & (cat1['class_star'] > 0.8) &
+                          (cat1['fwhm_world']*3600 < 2*medfwhm) &
+                          (np.abs(cat1['sharp']) < 1) & (cat1['chi']<5) &
+                          (ref1['bp'] > 0) & (ref1['bp'] < 50) &
+                          (ref1['rp'] > 0) & (ref1['rp'] < 50) &                          
+                          (ref1[refmagcol] > 0) & (ref1[refmagcol] < 50))
+        #  if the seeing is bad then class_star sometimes doesn't work well 
+        if medfwhm > 1.8 and len(gdcat) < 100:
+            gdcat, = np.where((cat1['imaflags_iso'] == 0) & (~((cat1['flags'] & 8) > 0)) &
+                              (~((cat1['flags'] & 16) > 0)) &
+                              (cat1['magpsf'] < 50) & (cat1['errpsf'] < 0.05) & 
+                              (cat1['fwhm_world']*3600 < 2*medfwhm) &
+                          (ref1['bp'] > 0) & (ref1['bp'] < 50) &
+                          (ref1['rp'] > 0) & (ref1['rp'] < 50) &                          
+                          (ref1[refmagcol] > 0) & (ref1[refmagcol] < 50))                              
+        if len(gdcat) > 0:
+            ref2 = ref1[gdcat] 
+            mmags2 = mmags[gdcat,:] 
+            cat2 = cat1[gdcat]
+            # Matched structure
+            mag2 = cat2['magpsf'] + 2.5*np.log10(exptime)   # correct for the exposure time
+            mstr = {'col':ref2['bp']-ref2['rp'],'mag':mag2,'model':ref2[refmagcol],
+                    'err':ref2[referrcol],'ccdnum':cat2['ccdnum']}
+            # Measure the zero-point
+            expinfo,chinfo = fitzpterm(mstr,expinfo,chinfo)
+            expinfo['zptype'] = 2
+        else:
+            logger.info('No good reference sources')            
     else:
-        logger.info('No good reference sources')
-    
+        logger.info(photmethod+' not supported')
+        import pdb; pdb.set_trace()
+        
     # Use self-calibration 
     if expinfo['nrefmatch'] <= 5 and selfcal:
         expinfo,chinfo = selfcalzpterm(expdir,cat,expinfo,chinfo)
@@ -1076,7 +1221,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         logger.info('10sigma depth = %.2f mag' % depth10sig)
         expinfo['depth10sig'] = depth10sig 
         chinfo['depth10sig'] = depth10sig 
-             
+        
     # Step 5. Write out the final catalogs and metadata 
     #-------------------------------------------------- 
     if redo and selfcal and expinfo['ztype']==2:
@@ -1104,8 +1249,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         # Half of chip 31 for MJD>56660 
         #  c4d_131123_025436_ooi_r_v2 with MJD=56619 has problems too 
         #  if the background b/w the left and right half is large then BAd 
-        lft31, = np.where((cat1['x_image'] < 1024) & (cat1['ccdnum'] == 31))
-        rt31, = np.where((cat1['x_image'] >= 1024) & (cat1['ccdnum'] == 31))
+        lft31, = np.where((cat1[xcol] < 1024) & (cat1['ccdnum'] == 31))
+        rt31, = np.where((cat1[xcol] >= 1024) & (cat1['ccdnum'] == 31))
         if len(lft31) > 10 and len(rt31) > 10: 
             lftback = np.median(cat1['background'][lft31]) 
             rtback = np.median(cat1['background'][rt31]) 
@@ -1125,7 +1270,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
             # X: 1025-2049 bad 
             # use 1000 as the boundary since sometimes there's a sharp drop 
             # at the boundary that causes problem sources with SExtractor 
-            bdind, = np.where((cat1['x_image'] > 1000) & (cat1['ccdnum'] == 31))
+            bdind, = np.where((cat1[xcol] > 1000) & (cat1['ccdnum'] == 31))
             ngdind = len(cat1)-len(bdind)
             if len(bdind) > 0:  # some bad ones found 
                 if ngdind == 0:  # all bad 
@@ -1174,14 +1319,17 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         # Convert to final format 
         if ncat1 > 0:
             cat1 = Table(cat1)
-            mdt = [('measid',(np.str,100)),('objectid',(np.str,100)),('exposure',(np.str,50)),
-                   ('ccdnum',int),('filter',(np.str,50)),('mjd',float),('x',float),('y',float),
+            mdt = [('measid',(str,100)),('objectid',(str,100)),('exposure',(str,50)),
+                   ('ccdnum',int),('filter',(str,50)),('mjd',float),('x',float),('y',float),
                    ('ra',float),('raerr',float),('dec',float),('decerr',float),('mag_auto',float),
                    ('magerr_auto',float),('mag_aper1',float),('magerr_aper1',float),('mag_aper2',float),
                    ('magerr_aper2',float),('mag_aper4',float),('magerr_aper4',float),('mag_aper8',float),
                    ('magerr_aper8',float),('kron_radius',float),('asemi',float),('asemierr',float),
                    ('bsemi',float),('bsemierr',float),('theta',float),('thetaerr',float),('fwhm',float),
-                   ('flags',int),('class_star',float)]
+                   ('flags',int),('class_star',float),
+                   ('ndet_iter',int),('repeat',int),('xpsf',float),('ypsf',float),('magpsf',float),
+                   ('errpsf',float),('sky',float),('iter',int),('chi',float),('sharp',float),
+                   ('rapsf',float),('decpsf',float),('ebv',float)]
             meas = np.zeros(ncat1,dtype=np.dtype(mdt))
             meas = Table(meas)
             for n in meas.colnames:
@@ -1189,10 +1337,10 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
                     meas[n] = cat1[n]
             meas['measid'] = cat1['sourceid'].astype(str)
             meas['exposure'] = base 
-            meas['x'] = cat1['x_image']
-            meas['y'] = cat1['y_image']
-            meas['mag_auto'] = cat1['cmag']
-            meas['magerr_auto'] = cat1['cerr']
+            meas['x'] = cat1[xcol]
+            meas['y'] = cat1[ycol]
+            meas['mag_auto'] = cat1['mag_auto'] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
+            meas['magerr_auto'] = cat1['magerr_auto']
             meas['mag_aper1'] = cat1['mag_aper'][:,0] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
             meas['magerr_aper1'] = cat1['magerr_aper'][:,0] 
             meas['mag_aper2'] = cat1['mag_aper'][:,1] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
@@ -1209,7 +1357,20 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
             meas['thetaerr'] = cat1['errtheta_world'] 
             meas['fwhm'] = cat1['fwhm_world'] * 3600.       # convert to arcsec 
             meas['class_star'] = cat1['class_star']
-                             
+            meas['ndet_iter'] = cat1['ndet_iter']
+            meas['repeat'] = cat1['repeat']
+            meas['xpsf'] = cat1['xpsf']
+            meas['ypsf'] = cat1['ypsf']
+            meas['magpsf'] = cat1['magpsf'] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
+            meas['errpsf'] = cat1['errpsf']
+            meas['sky'] = cat1['sky']
+            meas['iter'] = cat1['iter']
+            meas['chi'] = cat1['chi']
+            meas['sharp'] = cat1['sharp']
+            meas['rapsf'] = cat1['rapsf']
+            meas['decpsf'] = cat1['decpsf']
+            meas['ebv'] = cat1['ebv']
+
             # Write to file 
             outfile = expdir+'/'+base+'_'+str(chinfo['ccdnum'][i])+'_meas.fits' 
             chinfo['nmeas'][i] = ncat1   # updating Chinfo 
