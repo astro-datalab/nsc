@@ -741,10 +741,12 @@ def calibrate(expdir,inpref=None,refcatfile=None,logfilename=None,eqnfile=None,r
             cenra += 360 
         # use chip VRA to get RA range 
         vra = chinfo['vra'][gdchip]
-        bdra, = np.where(vra > 180) 
+        bdra = np.where(vra > 180)[0]
+        #bdra, = np.where(vra > 180)
         if len(bdra) > 0: 
             vra[bdra] -= 360 
-        bdra2, = np.where(vra < -180) 
+        bdra2 = np.where(vra < -180)[0]
+        #bdra2, = np.where(vra < -180) 
         if len(bdra2) > 0: 
             vra[bdra2] += 360 
         rarange = dln.valrange(vra)*np.cos(np.deg2rad(cendec))
