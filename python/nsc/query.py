@@ -653,6 +653,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
     refcat = []
     for i in range(len(filt)):
         instfilt = filt[i].strip()
+        logger.info("instfilt = "+instfilt)
         # If no instrument information then assume it's DECam
         if instfilt.find('-') == -1:
             instfilt = 'c4d-'+instfilt

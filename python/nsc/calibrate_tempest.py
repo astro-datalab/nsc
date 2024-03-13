@@ -1,27 +1,32 @@
 #!/usr/bin/env python
 
-import os
-import time
-import numpy as np
-from glob import glob
-import healpy as hp
+from argparse import ArgumentParser
 from astropy.io import fits
-from astropy.table import Table
+from astropy.table import *
 from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 from dlnpyutils import utils as dln,coords
 from dustmaps.sfd import SFDQuery
+from glob import glob
+import healpy as hp
+import numpy as np
+import os
 from scipy.optimize import curve_fit
 from scipy import stats
+import shutil
+import socket
 import subprocess
+import sys
+import time
+
 from nsc import utils,query,modelmag
 #from utils_tempest import *
 import warnings
-
 warnings.resetwarnings()
 warnings.filterwarnings('ignore',category=UserWarning,append=True)
 
+from slurm_funcs import *
 
 
 def fitzpterm(mstr,expinfo,chinfo):
@@ -355,7 +360,7 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
     return expinfo,chinfo
 
 
-def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=False,ncpu=1,logger=None,gsynthphot=False,psf=False):
+def calibrate(expdir,inpref=None,refcatfile=None,logfilename=None,eqnfile=None,redo=False,selfcal=False,saveref=False,ncpu=1,logger=None,gsynthphot=False,psf=False):
     """
     Perform photometry and astrometric calibration of an NSC exposure using
     external catalogs.
@@ -407,6 +412,9 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
 
     # Calibrate catalogs for one exposure
     dldir,mssdir,localdir = utils.rootdirs()
+    basedir = "/home/x25h971/nsc/instcal/v4/"
+    tardir = basedir+(expdir.split("/")[-3])+"/"+(expdir.split("/")[-2])
+    print("tardir = ",tardir)
 
     # Make sure the directory exists
     if os.path.exists(expdir) == False:
@@ -418,7 +426,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         expdir = expdir[0:-1]
     base = os.path.basename(expdir) #.split(".tar.gz")[0]
     if logger is None:
-        logger = dln.basiclogger()
+        logger = dln.basiclogger("calibrate_"+str(expdir))
     #outfile = expdir.split(".tar.gz")[0]+'/'+base+'_meta.fits'
     outfile = expdir+'/'+base+'_meta.fits'
     # get version number
@@ -434,7 +442,16 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     # Check for output file
     if os.path.exists(outfile) == True and redo==False:
         logger.info(outfile+' already exists and /redo not set.')
-        return
+        # Re-compress the exposure repo!
+        os.chdir(tardir)
+        print("tar -czf "+(expdir.split("/")[-1])+".tar.gz "+(expdir.split("/")[-1]))
+        os.system("tar -czf "+(expdir.split("/")[-1])+".tar.gz "+(expdir.split("/")[-1]))
+        #print("shutil.rmtree("+str(expdir.split("/")[-1])+")")
+        #shutil.rmtree(expdir.split("/")[-1])
+        #print("os.rmdir("+str(expdir.split("/")[-1])+")")
+        #os.rmdir(expdir.split("/")[-1])
+        os.chdir(basedir)
+        return(True)
 
     # What instrument is this?
     instrument = 'c4d'# by default
@@ -459,23 +476,29 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     # Get the exposure files
     # Load the logfile and get absolute flux filename
     #loglines = dln.readlines(expdir.split(".tar.gz")[0]+'/'+base+'.log')
-    loglines = dln.readlines(expdir+'/'+base+'.log')
-    #ind = dln.grep(loglines,'Step #2: Copying InstCal images from mass store archive',index=True)
-    ind = dln.grep(loglines,"Copying InstCal images downloaded from Astro Data Archive",index=True)
-    fline = loglines[ind[0]+1]
-    #lo = fline.find('/archive') # as in /mss1/archive/pipe/.........
-    #fluxfile = mssdir+str(fline[lo+1:])
-    fluxfile = fline.split("   ")[-1].strip()
-    print(fluxfile," = fluxfile")
-    wline = loglines[ind[0]+2]
-    #lo = wline.find('/archive')
-    #wtfile = mssdir+str(wline[lo+1:])
-    wtfile = wline.split("   ")[-1].strip()
-    mline = loglines[ind[0]+3]
-    #lo = mline.find('/archive')
-    #maskfile = mssdir+str(mline[lo+1:])
-    maskfile = mline.split("   ")[-1].strip()
-
+    if os.path.exists(expdir+'/'+base+'.log'):
+        loglines = dln.readlines(expdir+'/'+base+'.log')
+        #ind = dln.grep(loglines,'Step #2: Copying InstCal images from mass store archive',index=True)
+        ind = dln.grep(loglines,"Copying InstCal images downloaded from Astro Data Archive",index=True)
+        fline = loglines[ind[0]+1]
+        #lo = fline.find('/archive') # as in /mss1/archive/pipe/.........
+        #fluxfile = mssdir+str(fline[lo+1:])
+        fluxfile = fline.split("   ")[-1].strip()
+        wline = loglines[ind[0]+2]
+        #lo = wline.find('/archive')
+        #wtfile = mssdir+str(wline[lo+1:])
+        wtfile = wline.split("   ")[-1].strip()
+        mline = loglines[ind[0]+3]
+        #lo = mline.find('/archive')
+        #maskfile = mssdir+str(mline[lo+1:])
+        maskfile = mline.split("   ")[-1].strip()
+    else:
+        explist = Table.read(basedir+"lists/nscdr3_instcal_list.fits.gz")
+        expline = explist[explist['base']==expdir.split("/")[-1].split(".tar.gz")[0]]
+        fluxfile = expline['fluxfile'][0].split("/")[-1]
+        wtfile = expline['wtfile'][0].split("/")[-1]
+        maskfile = expline['maskfile'][0].split("/")[-1]
+    logger.info(fluxfile+wtfile+maskfile+" = flux,wt,maskfiles")
 
 
     # Step 1. Read in the catalogs 
@@ -578,12 +601,12 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         hd = fits.getheader(catfiles[i],1) # was 2
         cat1 = Table.read(catfiles[i],1) # was ext. 2
         if psf==True:
-            cat1 = cat1[[not i for i in cat1['RAPSF'].mask]]
+            cat1 = cat1[[not i for i in MaskedColumn(cat1['RAPSF']).mask]]
             #print("shrunk cat to PSF sources")
         for c in cat1.colnames:
             cat1[c].name = c.lower()
         ncat1 = hd['naxis2']   # handles empty catalogs; will be changed
-        logger.info(str(ncat1)+" = ncat1 for now")
+        #logger.info(str(ncat1)+" = ncat1 for now")
         # Fix negative FWHM values 
         #  use A_WORLD and B_WORLD which are never negative 
         bdfwhm, = np.where(cat1['fwhm_world'] < 0.1)
@@ -610,7 +633,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         imline = imline[imline!=""]
         nx = int(imline[np.where(imline=="size:")[0][0]+1])
         ny = int(imline[np.where(imline=="size:")[0][0]+2])
-        print("nx,ny = ",nx,ny)
+        #print("nx,ny = ",nx,ny)
         try:
             hd1 = fits.getheader(catfiles[i])
             wcs1 = WCS(hd1)
@@ -623,7 +646,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         #    goto,BOMB1 
         #print("wcs1 = ",wcs1)
         vcoo = wcs1.pixel_to_world([0,nx-1,nx-1,0],[0,0,ny-1,ny-1])
-        print("vcoo = ",vcoo)
+        #print("vcoo = ",vcoo)
         vra = vcoo.ra.deg
         vdec = vcoo.dec.deg
         chinfo['vra'][i] = vra 
@@ -668,7 +691,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
             else:
                 cenra = np.mean(dln.minmax(cat1['rapsf']))
                 ra_range=cat1['rapsf']
-            logger.info(str(cenra)+" = cenra")
+            #logger.info(str(cenra)+" = cenra")
             #if dln.valrange(cat1['alpha_j2000']) > 100: 
             if dln.valrange(ra_range) > 100:
                 #ra = cat1['alpha_j2000']
@@ -718,10 +741,12 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
             cenra += 360 
         # use chip VRA to get RA range 
         vra = chinfo['vra'][gdchip]
-        bdra, = np.where(vra > 180) 
+        bdra = np.where(vra > 180)[0]
+        #bdra, = np.where(vra > 180)
         if len(bdra) > 0: 
             vra[bdra] -= 360 
-        bdra2, = np.where(vra < -180) 
+        bdra2 = np.where(vra < -180)[0]
+        #bdra2, = np.where(vra < -180) 
         if len(bdra2) > 0: 
             vra[bdra2] += 360 
         rarange = dln.valrange(vra)*np.cos(np.deg2rad(cendec))
@@ -841,13 +866,17 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     logger.info('------------------------------------')
 
     # Getting reference catalogs
-    if inpref is None:
+    if inpref is None and refcatfile is None:
         # Search radius
         radius = 1.1 * np.sqrt( (0.5*rarange)**2 + (0.5*decrange)**2 )
         ref = query.getrefdata(instrument+'-'+filt,cenra,cendec,radius)
         if len(ref) == 0:
             logger.info('No Reference Data')
             return
+
+    elif inpref is None and refcatfile is not None:
+        ref = Table.read(refcatfile)
+        logger.info("Reference catalog read in from "+refcatfile)
 
     # Using input reference catalog
     else:
@@ -898,7 +927,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     logger.info('Step 3. Astrometric calibration')
     logger.info('--------------------------------')
     # Get reference catalog with Gaia values
-    logger.info("ref cat columns = "+str(ref.colnames))
+    #logger.info("ref cat columns = "+str(ref.colnames))
     gdgaia, = np.where(ref['source'] > 0)
     gaia = ref[gdgaia]
     # Match everything to Gaia at once, this is much faster!
@@ -1259,7 +1288,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
         # Get chip sources using CCDNUM 
         cat1 = cat[chind2] 
         ncat1 = len(cat1)
-        logger.info("chip sources = "+str(len(cat1))+" "+str(nchmatch)+" before QA cuts")
+        #logger.info("chip sources = "+str(len(cat1))+" "+str(nchmatch)+" before QA cuts")
 
                  
         # Apply QA cuts 
@@ -1335,7 +1364,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
                 continue
             cat1 = np.delete(cat1,bdsnr)
             ncat1 = len(cat1) 
-        logger.info("ncat1, len(cat1) = "+str(ncat1)+" "+str(len(cat1))+" after QA cuts")
+        #logger.info("ncat1, len(cat1) = "+str(ncat1)+" "+str(len(cat1))+" after QA cuts")
 
         # Convert to final format
         if ncat1 > 0:
@@ -1360,7 +1389,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
                    #('alpha_j2000),(),(),()]
             meas = np.zeros(ncat1,dtype=np.dtype(mdt))
             meas = Table(meas)
-            logger.info("ncat1,length cat1,length meas = "+str(ncat1)+" "+str(len(cat1))+" "+str(len(meas)))
+            #logger.info("ncat1,length cat1,length meas = "+str(ncat1)+" "+str(len(cat1))+" "+str(len(meas)))
             #print("cat1 colnames: ",cat1.colnames)
             for n in meas.colnames:
                 if n in cat1.colnames:
@@ -1420,24 +1449,49 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,saveref=F
     hdus.append(fits.table_to_hdu(expinfo))
     hdus.append(fits.table_to_hdu(chinfo))  # add chip structure to second extension 
     hdus.writeto(metafile,overwrite=True)
-            
+
+    if os.path.exists(metafile):
+        logger.info("exposure successfully calibrated!")
+        print(logfilename,expdir.split(".tar.gz")[0]+"/"+logfilename.split("/")[-1])
+        shutil.copy(logfilename,expdir.split(".tar.gz")[0]+"/"+logfilename.split("/")[-1])
+        calbrated = True
+    else: calbrated = False
+    # Re-compress the exposure repo!
+    os.chdir(tardir)
+    print("tar -czf "+(expdir.split("/")[-1])+".tar.gz "+expdir.split("/")[-1])
+    os.system("tar -czf "+(expdir.split("/")[-1])+".tar.gz "+(expdir.split("/")[-1]))
+    #print("shutil.rmtree("+str(expdir.split("/")[-1])+")")
+    #shutil.rmtree(expdir.split("/")[-1])
+    #print("os.rmdir("+str(expdir.split("/")[-1])+")")
+    #os.rmdir(expdir.split("/")[-1])
+    os.chdir(basedir)
+
     dt = time.time()-t00 
     logger.info('dt = %.2f sec.' % dt)
     #return(ref1,ref2,mmags,mmags2)
+    
+    return(calbrated)
 
 
-def calibrate_healpix(pix,version,nside=64,redo=False,logger=None):
+def complete_job(jobname,jstruct,torun,jobinds,jobtype):
+    cputime,maxrss,jobid = sacct_cmd(jobname,['cputimeraw','maxrss','jobid'],c=True,m=True)
+    jstruct[jobtype+'_cputime'][torun][jobinds] = cputime
+    jstruct[jobtype+'_maxrss'][torun][jobinds] = maxrss
+    jstruct[jobtype+'_jobid'][torun][jobinds] = jobid
+    
+def calibrate_healpix(pix,version,nside=32,maxexp=10,logtime="000",gsynth=True,psf=True,redo=False,logger=None):
     """
-    This program is a wrapper around NSC_INSTCAL_CALIBRATE
+    This program is a wrapper around calibrate()
     for all exposures in the same region of the sky.
     It retrieves the reference catalogs ONCE which saves time.
 
     Parameters
     ----------
     pix       The HEALPix pixel number.
-    version   The version name, e.g. 'v3'. 
-    =nside    The HEALPix nside to use.  Default is 64.
-    /redo     Rerun on exposures that were previously processed.
+    version   The version name, e.g. 'v3'.
+    =nside    The HEALPix nside to use.  Default is 32
+    =maxexp   The maximum number of exposures to process at once
+    /redo     Rerun exposures that were previously processed.
 
     Returns
     -------
@@ -1451,12 +1505,12 @@ def calibrate_healpix(pix,version,nside=64,redo=False,logger=None):
     Translated to Python by D. Nidever, May 2022
     """
 
-    # Main NOAO DECam source catalog
-    lsdir,mssdir,localdir = utils.rootdirs()
-    #fdir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
-    #tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
+    # Set up directories
     basedir = "/home/x25h971/nsc/instcal/"+str(version)+"/"
-    #fdir = basedir
+    inddir = basedir+"healpix_indicators/"+str(nside)+"_"+str(int(pix))+"/"
+    indfile = inddir+str(pix)+".txt"
+    outfiledir = basedir+"outfiles/"
+    refcatdir = basedir+"refcats/"
     tmpdir = basedir+'tmp/'
     logdir = basedir+"lists/logs/"
     if os.path.exists(logdir)==False:
@@ -1464,51 +1518,109 @@ def calibrate_healpix(pix,version,nside=64,redo=False,logger=None):
     if os.path.exists(tmpdir)==False:
         os.mkdir(tmpdir)
     t00 = time.time()
-    
-    
 
-    # Load the list of exposures
-    listfile = basedir+'/lists/nsc_calibrate_healpix_list.fits.gz'
+    # Do we have a logfile?
+    if logger is None:
+        logger = dln.basiclogger("calibrate_"+str(pix))
+
+    # Load the list of HEALPix-labeled exposures
+    listfile = basedir+'/lists/nsc_calibrate_healpix_list_blackmorerepos1.fits.gz'
     if os.path.exists(listfile)==False:
-        print(listfile,' NOT FOUND')
+        logger.info(listfile,' NOT FOUND')
         return
     hplist = Table.read(listfile)
 
     # Get the exposures for this healpix
-    print('Calibrating InstCal SExtractor catalogs for Healpix pixel = '+str(pix))
+    logger.info('Calibrating InstCal SExtractor catalogs for Healpix pixel = '+str(pix))
     #ind1,ind2 = dln.match(hplist['pix'],[pix])
     #imatches,ind1,ind2 = np.intersect1d(hplist['pix'],np.array([pix]),return_indices=True)
     ind1 = np.isin(hplist['pix'],np.array([pix]))
     nind = len(hplist[ind1])
-    if nind==0:
-        print('No exposures')
-        return
-    print('NEXPOSURES = '+str(nind))
     hplist1 = hplist[ind1]
+    if nind==0:
+        logger.info('No exposures for pix '+str(pix))
+        return
+    logger.info('For pix '+str(pix)+', NEXPOSURES = '+str(nind))
     hplist1['expdir'] = [i.strip().split(".fits")[0]+".tar.gz" for i in hplist1['expdir']]
-    hplist1['instrument ']= np.char.array(hplist1['instrument']).strip()
+    hplist1['exp_done'] = np.repeat(False,nind) # for previous attempts
+    hplist1['exp_calibrated'] = np.repeat(False,nind) # for this attempt
+    hplist1['exp_ready'] = np.repeat(False,nind) # has the exposure been measured?  do we know where it is and how to get it?
     hplist1['filter'] = np.char.array(hplist1['filter']).strip()
-    #print("hplist1 = \n",hplist1)
+    hplist1['transfer_group'] = np.repeat(-9,nind)
+    hplist1['transfer_in_jobname'] = Column(dtype="U100",length=nind)
+    hplist1['transfer_in_cmd'] = Column(dtype="U5000",length=nind)
+    hplist1['transfer_in_jobid'] = Column(dtype="U10",length=nind)
+    hplist1['transfer_in_jobstatus'] = Column(dtype="U10",length=nind)
+    hplist1['transfer_out_jobname'] = Column(dtype="U100",length=nind)
+    hplist1['transfer_in_cputime'] = Column(dtype="U10",length=nind)
+    hplist1['transfer_in_maxrss'] = Column(dtype="U100",length=nind)
+    hplist1['transfer_out_cmd'] = Column(dtype="U5000",length=nind)
+    hplist1['transfer_out_jobid'] = Column(dtype="U10",length=nind)
+    hplist1['transfer_out_jobstatus'] = Column(dtype="U10",length=nind)
+    hplist1['calibrate_jobname'] = Column(dtype="U100",length=nind)
+    hplist1['calibrate_cmd'] = Column(dtype="U1000",length=nind)
+    hplist1['calibrate_jobid'] = Column(dtype="U10",length=nind)
+    hplist1['calibrate_jobstatus'] = Column(dtype="U10",length=nind)
+    hplist1['calibrate_cputime'] = Column(dtype="U10",length=nind)
+    hplist1['calibrate_maxrss'] = Column(dtype="U100",length=nind)
+    hplist1['torun'] = np.repeat(False,nind)
+    hplist1['transfer_in_jobstatus'] = "-9"
+    hplist1['transfer_out_jobstatus'] = "-9"
+    hplist1['transfer_out_cputime'] = Column(dtype="U10",length=nind)
+    hplist1['transfer_out_maxrss'] = Column(dtype="U100",length=nind)
+    hplist1['calibrate_jobstatus'] = "-9"
 
+
+    # Get list of already-calibrated exposures from indicator repo
+    explist = subprocess.getoutput("ls "+inddir).split("\n")
+    print("explist = ",explist)
+    if "No such file or directory" in explist[0] or len(explist)<2:
+        hplist1['exp_done'][:] = False
+        logger.info("no indicator files for this pix "+str(pix))
+    else:
+        done_exposures = np.array([i.split(".")[0] for i in explist])
+        hp_exposures = np.array([i.split("/")[-1].split(".tar.gz")[0]  for i in hplist1['expdir']])
+        #print("done exposures = ",done_exposures)
+        #print("hp_exposures = ",hp_exposures)
+        exp_dones = np.isin(hp_exposures,done_exposures)
+        hplist1['exp_done'][exp_dones] = True
+        logger.info(str(len(hplist1[exp_dones]))+" exposures completed already for pix "+str(pix))
+        if redo:
+            logger.info("Re-calibrating those exposures!")
+            # Remove all the indicator files
+            for ed in explist:
+                print(inddir+ed)
+                os.remove(str(inddir+ed))
+    # Get list of exposures that are ready to calibrate (have been measuresd)
+    hplist1['exp_ready'] = [i!="-99" for i in hplist1['blackmore_repo'].filled("-99")]
+    # Select exposures to calibrate!
+    if redo:
+        torun = np.where(hplist1['exp_ready']==True)[0]
+    else:
+        torun = np.where((hplist1['exp_done']==False) & (hplist1['exp_ready']==True))[0]
+    ntorun = len(hplist1[torun])
+    hplist1['torun'][torun] = True
+    logger.info('NEXPOSURES to run = '+str(ntorun))
+    if ntorun==0:
+        sys.exit()
+    # Get all of the reference data that we need, save to file to delete after
     # Central coordinates
     cenra,cendec = hp.pix2ang(nside,pix,lonlat=True)
-    print('RA  = %.6f' % cenra)
-    print('DEC = %.6f' % cendec)
+    logger.info('RA  = %.6f' % cenra)
+    logger.info('DEC = %.6f' % cendec)
     cencoo = SkyCoord(ra=cenra,dec=cendec,unit='deg')
     glon = cencoo.galactic.l.degree
     glat = cencoo.galactic.b.degree
-    print('L = %.6f' % glon)
-    print('B = %.6f' % glat)
-
+    logger.info('L = %.6f' % glon)
+    logger.info('B = %.6f' % glat)
     # List of instrument-filters
     #filters = np.char.array((hplist1['instrument']).strip())+'-'+str&np.char.array([f.strip()[0:2] for f in hplist1['filter']]).strip())
     filters = np.array([i['instrument'].strip()+"-"+i['filter'][0:2] for i in hplist1])
     filters = np.unique(filters)
     for i in range(0,len(filters)):
-        if filters[i].split("-")[-1]!="VR" or filters[i].split("-")[-1]!="Y":
+        if filters[i].split("-")[-1]!="VR" and filters[i].split("-")[-1]!="Y":
             filters[i] = str(str(filters[i].split("-")[0])+"-"+str(np.char.lower(filters[i].split("-")[-1])))
-    print("filters = ",filters)
-
+    logger.info("filters = "+", ".join(filters))
     # Get required radius
     #  DECam      needs 1.1 deg
     #  Mosaic3    needs 0.43 deg
@@ -1518,53 +1630,178 @@ def calibrate_healpix(pix,version,nside=64,redo=False,logger=None):
     minradius = 0.43
     if nksb>0:
         minradius = np.maximum(minradius, 0.75)
-    if nc4d>0: 
+    if nc4d>0:
         minradius = np.maximum(minradius, 1.1)
     # Add extra area for the size of the healpix pixel
     #   nside=128 is roughly 27' across
     #   nside=64 is roughly 55' across
     #   nside=32 is roughly 110' across
-    radius = minradius + 0.5
+    radius = minradius + 1 # 0.5
+    # Check to see if the file already exists
+    refcatfile = refcatdir+"calibrate_healpix32_"+str(pix)+".fits.gz"
+    if os.path.exists(refcatfile):
+        logger.info("Reference catalog already queried, at "+refcatfile)
+        ref = Table.read(refcatfile)
+    else:
+    # Do the query!
+        logger.info('Querying reference catalog for healpix...')
+        ref = query.getrefdata(filters,cenra,cendec,radius)
+        ref.write(refcatfile,overwrite=True)
+        logger.info("refcat saved to "+refcatfile)
 
-    # Get all of the reference data that we need
-    print('')
-    ref = query.getrefdata(filters,cenra,cendec,radius)
+    # Split exposures up into transfer batches
+    ntransfers = (ntorun//maxexp)+1
+    logger.info("We will be submitting "+str(ntransfers)+" transfers for "+str(maxexp)+" exposures per transfer")
+    hplist1['transfer_group'][torun] = np.concatenate([np.repeat(i,maxexp) for i in range(ntransfers)])[:ntorun]
 
-    # Loop over the exposures that have been transferred
-    for i in range(nind):
-        print('')
-        print('---- EXPOSURE '+str(i+1)+' OF '+str(nind)+' ----')
-        print('')
-        expdir = hplist1['expdir'][i]
-        #expdir = (expdir.split(".fits")[0])+".tar.gz"
-        #print("expdir = ",expdir)
-        #lo = expdir.find('/d1')
-        #expdir = dldir + expdir[lo+5:]
-        print("expdir = ",expdir)
-        # Unzip and untar the exposure repo
-        runexp = False
-        if os.path.exists(expdir): # if exp.tar.gz,
-            print("tar -xzf "+expdir+" -C "+"/".join(expdir.split("/")[:-1])+"/")
-            os.system("tar -xzf "+expdir+" -C "+"/".join(expdir.split("/")[:-1])+"/")
-            runexp = True
-        elif os.path.exists(expdir.split(".gz")[0]): # elif exp.tar, (already unzipped)
-            print("tar -xf "+expdir.split(".gz")[0]+" -C "+"/".join(expdir.split("/")[:-1])+"/")
-            os.system("tar -xf "+expdir.split(".gz")[0]+" -C "+"/".join(expdir.split("/")[:-1])+"/")
-            runexp = True
-        elif os.path.exists(expdir.split(".tar.gz")[0]): # elif exp (aleady unzipped and untarred)
-            print("exposure ",expdir," already untarred and unzipped")
-            runexp = True
-        else: # else if not there,
-            print("exposure directory does not exist!")
-            runexp = False
-        # Calibrate the exposure
-        if runexp:
-            print("calibrate("+str(expdir.split(".tar.gz")[0])+",ref,redo="+str(redo)+",gsynthphot=True,psf=True)")
-            calibrate(expdir.split(".tar.gz")[0],ref,redo=redo,gsynthphot=True,psf=True)
-            # Re-tar and re-zip the exposure repo
-            print("tar -czf "+expdir+" "+expdir.split(".tar.gz")[0])
-            os.system("tar -czf "+expdir+" "+expdir.split(".tar.gz")[0])
-        else: print("exposure can't be processed!")
-    print('Total time = %.2f sec' % (time.time()-t00))
+    # Save job structure to runfile
+    runfile = basedir+"lists/runfiles/calibrate_healpix_"+str(pix)+"_run."+str(logtime)+".fits.gz"
+    hplist1.write(runfile,overwrite=True)
+    #print("hplist1 colnames = ",hplist1.colnames)
+    logger.info("job structure saved to "+runfile)
 
 
+    # Start submitting exposures for transfer & calibration!
+    # ------------------------------------------------------
+    if gsynth: gsth = " --gsynth " # Photometric calibration with Gaia Synthetic Photometry?
+    else: gsth = ""
+    if psf: ps = " --psf"          # Astrometric calibration with PSF coordinates?
+    else: ps = ""
+    if redo: rdo = " --redo"       # Redo the exposure?
+    else: rdo = ""
+
+    sleep_time = 10
+    # - Loop through exposure batches (one transfer and one calibration job maintained simultaneously)
+    for tns in range(ntransfers):
+        logger.info(" ")
+        logger.info("Writing & submitting transfer jobs for exposure batch "+str(tns))
+        trans = np.where(hplist1['transfer_group'][torun]==tns)[0]
+        #print("length of transfer group = ",len(hplist1[torun[trans]]))
+        #print(hplist1[torun[trans]])
+
+        # -- Create & submit script for expdir batch transfer from blackmore to tempest
+        expdir_srcs = ",".join([i for i in hplist1['blackmore_repo'][torun[trans]]])
+        expdir_dests = ",".join([i['expdir'].split("/")[-3]+"/"+i['expdir'].split("/")[-2]+"/"+i['blackmore_repo'].split("/")[-1] for i in hplist1[torun[trans]]])
+        cmd_trans = "python "+str(basedir)+"globus-sdk-transfer.py blackmore tempest /phyx-nidever/kfas/nsc_meas/ "+basedir+" "+expdir_srcs+" "+expdir_dests
+        print("cmd_trans_in = "+str(cmd_trans))
+        jname_trans = "ctransin_"+str(pix)+"_"+str(tns)+"_"+str(logtime)
+        hplist1['transfer_in_cmd'][torun[trans]] = cmd_trans
+        hplist1['transfer_in_jobname'][torun[trans]] = jname_trans
+        # Dependencies!  each transfer in job transiN must wait until transi(N-1) and cal(N-2) are done
+        deps = []
+        if tns>0: deps.append(hplist1[torun][hplist1[torun]['transfer_group']==(tns-1)]['transfer_in_jobid'][0].strip()) # add jid of last transfer in job
+        if tns>1: deps.append(hplist1[torun][hplist1[torun]['transfer_group']==(tns-2)]['calibrate_jobid'][0].strip())   # add jid of last-last calibration job
+        # Write job script for exposure transfer to tempest from blackmore
+        jfile_trans = write_jscript(jname_trans,tns,"priority",[cmd_trans],outfiledir,"katiefasbender@montana.edu",cpupt=2,mempc="4G",rtime="05:00:00",parallel=False,dependent=deps)
+        #os.system("sbatch "+jfile_trans)
+        trans_jid = subprocess.getoutput("sbatch "+jfile_trans).split(" ")[-1]
+        logger.info("submitted transfer_in job "+jname_trans+" "+str(trans_jid))
+        time.sleep(sleep_time) # wait and get the id of the transfer job you just submitted
+        #trans_jid = sacct_cmd(jname_trans,['jobid'],c=False,m=False)
+        hplist1['transfer_in_jobid'][torun[trans]] = trans_jid
+
+        # -- Create and submit script for calibration of expdir batch
+        cmds_cal = []
+        for i in range(len(hplist1[torun[trans]])):
+            expdir = hplist1['expdir'][torun[trans[i]]]
+            #logger.info("expdir = "+expdir)
+            #exposure_runs.append(expdir)
+            calcmd = "python "+basedir+"calibrate_exposure_tempest.py --version "+str(version)+" --pix "+str(pix)+" --nside "+str(nside)+" --expdir "+str(expdir.split(".tar.gz")[0])+" --refcat "+refcatfile+gsth+ps+rdo
+            hplist1['calibrate_cmd'][torun[trans[i]]] = calcmd
+            #print("cmd_cal = "+calcmd)
+            cmds_cal.append(calcmd) #calibrate(expdir.split(".tar.gz")[0],ref,redo=redo,gsynthphot=True,psf=True)
+        jname_cal = "calibrate_"+str(pix)+"_"+str(tns)+"_"+str(logtime)
+        hplist1['calibrate_jobname'][torun[trans]] = jname_cal
+        # Dependencies!  each calibration job calN must wait until transiN and cal(N-1) are done
+        deps = [trans_jid]                                                                                      # add this transfer in job
+        if tns>0: deps.append(hplist1[torun][hplist1[torun]['transfer_group']==(tns-1)]['calibrate_jobid'][0].strip()) # add jid of last calibration job
+        # Write job script for exposure calibration
+        jfile_cal = write_jscript(jname_cal,tns,"priority",cmds_cal,outfiledir,"katiefasbender@montana.edu",cpupt=2,mempc="4G",rtime="05:00:00",parallel=True,dependent=deps)
+        #os.system("sbatch "+jfile_cal)
+        cal_jid = subprocess.getoutput("sbatch "+jfile_cal).split(" ")[-1]
+        hplist1['calibrate_jobid'][torun[trans]] = cal_jid
+        logger.info("submitted calibration job "+jname_cal+" "+str(cal_jid))
+        time.sleep(sleep_time) # wait and get the id of the transfer job you just submitted
+
+        # -- Save job structure to runfile
+        hplist1.write(runfile,overwrite=True)
+        logger.info("Saving job structure to "+str(runfile))
+
+    # - Check on exposure jobs every 5 minutes or so
+    # Only once an exposure job is done may the exposure file, tarred and zipped with its base_meta.fits file within, be added to the transfer-out
+    run_exposures = 0
+    while run_exposures<ntorun:
+        # loop through batches and check on them, zipping, writing, and transferring the files back when done
+        for tns in range(ntransfers):
+            logger.info("Checking current jobs of transfer group "+str(tns))
+            trans = np.where(hplist1['transfer_group'][torun]==tns)[0]
+            for jtype in ["calibrate","transfer_in","transfer_out"]:
+                jname = hplist1[torun[trans]][jtype+'_jobname'][0]
+                jstat = hplist1[torun[trans]][jtype+'_jobstatus'][0]
+                logger.info(jname+" "+jstat)
+                if jstat=="RUNNING" or jstat=="PENDING" or jstat=="REQUEUED" or jstat=="-9":
+                    if jname.strip()!="":
+                        new_jstat = sacct_cmd(jname,['state'],c=False,m=False)
+                    else: new_jstat = "-9"
+                    if new_jstat.strip()=="": new_jstat = "-9"
+                    hplist1[jtype+"_jobstatus"][torun[trans]] = new_jstat
+                    if new_jstat=="COMPLETED":
+                        complete_job(jname,hplist1,torun,trans,jtype)
+                        if jtype=="transfer_out": 
+                            calibrated = np.where(hplist1[torun[trans]]['exp_calibrated']==True)[0]
+                            for ed in hplist1[torun[trans]]['expdir'][calibrated]:
+                                # Check for expdir
+                                if os.path.exists(ed):
+                                    os.remove(ed)
+                                else: print(expdir," does not exist? tns group ",tns)
+                        if jtype=="calibrate":
+                            edirs = hplist1[torun[trans]]['expdir']
+                            for ed,n in zip(edirs,range(len(edirs))):
+                                ifile = inddir+ed.split("/")[-1].split(".tar.gz")[0]+".txt"
+                                if os.path.exists(ifile): hplist1['exp_calibrated'][torun[trans[n]]] = True
+                            calibrated = np.where(hplist1[torun[trans]]['exp_calibrated']==True)[0]
+                            # -- Create and submit script for transfer of expdir batch from tempest back to blackmore
+                            expdir_srcs = ",".join([i.split("v4/")[-1] for i in hplist1['expdir'][torun[trans[calibrated]]]])
+                            expdir_dests = ",".join([i.split("v4/")[-1] for i in hplist1['expdir'][torun[trans[calibrated]]]])
+                            cmd_trans = "python "+str(basedir)+"globus-sdk-transfer.py tempest blackmore "+basedir+" /phyx-nidever/kfas/nsc_meas/ "+expdir_srcs+" "+expdir_dests
+                            print("cmd_trans_out = "+cmd_trans)
+                            jname_trans = "ctransout_"+str(pix)+"_"+str(tns)+"_"+str(logtime)
+                            hplist1['transfer_out_cmd'][torun[trans]] = cmd_trans
+                            hplist1['transfer_out_jobname'][torun[trans]] = jname_trans
+                            # Dependencies!  each transfer out job transoN must wait until transo(N-1) and cal(N) are done
+                            #deps = [cal_jid]
+                            #if tns>0: deps.append(hplist1[hplist1[torun]['transfer_group']==(tns-1)]['transfer_in_jobid'][0].strip()) # add jid of last transfer out job
+                            # Write job script for exposure transfer to tempest from blackmore
+                            jfile_trans = write_jscript(jname_trans,tns,"priority",[cmd_trans],outfiledir,"katiefasbender@montana.edu",cpupt=2,mempc="4G",rtime="05:00:00",parallel=False)#,dependent=deps)
+                            trans_jid = subprocess.getoutput("sbatch "+jfile_trans).split(" ")[-1]
+                            logger.info("submitted tans_out job "+jname_trans+" "+str(trans_jid))
+                            #time.sleep(sleep_time) # wait and get the id of the transfer job you just submitted
+                            #trans_jid = sacct_cmd(jname_trans,['jobid'],c=False,m=False)
+                            hplist1['transfer_out_jobid'][torun[trans]] = trans_jid
+                    if jtype=="transfer_out" and new_jstat!="RUNNING" and new_jstat!="PENDING" and new_jstat!="REQUEUED" and new_jstat!="-9": run_exposures = run_exposures+len(hplist1[torun[trans]])
+            logger.info(str(run_exposures)+"/"+str(ntorun)+" exposures processed...")
+        logger.info("wait a sec...")
+        time.sleep(10)
+        
+
+    # -  Check for exposures copmleted from this healpix in indicator directory
+    # If all exposures have been sucessfully calibrated, save a file indicating healpix completion
+    #exps = subprocess.getoutput("ls "+inddir).split("\n")
+    #if "No such file or directory" in exps[0]: hplist1['exp_calibrated'][:] = False
+    #else:
+    #    done_exps = np.array([i.split(".")[0] for i in exps])
+    #    hp_exps = np.array([i.split("/")[-2].split(".fits")[0]  for i in hplist1['expdir']])
+    #    exp_dones = np.isin(hp_exps,done_exps)
+    #    hplist1['exp_calibrated'][exp_dones] = True
+    #if len(hplist1['exp_calibrated'][exp_dones])==nind:
+    if len(hplist1[hplist1['exp_calibrated']])==nind:
+        logger.info("HEALPix Complete!")
+        with (indfile,"w") as f:
+            f.writelines("done! "+str(logtime)+" to "+str(time.time())+"\n")
+            f.close()
+    logger.info(str(len(hplist1[hplist1['exp_calibrated']]))+" HEALPix exposures calibrated")
+
+    # - Save job structure to runfile
+    hplist1.write(runfile,overwrite=True)
+    logger.info("Saving job structure to "+str(runfile))
+    logger.info('Total time = %.2f sec' % (time.time()-t00))
