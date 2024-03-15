@@ -30,8 +30,8 @@ from scipy.ndimage import convolve
 #from scipy.ndimage.filters import convolve
 import astropy.stats
 import struct
-from utils import *
-from phot import *
+from dlnpyutils.utils import *
+from phot_tempest import *
 import glob
 
 # Ignore these warnings, it's a bug
@@ -1015,11 +1015,13 @@ if __name__ == "__main__":
     #if len(sys.argv) > 6: #ktedit:createpsf_test
        version = sys.argv[4]
        ltype = sys.argv[5]
-       print("version = ",version,", ltype = ",ltype)
+       x = sys.argv[6]
+       print("version = ",version,", ltype = ",ltype,", x = ",x)
        verdir = version if version.endswith('/') else version+"/"
     else:
         version = None
         ltype="a"
+        x=False
     # Get NSC directories
     basedir, tmpdir = getnscdirs(version,listtype=ltype)
 
@@ -1045,6 +1047,12 @@ if __name__ == "__main__":
     fluxfile = filedir+sys.argv[1]
     wtfile = filedir+sys.argv[2]
     maskfile = filedir+sys.argv[3]
+    if x:
+        vers = fluxfile.split(".")[0].split("_")[-1]
+        versx = re.split('(\d+)',vers)[0]+"x"
+        fluxfile = fluxfile.split(vers)[0]+versx+fluxfile.split(vers)[-1]
+        wtfile = wtfile.split(vers)[0]+versx+wtfile.split(vers)[-1]
+        maskfile = maskfile.split(vers)[0]+versx+maskfile
     # Check that the files exist
     if os.path.exists(fluxfile) is False:
         print(fluxfile+" file NOT FOUND")

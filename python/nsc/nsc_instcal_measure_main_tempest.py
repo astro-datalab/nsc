@@ -30,6 +30,7 @@ import glob
 import logging
 import numpy as np
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -91,7 +92,7 @@ def write_jscript(job_name,partition,cmds,dir,single=True):
         fh.writelines("#SBATCH --cpus-per-task 2\n")             # number of cores to allocate; set with care
         fh.writelines("#SBATCH --mem-per-cpu=9G\n")           # memory, set --mem with care!!!!! refer to hyalite quickstart guide
         if single==True: fh.writelines("#SBATCH --time=36:00:00\n")
-        else: fh.writelines("#SBATCH --time=00:05:00\n")         # Maximum job run time
+        else: fh.writelines("#SBATCH --time=00:15:00\n")         # Maximum job run time
         if job_num % 1000 == 0:
             fh.writelines("#SBATCH --mail-user katiefasbender@montana.edu\n")
             fh.writelines("#SBATCH --mail-type BEGIN\n")
@@ -222,6 +223,12 @@ if __name__ == "__main__":
     for sub in subdirs:
         makedir(basedir+sub)
 
+    unavails = subprocess.getoutput("ls -ltrh "+basedir+"/unavails/").split("\n")
+    unavails = np.array([i.split(" ")[-1].split("_unavails.txt") for i in unavails])
+    xs = subprocess.getoutput("ls -ltrh "+basedir+"/xvers/").split("\n")
+    xs = np.array([i.split(" ")[-1].split("_xvers.txt")[0] for i in xs])
+
+
     # Log File
     #---------
     # Create Log file name;
@@ -299,7 +306,7 @@ if __name__ == "__main__":
     rootLogger.info('Checking on the exposures')
     dtype_expstr = np.dtype([('instrument',str,100),('rawname',str,100),('fluxfile',str,100),('wtfile',str,100),
                              ('maskfile',str,100),('outfile',str,150),('logfile',str,150),('partition',str,100),
-                             ('done',bool),('torun',bool),('ur',bool),('submitted',bool),
+                             ('done',bool),('torun',bool),('ur',bool),("x",bool),('submitted',bool),
                              ('jobname',str,100),('jobid',str,100),('jobstatus',str,100),
                              ('cmd',str,1000),('cputime',str,100),('maxrss',str,100),('esubmitted',bool),
                              ('exp_jobname',str,100),('exp_jobid',str,100),('exp_jobstatus',str,100),
@@ -332,12 +339,21 @@ if __name__ == "__main__":
         expstr['fluxfile'][i] = fluxfile
         expstr['wtfile'][i] = wtfile
         expstr['maskfile'][i] = maskfile
-
+        # Check to see if file is unavailable or has x version:
+        xvers = False
+        if rawname in unavails: expstr['ur'][i] = True
+        if rawname in xs:
+            expstr['x'][i] = True
+            xvers = True
         # Check if the output already exists.
         dateobs = lstr['DATE_OBS'][gdexp[i]]
         if type(dateobs) is np.bytes_: dateobs=dateobs.decode()
         night = dateobs[0:4]+dateobs[5:7]+dateobs[8:10]
         baseroot = base[0:base.find('.fits.fz')]
+        if xvers:
+            vers = baseroot.split(".")[0].split("_")[-1]
+            versx = re.split('(\d+)',vers)[0]+"x"
+            baseroot = baseroot.split(vers)[0]+versx+baseroot.split(vers)[-1]
         outroot =      basedir+instrument+'/'+night+'/'+baseroot
         outfile =      outroot+"/"+baseroot+'_1.fits' # outfile for first chip
         outlogfile =   outroot+"/"+baseroot+'.log' # logfile for complete exposure
@@ -467,6 +483,7 @@ if __name__ == "__main__":
                     nu = True
                     expstr[torun[nsub]]['ur'] = 1
                     expstr[torun[nsub]]['submitted'] = 1
+                    expstr[torun[nsub]]['esubmitted'] = 1
                 else: nu = False
                 # has (n) been submitted in an exp dload job? = d
                 if nsub in dloading: d=True
@@ -481,9 +498,23 @@ if __name__ == "__main__":
                 else: x=False
                 # do all (n)'s exposure files exist?          = e
                 exp_files = [expstr['fluxfile'][torun[nsub]],expstr['wtfile'][torun[nsub]],expstr['maskfile'][torun[nsub]]]
+                expx_files = []
+                for expp in exp_files:
+                    expp = expp[0]
+                    #print("expp = ",expp)
+                    vers = expp.split(".")[0].split("_")[-1]
+                    if vers in ['MT1', 'a1', 'lg9', 'ls10', 'ls9', 'v1', 'v2', 'v3', 'v4']:
+                        versx = re.split('(\d+)',vers)[0]+"x"
+                        exppx = expp.split(vers)[0]+versx+expp.split(vers)[-1]
+                        #print("old base = ",expp," and new base = ",exppx)
+                        expx_files.append(exppx)
                 #print("exp_files = ",exp_files)
                 exp_bools = [os.path.exists(expdir+exp_files[i][0].strip()) for i in range(len(exp_files))]
-                if False in exp_bools: e=False
+                expx_bools = [os.path.exists(expdir+expx_files[i][0].strip()) for i in range(len(expx_files))]
+                if (False in exp_bools) and (False in expx_bools): e=False
+                elif (False in exp_bools) and (False not in expx_bools):
+                    e = True
+                    expstr['x'][torun[nsub]] = True
                 else: e=True
             else:
                 nsub=False
@@ -592,6 +623,8 @@ if __name__ == "__main__":
                     rootLogger.info("Exposure unreleased, skip")
                 else:
                     cmd = expstr['cmd'][torun[jbsb]]
+                    if expstr['x'][torun[jbsb]]: cmd = cmd+" True"
+                    else: cmd = cmd+" False"
                     partition = expstr['partition'][torun[jbsb]].split("_")[0]
                     rootLogger.info("--Submit Processing Job for Exposure "+str(expstr['fluxfile'][torun[jbsb]].split("/")[-1])+"--")
                     # -> Write exposure processing job script to file

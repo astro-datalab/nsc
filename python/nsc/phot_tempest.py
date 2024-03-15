@@ -16,7 +16,6 @@ from astropy.io import fits
 from astropy.wcs import WCS
 from astropy.utils.exceptions import AstropyWarning
 from astropy.table import Table, Column
-import time
 import shutil
 import subprocess
 import requests
@@ -38,11 +37,12 @@ warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
 # Download exposures from Astro Data Archive
-def getdata(rawname,fluxfile,wtfile,maskfile,outdir):
+def getdata(rawname,fluxfile,wtfile,maskfile,outdir,listtype="a"):
     '''Download exposures from Astro Data Archive'''
     natroot = 'https://astroarchive.noirlab.edu'
     adsurl = f'{natroot}/api/adv_search'
-    basedir = "/home/x25h971/nsc/instcal/v4/"
+    print("adsurl = ",adsurl)
+    basedir = os.getcwd()+"/"
 
     t0 = time.time()
     unavails = basedir+"unavails/unavail_exposures.txt" # file for storing unreleased file bases
@@ -53,7 +53,7 @@ def getdata(rawname,fluxfile,wtfile,maskfile,outdir):
 
     print('Downloading data for exposure RAWNAME = ',rawname)
     # Do the query
-    jj = {"outfields" : ["original_filename", "archive_filename", "proc_type", "url"],"search" : [["original_filename",rawname, 'icontains'],]}
+    jj = {"outfields" : ["original_filename", "archive_filename", "proc_type", "url","release_date"],"search" : [["original_filename",rawname, 'icontains'],]}
     query_eflag = 0
     while query_eflag==0:
         try:
@@ -76,21 +76,26 @@ def getdata(rawname,fluxfile,wtfile,maskfile,outdir):
         else:
             print("rawname query done")
             query_eflag = 1
-    print(len(res)," = length of query output")
+    print("length of query output = ",len(res))
+    print("res = ",res.archive_filename[0],res.original_filename[0],res.url[0],res.release_date[0])
     if len(res)<3:
+        print("flux, weight, mask files not found in rawname query.  trying an individual query for each.")
         for fl in [fluxbase,wtbase,maskbase]:
-            jj_fl = {"outfields" : ["original_filename", "archive_filename", "proc_type", "url"],"search" : [["archive_filename",fl, 'icontains'],]}
+            print("fl = ",fl)
+            #jj_fl = {"outfields" : ["original_filename", "archive_filename", "proc_type", "url"],"search" : [["archive_filename",fl, 'icontains'],]}
+            jj_fl = {"outfields" : ["original_filename", "archive_filename", "proc_type", "url"],"search" : [["archive_filename",fl.split(".")[0], 'icontains'],]}
             query_eflag2=0
             while query_eflag2==0:
                 try:
                     res_fl =  pd.DataFrame(requests.post(f'{adsurl}/find/?limit=100',json=jj_fl).json()[1:])
+                    #print("individual file query = ",str(pd.DataFrame(requests.post(),str(f'{adsurl}/find/?limit=100'),str(,json=jj_fl).json()[1:]))))
                 except Exception as e:
                     print("Exception = ",e)
                     if "not available" in str(e):
                         print("file not available, goodbye")
-                        with open(basedir+"unavails/"+rawname+"_unavail.txt","w") as fl:
-                            fl.writelines(rawname+"\n")
-                            fl.close()
+                        with open(basedir+"unavails/"+rawname+"_unavail.txt","w") as fil:
+                            fil.writelines(rawname+"\n")
+                            fil.close()
                         with open(unavails,'a') as fil:
                             fil.writelines(fl+"\n")
                             fil.close()
@@ -101,28 +106,64 @@ def getdata(rawname,fluxfile,wtfile,maskfile,outdir):
                 else:
                     print("sub-query done")
                     query_eflag2 = 1
+            print("res_fl = ",res_fl)
             res = pd.concat([res,res_fl],axis=0,ignore_index=True)
-#    res=res.drop(res[res.proc_type != "instcal"].index)
-#    res=res.reset_index(drop=True)
+    if len(res)<3:
+        print("lmao sorry, exposure files not in ADA.")
+        with open(basedir+"unavails/"+rawname+"_unavail.txt","w") as fil:
+            fil.writelines(rawname+"\n")
+            fil.close()
+        with open(unavails,'a') as fil:
+            fil.writelines(rawname+"\n")
+            fil.close()
+        return(res)
+    #res=res.drop(res[res.proc_type != "instcal"].index)
+    #res=res.reset_index(drop=True)
     #print("query proc_type =\n",res.values) #,"\n",res.archive_filename.values)
-    #print("res[1] = ",res['url'][1])
+    #print("res[1] = ",res['url'][1]
     #print("res =\n",res.url)
     # Get the base names and compare to our filenames
-    base = [os.path.basename(f) for f in res.archive_filename]
-    #print("base =/n",base)
-    fluxind = np.where(np.array(base)==fluxbase)[0]
-    maskind = np.where(np.array(base)==maskbase)[0]
-    wtind = np.where(np.array(base)==wtbase)[0]
+    res_bases = [os.path.basename(f) for f in res.archive_filename]
+    res_obases = [os.path.basename(f) for f in res.original_filename]
+    print("base =/n",res_bases)
+    print("obase =/n",res_obases)
+    #inds = np.array([fluxind,maskind,wtind])
+    exp_bases = np.array([fluxbase,maskbase,wtbase])
+    inds = []
+    # sometimes there's only a "vx" listed on ADA; use that.
+    for bs in exp_bases:
+        baseind = np.where(np.array(res_bases)==bs)[0]
+        if len(baseind)==0:
+            vers = bs.split(".")[0].split("_")[-1]
+            if vers in ['MT1', 'a1', 'lg9', 'ls10', 'ls9', 'v1', 'v2', 'v3', 'v4']:
+                versx = re.split('(\d+)',vers)[0]+"x"
+                bsx = bs.split(vers)[0]+versx+bs.split(vers)[-1]
+                print("old base = ",bs," and new base = ",bsx)
+                baseind = np.where(np.array(res_bases)==bsx)[0]
+                if len(baseind)!=0:
+                    with open(basedir+"xvers/"+rawname+"_xvers.txt","w") as fil:
+                        fil.writelines(rawname+"\n")
+                        fil.close()
+            else:
+                print("file not found in query!!!")
+                sys.exit(0)
+        inds.append(baseind)
+    fluxind = inds[0]
+    maskind = inds[1]
+    wtind = inds[2] 
     #print("indices = ",fluxind,maskind,wtind)
     # Download the files
     # 'https://astroarchive.noirlab.edu/api/retrieve/26e44fdb72ae8c6123511bead4caa97a/'
 
     for fl,fname,findd,fbase in zip ([fluxfile,maskfile,wtfile],["fluxfile","maskfile","wtfile"],[fluxind,maskind,wtind],[fluxbase,maskbase,wtbase]):
         dload_eflag = 0
+        print("index = ",findd)
         while dload_eflag==0:
             #print(findd[0])
+#            print('Downloading ',fname,' =',fl,' url =',res.url[findd[0]])
             print('Downloading ',fname,' =',fl,' url =',res.url[findd[0]])
             try:
+#                urllib.request.urlretrieve(res['url'][findd[0]],outdir+'/'+fbase)   # save to fluxfile
                 urllib.request.urlretrieve(res['url'][findd[0]],outdir+'/'+fbase)   # save to fluxfile
             #except:
             except Exception as e:
@@ -1072,8 +1113,8 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
         ind1 = grep(arr,'Background:',index=True)
         ind2 = grep(arr,'RMS',index=True)
         ind3 = grep(arr,'Threshold',index=True)
-        background = np.float(arr[ind1[0]+1])
-        rms = np.float(arr[ind2[0]+1])
+        background = float(arr[ind1[0]+1])
+        rms = float(arr[ind2[0]+1])
         meta["SKYMED"] = (background,"Median sky background")
         meta["SKYRMS"] = (rms,"RMS of sky")
         # offset the star id (if this is not the first sextractor run #ktedit:sex2
@@ -1926,7 +1967,7 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
                 l1 = l1[0:len(l1)-7]   # strip BELL at end \x07\n
                 lo = l1.find(":")
                 hi = l1.find("+-")
-                maglim = np.float(l1[lo+1:hi])
+                maglim = float(l1[lo+1:hi])
                 logger.info(l1.strip())   # clip leading/trailing whitespace
     # Failure
     else:
