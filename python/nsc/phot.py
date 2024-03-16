@@ -2623,10 +2623,27 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
                 pararr, parchi, profs = daopsf(imfile,wlistfile,apfile,logger=logger)
                 chi = np.min(parchi)
                 mean_chi = np.mean(profs['SIG'])                         #ktedit:cpsf
-                logger.info("mean chi = "+str(mean_chi))                 #ktedit:cpsf     
+                logger.info("mean chi = "+str(mean_chi))                 #ktedit:cpsf    
+                psfsuccess = True
             except:
                 logger.error("Failure in DAOPSF")
-                raise
+                traceback.print_exc()
+                psfsuccess = False
+
+            # PSF failed, try searching all analytic types
+            if psfsuccess==False:
+                opttable = readlines(optfile)
+                psfan = opttable[14].split('=')[1].strip()
+                if psfan[0] != '-':
+                    newanpsf = '-7.0'
+                    opttable[14] = 'AN = '+newanpsf
+                    writelines(optfile,opttable,overwrite=True)                    
+                    logger.info('Retrying DAOPHOT PSF with AN='+newanpsf)
+                    pararr, parchi, profs = daopsf(imfile,wlistfile,apfile,logger=logger)
+                    chi = np.min(parchi)
+                    mean_chi = np.mean(profs['SIG'])     
+                    logger.info("mean chi = "+str(mean_chi))
+                    psfsuccess = True
 
             # Check for bad stars
             nstars = len(profs)
