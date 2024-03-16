@@ -307,7 +307,6 @@ if __name__ == "__main__":
             if rawname in xs:
                 expstr['x'][i] = True
                 xvers = True
-            if xvers:
                 vers = baseroot.split(".")[0].split("_")[-1]
                 versx = re.split('(\d+)',vers)[0]+"x"
                 baseroot = baseroot.split(vers)[0]+versx+baseroot.split(vers)[-1]
@@ -330,8 +329,8 @@ if __name__ == "__main__":
 
         # If exposure is completed or yes redo:
         if (expstr['done'][i]==False) or (redo==True):
-            expstr['cmd'][i] = 'python '+scriptdir+'nsc_instcal_measure.py --fluxfile '+fluxfile+' --wtfile '+wtfile+' --maskfile '+maskfile+' --version '+version+' --host 'host+x
-            if host=="tempest_group" or host=="tempest_katie": expstr['exp_cmd'][i] = 'python '+scriptdir+'get_exposures.py '+rawname+' '+fluxfile+' '+wtfile+' '+maskfile+' '+expdir+' '+ltype
+            expstr['cmd'][i] = 'python '+scriptdir+'nsc_instcal_measure.py --fluxfile '+fluxfile+' --wtfile '+wtfile+' --maskfile '+maskfile+' --version '+version+' --host '+host
+            if host=="tempest_group" or host=="tempest_katie": expstr['exp_cmd'][i] = 'python '+scriptdir+'get_exposures.py '+rawname+' '+fluxfile+' '+wtfile+' '+maskfile+' '+expdir
             expstr['torun'][i] = True
         # If exposure is completed and no redo:
         elif (expstr['done'][i]==True) and (redo==False):
