@@ -30,6 +30,7 @@ import astropy.stats
 import struct
 import tempfile
 import time
+from slurm_funcs import *
 
 pd.set_option('display.max_columns',None)
 
@@ -37,114 +38,105 @@ pd.set_option('display.max_columns',None)
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
-# Download exposures from Astro Data Archive
-def getdata(rawname,fluxfile,wtfile,maskfile,outdir,listtype="a"):
-    '''Download exposures from Astro Data Archive'''
-    natroot = 'https://astroarchive.noirlab.edu'
-    adsurl = f'{natroot}/api/adv_search'
-    if listtype=="b": basedir = "/home/x25h971/nsc/instcal/v4/"
-    else: basedir = "/home/group/davidnidever/nsc/instcal/v4/"
-
-    t0 = time.time()
-    unavails = basedir+"unavails/unavail_exposures.txt" # file for storing unreleased file bases
-
-    fluxbase = os.path.basename(fluxfile)
-    wtbase = os.path.basename(wtfile)
-    maskbase = os.path.basename(maskfile)
-
-    print('Downloading data for exposure RAWNAME = ',rawname)
-    # Do the query
-    jj = {"outfields" : ["original_filename", "archive_filename", "proc_type", "url"],"search" : [["original_filename",rawname, 'icontains'],]}
-    query_eflag = 0
+# Query the Astro Data Archive (ADA)
+def ada_query(type,adsurl,search_params,rawname,udir,outdir="",fbase=""):
+    query_eflag = 0                # to redo query if denied
     while query_eflag==0:
-        try:
-            print(f'{adsurl}/find/?limit=100',jj)
-            res =  pd.DataFrame(requests.post(f'{adsurl}/find/?limit=100',json=jj).json()[1:])
-        except Exception as e:
+        try:                       # Try to do query
+            #print(f'{adsurl}/find/?limit=100',search_params)
+            if type=="query":  res =  pd.DataFrame(requests.post(f'{adsurl}/find/?limit=100',json=search_params).json()[1:])
+            elif type=="dload": urllib.request.urlretrieve(adsurl,outdir+'/'+fbase)   # save to fluxfile
+        except Exception as e:     # If file is unavailable, make a note of it
             print("exception = ",e)
-            if "not available" in str(e):
+            if "out of bounds" in str(e):
+                print("no url found")
+                dload_eflag = 1
+            elif "not available" in str(e):
                 print("file not available, goodbye")
-                with open(basedir+"unavails/"+rawname+"_unavail.txt","w") as fl:
-                    fl.writelines(rawname+"\n")
-                    fl.close()
-                with open(unavails,'a') as fl:
-                    fl.writelines(rawname+"\n")
-                    fl.close()
+                with open(udir+rawname+"_unavail.txt","w") as ufile:
+                    ufile.writelines(rawname+"\n")
+                    ufile.close()
                 sys.exit(0)
-            else:
+            else:                  # If query denied, sleep for a sec and try again
                 print("request denied, sleep and try again")
                 time.sleep(np.random.randint(1,10))
-        else:
+        else:                      # If query complete, get out of the loop and check it!   
             print("rawname query done")
             query_eflag = 1
-    print(len(res)," = length of query output")
-    print(res)
+        if type=="query": return(res)
+        #elif type=="dload": 
+    
+
+# Download exposures from Astro Data Archive, mostly use for Tempest.
+def getdata(rawname,fluxfile,wtfile,maskfile,basedir,outdir):
+    '''Download exposures from Astro Data Archive'''
+    # -- Set up & Inputs --
+    natroot = 'https://astroarchive.noirlab.edu'    # ADA url
+    adsurl = f'{natroot}/api/adv_search'
+    t0 = time.time()                                # Determine start time
+    udir = basedir+"unavails/"                      # Where to keep a record of files that are
+    makedir(udir)                                     # unavailable for download from ADA, for whatever reason
+    unavails = udir+"unavail_exposures.txt"         # File for storing unavailable/unreleased file bases
+    fluxbase = os.path.basename(fluxfile)           # Name of epxosure fluxfile
+    wtbase = os.path.basename(wtfile)                                # wtfile
+    maskbase = os.path.basename(maskfile)                            # maskfile
+    print('Downloading data for exposure RAWNAME = ',rawname)
+    
+    # -- Try a RAWNAME query to get all 3 flux,wt,maskfiles --
+    jj = {"outfields" : ["original_filename", "archive_filename", "proc_type", "url","release_date"],"search" : [["original_filename",rawname, 'icontains'],]}
+    res = ada_query("query",adsurl,jj,rawname,udir)
+    #print(len(res)," = length of query output")
+    #print("res = ",res.archive_filename[0],res.original_filename[0],res.url[0],res.release_date[0])
+    
+    # -- If the files were not found by a RAWNAME query, do an individual search for each --
     if len(res)<3:
-        for fl in [fluxbase,wtbase,maskbase]:
+        print("flux, weight, mask files not found in rawname query.  trying an individual query for each.")
+        for fl in [fluxbase,wtbase,maskbase]:   # for each 
             jj_fl = {"outfields" : ["original_filename", "archive_filename", "proc_type", "url"],"search" : [["archive_filename",fl, 'icontains'],]}
-            query_eflag2=0
-            while query_eflag2==0:
-                try:
-                    res_fl =  pd.DataFrame(requests.post(f'{adsurl}/find/?limit=100',json=jj_fl).json()[1:])
-                except Exception as e:
-                    print("Exception = ",e)
-                    if "not available" in str(e):
-                        print("file not available, goodbye")
-                        with open(basedir+"unavails/"+rawname+"_unavail.txt","w") as fl:
-                            fl.writelines(rawname+"\n")
-                            fl.close()
-                        with open(unavails,'a') as fil:
-                            fil.writelines(fl+"\n")
-                            fil.close()
-                        sys.exit(0)
-                    else:
-                        print("request denied, sleep and try again")
-                        time.sleep(np.random.randint(1,10))
-                else:
-                    print("sub-query done")
-                    query_eflag2 = 1
+            res_fl = ada_query("query",adsurl,jj_fl,rawname,udir)
             res = pd.concat([res,res_fl],axis=0,ignore_index=True)
-#    res=res.drop(res[res.proc_type != "instcal"].index)
-#    res=res.reset_index(drop=True)
+
+    #res=res.drop(res[res.proc_type != "instcal"].index)
+    #res=res.reset_index(drop=True)
     #print("query proc_type =\n",res.values) #,"\n",res.archive_filename.values)
     #print("res[1] = ",res['url'][1])
     #print("res =\n",res.url)
-    # Get the base names and compare to our filenames
-    base = [os.path.basename(f) for f in res.archive_filename]
-    #print("base =/n",base)
-    fluxind = np.where(np.array(base)==fluxbase)[0]
-    maskind = np.where(np.array(base)==maskbase)[0]
-    wtind = np.where(np.array(base)==wtbase)[0]
-    #print("indices = ",fluxind,maskind,wtind)
-    # Download the files
-    # 'https://astroarchive.noirlab.edu/api/retrieve/26e44fdb72ae8c6123511bead4caa97a/'
 
-    for fl,fname,findd,fbase in zip ([fluxfile,maskfile,wtfile],["fluxfile","maskfile","wtfile"],[fluxind,maskind,wtind],[fluxbase,maskbase,wtbase]):
-        dload_eflag = 0
-        while dload_eflag==0:
-            #print(findd[0])
-            print('Downloading ',fname,' =',fl,' url =',res.url[findd[0]])
-            try:
-                urllib.request.urlretrieve(res['url'][findd[0]],outdir+'/'+fbase)   # save to fluxfile
-            #except:
-            except Exception as e:
-                print("exception = ",e)
-                if "out of bounds" in str(e):
-                    print("no url found")
-                    dload_eflag = 1
-                elif "not available" in str(e):
-                    print("file not available, goodbye")
-                    with open(basedir+"unavails/"+rawname+"_unavail.txt","w") as fl:
-                        fl.writelines(rawname+"\n")
-                        fl.close()
-                    with open(unavails,'a') as fl:
-                        fl.writelines(fbase+"\n")
-                        fl.close()
+    # -- Get the base names --
+    files = [fluxfile,maskfile,wtfile]
+    bases = [fluxbase,maskbase,wtbase]
+    archive_bases = [os.path.basename(f) for f in res.archive_filename]
+    #print("base =/n",base)
+    #fluxind = np.where(np.array(base)==fluxbase)[0]
+    #maskind = np.where(np.array(base)==maskbase)[0]
+    #wtind = np.where(np.array(base)==wtbase)[0]
+    #print("indices = ",fluxind,maskind,wtind)
+    
+    # -- Download the flux,mask,wtfiles if we can get em --
+    # 'https://astroarchive.noirlab.edu/api/retrieve/26e44fdb72ae8c6123511bead4caa97a/'
+    for file,f_base in zip (files,bases):
+        # --- Checking for a res index for the file
+        f_ind = np.where(np.array(archive_bases)==f_base)[0] # Try to get index of filename in res.  Also check for "vx" version listings.
+        if len(f_ind)==0:                                    # Check for "vx" naming
+            vers = f_base.split(".")[0].split("_")[-1]
+            versions = ['MT1', 'a1', 'lg9', 'ls10', 'ls9', 'v1', 'v2', 'v3', 'v4']
+            if vers in versions:                             # If file could it have "vx" naming, check for it!
+                versx = re.split('(\d+)',vers)[0]+"x"
+                f_basex = f_base.split(vers)[0]+versx+f_base.split(vers)[-1]
+                print("old base = ",f_base," and new base = ",f_basex)
+                f_ind = np.where(np.array(archive_bases)==f_basex)[0] # try to get index of "vx" filename in res
+                if len(f_ind)!=0:                            # If "vx" naming, make a note.
+                    with open(basedir+"xvers/"+rawname+"_xvers.txt","w") as xfile:
+                        xfile.writelines(rawname+"\n")
+                        xfile.close()
+                else:                                        # Else, if there was no "vx" version, file can't be found.
+                    print("file ",file," not found in query!!!")
                     sys.exit(0)
-                else:
-                    print("request denied, sleep and try again")
-                    time.sleep(np.random.randint(1,10))
-            else: dload_eflag = 1
+            else:                                            # Else, if can't have "vx" naming, file can't be found
+                print("file ",file," not found in query!!!")
+                sys.exit(0)
+        # --- If we've found a res index for the file, try to download it!
+        if len(f_ind)!=0: ada_query("dload",res['url'][find[0]],[],rawname,udir,outdir,fbase)
 
     t1 = time.time()
     print("time elapsed = ",t1-t0)
@@ -773,7 +765,7 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",naxis1=None,naxis2=Non
 # Run Source Extractor
 #---------------------
 #def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,configdir=None,logfile=None,logger=None):
-def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,configdir=None,offset=0,sexiter=1,dthresh=2.0,logfile=None,logger=None): #ktedit:sex2
+def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,configdir=None,offset=0,sexiter=1,dthresh=2.0,logfile=None,logger=None,bindir=None): #ktedit:sex2
     '''
     Run Source Extractor on an exposure.  The program is configured to work with files
     created by the NOAO Community Pipeline.
@@ -800,6 +792,9 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
             be the base name of `fluxfile` with the suffix "_sex.log".
     logger : logger object, optional
            The Logger to use for logging output.
+    bindir : str, optional
+           The path to whatever directory ("/home/x25h971/bin/" for katie on tempest)
+           you keep your SE command in
 
     Returns
     -------
@@ -821,7 +816,9 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
 
     if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     logger.info("-- Running SExtractor --")
-    logger.info("input file: "+str(fluxfile))    
+    logger.info("input file: "+str(fluxfile))   
+
+    if bindir is None: bindir=""  # /home/x25h971/bin/ is for Katie on Tempest, for example
 
     # Not enough inputs
     if fluxfile is None:
@@ -1043,7 +1040,7 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
     try:
         # Save the SExtractor info to a logfile
         sf = open(logfile,'w')
-        retcode = subprocess.call(["/home/x25h971/bin/sex",sfluxfile,"-c","default.config"],stdout=sf,stderr=subprocess.STDOUT)
+        retcode = subprocess.call([bindir+"sex",sfluxfile,"-c","default.config"],stdout=sf,stderr=subprocess.STDOUT)
         sf.close()
         if retcode < 0:
             logger.error("Child was terminated by signal"+str(-retcode))
@@ -1609,7 +1606,7 @@ def mkdaoim(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,logge
 
 # DAOPHOT FIND detection
 #-----------------------
-def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
+def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None,bindir=None):
     '''
     This runs DAOPHOT FIND on an image.
 
@@ -1628,6 +1625,9 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
             run.  By default this is the base name of `imfile` with a ".coo.log" suffix.
     logger : logging object
            The logger to use for the loggin information.
+    bindir : str, optional
+           The path to whatever directory ("/home/x25h971/bin/" for katie on tempest)
+           you keep your SE command in
 
     Returns
     -------
@@ -1647,6 +1647,8 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
 
     if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     logger.info("-- Running DAOPHOT detection --")
+
+    if bindir is None: bindir=""  # /home/x25h971/bin/ is for Katie on Tempest, for example
 
     # Make sure we have the image file name
     if imfile is None:
@@ -1681,7 +1683,7 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            "/home/x25h971/bin/daophot << END_DAOPHOT >> "+logfile+"\n" \
+            bindir+"daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
             ""+toptfile+"\n" \
             "\n" \
@@ -1755,7 +1757,7 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None):
 
 # DAOPHOT aperture photometry
 #----------------------------
-def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=None,apersfile=None,logfile=None,logger=None):
+def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=None,apersfile=None,logfile=None,logger=None,bindir=None):
     '''
     This runs DAOPHOT aperture photometry on an image.
 
@@ -1782,6 +1784,9 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
             run.  By default this is the base name of `imfile` with a ".ap.log" suffix.
     logger : logging object
            The logger to use for the loggin information.
+    bindir : str, optional
+           The path to whatever directory ("/home/x25h971/bin/" for katie on tempest)
+           you keep your SE command in
 
     Returns
     -------
@@ -1803,6 +1808,8 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
 
     if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     logger.info("-- Running DAOPHOT aperture photometry --")
+
+    if bindir is None: bindir=""  # /home/x25h971/bin is for Katie on Tempest, for example
 
     # Make sure we have the image file name
     if imfile is None:
@@ -1866,7 +1873,7 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            "/home/x25h971/bin/daophot << END_DAOPHOT >> "+logfile+"\n" \
+            bindir+"daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
             ""+toptfile+"\n" \
             "\n" \
@@ -1948,7 +1955,7 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
 
 # Pick PSF stars using DAOPHOT
 #-----------------------------
-def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optfile=None,logfile=None,logger=None):
+def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optfile=None,logfile=None,logger=None,bindir=None):
     '''
     This runs DAOPHOT aperture photometry on an image.
 
@@ -1973,6 +1980,9 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
             run.  By default this is the base name of `imfile` with a ".lst.log" suffix.
     logger : logging object
            The logger to use for the loggin information.
+    bindir : str, optional
+           The path to whatever directory ("/home/x25h971/bin/" for katie on tempest)
+           you keep your SE command in
 
     Returns
     -------
@@ -1992,6 +2002,8 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
 
     if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     logger.info("-- Running DAOPHOT PICKPSF -- ")
+
+    if bindir is None: bindir=""  # /home/x25h971/bin/ is for Katie on Tempest, for example
 
     # Make sure we have the image file name
     if imfile is None:
@@ -2033,7 +2045,7 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            "/home/x25h971/bin/daophot << END_DAOPHOT >> "+logfile+"\n" \
+            bindir+"daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
             ""+toptfile+"\n" \
             "\n" \
@@ -2094,7 +2106,7 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
 
 # Run DAOPHOT PSF
 #-------------------
-def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfile=None,logfile=None,verbose=False,logger=None):
+def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfile=None,logfile=None,verbose=False,logger=None,bindir=None):
     '''
     This runs DAOPHOT PSF to create a .psf file.
 
@@ -2123,6 +2135,9 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
             Verbose output of the DAOPHOT PSF parameter errors and PSF star profile errors.
     logger : logging object
            The logger to use for the loggin information.
+    bindir : str, optional
+           The path to whatever directory ("/home/x25h971/bin/" for katie on tempest)
+           you keep your SE command in
 
     Returns
     -------
@@ -2146,6 +2161,8 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
 
     if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     logger.info("-- Running DAOPHOT PSF -- ")
+
+    if bindir is None: bindir=""  # /home/x25h971/bin/ is for Katie on Tempest, for example
 
     # Make sure we have the image file name
     if imfile is None:
@@ -2194,7 +2211,7 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            "/home/x25h971/bin/daophot << END_DAOPHOT >> "+logfile+"\n" \
+            bindir+"daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
             ""+toptfile+"\n" \
             "\n" \
@@ -2273,7 +2290,7 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
 # Subtract neighbors of PSF stars
 #--------------------------------
 def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,psffile=None,
-              nstfile=None,grpfile=None,logfile=None,logger=None):
+              nstfile=None,grpfile=None,logfile=None,logger=None,bindir=None):
     '''
     This subtracts neighbors of PSF stars so that an improved PSF can be made.
 
@@ -2306,6 +2323,9 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
             run.  By default this is the base name of `imfile` with a ".subnei.log" suffix.
     logger : logging object
            The logger to use for the loggin information.
+    bindir : str, optional
+           The path to whatever directory ("/home/x25h971/bin/" for katie on tempest)
+           you keep your SE command in
 
     Returns
     -------
@@ -2322,6 +2342,8 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
 
     if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     logger.info("-- Subtracting PSF stars neighbors -- ")
+
+    if bindir is None: bindir=""  # /home/x25h971/bin/ is for Katie on Tempest, for example
 
     # Make sure we have the image file name
     if imfile is None:
@@ -2377,7 +2399,7 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            "/home/x25h971/bin/daophot << END_DAOPHOT >> "+logfile+"\n" \
+            "bindir+daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
             ""+toptfile+"\n" \
             "\n" \
@@ -2713,7 +2735,7 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
 
 # Run ALLSTAR
 #-------------
-def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfile=None,meta=None,logfile=None,logger=None):
+def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfile=None,meta=None,logfile=None,logger=None,bindir=None):
     '''
     Run DAOPHOT ALLSTAR on an image.
 
@@ -2742,6 +2764,9 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
             run.  By default this is the base name of `imfile` with a ".subnei.log" suffix.
     logger : logging object
            The logger to use for the loggin information.
+    bindir : str, optional
+           The path to whatever directory ("/home/x25h971/bin/" for katie on tempest)
+           you keep your SE command in
 
     Returns
     -------
@@ -2761,6 +2786,8 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
 
     if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     logger.info("-- Running ALLSTAR --")
+
+    if bindir is None: bindir=""  # /home/x25h971/bin/ is for Katie on Tempest, for example
 
     # Make sure we have the image file name
     if imfile is None:
@@ -2807,7 +2834,7 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
     optlines=[line +'\n' for line in optlines]
     # Lines for the DAOPHOT ALLSTAR script
     lines = ["#!/bin/sh\n",
-             "/home/x25h971/bin/allstar << END_ALLSTAR >> "+logfile+"\n"]
+             bindir+"allstar << END_ALLSTAR >> "+logfile+"\n"]
     lines += optlines
     lines += ["\n",
               timfile+"\n",
@@ -2869,7 +2896,7 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
 
 # Calculate aperture corrections
 #-------------------------------
-def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=None,logger=None):
+def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=None,logger=None,bindir=None):
     '''
     Run DAOGROW that calculates curve of growths using aperture photometry.
 
@@ -2893,6 +2920,9 @@ def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=Non
             run.  By default this is the base name of `imfile` with a ".gro.log" suffix.
     logger : logging object
            The logger to use for the logging information.
+    bindir : str, optional
+           The path to whatever directory ("/home/x25h971/bin/" for katie on tempest)
+           you keep your SE command in
 
     Returns
     -------
@@ -2910,6 +2940,8 @@ def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=Non
     '''
     if logger is None: logger=basiclogger('phot')   # set up basic logger if necessary
     logger.info("-- Running DAOGROW --")
+
+    if bindir is None: bindir=""  # default for Katie on Tempest, for example
 
     # Make sure we have apfile
     if photfile is None:
@@ -2977,7 +3009,7 @@ def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=Non
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            "/home/x25h971/bin/daogrow << DONE >> "+logfile+"\n" \
+            "bindirdaogrow << DONE >> "+logfile+"\n" \
             ""+taperfile+"\n" \
             "\n" \
             ""+tinffile+"\n" \
