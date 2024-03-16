@@ -261,7 +261,11 @@ class Exposure:
                 # Clean up
                 self.chip.cleanup()
             self.logger.info("dt = "+str(time.time()-t0)+" seconds")
-
+            if 2==1:
+                chiptimes = Table.read(basedir+'lists/nsc_dr3_chiptimes.fits')
+                chiptimes.add_row([(str(self.fluxfile).strip().split('/')[-1]).split('.')[0],i,int(self.chip.ccdnum),int(nsrc),int(t1_check-t0)])
+                chiptimes = Table(np.unique(chiptimes))
+                chiptimes.write(basedir+'lists/nsc_dr3_chiptimes.fits',overwrite=True)
 
     # Teardown
     def teardown(self):
