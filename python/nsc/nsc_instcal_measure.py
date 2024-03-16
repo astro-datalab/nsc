@@ -1027,9 +1027,9 @@ if __name__ == "__main__":
     #------
     # Initiate input arguments
     parser = ArgumentParser(description='Run NSC Instcal Measurement Process on one Exposure.')
-    parser.add_argument('--fluxfile',type=str,nargs=1,help='Fluxfile name, no paths!')
-    parser.add_argument('--wtfile',type=str,nargs=1,help='Weightfile name')
-    parser.add_argument('--maskfile',type=str,nargs=1,help='Maskfile name')
+    parser.add_argument('--fluxfile',type=str,nargs=1,help='Full path to fluxfile')
+    parser.add_argument('--wtfile',type=str,nargs=1,help='Weightfile')
+    parser.add_argument('--maskfile',type=str,nargs=1,help='Maskfile')
     parser.add_argument('--version',type=str,nargs=1,default="None",help='Version number')
     parser.add_argument('--host',type=str,nargs=1,default="None",help='hostname, default "None", other options supported are "cca","tempest_katie","tempest_group"')
     parser.add_argument('--x',action='store_true', help='Exposure version is of format "vX"')
@@ -1048,20 +1048,17 @@ if __name__ == "__main__":
     
     # Get NSC directories
     basedir, tmpdir = getnscdirs(version,host)
-    filedir = basedir + "/exposures/"
-    print("Working in basedir,tmpdir,exposuredir = ",basedir,tmpdir,filedir)
+    print("Working in basedir,tmpdir = ",basedir,tmpdir)
     # Make sure the directories exist
     if not os.path.exists(basedir):
         os.makedirs(basedir)
     if not os.path.exists(tmpdir):
         os.makedirs(tmpdir)
-    if not os.path.exists(filedir):
-        os.makedirs(filedir)
 
     # Get file names
-    fluxfile = filedir+args.fluxfile[0]
-    wtfile = filedir+args.wtfile[0]
-    maskfile = filedir+args.maskfile[0]
+    fluxfile = args.fluxfile[0]
+    wtfile = args.wtfile[0]
+    maskfile = args.maskfile[0]
     # Check if file naming convention lists version "vX"
     if x:
         vers = fluxfile.split(".")[0].split("_")[-1]
