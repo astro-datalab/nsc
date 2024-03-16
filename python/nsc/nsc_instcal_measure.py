@@ -1035,7 +1035,7 @@ if __name__ == "__main__":
     parser.add_argument('--wtfile',type=str,nargs=1,help='Weightfile')
     parser.add_argument('--maskfile',type=str,nargs=1,help='Maskfile')
     parser.add_argument('--version',type=str,nargs=1,default="None",help='Version number')
-    parser.add_argument('--host',type=str,nargs=1,default="None",help='hostname, default "None", other options supported are "cca","tempest_katie","tempest_group"')
+    parser.add_argument('--host',type=str,nargs=1,default="None",help='hostname, default "None", other options supported are "cca","tempest_katie","tempest_group","gp09/7"')
     parser.add_argument('--x',action='store_true', help='Exposure version is of format "vX"')
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
     args = parser.parse_args()
