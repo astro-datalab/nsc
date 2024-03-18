@@ -230,7 +230,7 @@ class Exposure:
             os.remove(maskfile)
         fits.writeto(maskfile,mask,header=mhead,output_verify='warn')        
         # Create the chip object
-        self.chip = Chip(fluxfile,wtfile,maskfile,self.base)
+        self.chip = Chip(fluxfile,wtfile,maskfile,self.base,self.host)
         self.chip.bigextension = extension
         self.chip.nscversion = self.nscversion
         self.chip.outdir = self.outdir
@@ -306,11 +306,14 @@ class Exposure:
 # Class to represent a single chip of an exposure
 class Chip:
 
-    def __init__(self,fluxfile,wtfile,maskfile,bigbase):
+    def __init__(self,fluxfile,wtfile,maskfile,bigbase,host):
         self.fluxfile = fluxfile
         self.wtfile = wtfile
         self.maskfile = maskfile
         self.bigbase = bigbase
+        self.host = host
+        if host=="tempest_katie" or "tempest_group": self.bindir = "/home/x25h971/bin/"
+        else: self.bindir = ""
         self.bigextension = None
         base = os.path.basename(fluxfile)
         base = os.path.splitext(os.path.splitext(base)[0])[0]
@@ -570,7 +573,7 @@ class Chip:
     # Run Source Extractor
     #---------------------
     #def runsex(self,outfile=None):
-    def runsex(self,dthresh=1.1,outfile=None): #ktedit:sex2
+    def runsex(self,dthresh=1.1,bindir="/home/x25h971/bin/",outfile=None): #ktedit:sex2
         #--------------------------------------------------------------------------------------------ktedit:sex2 T
         # if allsub=False, run SExtractor on the fluxfile.  Otherwise, run on the ALLSTAR PSF-subtracted image.
         if self.sexiter==1: 
@@ -590,7 +593,7 @@ class Chip:
         basedir, tmpdir = getnscdirs(self.nscversion)
         configdir = basedir+"config/"
         #sexcat, maglim = runsex(self.fluxfile,self.wtfile,self.maskfile,self.meta,sexcatfile,configdir,logger=self.logger)
-        sexcat, maglim = runsex(infile,self.wtfile,self.maskfile,meta,sexcatfile,configdir,offset=offset,sexiter=self.sexiter,dthresh=dthresh,logger=self.logger) #ktedit:sex2
+        sexcat, maglim = runsex(infile,self.wtfile,self.maskfile,meta,sexcatfile,configdir,offset=offset,sexiter=self.sexiter,dthresh=dthresh,logger=self.logger,bindir=self.bindir) #ktedit:sex2
         #--------------------------------------------------------------------------------------------ktedit:sex2 T
         sexcat.add_column(np.repeat(self.sexiter,len(sexcat)),name="NDET_ITER") # keep track of what SExtractor iteration each source is from
         sexcat.add_column(np.zeros(len(sexcat)),name="REPEAT")                  # keep track of sources that were detected in multiple iterations
@@ -665,7 +668,7 @@ class Chip:
     def daofind(self):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        cat = daofind(self.daofile,outfile=daobase+".coo",logger=self.logger)
+        cat = daofind(self.daofile,outfile=daobase+".coo",logger=self.logger,bindir=self.bindir)
 
     # DAOPHOT aperture photometry
     #----------------------------
@@ -682,7 +685,7 @@ class Chip:
             outfile=daobase+str(self.sexiter)+".ap"
         #----------------------------------------------------------------#ktedit:sex2 B
         #apcat, maglim = daoaperphot(self.daofile,daobase+".coo",outfile=daobase+".ap",logger=self.logger)
-        apcat, maglim = daoaperphot(imfile,coofile,outfile=outfile,optfile=daobase+".opt",logger=self.logger) #ktedit:sex2
+        apcat, maglim = daoaperphot(imfile,coofile,outfile=outfile,optfile=daobase+".opt",logger=self.logger,bindir=self.bindir) #ktedit:sex2
         #self._daomaglim = maglim
         if self.sexiter==1: self._daomaglim = maglim #ktedit:sex2
         #else: self._daomaglim2 = maglim            #ktedit:sex2
@@ -693,21 +696,21 @@ class Chip:
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
         if maglim is None: maglim=self.maglim
-        psfcat = daopickpsf(self.daofile,daobase+".ap",maglim,daobase+".lst",nstars,logger=self.logger)
+        psfcat = daopickpsf(self.daofile,daobase+".ap",maglim,daobase+".lst",nstars,logger=self.logger,bindir=self.bindir)
 
     # Run DAOPHOT PSF
     #-------------------
     def daopsf(self,verbose=False):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        psfcat = daopsf(self.daofile,daobase+".lst",outfile=daobase+".psf",verbose=verbose,logger=self.logger)
+        psfcat = daopsf(self.daofile,daobase+".lst",outfile=daobase+".psf",verbose=verbose,logger=self.logger,bindir=self.bindir)
 
     # Subtract neighbors of PSF stars
     #--------------------------------
     def subpsfnei(self):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        psfcat = subpsfnei(self.daofile,daobase+".lst",daobase+".nei",daobase+"a.fits",logger=self.logger)
+        psfcat = subpsfnei(self.daofile,daobase+".lst",daobase+".nei",daobase+"a.fits",logger=self.logger,bindir=self.bindir)
 
     # Create DAOPHOT PSF
     #-------------------
@@ -735,7 +738,7 @@ class Chip:
             outfile = daobase+str(self.sexiter)+".als"
         #-------------------------------------------------------------------#ktedit:sex2 B
         #alscat = allstar(daobase+".fits",daobase+".psf",daobase+".ap",outfile=daobase+".als",meta=self.meta,logger=self.logger)
-        alscat = allstar(imfile,daobase+".psf",apfile=apfile,subfile=subfile,outfile=outfile,optfile=daobase+".als.opt",meta=meta,logger=self.logger) #ktedit:sex2
+        alscat = allstar(imfile,daobase+".psf",apfile=apfile,subfile=subfile,outfile=outfile,optfile=daobase+".als.opt",meta=meta,logger=self.logger,bindir=self.bindir) #ktedit:sex2
 
 
     # Combine total + new SExtractor & ALLSTAR catalog files #ktedit:sex2; this function is new
@@ -875,7 +878,7 @@ class Chip:
             if self.sexiter==1: sex_dt=1.7
             else: sex_dt=1.1
 
-            self.runsex(dthresh=sex_dt)
+            self.runsex(dthresh=sex_dt,bindir=bdir)
 
             # get the info for this iteration's catalog
             nowcat = self.sexcat[self.sexcat['NDET_ITER']==self.sexiter]  # cat for current SE iteration
