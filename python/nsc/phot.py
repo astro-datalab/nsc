@@ -84,7 +84,8 @@ def getdata(rawname,fluxfile,wtfile,maskfile,basedir,outdir):
     
     # -- Try a RAWNAME query to get all 3 flux,wt,maskfiles --
     jj = {"outfields" : ["original_filename", "archive_filename", "proc_type", "url","release_date"],"search" : [["original_filename",rawname, 'icontains'],]}
-    res = ada_query("query",adsurl,jj,rawname,udir)
+    #res = ada_query("query",adsurl,jj,rawname,udir)
+    res = ada_query("query",adsurl,jj,rawname,udir,outdir,fluxbase)
     #print(len(res)," = length of query output")
     #print("res = ",res.archive_filename[0],res.original_filename[0],res.url[0],res.release_date[0])
     
@@ -93,7 +94,7 @@ def getdata(rawname,fluxfile,wtfile,maskfile,basedir,outdir):
         print("flux, weight, mask files not found in rawname query.  trying an individual query for each.")
         for fl in [fluxbase,wtbase,maskbase]:   # for each 
             jj_fl = {"outfields" : ["original_filename", "archive_filename", "proc_type", "url"],"search" : [["archive_filename",fl, 'icontains'],]}
-            res_fl = ada_query("query",adsurl,jj_fl,rawname,udir)
+            res_fl = ada_query("query",adsurl,jj_fl,rawname,udir,outdir,fl)
             res = pd.concat([res,res_fl],axis=0,ignore_index=True)
 
     #res=res.drop(res[res.proc_type != "instcal"].index)
@@ -136,7 +137,7 @@ def getdata(rawname,fluxfile,wtfile,maskfile,basedir,outdir):
                 print("file ",file," not found in query!!!")
                 sys.exit(0)
         # --- If we've found a res index for the file, try to download it!
-        if len(f_ind)!=0: ada_query("dload",res['url'][find[0]],[],rawname,udir,outdir,fbase)
+        if len(f_ind)!=0: ada_query("dload",res['url'][f_ind[0]],[],rawname,udir,outdir,f_base)
 
     t1 = time.time()
     print("time elapsed = ",t1-t0)
@@ -1683,7 +1684,7 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None,bindi
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            bindir+"daophot << END_DAOPHOT >> "+logfile+"\n" \
+            ""+bindir+"daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
             ""+toptfile+"\n" \
             "\n" \
@@ -1873,7 +1874,7 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            bindir+"daophot << END_DAOPHOT >> "+logfile+"\n" \
+            ""+bindir+"daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
             ""+toptfile+"\n" \
             "\n" \
@@ -2045,7 +2046,7 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            bindir+"daophot << END_DAOPHOT >> "+logfile+"\n" \
+            ""+bindir+"daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
             ""+toptfile+"\n" \
             "\n" \
@@ -2211,7 +2212,7 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            bindir+"daophot << END_DAOPHOT >> "+logfile+"\n" \
+            ""+bindir+"daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
             ""+toptfile+"\n" \
             "\n" \
@@ -2399,7 +2400,7 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            "bindir+daophot << END_DAOPHOT >> "+logfile+"\n" \
+            ""+bindir+"daophot << END_DAOPHOT >> "+logfile+"\n" \
             "OPTIONS\n" \
             ""+toptfile+"\n" \
             "\n" \
@@ -2851,7 +2852,7 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
     optlines=[line +'\n' for line in optlines]
     # Lines for the DAOPHOT ALLSTAR script
     lines = ["#!/bin/sh\n",
-             bindir+"allstar << END_ALLSTAR >> "+logfile+"\n"]
+             ""+bindir+"allstar << END_ALLSTAR >> "+logfile+"\n"]
     lines += optlines
     lines += ["\n",
               timfile+"\n",

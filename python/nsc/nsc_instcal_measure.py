@@ -59,18 +59,18 @@ def getnscdirs(version=None,host=None):
         basedir = "/net/dl2/kfas/nsc/instcal/"+verdir
         tpmroot = basedir+"tmp/"
     # on tempest use
-    elif host=="tempest_katie": 
+    elif host=="tempest_katie":
         basedir = "/home/x25h971/nsc/instcal/"+verdir
-        tpmroot = basedir+"tmp/"
-    elif host=="tempest_group": 
+        tmproot = basedir+"tmp/"
+    elif host=="tempest_group":
         basedir = "/home/group/davidnidever/nsc/instcal/"+verdir
-        tpmroot = basedir+"tmp/"
-    elif host=="cca": 
+        tmproot = basedir+"tmp/"
+    elif host=="cca":
         basedir = '/mnt/home/dnidever/ceph/nsc/instcal/'+verdir
         tmproot = '/mnt/home/dnidever/ceph/nsc/'+verdir+'tmp/'
-    else: 
+    else:
         basedir = os.getcwd()
-        tmpdir = basedir+"tmp/"
+        tmproot = basedir+"tmp/"
     return basedir,tmproot
 
 
@@ -228,7 +228,7 @@ class Exposure:
         fits.writeto(wtfile,wt,header=whead,output_verify='warn')
         if os.path.exists(maskfile):
             os.remove(maskfile)
-        fits.writeto(maskfile,mask,header=mhead,output_verify='warn')        
+        fits.writeto(maskfile,mask,header=mhead,output_verify='warn')
         # Create the chip object
         self.chip = Chip(fluxfile,wtfile,maskfile,self.base,self.host)
         self.chip.bigextension = extension
@@ -1045,7 +1045,7 @@ if __name__ == "__main__":
 
 
     # Inputs  
-    version = dln.first_el(args.version)     # NSC version, like "v4", default "None"
+    version = args.version[0]     # NSC version, like "v4", default "None"
     if version=="None": version = None
     host = str(args.host[0])                 # hostname of server, default "None"
     if host=="None": host = None

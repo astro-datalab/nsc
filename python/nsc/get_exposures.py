@@ -6,7 +6,7 @@
 from astropy.table import Table,vstack
 import numpy as np
 import os
-from phot_tempest import *
+from phot import *
 import sys
 
 # Main Code
@@ -49,12 +49,13 @@ if __name__=="__main__":
         fluxfile = sys.argv[2]
         wtfile = sys.argv[3]
         maskfile = sys.argv[4]
-        outdir = sys.argv[5]
+        basedir = sys.argv[5]
+        outdir = sys.argv[6]
 
 
     # check if files already exist!
     if os.path.exists(outdir+fluxfile) and os.path.exists(outdir+wtfile) and os.path.exists(outdir+maskfile):
         print("all files exist!")
     else:
-        print("file names = ",rawname,fluxfile,wtfile,maskfile,outdir)
-        getdata(rawname,fluxfile,wtfile,maskfile,outdir)
+        print("file names = ",rawname,fluxfile,wtfile,maskfile,basedir,outdir)
+        getdata(rawname,fluxfile,wtfile,maskfile,basedir,outdir)

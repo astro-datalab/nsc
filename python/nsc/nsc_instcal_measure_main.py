@@ -102,8 +102,8 @@ if __name__ == "__main__":
     parser.add_argument('--host',type=str,nargs=1,help='Hostname, or delimited list of hosts to divide jobs between if on datalab')    
     parser.add_argument('--partition',type=str,nargs=1,default="None",help='Delimited list of partitions to divide jobs between, if using slurm')
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
-    parser.add_argument('--nmulti', type=int, nargs=1, default=10, help='Number of jobs, if on datalab servers')
-    parser.add_argument('--maxjobs', type=int, nargs=1, default=1, help='Max number of exposures to process at any given time')
+    parser.add_argument('--nmulti', type=str, nargs=1, default=0, help='Number of jobs, if on datalab servers')
+    parser.add_argument('--maxjobs', type=str, nargs=1, default=1, help='Max number of exposures to process at any given time')
     parser.add_argument('--nside',type=str,nargs=1,default=32,help='HEALPix NSIDE (ring ordering, please!) to sort list for processing order, 0 for random order')    
     parser.add_argument('--nexp',type=str,nargs=1,default=0,help='Number of exposures to download at once, 0 if not downloading')
     parser.add_argument('--list',type=str,nargs=1,default=None,help='Input list of exposures to use')
@@ -123,11 +123,11 @@ if __name__ == "__main__":
         host = hostname.split('.')[0]
     partitions=args.partition[0].split(',')  # the slurm partitions to submit jobs to, if we're using slurm
     redo = args.redo                         # if called, redo = True
-    npar=len(partitions)                     # number of slurm partitions
-    nmulti = args.nmulti[0]                  
+    npar = len(partitions)                     # number of slurm partitions
+    nmulti = int(args.nmulti[0])                  # for running on datalab
     maxjobs = int(args.maxjobs[0])           # maximum number of jobs to maintain running at any time
     nchan = maxjobs//npar                    # number of job channels per partition, if using slurm
-    nside = int(args.nside)                  # HEALPix nside (ns of cca version)
+    nside = int(args.nside[0])                  # HEALPix nside (ns of cca version)
     nexp = int(args.nexp[0])                 # number of exposures to download at once, if not on datalab servers
     sleep_time=10                            # seconds to sleep between checking job status
     inputlist = args.list                    # list of exposures to analyze
@@ -137,9 +137,11 @@ if __name__ == "__main__":
     # Establish necessary directories
     if host=="tempest_katie" or host=="tempest_group":
         if host=="tempest_katie":
-            basedir = "/home/x25h971/nsc/instcal/"+version+"/"           # location of operations
+            basedir = "/home/x25h971/nsc/instcal/"+version+"/"       # location of operations
         elif host=="tempest_group":
-            basedir = "/home/group/davidnidever/nsc/instcal/"+version+"/"  
+            basedir = "/home/group/davidnidever/nsc/instcal/"+version+"/"
+        scriptdir = basedir                                          # where scripts will be
+        expdir = basedir+"exposures/"                                # where exposures will be downloaded
         unavail_dir = basedir+"unavails/"                            # where we keep a log of unavailable exposures
         x_dir = basedir+"xvers/"                                     # where we keep a log of exposures with version "vX" naming
         makedir(expdir)
@@ -151,8 +153,8 @@ if __name__ == "__main__":
         xs = np.array([i.split(" ")[-1].split("_xvers.txt")[0] for i in xs])
     elif host=="cca":
         basedir = os.getcwd()+"/"+version+"/"
-        scriptdir = basedir                                          # location of scripts
-        expdir = basedir+"exposures/"                                # where exposures will be
+        scriptdir = basedir
+        expdir = basedir+"exposures/"
     elif host=="gp09" or host=="gp07":
         basedir = "/net/dl2/kfas/nsc/instcal/"+version+"/"
         scriptdir = basedir # was localdir
@@ -246,8 +248,8 @@ if __name__ == "__main__":
     # Check the exposures
     #--------------------
     rootLogger.info('Checking on the exposures')
-    if host=="tempest_katie" or "tempest_group":
-        dtype_expstr = np.dtype([('instrument',str,100),('ring'+str(ns),int),('rawname',str,100),('fluxfile',str,100),('wtfile',str,100),
+    if nexp>0:
+        dtype_expstr = np.dtype([('instrument',str,100),('ring'+str(nside),int),('rawname',str,100),('fluxfile',str,100),('wtfile',str,100),
                                  ('maskfile',str,100),('outfile',str,150),('logfile',str,150),('partition',str,100),
                                  ('done',bool),('torun',bool),('submitted',bool),('jobname',str,100),('jobid',str,100),('jobstatus',str,100),
                                  ('cmd',str,1000),('cputime',str,100),('maxrss',str,100),('outdirectory',str,500),('exp',int),
@@ -276,7 +278,7 @@ if __name__ == "__main__":
         fdir,base = os.path.split(fluxfile)
 
         # Change the root directory name to reflect host repo structure
-        if host=="tempest_group" or host=="tempest_katie" or host=="cca":
+        if nexp>0:
             fluxfile = fluxfile.split('/')[-1]
             wtfile = wtfile.split('/')[-1]
             maskfile = maskfile.split('/')[-1]
@@ -292,14 +294,14 @@ if __name__ == "__main__":
         expstr['fluxfile'][i] = fluxfile
         expstr['wtfile'][i] = wtfile
         expstr['maskfile'][i] = maskfile
-        expstr['ring'+str(ns)][i] = hp.ang2pix(ns,lstr['RA'][gdexp[i]],lstr['DEC'][gdexp[i]],lonlat=True)
+        if nside>0: expstr['ring'+str(nside)][i] = hp.ang2pix(nside,lstr['RA'][gdexp[i]],lstr['DEC'][gdexp[i]],lonlat=True)
 
         # Check if the output already exists.
         dateobs = lstr['DATE_OBS'][gdexp[i]]
         if type(dateobs) is np.bytes_: dateobs=dateobs.decode()
         night = dateobs[0:4]+dateobs[5:7]+dateobs[8:10]
         baseroot = base[0:base.find('.fits.fz')]
-        
+
         # Check to see if file is unavailable or has x version:
         if host=="tempest_katie" or host=="tempest_group":
             xvers = False
@@ -310,7 +312,7 @@ if __name__ == "__main__":
                 vers = baseroot.split(".")[0].split("_")[-1]
                 versx = re.split('(\d+)',vers)[0]+"x"
                 baseroot = baseroot.split(vers)[0]+versx+baseroot.split(vers)[-1]
-                
+
         # Get output file information
         outroot =      basedir+instrument+'/'+night+'/'+baseroot
         outfile =      outroot+"/"+baseroot+'_1.fits' # outfile for first chip
@@ -330,7 +332,7 @@ if __name__ == "__main__":
         # If exposure is completed or yes redo:
         if (expstr['done'][i]==False) or (redo==True):
             expstr['cmd'][i] = 'python '+scriptdir+'nsc_instcal_measure.py --fluxfile '+fluxfile+' --wtfile '+wtfile+' --maskfile '+maskfile+' --version '+version+' --host '+host
-            if host=="tempest_group" or host=="tempest_katie": expstr['exp_cmd'][i] = 'python '+scriptdir+'get_exposures.py '+rawname+' '+fluxfile+' '+wtfile+' '+maskfile+' '+expdir
+            if host=="tempest_group" or host=="tempest_katie": expstr['exp_cmd'][i] = 'python '+scriptdir+'get_exposures.py '+rawname+' '+fluxfile+' '+wtfile+' '+maskfile+' '+basedir+' '+expdir
             expstr['torun'][i] = True
         # If exposure is completed and no redo:
         elif (expstr['done'][i]==True) and (redo==False):
@@ -351,7 +353,7 @@ if __name__ == "__main__":
 
     # ------------------------------------------------------------------------------------------------------------------------
     # If no slurm, use jobdaemon ---------------------------------------------------------------------------------------------
-    if partition[0]=="None":
+    if partitions[0]=="None":
 
         nperhost = int(np.ceil(nalltorun/nhost))
         for i in range(nhost):
@@ -712,13 +714,13 @@ if __name__ == "__main__":
                             rootLogger.info("Exposure unreleased, skip")
                         else:
                             cmd = expstr['cmd'][torun[jbsb]]
-                            if expstr['x'][torun[jbsb]]: cmd = cmd+" True"
-                            else: cmd = cmd+" False"
+                            if expstr['x'][torun[jbsb]]: cmd = cmd+" --x"
                             partition = expstr['partition'][torun[jbsb]].split("_")[0]
                             rootLogger.info("--Submit Processing Job for Exposure "+str(expstr['fluxfile'][torun[jbsb]].split("/")[-1])+"--")
                             # -> Write exposure processing job script to file
                             job_name = 'nsc_meas_'+str(logtime)+'_'+str(jsub) #jsub, not jbsb!!!!!
-                            job_file=write_jscript(job_name,partition,cmd,outfiledir,single=True)
+                            job_file = write_jscript(job_name,jsub,partition,[cmd],outfiledir,email="katiefasbender@montana.edu",cpupt=2,mempc="4G",rtime="2-00:00:00")
+                            #job_file=write_jscript(job_name,partition,cmd,outfiledir,single=True)
                             # -> Submit exposure processing job to slurm queue
                             os.system("sbatch "+str(job_file))
                             expstr['submitted'][torun[jbsb]] = True
@@ -751,7 +753,8 @@ if __name__ == "__main__":
                     expstr['exp_jobname'][torun[dload_inds]] = exp_job_name
                     #print(" -> Exposure names",expstr['fluxfile'][torun[tjob_inds]])
                     exp_cmds = list(expstr['exp_cmd'][torun[dload_inds]])
-                    exp_job_file=write_jscript(exp_job_name,"priority",exp_cmds,outfiledir,single=False)
+                    exp_job_file = write_jscript(exp_job_name,jexp,"priority",exp_cmds,outfiledir,email="katiefasbender@montana.edu",cpupt=2,mempc="2G",rtime="00:10:00",parallel=True)
+                    #exp_job_file = write_jscript(exp_job_name,"priority",exp_cmds,outfiledir,single=False)
                 else: nesub = False
                 #print("nesub,lesub = ",nesub,lesub)
                 # - Do the relevant shit with that information:
