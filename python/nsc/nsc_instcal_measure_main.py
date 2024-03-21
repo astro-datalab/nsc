@@ -241,8 +241,8 @@ if __name__ == "__main__":
         np.random.seed(1)
         np.random.shuffle(rnd)
         lstr = lstr[rnd]
-        gdexp = np.arange(nlstr)
-        ngdexp = nlstr
+    gdexp = np.arange(nlstr)
+    ngdexp = nlstr
 
 
     # Check the exposures
@@ -278,7 +278,7 @@ if __name__ == "__main__":
         fdir,base = os.path.split(fluxfile)
 
         # Change the root directory name to reflect host repo structure
-        if nexp>0:
+        if host=="tempest_group" or host=="tempest_katie" or host=="cca":
             fluxfile = fluxfile.split('/')[-1]
             wtfile = wtfile.split('/')[-1]
             maskfile = maskfile.split('/')[-1]
