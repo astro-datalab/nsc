@@ -302,7 +302,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
             if refname == 'PS': 
                 #tablename = 'cp_calib.ps1' 
                 tablename = 'public.ps1' 
-                cols = 'ra, dec, g as gmag, r as rmag, i as imag, z as zmag, y as ymag' 
+                cols = 'ra_ps, dec_ps, g as gmag, r as rmag, i as imag, z as zmag, y as ymag' 
                 ##server = 'gp02.datalab.noirlab.edu' 
                 #server = 'gp01.datalab.noirlab.edu' 
                 server = 'db02.datalab.noirlab.edu'

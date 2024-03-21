@@ -996,7 +996,7 @@ def calibrate(expdir,inpref=None,refcatfile=None,logfilename=None,eqnfile=None,r
         # https://www.cosmos.esa.int/web/gaia/earlydr3#:~:text=The%20reference%20epoch%20for%20Gaia,full%20Gaia%20DR3)%20is%20J2016.
         # The reference epoch for Gaia DR3 (both Gaia EDR3 and the full Gaia DR3) is J2016.0.
 
-        if 'PMRA' in gaia2.colnames and 'PMDEC' in gaia2.colnames:
+        if 'pmra' in gaia2.colnames and 'pmdec' in gaia2.colnames:
             #gaiamjd = 57206.0   # 7/3/2015, J2015.5
             gaiamjd = 57388.0   # 1/1/2016, J2016.0, EDR3, DR3
             delt = (mjd-gaiamjd)/365.242170 # convert to years 
