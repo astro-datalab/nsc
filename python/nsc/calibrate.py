@@ -17,6 +17,189 @@ from scipy import stats
 import subprocess
 from . import utils,query,modelmag
 
+def concatenate(expdir):
+    """
+    Combine multiple chip-level measurement files into a single multi-extension FITS file.
+    """
+    if os.path.exists(expdir)==False:
+        print(expdir,'not found')
+        return
+    curdir = os.getcwd()
+    os.chdir(expdir)
+    base = os.path.basename(expdir)
+    outfile = base+'_meas.fits'
+    if os.path.exists(outfile):
+        print(outfile,'already exists')
+        os.chdir(curdir)
+        return
+    fitsfiles1 = glob('*_?.fits')
+    fitsfiles1.sort()
+    fitsfiles2 = glob('*_??.fits')
+    fitsfiles2.sort()
+    fitsfiles = fitsfiles1+fitsfiles2
+    # this assumes that it is a c4d exposure
+    if len(fitsfiles)<59:
+        print(len(fitsfiles),'fits files found. not enough.  skipping')
+        os.chdir(curdir)
+        return
+    chdu = fits.HDUList()
+    hhdu = fits.HDUList()
+    hhdu.append(fits.PrimaryHDU())
+    for i in range(len(fitsfiles)):
+        hdu1 = fits.open(fitsfiles[i])
+        tab1 = Table.read(fitsfiles[i])
+        base1 = os.path.basename(fitsfiles[i])
+        print('{:3d} {:s} {:8d}'.format(i+1,base1,len(tab1)))
+        ccdnum = base1[:-5].split('_')[-1]
+        newhdu = fits.table_to_hdu(Table(hdu1[1].data))
+        newhdu.header['extname'] = ccdnum
+        newhdu.header['ccdnum'] = ccdnum
+        newhead = hdu1[0].header.copy()
+        newhead['extname'] = ccdnum
+        chdu.append(newhdu)
+        hhdu.append(fits.ImageHDU(header=newhead))
+        hdu1.close()
+    print('Writing',outfile)
+    chdu.writeto(outfile,overwrite=True)
+    chdu.close()
+    houtfile = base+'_header.fits'
+    print('Writing',houtfile)
+    hhdu.writeto(houtfile,overwrite=True)
+    hhdu.close()
+    # Confirm that it is there
+    if os.path.exists(outfile) and os.path.exists(houtfile):
+        # Delete fits files
+        print('Deleting',len(fitsfiles),'individual fits files')
+        for f in fitsfiles:
+            if os.path.exists(f): os.remove(f)
+        # Tar up the rest of the files
+        # leave out meas.fits, log
+        logfile = base+'.log'
+        tarfile = base+'.tgz'
+        allfiles = glob('*')
+        allfiles = [f for f in allfiles if os.path.isfile(f)]
+        allfiles.sort()
+        if outfile in allfiles:
+            allfiles.remove(outfile)
+        if houtfile in allfiles:
+            allfiles.remove(houtfile)
+        if logfile in allfiles:
+            allfiles.remove(logfile)
+        if tarfile in allfiles:
+            allfiles.remove(tarfile)
+        cmd = ['tar','cvzf',tarfile]+allfiles
+        print('tarring',len(allfiles),'files in',tarfile)
+        res = subprocess.run(cmd,capture_output=True)
+        if res.returncode==0:
+            print('tar success')
+            print('Deleting tarred files')
+            for f in allfiles:
+                if os.path.exists(f): os.remove(f)
+    os.chdir(curdir)
+
+def recreatemeas(calfile,metafile,outfile):
+    """
+    Recreate original measurement table using the calibrated table and
+    meta-data file.
+    """
+
+    # Load meta-data
+    expinfo = Table.read(metafile,1)
+    mhdu = fits.open(metafile)
+    expinfo = Table(mhdu[1]data)
+    chinfo = None
+    for i in range(len(mhdu)-1):
+        if chinfo is None:
+            chinfo = mhdu[i+2].data
+        else:
+            chinfo = np.concatenate((chinfo,mhdu[i+2].data))
+    chinfo = Table(chinfo)
+    mhdu.close()
+
+    # Original measurement table format
+    dt = [('NUMBER', '>i4'), ('X_IMAGE', '>f4'), ('Y_IMAGE', '>f4'), ('MAG_APER', '>f4', (5,)),
+          ('MAGERR_APER', '>f4', (5,)), ('MAG_ISO', '>f4'), ('MAGERR_ISO', '>f4'),
+          ('MAG_AUTO', '>f4'), ('MAGERR_AUTO', '>f4'), ('KRON_RADIUS', '>f4'),
+          ('BACKGROUND', '>f4'), ('THRESHOLD', '>f4'), ('ISOAREA_IMAGE', '>i4'),
+          ('ISOAREA_WORLD', '>f4'), ('ALPHA_J2000', '>f8'), ('DELTA_J2000', '>f8'),
+          ('X2_WORLD', '>f8'), ('Y2_WORLD', '>f8'), ('XY_WORLD', '>f8'),
+          ('A_WORLD', '>f4'), ('B_WORLD', '>f4'), ('THETA_WORLD', '>f4'),
+          ('ELLIPTICITY', '>f4'), ('ERRX2_WORLD', '>f8'), ('ERRY2_WORLD', '>f8'),
+          ('ERRXY_WORLD', '>f8'), ('ERRA_WORLD', '>f4'), ('ERRB_WORLD', '>f4'),
+          ('ERRTHETA_WORLD', '>f4'), ('FWHM_WORLD', '>f4'), ('FLAGS', '>i2'),
+          ('IMAFLAGS_ISO', '>i4'), ('NIMAFLAGS_ISO', '>i4'), ('CLASS_STAR', '>f4'),
+          ('NDET_ITER', '>i8'), ('REPEAT', '>f8'), ('XPSF', '>f8'), ('YPSF', '>f8'),
+          ('MAGPSF', '>f8'), ('ERRPSF', '>f8'), ('SKY', '>f8'), ('ITER', '>f8'),
+          ('CHI', '>f8'), ('SHARP', '>f8'), ('RAPSF', '>f8'), ('DECPSF', '>f8')]))
+    
+    # Loop over the chips
+    hdu = fits.open(calfile)
+    ohdu = fits.HDUList()
+    for i in range(len(hdu)-1):
+        tab1 = Table(hdu[i+1].data)
+        magoff = 2.5*np.log10(exptime) + chinfo['zpterm'][i]
+        meas1 = Table(np.zeros(len(tab1),dtype=np.dtype(dt)))
+        meas1['NUMBER'] = tab1['measid']   # fix
+        meas1['X_IMAGE'] = tab1['x']
+        meas1['Y_IMAGE'] = tab1['y']
+        meas1['MAG_APER'][:,0] = tab1['mag_aper1']       # uncalibrate, only good mags
+        meas1['MAG_APER'][:,1] = tab1['mag_aper2']       # uncalibrate, only good mags
+        meas1['MAG_APER'][:,2] = tab1['mag_aper4']       # uncalibrate, only good mags
+        meas1['MAG_APER'][:,3] = tab1['mag_aper6']       # uncalibrate, only good mags
+        meas1['MAG_APER'][:,4] = tab1['mag_aper8']       # uncalibrate, only good mags
+        meas1['MAGERR_APER'][:,0] = tab1['magerr_aper1']
+        meas1['MAGERR_APER'][:,1] = tab1['magerr_aper2']
+        meas1['MAGERR_APER'][:,2] = tab1['magerr_aper4']
+        meas1['MAGERR_APER'][:,3] = tab1['magerr_aper6']
+        meas1['MAGERR_APER'][:,4] = tab1['magerr_aper8']
+        meas1['MAG_ISO'] = tab1['mag_iso']
+        meas1['MAGERR_ISO'] = tab1['magerr_iso']
+        # ONLY UNCALIBRATE GOOD PHOTOMETRIC MEASUREMENTS!!!!!!!!!!!!!
+        meas1['KRON_RADIUS'] = tab1['kron_radius']
+        meas1['BACKGROUND'] = tab1['background']
+        meas1['THRESHOLD'] = tab1['threshold']
+        meas1['ISOAREA_IMAGE'] = tab1['isoarea_image']
+        meas1['ISOAREA_WORLD'] = tab1['isoarea_world']
+        meas1['ALPHA_J2000'] = tab1['ra']    # uncalibrate
+        meas1['DELTA_J2000'] = tab1['dec']   # uncalibrate
+        meas1['X2_WORLD'] = tab1['x2_world']
+        meas1['Y2_WORLD'] = tab1['y2_world']
+        meas1['XY_WORLD'] = tab1['xy_world']
+        meas1['A_WORLD'] = tab1['asemi'] / 3600.0          # convert arcsec -> deg
+        meas1['B_WORLD'] = tab1['bsemi'] / 3600.0          # convert arcsec -> deg
+        meas1['THETA_WORLD'] = 90-tab1['theta']
+        meas1['ELLIPTICITY'] = tab1['ellipticity']        
+        meas1['ERRX2_WORLD'] = tab1['errx2_world']
+        meas1['ERRY2_WORLD'] = tab1['erry2_world']
+        meas1['ERRXY_WORLD'] = tab1['errxy_world']
+        meas1['ERRA_WORLD'] = tab1['asemierr'] / 3600.0    # convert arcsec -> deg
+        meas1['ERRB_WORLD'] = tab1['bsemierr'] / 3600.0    # convert arcsec -> deg
+        meas1['ERRTHETA_WORLD'] = tab1['thetaerr']
+        meas1['FWHM_WORLD'] = tab1['fwhm'] / 3600.0        # convert arcsec -> deg
+        meas1['FLAGS'] = tab1['flags']
+        meas1['IMAFLAGS_ISO'] = tab1['imaflags_iso']
+        meas1['NIMAFLAGS_ISO'] = tab1['nimaflags_iso']
+        meas1['CLASS_STAR'] = tab1['class_star']
+        meas1['NDET_ITER'] = tab1['ndet_iter']
+        meas1['REPEAT'] = tab1['repeat']
+        meas1['XPSF'] = tab1['ypsf']
+        meas1['YPSF'] = tab1['xpsf']
+        meas1['MAGPSF'] = tab1['magpsf']
+        meas1['MAGPSF'][goodmag] -= magoff     # uncalibrate, only source with good psf mags
+        meas1['ERRPSF'] = tab1['errpsf']
+        meas1['SKY'] = tab1['skypsf']
+        meas1['ITER'] = tab1['iter']
+        meas1['CHI'] = tab1['chi']
+        meas1['SHARP'] = tab1['sharp']
+        meas1['RAPSF'] = tab1['rapsf']       # uncalibrate, only sources with coords
+        meas1['DECPSF'] = tab1['decpsf']      # uncalibrate, only sources with coords
+
+        # Append measurements
+        ohdu.append(fits.table_to_hdu(meas1))
+        
+    # Write to new file
+        
+    
 def fitzpterm(mstr,expinfo,chinfo):
     # Fit the global and ccd zero-points 
      
@@ -1224,13 +1407,19 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
         
     # Step 5. Write out the final catalogs and metadata 
     #-------------------------------------------------- 
-    if redo and selfcal and expinfo['ztype']==2:
-        # Create backup of original versions 
-        logger.info('Copying meas and meta files to v1 versions')
-        metafile = expdir+'/'+base+'_meta.fits' 
-        if os.path.exists(metafile): 
-            dln.file_copy(metafile,expdir+'/'+base+'_meta.v1.fits',overwrite=True)
-             
+    #if redo and selfcal and expinfo['ztype']==2:
+    #    # Create backup of original versions 
+    #    logger.info('Copying meas and meta files to v1 versions')
+    #    metafile = expdir+'/'+base+'_meta.fits' 
+    #    if os.path.exists(metafile): 
+    #        dln.file_copy(metafile,expdir+'/'+base+'_meta.v1.fits',overwrite=True)
+
+
+    hdu = fits.HDUList()   # main table
+    mhdu = fits.HDUList()  # meta-data
+    mhdu.append(fits.table_to_hdu(expinfo))
+
+    
     # Create an output catalog for each chip 
     nsrc = np.cumsum(chinfo['nsources'])
     lo = np.append(0,nsrc[0:nchips]) 
@@ -1244,7 +1433,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
                  
         # Apply QA cuts 
         #---------------- 
-                 
+        badflag = np.zeros(len(cat1),int)
+        
         # Remove bad chip data 
         # Half of chip 31 for MJD>56660 
         #  c4d_131123_025436_ooi_r_v2 with MJD=56619 has problems too 
@@ -1272,16 +1462,18 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
             # at the boundary that causes problem sources with SExtractor 
             bdind, = np.where((cat1[xcol] > 1000) & (cat1['ccdnum'] == 31))
             ngdind = len(cat1)-len(bdind)
-            if len(bdind) > 0:  # some bad ones found 
-                if ngdind == 0:  # all bad 
-                    #logger.info('NO useful measurements in ',list[i].file 
-                    cat1 = None
-                    ncat1 = 0 
-                    continue
-                else: 
-                    #logger.info('  Removing '+strtrim(nbdind,2)+' bad chip 31 measurements, '+strtrim(ngdind,2)+' left.' 
-                    cat1 = np.delete(cat1,bdind)
-                    ncat1 = len(cat1)         
+            if len(bdind) > 0:  # some bad ones found
+                logger.info('  '+str(len(bdind))+' bad chip 31 measurements')
+                badflag[bdind] += 1
+                #if ngdind == 0:  # all bad 
+                #    #logger.info('NO useful measurements in ',list[i].file 
+                #    cat1 = None
+                #    ncat1 = 0 
+                #    continue
+                #else: 
+                #    logger.info('  Removing '+strtrim(nbdind,2)+' bad chip 31 measurements, '+strtrim(ngdind,2)+' left.' 
+                #    cat1 = np.delete(cat1,bdind)
+                #    ncat1 = len(cat1)
             else:
                 badchip31 = False  # chip 31 
                          
@@ -1289,56 +1481,73 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
         bdcat, = np.where(cat1['imaflags_iso'] > 0)
         if len(bdcat) > 0: 
             #logger.info('  Removing ',strtrim(nbdcat,2),' sources with bad CP flags.' 
-            if len(bdcat) == ncat1: 
-                continue
-            cat1 = np.delete(cat1,bdcat)
-            ncat1 = len(cat1) 
-                         
+            #if len(bdcat) == ncat1: 
+            #    continue
+            #cat1 = np.delete(cat1,bdcat)
+            #ncat1 = len(cat1)
+            logger.info('  '+str(len(bdcat))+' sources with bad CP flags.')
+            bdflag[bdcat] += 2 
+            
         # Make cuts on SE FLAGS 
         #   this removes problematic truncatd sources near chip edges 
         bdseflags, = np.where( ((cat1['flags'] & 8) > 0) |   # object truncated 
                                ((cat1['flags'] & 16) > 0))   # aperture truncate 
         if len(bdseflags) > 0: 
             #logger.info('  Removing ',strtrim(nbdseflags,2),' truncated sources' 
-            if len(bdseflags) == ncat1: 
-                continue
-            cat1 = np.delete(cat1,bdseflags)
-            ncat1 = len(cat1) 
-                         
+            #if len(bdseflags) == ncat1: 
+            #    continue
+            #cat1 = np.delete(cat1,bdseflags)
+            #ncat1 = len(cat1)
+            logger.info('  '+str(len(bdseflags))+' truncated sources')
+            badflag[bdseflags] += 4
+            
         # Removing low-S/N sources 
         #  snr = 1.087/err 
         snrcut = 5.0 
         bdsnr, = np.where(1.087/cat1['magerr_auto'] < snrcut) 
         if len(bdsnr) > 0: 
             #logger.info('  Removing ',strtrim(nbdsnr,2),' sources with S/N<',strtrim(snrcut,2) 
-            if len(bdsnr) == ncat1: 
-                continue
-            cat1 = np.delete(cat1,bdsnr)
-            ncat1 = len(cat1) 
-                         
+            #if len(bdsnr) == ncat1: 
+            #    continue
+            #cat1 = np.delete(cat1,bdsnr)
+            #ncat1 = len(cat1)
+            logger.info('  '+str(len(bdsnr))+' sources with S/N<'+str(len(snrcut)))
+            badflag[bdsnr] += 8
+            
         # Convert to final format 
         if ncat1 > 0:
             cat1 = Table(cat1)
             mdt = [('measid',(str,100)),('objectid',(str,100)),('exposure',(str,50)),
-                   ('ccdnum',int),('filter',(str,50)),('mjd',float),('x',float),('y',float),
-                   ('ra',float),('raerr',float),('dec',float),('decerr',float),('mag_auto',float),
-                   ('magerr_auto',float),('mag_aper1',float),('magerr_aper1',float),('mag_aper2',float),
-                   ('magerr_aper2',float),('mag_aper4',float),('magerr_aper4',float),('mag_aper8',float),
-                   ('magerr_aper8',float),('kron_radius',float),('asemi',float),('asemierr',float),
-                   ('bsemi',float),('bsemierr',float),('theta',float),('thetaerr',float),('fwhm',float),
-                   ('flags',int),('class_star',float),
+                   ('ccdnum',int),('filter',(str,50)),('mjd',float),('x',np.float32),('y',np.float32),
+                   ('ra',float),('raerr',np.float32),('dec',float),('decerr',np.float32),('mag_auto',np.float32),
+                   ('magerr_auto',np.float32),('mag_aper1',np.float32),('magerr_aper1',np.float32),('mag_aper2',np.float32),
+                   ('magerr_aper2',np.float32),('mag_aper4',np.float32),('magerr_aper4',np.float32),
+                   ('mag_aper6',np.float32),('magerr_aper6',np.float32),('mag_aper8',np.float32),
+                   ('magerr_aper8',np.float32),('mag_iso',np.float32),('magerr_iso',np.float32),
+                   ('kron_radius',np.float32),('background',np.float32),('threshold',np.float32),('isoarea_image',np.float32),
+                   ('isoarea_world',np.float32),('x2_world',np.float32),('y2_world',np.float32),('xy_world',np.float32)
+                   ('asemi',np.float32),('asemierr',np.float32),('bsemi',np.float32),('bsemierr',np.float32),
+                   ('theta',np.float32),('thetaerr',np.float32),('ellipticity',np.float32),
+                   ('errx2_world',np.float32),('erry2_world',np.float32),('errxy_world',np.float32),
+                   ('fwhm',np.float32),('flags',np.int16),('imaflags_iso',np.int32),('nimaflags_iso',np.int32)
+                   ('class_star',np.float32),
                    ('ndet_iter',int),('repeat',int),('xpsf',float),('ypsf',float),('magpsf',float),
-                   ('errpsf',float),('sky',float),('iter',int),('chi',float),('sharp',float),
-                   ('rapsf',float),('decpsf',float),('ebv',float)]
+                   ('errpsf',float),('skypsf',float),('iter',int),('chi',float),('sharp',float),
+                   ('rapsf',float),('decpsf',float),('ebv',np.float32),('haspsf',bool),('snr',np.float32),
+                   ('badflag',int)]
             meas = np.zeros(ncat1,dtype=np.dtype(mdt))
             meas = Table(meas)
             for n in meas.colnames:
                 if n in cat1.colnames:
                     meas[n] = cat1[n]
             meas['measid'] = cat1['sourceid'].astype(str)
-            meas['exposure'] = base 
+            meas['exposure'] = base
+            meas['ccdnum'] = chinfo['ccdnum'][i]
+            meas['filter'] = expinfo['filter'][0]
+            meas['mjd'] = expinfo['mjd'][0]
             meas['x'] = cat1[xcol]
             meas['y'] = cat1[ycol]
+            # ONLY CALIBRATE GOOD PHOTOMETRIC MEASUREMENTS!!!!!!!!!!!!!
             meas['mag_auto'] = cat1['mag_auto'] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
             meas['magerr_auto'] = cat1['magerr_auto']
             meas['mag_aper1'] = cat1['mag_aper'][:,0] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
@@ -1346,7 +1555,9 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
             meas['mag_aper2'] = cat1['mag_aper'][:,1] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
             meas['magerr_aper2'] = cat1['magerr_aper'][:,1] 
             meas['mag_aper4'] = cat1['mag_aper'][:,2] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
-            meas['magerr_aper4'] = cat1['magerr_aper'][:,2] 
+            meas['magerr_aper4'] = cat1['magerr_aper'][:,2]
+            meas['mag_aper6'] = cat1['mag_aper'][:,3] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
+            meas['magerr_aper6'] = cat1['magerr_aper'][:,3] 
             meas['mag_aper8'] = cat1['mag_aper'][:,4] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
             meas['magerr_aper8'] = cat1['magerr_aper'][:,4] 
             meas['asemi'] = cat1['a_world'] * 3600.         # convert to arcsec 
@@ -1363,39 +1574,55 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
             meas['ypsf'] = cat1['ypsf']
             meas['magpsf'] = cat1['magpsf'] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
             meas['errpsf'] = cat1['errpsf']
-            meas['sky'] = cat1['sky']
+            meas['skypsf'] = cat1['sky']
             meas['iter'] = cat1['iter']
             meas['chi'] = cat1['chi']
             meas['sharp'] = cat1['sharp']
             meas['rapsf'] = cat1['rapsf']
             meas['decpsf'] = cat1['decpsf']
             meas['ebv'] = cat1['ebv']
+            meas['haspsf'] = cat1['magpsf'] < 50
+            meas['snr'] = 1.087/cat1['magerr_auto']
+            meas['badflag'] = badflag
+            # Other columns we are keeping in case we need to recreate the original measurement file
+            meas['mag_iso'] = cat1['mag_iso']
+            meas['magerr_iso'] = cat1['magerr_iso']
+            meas['background'] = cat1['background']
+            meas['threshold'] = cat1['threshold']
+            meas['isoarea_image'] = cat1['isoarea_image']
+            meas['isoarea_world'] = cat1['isoarea_world']
+            meas['x2_world'] = cat1['x2_world']
+            meas['y2_world'] = cat1['y2_world']
+            meas['xy_world'] = cat1['xy_world']
+            meas['ellipticity'] = cat1['ellipticity']
+            meas['errx2_world'] = cat1['errx2_world']
+            meas['erry2_world'] = cat1['erry2_world']
+            meas['errxy_world'] = cat1['errxy_world']
+            meas['imaflags_iso'] = cat1['imaflags_iso']
+            meas['nimaflags_iso'] = cat1['nimaflags_iso']
+            
+            #if redo and selfcal and expinfo['zptyper']==2: # Create backup of original versions 
+            #    if os.path.exists(outfile) == 1 : 
+            #        dln.file_copy(outfile,expdir+'/'+base+'_'+str(chinfo[i].ccdnum,2)+'_meas.v1.fits',overwrite=True)
 
-            # Write to file 
-            outfile = expdir+'/'+base+'_'+str(chinfo['ccdnum'][i])+'_meas.fits' 
-            chinfo['nmeas'][i] = ncat1   # updating Chinfo 
-            chinfo['measfile'][i] = outfile 
-                            
-            if redo and selfcal and expinfo['zptyper']==2: # Create backup of original versions 
-                if os.path.exists(outfile) == 1 : 
-                    dln.file_copy(outfile,expdir+'/'+base+'_'+str(chinfo[i].ccdnum,2)+'_meas.v1.fits',overwrite=True)
+            hdu1 = fits.table_to_hdu(meas))
+            hdu1.header['EXTNAME'] = ccdnum
+            hdu.append(hdu1)
+            mhdu1 = fits.table_to_hdu(chinfo[i:i+1])
+            mhdu1.header['EXTNAME'] = ccdnum
+            mhdu.append(mhdu1)                    # add metadata for this chip
 
-            hdu = fits.HDUList()
-            hdu.append(fits.table_to_hdu(meas))
-            hdu.append(fits.table_to_hdu(chinfo[i:i+1]))   # add chip stucture for this chip
-            hdu.writeto(outfile,overwrite=True)
-            hdu.close()
-                     
-    # Total number of measurements 
-    expinfo['nmeas'] = np.sum(chinfo['nmeas']) 
+    # Write to file 
+    outfile = expdir+'/'+base+'_meas.fits'
+    logger.info('Writing table to '+outfile)    
+    hdu.writeto(outfile,overwrite=True)
+    hdu.close()
                      
     # Meta-data file 
     metafile = expdir+'/'+base+'_meta.fits' 
     logger.info('Writing metadata to '+metafile)
-    hdus = fits.HDUList()
-    hdu.append(fits.table_to_hdu(expinfo))
-    hdu.append(fits.table_to_hdu(chinfo))  # add chip structure to second extension 
-    hdu.writeto(metafile,overwrite=True)
+    mhdu.writeto(metafile,overwrite=True)
+    mhdu.close()
             
     dt = time.time()-t00 
     logger.info('dt = %.2f sec.' % dt)
