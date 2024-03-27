@@ -15,6 +15,7 @@ from dustmaps.sfd import SFDQuery
 from scipy.optimize import curve_fit
 from scipy import stats
 import subprocess
+import traceback
 from . import utils,query,modelmag
 
 def concatenate(expdir):
@@ -24,7 +25,25 @@ def concatenate(expdir):
     if os.path.exists(expdir)==False:
         print(expdir,'not found')
         return
+
     curdir = os.getcwd()
+    
+    # Is this a tar file
+    if os.path.isdir(expdir)==False and expdir.endswith('.tar.gz') or expdir.endswith('.tgz'):
+        print('This is a tar file.  Uncompressing.')
+        tarfile = os.path.basename(expdir)
+        base = tarfile.replace('.tgz','').replace('.tar.gz','')
+        nightdir = os.path.abspath(os.path.dirname(expdir))
+        expdir = nightdir+'/'+base
+        os.chdir(nightdir)        
+        res = subprocess.run(['tar','xvf',tarfile],capture_output=True)
+        if res.returncode==0:
+            print('success: removing',tarfile)
+            #os.remove(tarfile)
+        else:
+            print('problem untarring',tarfile)
+            import pdb; pdb.set_trace()
+
     os.chdir(expdir)
     base = os.path.basename(expdir)
     outfile = base+'_meas.fits'
@@ -106,7 +125,7 @@ def recreatemeas(calfile,metafile,outfile):
     # Load meta-data
     expinfo = Table.read(metafile,1)
     mhdu = fits.open(metafile)
-    expinfo = Table(mhdu[1]data)
+    expinfo = Table(mhdu[1].data)
     chinfo = None
     for i in range(len(mhdu)-1):
         if chinfo is None:
@@ -130,7 +149,7 @@ def recreatemeas(calfile,metafile,outfile):
           ('IMAFLAGS_ISO', '>i4'), ('NIMAFLAGS_ISO', '>i4'), ('CLASS_STAR', '>f4'),
           ('NDET_ITER', '>i8'), ('REPEAT', '>f8'), ('XPSF', '>f8'), ('YPSF', '>f8'),
           ('MAGPSF', '>f8'), ('ERRPSF', '>f8'), ('SKY', '>f8'), ('ITER', '>f8'),
-          ('CHI', '>f8'), ('SHARP', '>f8'), ('RAPSF', '>f8'), ('DECPSF', '>f8')]))
+          ('CHI', '>f8'), ('SHARP', '>f8'), ('RAPSF', '>f8'), ('DECPSF', '>f8')]
     
     # Loop over the chips
     hdu = fits.open(calfile)
@@ -1525,11 +1544,11 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
                    ('mag_aper6',np.float32),('magerr_aper6',np.float32),('mag_aper8',np.float32),
                    ('magerr_aper8',np.float32),('mag_iso',np.float32),('magerr_iso',np.float32),
                    ('kron_radius',np.float32),('background',np.float32),('threshold',np.float32),('isoarea_image',np.float32),
-                   ('isoarea_world',np.float32),('x2_world',np.float32),('y2_world',np.float32),('xy_world',np.float32)
+                   ('isoarea_world',np.float32),('x2_world',np.float32),('y2_world',np.float32),('xy_world',np.float32),
                    ('asemi',np.float32),('asemierr',np.float32),('bsemi',np.float32),('bsemierr',np.float32),
                    ('theta',np.float32),('thetaerr',np.float32),('ellipticity',np.float32),
                    ('errx2_world',np.float32),('erry2_world',np.float32),('errxy_world',np.float32),
-                   ('fwhm',np.float32),('flags',np.int16),('imaflags_iso',np.int32),('nimaflags_iso',np.int32)
+                   ('fwhm',np.float32),('flags',np.int16),('imaflags_iso',np.int32),('nimaflags_iso',np.int32),
                    ('class_star',np.float32),
                    ('ndet_iter',int),('repeat',int),('xpsf',float),('ypsf',float),('magpsf',float),
                    ('errpsf',float),('skypsf',float),('iter',int),('chi',float),('sharp',float),
@@ -1605,7 +1624,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
             #    if os.path.exists(outfile) == 1 : 
             #        dln.file_copy(outfile,expdir+'/'+base+'_'+str(chinfo[i].ccdnum,2)+'_meas.v1.fits',overwrite=True)
 
-            hdu1 = fits.table_to_hdu(meas))
+            hdu1 = fits.table_to_hdu(meas)
             hdu1.header['EXTNAME'] = ccdnum
             hdu.append(hdu1)
             mhdu1 = fits.table_to_hdu(chinfo[i:i+1])
