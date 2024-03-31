@@ -26,6 +26,8 @@ def concatenate(expdir):
         print(expdir,'not found')
         return
 
+    print('Concatenate FITS files for ',expdir)
+    
     curdir = os.getcwd()
     
     # Is this a tar file
@@ -39,7 +41,7 @@ def concatenate(expdir):
         res = subprocess.run(['tar','xvf',tarfile],capture_output=True)
         if res.returncode==0:
             print('success: removing',tarfile)
-            #os.remove(tarfile)
+            os.remove(tarfile)
         else:
             print('problem untarring',tarfile)
             import pdb; pdb.set_trace()
@@ -116,18 +118,62 @@ def concatenate(expdir):
                 if os.path.exists(f): os.remove(f)
     os.chdir(curdir)
 
+def uncalcoord(ra,dec,chinfo):
+    # Uncalibrate coordinates, only good measurements
+    #  we need the original lon/lat values to get the right
+    #  correction terms, iterate until convergence
+    lon,lat = coords.rotsphcen(ra,dec,chinfo['cenra'],chinfo['cendec'],gnomic=True)
+    flag = 0
+    fra = ra.copy()
+    fdec = dec.copy()
+    last_fra = fra.copy()*0
+    last_fdec = fra.copy()*0
+    count = 0
+    while (flag==0):
+        flon,flat = coords.rotsphcen(fra,fdec,chinfo['cenra'],chinfo['cendec'],gnomic=True)
+        lon2 = lon - utils.func_poly2d(flon,flat,*chinfo['racoef'])
+        lat2 = lat - utils.func_poly2d(flon,flat,*chinfo['deccoef'])
+        fra,fdec = coords.rotsphcen(lon2,lat2,chinfo['cenra'],chinfo['cendec'],reverse=True,gnomic=True)
+        dra = np.abs(fra-last_fra)*3600
+        ddec = np.abs(fdec-last_fdec)*3600        
+        maxdiff = np.max(np.concatenate((dra,ddec)))
+        last_fra = fra.copy()
+        last_fdec = fdec.copy()
+        if maxdiff < 1e-6 or count>10:
+            flag = 1
+        count += 1            
+    return fra,fdec
+                
 def recreatemeas(calfile,metafile,outfile):
     """
     Recreate original measurement table using the calibrated table and
     meta-data file.
+
+    Parameters
+    ----------
+    calfile : str
+       Filaname of the calibrated measurement file.
+    metafile : str
+       Filename of the metadata file.
+    outfile : str
+       Filename for the output recreated measurement catalog.
+
+    Returns
+    -------
+    The recreated original measurement file is written to disk to "outfile".
+
+    Examples
+    --------
+
+    recreatemeas(calfile,metafile,outfile)
+
     """
 
     # Load meta-data
-    expinfo = Table.read(metafile,1)
     mhdu = fits.open(metafile)
     expinfo = Table(mhdu[1].data)
     chinfo = None
-    for i in range(len(mhdu)-1):
+    for i in range(len(mhdu)-2):
         if chinfo is None:
             chinfo = mhdu[i+2].data
         else:
@@ -156,69 +202,203 @@ def recreatemeas(calfile,metafile,outfile):
     ohdu = fits.HDUList()
     for i in range(len(hdu)-1):
         tab1 = Table(hdu[i+1].data)
-        magoff = 2.5*np.log10(exptime) + chinfo['zpterm'][i]
+        zpoff = 2.5*np.log10(expinfo['exptime'][0]) + chinfo['zpterm'][i]
         meas1 = Table(np.zeros(len(tab1),dtype=np.dtype(dt)))
-        meas1['NUMBER'] = tab1['measid']   # fix
-        meas1['X_IMAGE'] = tab1['x']
-        meas1['Y_IMAGE'] = tab1['y']
-        meas1['MAG_APER'][:,0] = tab1['mag_aper1']       # uncalibrate, only good mags
-        meas1['MAG_APER'][:,1] = tab1['mag_aper2']       # uncalibrate, only good mags
-        meas1['MAG_APER'][:,2] = tab1['mag_aper4']       # uncalibrate, only good mags
-        meas1['MAG_APER'][:,3] = tab1['mag_aper6']       # uncalibrate, only good mags
-        meas1['MAG_APER'][:,4] = tab1['mag_aper8']       # uncalibrate, only good mags
-        meas1['MAGERR_APER'][:,0] = tab1['magerr_aper1']
+        # measid = instrument+'.'+str(expnum)+'.'+meas['ccdnum']+'.'+meas['number']
+        number = [n.split('.')[-1] for n in tab1['measid']]
+        meas1['NUMBER'][:] = number
+        meas1['X_IMAGE'][:] = tab1['x']
+        meas1['Y_IMAGE'][:] = tab1['y']
+        # Uncalibrate, only good mags
+        for c in ['mag_auto','mag_aper1','mag_aper2','mag_aper4','mag_aper6','mag_aper8','magpsf']:
+            if c[:8]=='mag_aper':
+                indx = {'1':0,'2':1,'4':2,'6':3,'8':4}[c[-1]]
+                mag = tab1[c]
+                gdmag = ((mag < 50) & np.isfinite(mag))
+                meas1['MAG_APER'][:,indx] = np.nan   # bad by default
+                meas1['MAG_APER'][gdmag,indx] = mag[gdmag]-zpoff
+            else:
+                mag = tab1[c]
+                gdmag = ((mag < 50) & np.isfinite(mag))
+                meas1[c.upper()][:] = np.nan   # bad by default
+                meas1[c.upper()][gdmag] = mag[gdmag]-zpoff
+        meas1['MAGERR_AUTO'][:] = tab1['magerr_auto']
+        meas1['MAGERR_APER'][:,0] = tab1['magerr_aper1']        
         meas1['MAGERR_APER'][:,1] = tab1['magerr_aper2']
         meas1['MAGERR_APER'][:,2] = tab1['magerr_aper4']
         meas1['MAGERR_APER'][:,3] = tab1['magerr_aper6']
         meas1['MAGERR_APER'][:,4] = tab1['magerr_aper8']
-        meas1['MAG_ISO'] = tab1['mag_iso']
-        meas1['MAGERR_ISO'] = tab1['magerr_iso']
-        # ONLY UNCALIBRATE GOOD PHOTOMETRIC MEASUREMENTS!!!!!!!!!!!!!
-        meas1['KRON_RADIUS'] = tab1['kron_radius']
-        meas1['BACKGROUND'] = tab1['background']
-        meas1['THRESHOLD'] = tab1['threshold']
-        meas1['ISOAREA_IMAGE'] = tab1['isoarea_image']
-        meas1['ISOAREA_WORLD'] = tab1['isoarea_world']
-        meas1['ALPHA_J2000'] = tab1['ra']    # uncalibrate
-        meas1['DELTA_J2000'] = tab1['dec']   # uncalibrate
-        meas1['X2_WORLD'] = tab1['x2_world']
-        meas1['Y2_WORLD'] = tab1['y2_world']
-        meas1['XY_WORLD'] = tab1['xy_world']
-        meas1['A_WORLD'] = tab1['asemi'] / 3600.0          # convert arcsec -> deg
-        meas1['B_WORLD'] = tab1['bsemi'] / 3600.0          # convert arcsec -> deg
-        meas1['THETA_WORLD'] = 90-tab1['theta']
-        meas1['ELLIPTICITY'] = tab1['ellipticity']        
-        meas1['ERRX2_WORLD'] = tab1['errx2_world']
-        meas1['ERRY2_WORLD'] = tab1['erry2_world']
-        meas1['ERRXY_WORLD'] = tab1['errxy_world']
-        meas1['ERRA_WORLD'] = tab1['asemierr'] / 3600.0    # convert arcsec -> deg
-        meas1['ERRB_WORLD'] = tab1['bsemierr'] / 3600.0    # convert arcsec -> deg
-        meas1['ERRTHETA_WORLD'] = tab1['thetaerr']
-        meas1['FWHM_WORLD'] = tab1['fwhm'] / 3600.0        # convert arcsec -> deg
-        meas1['FLAGS'] = tab1['flags']
-        meas1['IMAFLAGS_ISO'] = tab1['imaflags_iso']
-        meas1['NIMAFLAGS_ISO'] = tab1['nimaflags_iso']
-        meas1['CLASS_STAR'] = tab1['class_star']
-        meas1['NDET_ITER'] = tab1['ndet_iter']
-        meas1['REPEAT'] = tab1['repeat']
-        meas1['XPSF'] = tab1['ypsf']
-        meas1['YPSF'] = tab1['xpsf']
-        meas1['MAGPSF'] = tab1['magpsf']
-        meas1['MAGPSF'][goodmag] -= magoff     # uncalibrate, only source with good psf mags
-        meas1['ERRPSF'] = tab1['errpsf']
-        meas1['SKY'] = tab1['skypsf']
-        meas1['ITER'] = tab1['iter']
-        meas1['CHI'] = tab1['chi']
-        meas1['SHARP'] = tab1['sharp']
-        meas1['RAPSF'] = tab1['rapsf']       # uncalibrate, only sources with coords
-        meas1['DECPSF'] = tab1['decpsf']      # uncalibrate, only sources with coords
+        # uncalibrate coordinates
+        #  SE coordinates
+        fra,fdec = uncalcoord(tab1['ra'],tab1['dec'],chinfo[i])
+        meas1['ALPHA_J2000'][:] = fra
+        meas1['DELTA_J2000'][:] = fdec
+        # PSF coordinates
+        meas1['RAPSF'][:] = tab1['rapsf']
+        meas1['DECPSF'][:] = tab1['decpsf']
+        gdcoo, = np.where(np.isfinite(tab1['rapsf']) & np.isfinite(tab1['decpsf']))
+        fra,fdec = uncalcoord(tab1['rapsf'][gdcoo],tab1['decpsf'][gdcoo],chinfo[i])
+        meas1['RAPSF'][gdcoo] = fra
+        meas1['DECPSF'][gdcoo] = fdec
+        # Rest of the columns
+        meas1['MAG_ISO'][:] = tab1['mag_iso']
+        meas1['MAGERR_ISO'][:] = tab1['magerr_iso']
+        meas1['KRON_RADIUS'][:] = tab1['kron_radius']
+        meas1['BACKGROUND'][:] = tab1['background']
+        meas1['THRESHOLD'][:] = tab1['threshold']
+        meas1['ISOAREA_IMAGE'][:] = tab1['isoarea_image']
+        meas1['ISOAREA_WORLD'][:] = tab1['isoarea_world']
+        meas1['X2_WORLD'][:] = tab1['x2_world']
+        meas1['Y2_WORLD'][:] = tab1['y2_world']
+        meas1['XY_WORLD'][:] = tab1['xy_world']
+        meas1['A_WORLD'][:] = tab1['asemi'] / 3600.0          # convert arcsec -> deg
+        meas1['B_WORLD'][:] = tab1['bsemi'] / 3600.0          # convert arcsec -> deg
+        meas1['THETA_WORLD'][:] = 90-tab1['theta']
+        meas1['ELLIPTICITY'][:] = tab1['ellipticity']        
+        meas1['ERRX2_WORLD'][:] = tab1['errx2_world']
+        meas1['ERRY2_WORLD'][:] = tab1['erry2_world']
+        meas1['ERRXY_WORLD'][:] = tab1['errxy_world']
+        meas1['ERRA_WORLD'][:] = tab1['asemierr'] / 3600.0    # convert arcsec -> deg
+        meas1['ERRB_WORLD'][:] = tab1['bsemierr'] / 3600.0    # convert arcsec -> deg
+        meas1['ERRTHETA_WORLD'][:] = tab1['thetaerr']
+        meas1['FWHM_WORLD'][:] = tab1['fwhm'] / 3600.0        # convert arcsec -> deg
+        meas1['FLAGS'][:] = tab1['flags']
+        meas1['IMAFLAGS_ISO'][:] = tab1['imaflags_iso']
+        meas1['NIMAFLAGS_ISO'][:] = tab1['nimaflags_iso']
+        meas1['CLASS_STAR'][:] = tab1['class_star']
+        meas1['NDET_ITER'][:] = tab1['ndet_iter']
+        meas1['REPEAT'][:] = tab1['repeat']
+        meas1['XPSF'][:] = tab1['xpsf']
+        meas1['YPSF'][:] = tab1['ypsf']
+        meas1['ERRPSF'][:] = tab1['errpsf']
+        meas1['SKY'][:] = tab1['skypsf']
+        meas1['ITER'][:] = tab1['iter']
+        meas1['CHI'][:] = tab1['chi']
+        meas1['SHARP'][:] = tab1['sharp']
 
         # Append measurements
         ohdu.append(fits.table_to_hdu(meas1))
         
     # Write to new file
-        
+    ohdu.writeto(outfile,overwrite=True)
+    ohdu.close()
+
+def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag'):
+    """
+    Obtain the photometric zero-point using matched observed and
+    reference catalogs and a specific method.
+
+    Parameters
+    ----------
+    meas1 : astropy table
+       Observed measurement table.
+    ref1  : astropy table
+       Reference table matched to "meas1".
+    expinfo : astropy table
+       Meta-data table for the entire exposure.
+    chinfo : astropy table
+       The table of meta-data for each chip.
+    kind : str, optional
+       The method to use to determine the zeropoint: "modelmag",
+         "gaiaxpsynth", or "selfcal".  Default is "modelmag".
+
+    Returns
+    -------
+    expinfo : astropy table
+       Meta-data table for the entire exposure updated with
+         zero-point information.
+    chinfo : astropy table
+       The table of meta-data for each chip updated with
+         zero-point information.
+
+    Examples
+    --------
+
+    expinfo,chinfo = getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag')
+
+    """
+
+    medfwhm = expinfo['fwhm'][0]
+    exptime = expinfo['exptime'][0]
+    filt = expinfo['filter'][0]
     
+    # Model Magnitudes
+    #-----------------
+    if kind=='modelmag':
+        
+        # Get the good sources 
+        gdmeas, = np.where((meas1['imaflags_iso'] == 0) & (~((meas1['flags'] & 8) > 0)) & (~((meas1['flags'] & 16) > 0)) &
+                          (meas1['magpsf'] < 50) &  (meas1['magerr_auto'] < 0.05) & (meas1['class_star'] > 0.8) &
+                          (meas1['fwhm_world']*3600 < 2*medfwhm) & (mmags[:,0] < 50) & (mmags[:,1] < 5))
+        #  if the seeing is bad then class_star sometimes doesn't work well 
+        if medfwhm > 1.8 and len(gdmeas) < 100:
+            gdmeas, = np.where((meas1['imaflags_iso'] == 0) & (~((meas1['flags'] & 8) > 0)) & (~((meas1['flags'] & 16) > 0)) &
+                              (meas1['magpsf'] < 50) &  (meas1['magerr_auto'] < 0.05) & 
+                              (meas1['fwhm_world']*3600 < 2*medfwhm) & (mmags[:,0] < 50) & (mmags[:,1] < 5))
+        if len(gdmeas) > 0: 
+            ref2 = ref1[gdmeas] 
+            mmags2 = mmags[gdmeas,:] 
+            meas2 = meas1[gdmeas]
+            # Matched structure
+            mag2 = meas2['magpsf'] + 2.5*np.log10(exptime)   # correct for the exposure time
+            mstr = {'col':mmags2[:,2],'mag':mag2,'model':mmags2[:,0],
+                    'err':mmags2[:,1],'ccdnum':meas2['ccdnum']}
+            # Measure the zero-point
+            expinfo,chinfo = fitzpterm(mstr,expinfo,chinfo)
+            expinfo['zptype'] = 1
+        else:
+            logger.info('No good reference sources')
+
+    # Gaia XP synthetic photometry
+    #-----------------------------
+    elif kind=='gaiaxpsynth':
+        
+        refmagcol = 'gsynth_'+filt.lower()+'mag'
+        referrcol = 'e_gsynth_'+filt.lower()+'mag'
+        # Get the good sources 
+        gdmeas, = np.where((meas1['imaflags_iso'] == 0) & (~((meas1['flags'] & 8) > 0)) &
+                          (~((meas1['flags'] & 16) > 0)) & (meas1['magpsf'] < 50) &
+                          (meas1['errpsf'] < 0.05) & (meas1['class_star'] > 0.8) &
+                          (meas1['fwhm_world']*3600 < 2*medfwhm) &
+                          (np.abs(meas1['sharp']) < 1) & (meas1['chi']<5) &
+                          (ref1['bp'] > 0) & (ref1['bp'] < 50) &
+                          (ref1['rp'] > 0) & (ref1['rp'] < 50) &                          
+                          (ref1[refmagcol] > 0) & (ref1[refmagcol] < 50))
+        #  if the seeing is bad then class_star sometimes doesn't work well 
+        if medfwhm > 1.8 and len(gdmeas) < 100:
+            gdmeas, = np.where((meas1['imaflags_iso'] == 0) & (~((meas1['flags'] & 8) > 0)) &
+                              (~((meas1['flags'] & 16) > 0)) &
+                              (meas1['magpsf'] < 50) & (meas1['errpsf'] < 0.05) & 
+                              (meas1['fwhm_world']*3600 < 2*medfwhm) &
+                          (ref1['bp'] > 0) & (ref1['bp'] < 50) &
+                          (ref1['rp'] > 0) & (ref1['rp'] < 50) &                          
+                          (ref1[refmagcol] > 0) & (ref1[refmagcol] < 50))                              
+        if len(gdmeas) > 0:
+            ref2 = ref1[gdmeas] 
+            mmags2 = mmags[gdmeas,:] 
+            meas2 = meas1[gdmeas]
+            # Matched structure
+            mag2 = meas2['magpsf'] + 2.5*np.log10(exptime)   # correct for the exposure time
+            mstr = {'col':ref2['bp']-ref2['rp'],'mag':mag2,'model':ref2[refmagcol],
+                    'err':ref2[referrcol],'ccdnum':meas2['ccdnum']}
+            # Measure the zero-point
+            expinfo,chinfo = fitzpterm(mstr,expinfo,chinfo)
+            expinfo['zptype'] = 2
+        else:
+            logger.info('No good reference sources')
+
+    # Self-calibration
+    #-----------------
+    elif kind=='selfcal':
+        expinfo,chinfo = selfcalzpterm(expdir,meas,expinfo,chinfo)
+        expinfo['zptype'] = 3 
+
+    else:
+        raise ValueError(kind+' not supported')
+
+    return expinfo,chinfo
+
+
 def fitzpterm(mstr,expinfo,chinfo):
     # Fit the global and ccd zero-points 
      
@@ -553,23 +733,38 @@ def loadheader(headfile):
     Load header file
     """
 
-    headlines = dln.readlines(headfile)
-    lo = dln.grep(headlines,'^SIMPLE  =',index=True)
-    begind = dln.grep(headlines,'^XTENSION',index=True)
-    begind = lo+begind
-    endind = dln.grep(headlines,'^END',index=True)
-    headdict = {}
-    # Loop over the extendions
-    for i in range(len(begind)):
-        lines = headlines[begind[i]:endind[i]+1]
-        if i==0:
-            headdict['main'] = lines
-        else:
-            numind = dln.grep(lines,'^CCDNUM',index=True)
-            line1 = lines[numind[0]]
-            ccdnum = int(line1.split('/')[0].split('=')[1])
-            extind = dln.grep(lines,'^EXTNUM',index=True)
-            headdict[ccdnum] = lines
+    # FITS file
+    if utils.file_isfits(headfile):
+        hdu = fits.open(headfile)
+        headdict = {}
+        # Loop over the extendions
+        for i in range(len(hdu)):
+            head = hdu[i].header
+            if i==0:
+                # the main header is blank
+                # use the next header which should have filter and other info
+                headdict['main'] = hdu[1].header
+            else:
+                ccdnum = head['CCDNUM']
+                headdict[ccdnum] = head
+        hdu.close()
+    # ASCII file
+    else:
+        headlines = dln.readlines(headfile)
+        lo = dln.grep(headlines,'^SIMPLE  =',index=True)
+        begind = dln.grep(headlines,'^XTENSION',index=True)
+        begind = lo+begind
+        endind = dln.grep(headlines,'^END',index=True)
+        headdict = {}
+        # Loop over the extendions
+        for i in range(len(begind)):
+            lines = headlines[begind[i]:endind[i]+1]
+            head = fits.Header.fromstring('\n'.join(lines),sep='\n')
+            if i==0:
+                headdict['main'] = head
+            else:
+                ccdum = head['CCDNUM']
+                headdict[ccdnum] = head
     return headdict
     
 def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
@@ -666,7 +861,9 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     logger.info('')
     logger.info('Step 1. Read in the catalogs')
     logger.info('-----------------------------')
+    # tar file
     if expdir.endswith('.tar.gz'):
+        measfile = None
         logger.info('tar file')
         exposure = os.path.basename(expdir).replace('.tar.gz','')
         result = subprocess.run(['tar','tvf',expdir],capture_output=True)
@@ -678,7 +875,18 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
         nchips = len(fitsfiles)
         logfile = exposure+'.log'
         logfiletest = logfile in ' '.join(tarfiles)
+    # multi-extension meas.fits file
+    elif os.path.exists(expdir+'/'+base+'_meas.fits'):
+        measfile = expdir+'/'+base+'_meas.fits'
+        mhdu = fits.open(measfile)
+        nchips = len(mhdu)-1
+        # leave the hdu open, we'll use it below
+        catfiles = []
+        logfile = os.path.join(*[expdir,base+'.log'])
+        logfiletest = os.path.exists(logfile)
+    # Individual measurement chip files
     else:
+        measfile = None
         catfiles = []
         catfiles1 = glob(expdir+'/'+base+'_[1-9].fits')
         if len(catfiles1) > 0:
@@ -715,16 +923,18 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
 
     # v4+ use separate header file
     if version >= 'v4':
-        headfile = os.path.join(expdir,base+'.hdr')
-        if os.path.exists(headfile)==False:
-            headfile = os.path.join(dldir,'dnidever','nsc','instcal',version,
-                                    'header',instrument,night,base+'.hdr')
+        if measfile is not None:
+            headfile = os.path.join(expdir,base+'_header.fits')            
+        else:
+            headfile = os.path.join(expdir,base+'.hdr')
             if os.path.exists(headfile)==False:
-                raise ValueError(headfile+' not found')
+                headfile = os.path.join(dldir,'dnidever','nsc','instcal',version,
+                                    'header',instrument,night,base+'.hdr')
+        if os.path.exists(headfile)==False:
+            raise ValueError(headfile+' not found')
         headdict = loadheader(headfile)
     else:
         headdict = None
-
 
     if version < 'v4':
         racol = 'alpha_j2000'
@@ -739,27 +949,32 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
 
     # Figure out the number of sources 
     ncat = 0 
-    ncatarr = np.zeros(ncatfiles,int) 
-    for i in range(ncatfiles):
-        head = fits.getheader(catfiles[i],1)
+    ncatarr = np.zeros(nchips,int)
+    for i in range(nchips):
+        if measfile is None:
+            head = fits.getheader(catfiles[i],1)
+        else:
+            head = mhdu[i+1].header
         ncatarr[i] = head['NAXIS2']
+            
     ncat = int(np.sum(ncatarr)) 
     logger.info(str(ncat)+' total sources')
     if ncat == 0: 
         logger.info('No sources')
-        return 
+        return
+    
     # Create structure, exten=1 has header now 
     ind, = np.where(ncatarr > 0)
-    cat1 = fits.getdata(catfiles[ind[0]],1)
-    #cat1 = fits.getdata(catfiles[ind[0]],2)    
-    cdt = cat1.dtype.descr
+    if measfile is not None:
+        meas1 = mhdu[ind[0]+1].data
+    else:
+        meas1 = fits.getdata(catfiles[ind[0]],1)
+    cdt = meas1.dtype.descr
     cdt += [('ccdnum',int),('ebv',float),('ra',float),('dec',float),('raerr',float),
-            ('decerr',float),('cmag',float),('cerr',float),('sourceid',(str,50)),
-            ('filter',(str,50)),('mjd',float)]
-    cat = np.zeros(ncat,dtype=np.dtype(cdt))
-    cat = Table(cat)
-    for c in cat.colnames:
-        cat[c].name = c.lower()
+            ('decerr',float),('measid',(str,50)),('filter',(str,50)),('mjd',float)]
+    meas = np.zeros(ncat,dtype=np.dtype(cdt))
+    meas = Table(meas)
+    for c in meas.colnames: meas[c].name = c.lower()
     # Start the chips summary structure
     dt = [('expdir',(str,300)),('instrument',(str,10)),('filename',(str,300)),('measfile',(str,300)),
           ('ccdnum',int),('nsources',int),('nmeas',int),('cenra',float),('cendec',float),('ngaiamatch',int),
@@ -778,58 +993,58 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     chinfo['instrument'] = instrument 
     # Load the files 
     cnt = 0
-    for i in range(ncatfiles):
-        dum = os.path.splitext(os.path.basename(catfiles[i]))[0].split('_')
-        ccdnum = int(dum[-1])
-        hd = fits.getheader(catfiles[i],1)
-        cat1 = Table.read(catfiles[i],1)
-        #hd = fits.getheader(catfiles[i],2)        
-        #cat1 = Table.read(catfiles[i],2)
-        for c in cat1.colnames:
-            cat1[c].name = c.lower()
-        ncat1 = hd['naxis2']   # handles empty catalogs 
+    for i in range(nchips):
+        if measfile is not None:
+            meas1 = Table(mhdu[i+1].data)
+            hd = mhdu[i+1].header
+            ccdnum = hd['ccdnum']
+        else:
+            dum = os.path.splitext(os.path.basename(catfiles[i]))[0].split('_')
+            ccdnum = int(dum[-1])
+            hd = fits.getheader(catfiles[i],1)
+            meas1 = Table.read(catfiles[i],1)
+        for c in meas1.colnames: meas1[c].name = c.lower()
+        nmeas1 = hd['naxis2']   # handles empty catalogs 
          
         # Fix negative FWHM values 
         #  use A_WORLD and B_WORLD which are never negative 
-        bdfwhm, = np.where(cat1['fwhm_world'] < 0.1)
+        bdfwhm, = np.where(meas1['fwhm_world'] < 0.1)
         if len(bdfwhm) > 0: 
-            cat['fwhm_world'][bdfwhm] = np.sqrt(cat1['a_world'][bdfwhm]**2+cat1['b_world'][bdfwhm]**2)*2.35 
-         
-        #ncat1 = n_elements(cat1) 
-        chinfo['filename'][i] = catfiles[i] 
+            meas['fwhm_world'][bdfwhm] = np.sqrt(meas1['a_world'][bdfwhm]**2+meas1['b_world'][bdfwhm]**2)*2.35 
+
+        if measfile is None:
+            chinfo['filename'][i] = catfiles[i] 
         chinfo['ccdnum'][i] = ccdnum 
-        chinfo['nsources'][i] = ncat1
-        # Get the chip corners
+        chinfo['nsources'][i] = nmeas1
+        # Get the chip corners from full header
         if version < 'v4':
             dum = fits.getdata(catfiles[i],1)
             hd1 = fits.Header.fromstring('\n'.join(dum[0][0]),sep='\n')
         else:
-            dum = headdict[int(ccdnum)]
-            hd1 = fits.Header.fromstring('\n'.join(dum),sep='\n')
-        nx = hd1['NAXIS1']
-        ny = hd1['NAXIS2']
+            hd1 = headdict[int(ccdnum)]
+        if instrument=='c4d':
+            nx = 2046
+            ny = 4094
+        else:
+            nx = hd1['NAXIS1']
+            ny = hd1['NAXIS2']
         try:
             wcs1 = WCS(hd1)
         except:
             logger.info('Problem with WCS in header '+catfiles[i])    
             continue
-        #extast,hd1,ast,noparams# check the WCS 
-        #if noparams <= 0: 
-        #    logger.info('Problem with WCS in header '+catfiles[i])
-        #    goto,BOMB1 
         vcoo = wcs1.pixel_to_world([0,nx-1,nx-1,0],[0,0,ny-1,ny-1])
         vra = vcoo.ra.deg
         vdec = vcoo.dec.deg
         chinfo['vra'][i] = vra 
         chinfo['vdec'][i] = vdec 
-        if ncat1 > 0: 
-            temp = cat[cnt:cnt+ncat1]
-            for n in cat1.colnames:
-                temp[n] = cat1[n]
-            #STRUCT_ASSIGN,cat1,temp,/nozero 
+        if nmeas1 > 0: 
+            temp = meas[cnt:cnt+nmeas1]
+            for n in meas1.colnames:
+                temp[n] = meas1[n]
             temp['ccdnum'] = ccdnum
-            temp['ra'] = cat1['alpha_j2000']  # add these here in case the astrometric correction fails later on 
-            temp['dec'] = cat1['delta_j2000']
+            temp['ra'] = meas1['alpha_j2000']  # add these here in case the astrometric correction fails later on 
+            temp['dec'] = meas1['delta_j2000']
             # Add coordinate uncertainties 
             #   sigma = 0.644*FWHM/SNR 
             #   SNR = 1.087/magerr 
@@ -844,12 +1059,12 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
             temp['raerr'] = coorderr 
             temp['decerr'] = coorderr 
             # Stuff into main structure 
-            cat[cnt:cnt+ncat1] = temp
-            cnt += ncat1
-            cenra = np.mean(dln.minmax(cat1['alpha_j2000'])) 
+            meas[cnt:cnt+nmeas1] = temp
+            cnt += nmeas1
+            cenra = np.mean(dln.minmax(meas1['alpha_j2000'])) 
             # Wrapping around RA=0 
-            if dln.valrange(cat1['alpha_j2000']) > 100: 
-                ra = cat1['alpha_j2000']
+            if dln.valrange(meas1['alpha_j2000']) > 100: 
+                ra = meas1['alpha_j2000']
                 bdra, = np.where(ra > 180) 
                 if len(bdra) > 0: 
                     ra[bdra] -= 360 
@@ -860,11 +1075,14 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
                 if cenra < 0: 
                     cenra += 360 
             chinfo['cenra'][i] = cenra 
-            chinfo['cendec'][i] = np.mean(dln.minmax(cat1['delta_j2000'])) 
-
+            chinfo['cendec'][i] = np.mean(dln.minmax(meas1['delta_j2000']))
+    
+    if measfile is not None:
+        mhdu.close()
+            
     # Sort by ccdnum
     chinfo.sort('ccdnum')
-            
+    
     # Exposure level values 
     gdchip, = np.where((chinfo['nsources'] > 0) & (chinfo['cenra'] < 400))
     if len(gdchip) == 0: 
@@ -906,20 +1124,18 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     coo = SkyCoord(ra=cenra,dec=cendec,unit='deg')
     glon = coo.galactic.l.deg
     glat = coo.galactic.b.deg
-    #glactc,cenra,cendec,2000.0,glon,glat,1,/deg 
     logger.info('GLON = %.5f' % glon)
     logger.info('GLAT = %.5f' % glat)
 
-    
     # Number of good sources 
-    goodsources, = np.where((cat['imaflags_iso']==0) & (~((cat['flags']& 8)>0)) &
-                            (~((cat['flags']&16)>0)) & (cat['mag_auto'] < 50))
+    goodsources, = np.where((meas['imaflags_iso']==0) & (~((meas['flags']& 8)>0)) &
+                            (~((meas['flags']&16)>0)) & (meas['mag_auto'] < 50))
     ngoodsources = len(goodsources)
     logger.info('GOOD SRCS = '+str(ngoodsources))
          
     # Measure median seeing FWHM 
-    gdcat, = np.where((cat['mag_auto'] < 50) & (cat['magerr_auto'] < 0.05) & (cat['class_star'] > 0.8))
-    medfwhm = np.median(cat['fwhm_world'][gdcat]*3600.) 
+    gdmeas, = np.where((meas['mag_auto'] < 50) & (meas['magerr_auto'] < 0.05) & (meas['class_star'] > 0.8))
+    medfwhm = np.median(meas['fwhm_world'][gdmeas]*3600.) 
     logger.info('FWHM = %.2f arcsec' % medfwhm)
          
     # Load the logfile and get absolute flux filename
@@ -935,16 +1151,15 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     wtfile = mssdir+str(wline[lo+1:]) 
     mline = loglines[ind[0]+3] 
     lo = mline.find('/archive') 
-    maskfile = mssdir+str(mline[lo+1:]) 
-         
+    maskfile = mssdir+str(mline[lo+1:])
+
     # Load the meta-data from the original header
     if headdict is None:
-        #READLINE,expdir+'/'+base+'.head',head
         head = fits.getheader(fluxfile,0)
     else:
-        dum = headdict['main']
-        head = fits.Header.fromstring('\n'.join(dum),sep='\n')        
+        head = headdict['main']
     filterlong = head.get('filter')
+    
     if filterlong is None:
         raise ValueError('no filter in header')
         dum = fits.getdata(catfiles[0],1)
@@ -984,10 +1199,10 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     logger.info('MJD = %.4f' % mjd)
     
     # Set some catalog values 
-    cat['filter'] = filt
-    cat['mjd'] = mjd 
-    cat['sourceid'] = instrument+'.'+str(expnum)+'.'+np.char.array(cat['ccdnum'].astype(str))+'.'+np.char.array(cat['number'].astype(str))
-         
+    meas['filter'] = filt
+    meas['mjd'] = mjd 
+    meas['measid'] = instrument+'.'+str(expnum)+'.'+np.char.array(meas['ccdnum'].astype(str))+'.'+np.char.array(meas['number'].astype(str))
+    
     # Start the exposure-level table
     edt = [('file',(str,300)),('wtfile',(str,300)),('maskfile',(str,300)),('instrument',(str,10)),
            ('base',(str,100)),('expnum',int),('ra',float),('dec',float),('dateobs',(str,50)),('mjd',float),
@@ -1043,22 +1258,22 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     else: 
         logger.info('Reference catalogs input')
         if rawrap == False: 
-            gdref, = np.where((inpref['ra'] >= np.min(cat[racol])-0.01) & 
-                              (inpref['ra'] <= np.max(cat[racol])+0.01) &
-                              (inpref['dec'] >= np.min(cat[deccol])-0.01) & 
-                              (inpref['dec'] <= np.max(cat[deccol])+0.01))
+            gdref, = np.where((inpref['ra'] >= np.min(meas[racol])-0.01) & 
+                              (inpref['ra'] <= np.max(meas[racol])+0.01) &
+                              (inpref['dec'] >= np.min(meas[deccol])-0.01) & 
+                              (inpref['dec'] <= np.max(meas[deccol])+0.01))
         else: 
-            ra = cat[racol]
+            ra = meas[racol]
             bdra, = np.where(ra > 180) 
             if len(bdra) > 0 : 
                 ra[bdra]-=360 
             gdref, = np.where((inpref['ra'] <= np.max(ra)-0.01) & 
                               (inpref['ra'] >= np.min(ra+360)-0.01) &
-                              (inpref['dec'] >= np.min(cat[deccol])-0.01) & 
-                              (inpref['dec'] <= np.max(cat[deccol])+0.01))
+                              (inpref['dec'] >= np.min(meas[deccol])-0.01) & 
+                              (inpref['dec'] <= np.max(meas[deccol])+0.01))
         ref = inpref[gdref] 
         logger.info(str(ngdref)+' reference stars in our region')
-         
+
     # Step 3. Astrometric calibration 
     #---------------------------------- 
     # At the chip level, linear fits in RA/DEC 
@@ -1069,28 +1284,28 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     gdgaia, = np.where(ref['source'] > 0) 
     gaia = ref[gdgaia]
     # Match everything to Gaia at once, this is much faster!
-    gdcat, = np.where(np.isfinite(cat[racol]) & np.isfinite(cat[deccol]))
-    if len(gdcat)==0:
+    gdmeas, = np.where(np.isfinite(meas[racol]) & np.isfinite(meas[deccol]))
+    if len(gdmeas)==0:
         logger.info('No catalog stars with good PSF coordinates')
         return
-    ind1,ind2,dist = coords.xmatch(gaia['ra'],gaia['dec'],cat[racol][gdcat],cat[deccol][gdcat],1.0)
+    ind1,ind2,dist = coords.xmatch(gaia['ra'],gaia['dec'],meas[racol][gdmeas],meas[deccol][gdmeas],1.0)
     ngmatch = len(ind1)
     if ngmatch == 0: 
         logger.info('No gaia matches')
         return 
     allgaiaind = np.zeros(ncat,int)-1
-    allgaiaind[gdcat[ind2]] = ind1 
+    allgaiaind[gdmeas[ind2]] = ind1 
     allgaiadist = np.zeros(ncat,float)+999999. 
-    allgaiadist[gdcat[ind2]] = coords.sphdist(gaia['ra'][ind1],gaia['dec'][ind1],
-                                              cat[racol][gdcat[ind2]],cat[deccol][gdcat[ind2]])*3600 
+    allgaiadist[gdmeas[ind2]] = coords.sphdist(gaia['ra'][ind1],gaia['dec'][ind1],
+                                              meas[racol][gdmeas[ind2]],meas[deccol][gdmeas[ind2]])*3600 
     # CCD loop 
     for i in range(nchips): 
         if chinfo['nsources'][i]==0: 
             continue
         # Get chip sources using CCDNUM 
-        chind1,chind2 = dln.match(chinfo['ccdnum'][i],cat['ccdnum'])
+        chind1,chind2 = dln.match(chinfo['ccdnum'][i],meas['ccdnum'])
         nchmatch = len(chind1)
-        cat1 = cat[chind2] 
+        meas1 = meas[chind2] 
         # Gaia matches for this chip 
         gaiaind1 = allgaiaind[chind2] 
         gaiadist1 = allgaiadist[chind2] 
@@ -1100,33 +1315,33 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
         if len(gmatch) < 5: 
             logger.info('Not enough Gaia matches')
             # Add threshold to astrometric errors 
-            cat1['raerr'] = np.sqrt(cat1['raerr']**2 + 0.100**2) 
-            cat1['decerr'] = np.sqrt(cat1['decerr']**2 + 0.100**2) 
-            cat[chind2] = cat1 
+            meas1['raerr'] = np.sqrt(meas1['raerr']**2 + 0.100**2) 
+            meas1['decerr'] = np.sqrt(meas1['decerr']**2 + 0.100**2) 
+            meas[chind2] = meas1 
             continue
         #gaia1b = gaia[ind1] 
-        #cat1b = cat1[ind2] 
+        #meas1b = meas1[ind2] 
         gaia1b = gaia[gaiaind1[gmatch]] 
-        cat1b = cat1[gmatch]
+        meas1b = meas1[gmatch]
         # Apply quality cuts 
         #  no bad CP flags 
         #  no SE truncated or incomplete data flags 
         #  must have good photometry
         if 'pmra' in gaia1b.colnames and 'pmdec' in gaia1b.colnames:  # we have proper motion information 
-            qcuts1, = np.where((cat1b['imaflags_iso'] == 0) & (~((cat1b['flags'] & 8) > 0)) & (~((cat1b['flags'] & 16) > 0)) & 
-                               (cat1b['mag_auto'] < 50) & np.isfinite(gaia1b['pmra']) & np.isfinite(gaia1b['pmdec']))
+            qcuts1, = np.where((meas1b['imaflags_iso'] == 0) & (~((meas1b['flags'] & 8) > 0)) & (~((meas1b['flags'] & 16) > 0)) & 
+                               (meas1b['mag_auto'] < 50) & np.isfinite(gaia1b['pmra']) & np.isfinite(gaia1b['pmdec']))
         else:
-            qcuts1, = np.where((cat1b['imaflags_iso'] == 0) & (~((cat1b['flags'] & 8) > 0)) & (~((cat1b['flags'] & 16) > 0)) & 
-                               (cat1b['mag_auto'] < 50))
+            qcuts1, = np.where((meas1b['imaflags_iso'] == 0) & (~((meas1b['flags'] & 8) > 0)) & (~((meas1b['flags'] & 16) > 0)) & 
+                               (meas1b['mag_auto'] < 50))
         if len(qcuts1) == 0: 
             logger.info('Not enough stars after quality cuts')
             # Add threshold to astrometric errors 
-            cat1['raerr'] = np.sqrt(cat1['raerr']**2 + 0.100**2) 
-            cat1['decerr'] = np.sqrt(cat1['decerr']**2 + 0.100**2) 
-            cat[chind2] = cat1 
+            meas1['raerr'] = np.sqrt(meas1['raerr']**2 + 0.100**2) 
+            meas1['decerr'] = np.sqrt(meas1['decerr']**2 + 0.100**2) 
+            meas[chind2] = meas1 
             continue
         gaia2 = gaia1b[qcuts1] 
-        cat2 = cat1b[qcuts1] 
+        meas2 = meas1b[qcuts1] 
              
         # Precess the Gaia coordinates to the epoch of the observation 
         # The reference epoch for Gaia DR2 is J2015.5 (compared to the 
@@ -1147,18 +1362,17 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
             gdec_epoch = gaia2['dec'] 
 
         # Rotate to coordinates relative to the center of the field 
-        #ROTSPHCEN,gaia2.ra,gaia2.dec,chinfo[i].cenra,chinfo[i].cendec,gaialon,gaialat,/gnomic 
         gaialon,gaialat = coords.rotsphcen(gra_epoch,gdec_epoch,chinfo['cenra'][i],chinfo['cendec'][i],gnomic=True)
-        lon1,lat1 = coords.rotsphcen(cat2[racol],cat2[deccol],chinfo['cenra'][i],chinfo['cendec'][i],gnomic=True)
+        lon1,lat1 = coords.rotsphcen(meas2[racol],meas2[deccol],chinfo['cenra'][i],chinfo['cendec'][i],gnomic=True)
         # ---- Fit RA as function of RA/DEC ---- 
         londiff = gaialon-lon1 
         err = None
         if 'ra_error' in gaia2.colnames:
-            err = np.sqrt(gaia2['ra_error']**2 + cat2['raerr']**2) 
+            err = np.sqrt(gaia2['ra_error']**2 + meas2['raerr']**2) 
         if 'ra_error' not in gaia2.colnames and 'e_ra_icrs' in gaia2.colnames:
-            err = np.sqrt(gaia2['e_ra_icrs']**2 + cat2['raerr']**2) 
+            err = np.sqrt(gaia2['e_ra_icrs']**2 + meas2['raerr']**2) 
         if err is None:
-            err = cat2['raerr']
+            err = meas2['raerr']
         lonmed = np.median(londiff) 
         lonsig = np.maximum(dln.mad(londiff), 1e-5)  # 0.036" 
         gdlon, = np.where(np.abs(londiff-lonmed) < 3.0*lonsig)# remove outliers 
@@ -1174,9 +1388,9 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
         rarms1 = dln.mad((londiff[gdlon]-yfitall[gdlon])*3600.) 
         rastderr = rarms1/np.sqrt(len(gdlon))
         # Use bright stars to get a better RMS estimate 
-        gdstars, = np.where((cat2['fwhm_world']*3600 < 2*medfwhm) & (1.087/cat2['magerr_auto'] > 50))
+        gdstars, = np.where((meas2['fwhm_world']*3600 < 2*medfwhm) & (1.087/meas2['magerr_auto'] > 50))
         if len(gdstars) < 20: 
-            gdstars, = np.where((cat2['fwhm_world']*3600 < 2*medfwhm) & (1.087/cat2['magerr_auto'] > 30))
+            gdstars, = np.where((meas2['fwhm_world']*3600 < 2*medfwhm) & (1.087/meas2['magerr_auto'] > 30))
         if len(gdstars) > 5: 
             diff = (londiff-yfitall)*3600. 
             rarms = dln.mad(diff[gdstars]) 
@@ -1187,11 +1401,11 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
         latdiff = gaialat-lat1 
         err = None
         if 'dec_error' in gaia2.colnames: 
-            err = np.sqrt(gaia2['dec_error']**2 + cat2['decerr']**2) 
+            err = np.sqrt(gaia2['dec_error']**2 + meas2['decerr']**2) 
         if 'dec_error' not in gaia2.colnames and 'e_dec_icrs' in gaia2.colnames:
-            err = np.sqrt(gaia2['e_de_icrs']**2 + cat2['decerr']**2) 
+            err = np.sqrt(gaia2['e_de_icrs']**2 + meas2['decerr']**2) 
         if err is None: 
-            err = cat2['decerr']
+            err = meas2['decerr']
         latmed = np.median(latdiff) 
         latsig = np.maximum(dln.mad(latdiff), 1e-5)   # 0.036" 
         gdlat, = np.where(np.abs(latdiff-latmed) < 3.0*latsig)  # remove outliers 
@@ -1216,17 +1430,27 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
         logger.info('  CCDNUM=%3d  NSOURCES=%5d  %5d/%5d GAIA matches  RMS(RA/DEC)=%7.4f/%7.4f STDERR(RA/DEC)=%7.4f/%7.4f arcsec' % 
                     (chinfo['ccdnum'][i],nchmatch,len(gmatch),len(qcuts1),rarms,decrms,rastderr,decstderr))
         # Apply to all sources 
-        lon,lat = coords.rotsphcen(cat1[racol],cat1[deccol],chinfo['cenra'][i],chinfo['cendec'][i],gnomic=True)
+        lon,lat = coords.rotsphcen(meas1['alpha_j2000'],meas1['delta_j2000'],
+                                   chinfo['cenra'][i],chinfo['cendec'][i],gnomic=True)
         lon2 = lon + utils.func_poly2d(lon,lat,*racoef)
         lat2 = lat + utils.func_poly2d(lon,lat,*deccoef) 
         ra2,dec2 = coords.rotsphcen(lon2,lat2,chinfo['cenra'][i],chinfo['cendec'][i],reverse=True,gnomic=True)
-        cat1['ra'] = ra2 
-        cat1['dec'] = dec2 
+        meas1['ra'] = ra2 
+        meas1['dec'] = dec2
+        if version >= 'v4':
+            gdmeas, = np.where(np.isfinite(meas1['rapsf']) & np.isfinite(meas1['decpsf']))
+            lon,lat = coords.rotsphcen(meas1['rapsf'][gdmeas],meas1['decpsf'][gdmeas],
+                                       chinfo['cenra'][i],chinfo['cendec'][i],gnomic=True)
+            lon2 = lon + utils.func_poly2d(lon,lat,*racoef)
+            lat2 = lat + utils.func_poly2d(lon,lat,*deccoef) 
+            ra2,dec2 = coords.rotsphcen(lon2,lat2,chinfo['cenra'][i],chinfo['cendec'][i],reverse=True,gnomic=True)
+            meas1['rapsf'][gdmeas] = ra2 
+            meas1['decpsf'][gdmeas] = dec2
         # Add to astrometric errors 
-        cat1['raerr'] = np.sqrt(cat1['raerr']**2 + rarms**2) 
-        cat1['decerr'] = np.sqrt(cat1['decerr']**2 + decrms**2) 
+        meas1['raerr'] = np.sqrt(meas1['raerr']**2 + rarms**2) 
+        meas1['decerr'] = np.sqrt(meas1['decerr']**2 + decrms**2) 
         # Stuff back into the main structure 
-        cat[chind2] = cat1 
+        meas[chind2] = meas1 
         chinfo['ngaiamatch'][i] = len(gmatch)
         chinfo['ngoodgaiamatch'][i] = len(qcuts1) 
         chinfo['rarms'][i] = rarms 
@@ -1235,18 +1459,12 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
         chinfo['decrms'][i] = decrms 
         chinfo['decstderr'][i] = decstderr 
         chinfo['deccoef'][i] = deccoef 
-
-    # DO WE WANT TO USE THE SOURCE EXTRACTOR OF DAOPHOT COORDINATES
-    # AS THE DEFAULT RA/DEC???
-    # don't have daophot coordinates for all the sources, why?
-        
+    
     # Get reddening
-    coo = SkyCoord(ra=cat['ra'],dec=cat['dec'],unit='deg')
+    coo = SkyCoord(ra=meas['ra'],dec=meas['dec'],unit='deg')
     sfd = SFDQuery()
     ebv = sfd(coo)                
-    #glactc,cat['ra'],cat['dec'],2000.0,glon,glat,1,/deg 
-    #ebv = dust_getval(glon,glat,/noloop,/interp)
-    cat['ebv'] = ebv 
+    meas['ebv'] = ebv 
                  
     # Put in exposure-level information 
     expinfo['rarms'] = np.median(chinfo['rarms']) 
@@ -1265,90 +1483,30 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
                  
     # Now crossmatch with our catalog 
     dcr = 1.0
-    gdcat, = np.where(np.isfinite(cat['ra']) & np.isfinite(cat['dec']))
-    ind1,ind2,dist = coords.xmatch(ref['ra'],ref['dec'],cat['ra'][gdcat],cat['dec'][gdcat],dcr)
+    gdmeas, = np.where(np.isfinite(meas['ra']) & np.isfinite(meas['dec']))
+    ind1,ind2,dist = coords.xmatch(ref['ra'],ref['dec'],meas['ra'][gdmeas],meas['dec'][gdmeas],dcr)
     nmatch = len(ind1)
     logger.info(str(nmatch)+' matches to reference catalog')
     if nmatch == 0: 
         logger.info('No matches to reference catalog')
         return
     ref1 = ref[ind1]
-    cat1 = cat[gdcat[ind2]]
+    meas1 = meas[gdmeas[ind2]]
     # Use Gaia XP synthetic photometry
     # Get the model magnitudes 
     mmags = modelmag.modelmag(ref1,instfilt,cendec,eqnfile) 
     if len(mmags) == 1 and mmags[0] < -1000: 
         print('No good model mags')
         return
-    # Using model magnitudes
-    if photmethod=='modelmag':
-        # Get the good sources 
-        gdcat, = np.where((cat1['imaflags_iso'] == 0) & (~((cat1['flags'] & 8) > 0)) & (~((cat1['flags'] & 16) > 0)) &
-                          (cat1['magpsf'] < 50) &  (cat1['magerr_auto'] < 0.05) & (cat1['class_star'] > 0.8) &
-                          (cat1['fwhm_world']*3600 < 2*medfwhm) & (mmags[:,0] < 50) & (mmags[:,1] < 5))
-        #  if the seeing is bad then class_star sometimes doesn't work well 
-        if medfwhm > 1.8 and len(gdcat) < 100:
-            gdcat, = np.where((cat1['imaflags_iso'] == 0) & (~((cat1['flags'] & 8) > 0)) & (~((cat1['flags'] & 16) > 0)) &
-                              (cat1['magpsf'] < 50) &  (cat1['magerr_auto'] < 0.05) & 
-                              (cat1['fwhm_world']*3600 < 2*medfwhm) & (mmags[:,0] < 50) & (mmags[:,1] < 5))
-        if len(gdcat) > 0: 
-            ref2 = ref1[gdcat] 
-            mmags2 = mmags[gdcat,:] 
-            cat2 = cat1[gdcat]
-            # Matched structure
-            mag2 = cat2['magpsf'] + 2.5*np.log10(exptime)   # correct for the exposure time
-            mstr = {'col':mmags2[:,2],'mag':mag2,'model':mmags2[:,0],
-                    'err':mmags2[:,1],'ccdnum':cat2['ccdnum']}
-            # Measure the zero-point
-            expinfo,chinfo = fitzpterm(mstr,expinfo,chinfo)
-            expinfo['zptype'] = 1
-        else:
-            logger.info('No good reference sources')
+    
+    # Get the zero-points
+    mmexpinfo,mmchinfo = getzpterm(meas1,ref1,mmags,expinfo.copy(),chinfo.copy(),kind='modelmag')
+    gexpinfo,gchinfo = getzpterm(meas1,ref1,mmags,expinfo.copy(),chinfo.copy(),kind='gaiaxpsynth')    
 
-    # Using Gaia XP synthetic photometry
-    elif photmethod=='gaiaxpsynth':
-        refmagcol = 'gsynth_'+filt.lower()+'mag'
-        referrcol = 'e_gsynth_'+filt.lower()+'mag'
-        # Get the good sources 
-        gdcat, = np.where((cat1['imaflags_iso'] == 0) & (~((cat1['flags'] & 8) > 0)) &
-                          (~((cat1['flags'] & 16) > 0)) & (cat1['magpsf'] < 50) &
-                          (cat1['errpsf'] < 0.05) & (cat1['class_star'] > 0.8) &
-                          (cat1['fwhm_world']*3600 < 2*medfwhm) &
-                          (np.abs(cat1['sharp']) < 1) & (cat1['chi']<5) &
-                          (ref1['bp'] > 0) & (ref1['bp'] < 50) &
-                          (ref1['rp'] > 0) & (ref1['rp'] < 50) &                          
-                          (ref1[refmagcol] > 0) & (ref1[refmagcol] < 50))
-        #  if the seeing is bad then class_star sometimes doesn't work well 
-        if medfwhm > 1.8 and len(gdcat) < 100:
-            gdcat, = np.where((cat1['imaflags_iso'] == 0) & (~((cat1['flags'] & 8) > 0)) &
-                              (~((cat1['flags'] & 16) > 0)) &
-                              (cat1['magpsf'] < 50) & (cat1['errpsf'] < 0.05) & 
-                              (cat1['fwhm_world']*3600 < 2*medfwhm) &
-                          (ref1['bp'] > 0) & (ref1['bp'] < 50) &
-                          (ref1['rp'] > 0) & (ref1['rp'] < 50) &                          
-                          (ref1[refmagcol] > 0) & (ref1[refmagcol] < 50))                              
-        if len(gdcat) > 0:
-            ref2 = ref1[gdcat] 
-            mmags2 = mmags[gdcat,:] 
-            cat2 = cat1[gdcat]
-            # Matched structure
-            mag2 = cat2['magpsf'] + 2.5*np.log10(exptime)   # correct for the exposure time
-            mstr = {'col':ref2['bp']-ref2['rp'],'mag':mag2,'model':ref2[refmagcol],
-                    'err':ref2[referrcol],'ccdnum':cat2['ccdnum']}
-            # Measure the zero-point
-            expinfo,chinfo = fitzpterm(mstr,expinfo,chinfo)
-            expinfo['zptype'] = 2
-        else:
-            logger.info('No good reference sources')            
-    else:
-        logger.info(photmethod+' not supported')
-        import pdb; pdb.set_trace()
-        
-    # Use self-calibration 
-    if expinfo['nrefmatch'] <= 5 and selfcal:
-        expinfo,chinfo = selfcalzpterm(expdir,cat,expinfo,chinfo)
-        expinfo['zptype'] = 3 
-
+    print('Using Gaia for everything now')
+    expinfo = gexpinfo.copy()
+    chinfo = gchinfo.copy()
+    
     # Apply the zero-point to the full catalogs 
     # USE CHIP-LEVEL ZERO-POINTS WHEN POSSIBLE!!! 
     # Create an output catalog for each chip 
@@ -1356,9 +1514,9 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     lo = np.append(0,nsrc[0:nchips])
     hi = nsrc-1 
     for i in range(nchips): 
-        ncat1 = hi[i]-lo[i]+1 
-        if ncat1 > 0: 
-            cat1 = cat[lo[i]:hi[i]] 
+        nmeas1 = hi[i]-lo[i]+1 
+        if nmeas1 > 0: 
+            meas1 = meas[lo[i]:hi[i]] 
             #; Use chip-level zero-point 
             #if chinfo[i].nrefmatch gt 5 then begin 
             #  chinfo[i].zptype = 1 
@@ -1371,20 +1529,15 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
             # Always use exposure-level zero-points,  they are good enough 
             chinfo['zpterm'][i] = expinfo['zpterm']
             chinfo['zptermerr'][i] = expinfo['zptermerr']
-            chinfo['zptype'][i] = 2 
+            #chinfo['zptype'][i] = 2 
                      
-            gdcatmag, = np.where(cat1['magpsf'] < 50) 
-            cat1['cmag'][gdcatmag] = cat1['magpsf'][gdcatmag] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
-            cat1['cerr'][gdcatmag] = np.sqrt(cat1['errpsf'][gdcatmag]**2 + chinfo['zptermerr'][i]**2) # add calibration error in quadrature 
-            #for j=0,n_elements(cat1.mag_aper)-1 do begin 
-            #  gdcatmag = where(cat1.mag_aper[j] lt 50,ngd) 
-            #  cat1[gdcatmag].cmag = cat1[gdcatmag].mag_auto + 2.5*alog10(exptime) + zpterm 
-            #  cat1[gdcatmag].cerr = sqrt(cat1[gdcatmag].magerr_auto^2 + zptermerr^2)  ; add calibration error in quadrature 
-            #endfor 
+            #gdmeasmag, = np.where(meas1['magpsf'] < 50) 
+            #meas1['cmag'][gdmeasmag] = meas1['magpsf'][gdmeasmag] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
+            #meas1['cerr'][gdmeasmag] = np.sqrt(meas1['errpsf'][gdmeasmag]**2 + chinfo['zptermerr'][i]**2) # add calibration error in quadrature 
             # Print out the results 
             logger.info('  CCDNUM=%3d  NREFSOURCES=%5d  ZPTYPE=%2d  ZPTERM=%7.4f+/-%7.4f' %
                         (chinfo['ccdnum'][i],chinfo['nrefmatch'][i],chinfo['zptype'][i],chinfo['zpterm'][i],chinfo['zptermerr'][i]))
-            cat[lo[i]:hi[i]] = cat1  # stuff back in 
+            #meas[lo[i]:hi[i]] = meas1  # stuff back in 
              
     # Print out the results 
     logger.info('NPHOTREFMATCH=%d' % expinfo['nrefmatch'])
@@ -1395,13 +1548,15 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
              
     # Measure the depth 
     #   need good photometry 
-    gdmag, = np.where(cat['cmag'] < 50) 
+    gdmag, = np.where(meas['magpsf'] < 50) 
     ngdmag = len(gdmag)
     if ngdmag > 0: 
         # Get 95% percentile depth 
-        cmag = cat['cmag'][gdmag]
+        cmag = meas['magpsf'][gdmag] + 2.5*np.log10(exptime) + expinfo['zpterm'][0]
+        cerr = np.sqrt(meas['errpsf'][gdmag]**2 + expinfo['zptermerr'][0]**2) # add calibration error in quadrature 
         si = np.argsort(cmag) 
-        cmag = cmag[si] 
+        cmag = cmag[si]
+        cerr = cerr[si]
         depth95 = cmag[int(np.round(0.95*ngdmag))-1] 
         expinfo['depth95'] = depth95 
         chinfo['depth95'] = depth95 
@@ -1411,15 +1566,15 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
         #  so S/N=5 is for err=1.087/5=0.2174 
         #  S/N=10 is for err=1.087/10=0.1087 
         depth10sig = 99.99 
-        depind, = np.where((cat['cmag'] < 50) & (cat['cmag'] > depth95-3.0) & (cat['cerr'] >= 0.0987) & (cat['cerr'] <= 0.1187))
-        if len(depind) < 5 : 
-            depind, = np.where((cat['cmag'] < 50) & (cat['cmag'] > depth95-3.0) & (cat['cerr'] >= 0.0787) & (cat['cerr'] <= 0.1387))
+        depind, = np.where((cmag < 50) & (cmag > depth95-3.0) & (cerr >= 0.0987) & (cerr <= 0.1187))
+        if len(depind) < 5: 
+            depind, = np.where((cmag < 50) & (cmag > depth95-3.0) & (cerr >= 0.0787) & (cerr <= 0.1387))
         if len(depind) > 5: 
-            depth10sig = np.median(cat['cmag'][depind]) 
+            depth10sig = np.median(cmag[depind]) 
         else: 
-            depind, = np.where(cat['cmag'] < 50) 
+            depind, = np.where(cmag < 50) 
             if len(depind) > 0: 
-                depth10sig = np.max(cat['cmag'][depind]) 
+                depth10sig = np.max(cmag[depind]) 
         logger.info('10sigma depth = %.2f mag' % depth10sig)
         expinfo['depth10sig'] = depth10sig 
         chinfo['depth10sig'] = depth10sig 
@@ -1444,27 +1599,28 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     lo = np.append(0,nsrc[0:nchips]) 
     hi = nsrc-1 
     for i in range(nchips): 
-        ncat1 = hi[i]-lo[i]+1 
-        if ncat1 == 0: 
+        nmeas1 = hi[i]-lo[i]+1 
+        if nmeas1 == 0: 
             logger.info('No sources for CCDNUM='+str(chinfo['ccdnum'][i]))
             continue
-        cat1 = cat[lo[i]:hi[i]] 
-                 
+        meas1 = meas[lo[i]:hi[i]+1] 
+        logger.info('CCDNUM={:4d}  NSOURCES={:d}'.format(meas1['ccdnum'][0],len(meas1)))
+        
         # Apply QA cuts 
         #---------------- 
-        badflag = np.zeros(len(cat1),int)
+        badflag = np.zeros(len(meas1),int)
         
-        # Remove bad chip data 
+        # Mask bad chip data 
         # Half of chip 31 for MJD>56660 
         #  c4d_131123_025436_ooi_r_v2 with MJD=56619 has problems too 
         #  if the background b/w the left and right half is large then BAd 
-        lft31, = np.where((cat1[xcol] < 1024) & (cat1['ccdnum'] == 31))
-        rt31, = np.where((cat1[xcol] >= 1024) & (cat1['ccdnum'] == 31))
+        lft31, = np.where((meas1[xcol] < 1024) & (meas1['ccdnum'] == 31))
+        rt31, = np.where((meas1[xcol] >= 1024) & (meas1['ccdnum'] == 31))
         if len(lft31) > 10 and len(rt31) > 10: 
-            lftback = np.median(cat1['background'][lft31]) 
-            rtback = np.median(cat1['background'][rt31]) 
+            lftback = np.median(meas1['background'][lft31]) 
+            rtback = np.median(meas1['background'][rt31]) 
             mnback = 0.5*(lftback+rtback) 
-            sigback = dln.mad(cat1['background']) 
+            sigback = dln.mad(meas1['background']) 
             if np.abs(lftback-rtback) > (np.sqrt(mnback)>sigback): 
                 jump31 = True
             else: 
@@ -1479,65 +1635,40 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
             # X: 1025-2049 bad 
             # use 1000 as the boundary since sometimes there's a sharp drop 
             # at the boundary that causes problem sources with SExtractor 
-            bdind, = np.where((cat1[xcol] > 1000) & (cat1['ccdnum'] == 31))
-            ngdind = len(cat1)-len(bdind)
+            bdind, = np.where((meas1[xcol] > 1000) & (meas1['ccdnum'] == 31))
+            ngdind = len(meas1)-len(bdind)
             if len(bdind) > 0:  # some bad ones found
                 logger.info('  '+str(len(bdind))+' bad chip 31 measurements')
                 badflag[bdind] += 1
-                #if ngdind == 0:  # all bad 
-                #    #logger.info('NO useful measurements in ',list[i].file 
-                #    cat1 = None
-                #    ncat1 = 0 
-                #    continue
-                #else: 
-                #    logger.info('  Removing '+strtrim(nbdind,2)+' bad chip 31 measurements, '+strtrim(ngdind,2)+' left.' 
-                #    cat1 = np.delete(cat1,bdind)
-                #    ncat1 = len(cat1)
             else:
                 badchip31 = False  # chip 31 
                          
-        # Make a cut on quality mask flag (IMAFLAGS_ISO) 
-        bdcat, = np.where(cat1['imaflags_iso'] > 0)
-        if len(bdcat) > 0: 
-            #logger.info('  Removing ',strtrim(nbdcat,2),' sources with bad CP flags.' 
-            #if len(bdcat) == ncat1: 
-            #    continue
-            #cat1 = np.delete(cat1,bdcat)
-            #ncat1 = len(cat1)
-            logger.info('  '+str(len(bdcat))+' sources with bad CP flags.')
-            bdflag[bdcat] += 2 
+        # Mask sourcds with bad quality mask flag (IMAFLAGS_ISO) 
+        bdmeas, = np.where(meas1['imaflags_iso'] > 0)
+        if len(bdmeas) > 0: 
+            logger.info('  '+str(len(bdmeas))+' sources with bad CP flags.')
+            badflag[bdmeas] += 2 
             
-        # Make cuts on SE FLAGS 
-        #   this removes problematic truncatd sources near chip edges 
-        bdseflags, = np.where( ((cat1['flags'] & 8) > 0) |   # object truncated 
-                               ((cat1['flags'] & 16) > 0))   # aperture truncate 
+        # Mask sources with bad SE FLAGS 
+        #   this masks problematic truncatd sources near chip edges 
+        bdseflags, = np.where( ((meas1['flags'] & 8) > 0) |   # object truncated 
+                               ((meas1['flags'] & 16) > 0))   # aperture truncate 
         if len(bdseflags) > 0: 
-            #logger.info('  Removing ',strtrim(nbdseflags,2),' truncated sources' 
-            #if len(bdseflags) == ncat1: 
-            #    continue
-            #cat1 = np.delete(cat1,bdseflags)
-            #ncat1 = len(cat1)
             logger.info('  '+str(len(bdseflags))+' truncated sources')
             badflag[bdseflags] += 4
             
-        # Removing low-S/N sources 
+        # Mask low-S/N sources 
         #  snr = 1.087/err 
         snrcut = 5.0 
-        bdsnr, = np.where(1.087/cat1['magerr_auto'] < snrcut) 
+        bdsnr, = np.where(1.087/meas1['magerr_auto'] < snrcut) 
         if len(bdsnr) > 0: 
-            #logger.info('  Removing ',strtrim(nbdsnr,2),' sources with S/N<',strtrim(snrcut,2) 
-            #if len(bdsnr) == ncat1: 
-            #    continue
-            #cat1 = np.delete(cat1,bdsnr)
-            #ncat1 = len(cat1)
-            logger.info('  '+str(len(bdsnr))+' sources with S/N<'+str(len(snrcut)))
+            logger.info('  '+str(len(bdsnr))+' sources with S/N<'+str(snrcut))
             badflag[bdsnr] += 8
             
         # Convert to final format 
-        if ncat1 > 0:
-            cat1 = Table(cat1)
+        if nmeas1 > 0:
             mdt = [('measid',(str,100)),('objectid',(str,100)),('exposure',(str,50)),
-                   ('ccdnum',int),('filter',(str,50)),('mjd',float),('x',np.float32),('y',np.float32),
+                   ('ccdnum',np.int8),('filter',(str,50)),('mjd',float),('x',np.float32),('y',np.float32),
                    ('ra',float),('raerr',np.float32),('dec',float),('decerr',np.float32),('mag_auto',np.float32),
                    ('magerr_auto',np.float32),('mag_aper1',np.float32),('magerr_aper1',np.float32),('mag_aper2',np.float32),
                    ('magerr_aper2',np.float32),('mag_aper4',np.float32),('magerr_aper4',np.float32),
@@ -1554,77 +1685,68 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
                    ('errpsf',float),('skypsf',float),('iter',int),('chi',float),('sharp',float),
                    ('rapsf',float),('decpsf',float),('ebv',np.float32),('haspsf',bool),('snr',np.float32),
                    ('badflag',int)]
-            meas = np.zeros(ncat1,dtype=np.dtype(mdt))
-            meas = Table(meas)
-            for n in meas.colnames:
-                if n in cat1.colnames:
-                    meas[n] = cat1[n]
-            meas['measid'] = cat1['sourceid'].astype(str)
-            meas['exposure'] = base
-            meas['ccdnum'] = chinfo['ccdnum'][i]
-            meas['filter'] = expinfo['filter'][0]
-            meas['mjd'] = expinfo['mjd'][0]
-            meas['x'] = cat1[xcol]
-            meas['y'] = cat1[ycol]
-            # ONLY CALIBRATE GOOD PHOTOMETRIC MEASUREMENTS!!!!!!!!!!!!!
-            meas['mag_auto'] = cat1['mag_auto'] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
-            meas['magerr_auto'] = cat1['magerr_auto']
-            meas['mag_aper1'] = cat1['mag_aper'][:,0] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
-            meas['magerr_aper1'] = cat1['magerr_aper'][:,0] 
-            meas['mag_aper2'] = cat1['mag_aper'][:,1] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
-            meas['magerr_aper2'] = cat1['magerr_aper'][:,1] 
-            meas['mag_aper4'] = cat1['mag_aper'][:,2] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
-            meas['magerr_aper4'] = cat1['magerr_aper'][:,2]
-            meas['mag_aper6'] = cat1['mag_aper'][:,3] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
-            meas['magerr_aper6'] = cat1['magerr_aper'][:,3] 
-            meas['mag_aper8'] = cat1['mag_aper'][:,4] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
-            meas['magerr_aper8'] = cat1['magerr_aper'][:,4] 
-            meas['asemi'] = cat1['a_world'] * 3600.         # convert to arcsec 
-            meas['asemierr'] = cat1['erra_world'] * 3600.   # convert to arcsec 
-            meas['bsemi'] = cat1['b_world'] * 3600.         # convert to arcsec 
-            meas['bsemierr'] = cat1['errb_world'] * 3600.   # convert to arcsec 
-            meas['theta'] = 90-cat1['theta_world']          # make CCW E of N 
-            meas['thetaerr'] = cat1['errtheta_world'] 
-            meas['fwhm'] = cat1['fwhm_world'] * 3600.       # convert to arcsec 
-            meas['class_star'] = cat1['class_star']
-            meas['ndet_iter'] = cat1['ndet_iter']
-            meas['repeat'] = cat1['repeat']
-            meas['xpsf'] = cat1['xpsf']
-            meas['ypsf'] = cat1['ypsf']
-            meas['magpsf'] = cat1['magpsf'] + 2.5*np.log10(exptime) + chinfo['zpterm'][i]
-            meas['errpsf'] = cat1['errpsf']
-            meas['skypsf'] = cat1['sky']
-            meas['iter'] = cat1['iter']
-            meas['chi'] = cat1['chi']
-            meas['sharp'] = cat1['sharp']
-            meas['rapsf'] = cat1['rapsf']
-            meas['decpsf'] = cat1['decpsf']
-            meas['ebv'] = cat1['ebv']
-            meas['haspsf'] = cat1['magpsf'] < 50
-            meas['snr'] = 1.087/cat1['magerr_auto']
-            meas['badflag'] = badflag
+            final = np.zeros(nmeas1,dtype=np.dtype(mdt))
+            final = Table(final)
+            # Add units
+            for c in ['ra','dec','rapsf','decpsf','theta','thetaerr']:
+                final[c].unit = 'degree'
+            for c in ['raerr','decerr','fwhm','asemi','asemierr','bsemi','bsemierr','kron_radius']:
+                final[c].unit = 'arcsec'
+            for c in ['mag_auto','magerr_auto','mag_aper1','magerr_aper1','mag_aper2','magerr_aper2',
+                      'mag_aper4','magerr_aper4','mag_aper6','magerr_aper6','mag_aper8','magerr_aper8',
+                      'mag_iso','magerr_iso','magpsf','errpsf','ebv']:
+                final[c].unit = 'magnitude'
+            for c in ['x','y','xpsf','ypsf']:
+                final[c].unit = 'pixel'
+            for c in ['background','skypsf']:
+                final[c].unit = 'ADU'
+            final['mjd'].unit = 'day'
+            # Copy over all columns in common
+            for n in final.colnames:
+                if n in meas1.colnames:
+                    final[n][:] = meas1[n]
+            # Special handling of some columns
+            final['exposure'][:] = base
+            final['x'][:] = meas1['x_image']
+            final['y'][:] = meas1['y_image']
+            # Calibrate the photometry
+            #  only calibrate good photometric measurements
+            zpoff = 2.5*np.log10(exptime) + chinfo['zpterm'][i]
+            for c in ['mag_auto','mag_aper1','mag_aper2','mag_aper4','mag_aper6','mag_aper8','magpsf']:
+                if c[:8]=='mag_aper':
+                    indx = {'1':0,'2':1,'4':2,'6':3,'8':4}[c[-1]]
+                    mag = meas1['mag_aper'][:,indx]
+                else:
+                    mag = meas1[c]
+                gdmag = ((mag < 50) & np.isfinite(mag))
+                final[c][:] = np.nan   # bad by default
+                final[c][gdmag] = mag[gdmag]+zpoff
+            final['magerr_auto'][:] = meas1['magerr_auto']
+            final['magerr_aper1'][:] = meas1['magerr_aper'][:,0] 
+            final['magerr_aper2'][:] = meas1['magerr_aper'][:,1] 
+            final['magerr_aper4'][:] = meas1['magerr_aper'][:,2]
+            final['magerr_aper6'][:] = meas1['magerr_aper'][:,3] 
+            final['magerr_aper8'][:] = meas1['magerr_aper'][:,4]
+            final['asemi'][:] = meas1['a_world'] * 3600.         # convert to arcsec 
+            final['asemierr'][:] = meas1['erra_world'] * 3600.   # convert to arcsec 
+            final['bsemi'][:] = meas1['b_world'] * 3600.         # convert to arcsec 
+            final['bsemierr'][:] = meas1['errb_world'] * 3600.   # convert to arcsec 
+            final['theta'][:] = 90-meas1['theta_world']          # make CCW E of N 
+            final['thetaerr'][:] = meas1['errtheta_world'] 
+            final['fwhm'][:] = meas1['fwhm_world'] * 3600.       # convert to arcsec 
+            final['skypsf'][:] = meas1['sky']
+            final['haspsf'][:] = meas1['magpsf'] < 50
+            final['snr'][:] = 1.087/meas1['magerr_auto']
+            final['badflag'][:] = badflag
             # Other columns we are keeping in case we need to recreate the original measurement file
-            meas['mag_iso'] = cat1['mag_iso']
-            meas['magerr_iso'] = cat1['magerr_iso']
-            meas['background'] = cat1['background']
-            meas['threshold'] = cat1['threshold']
-            meas['isoarea_image'] = cat1['isoarea_image']
-            meas['isoarea_world'] = cat1['isoarea_world']
-            meas['x2_world'] = cat1['x2_world']
-            meas['y2_world'] = cat1['y2_world']
-            meas['xy_world'] = cat1['xy_world']
-            meas['ellipticity'] = cat1['ellipticity']
-            meas['errx2_world'] = cat1['errx2_world']
-            meas['erry2_world'] = cat1['erry2_world']
-            meas['errxy_world'] = cat1['errxy_world']
-            meas['imaflags_iso'] = cat1['imaflags_iso']
-            meas['nimaflags_iso'] = cat1['nimaflags_iso']
+            # already copied over in for loop above
             
             #if redo and selfcal and expinfo['zptyper']==2: # Create backup of original versions 
             #    if os.path.exists(outfile) == 1 : 
             #        dln.file_copy(outfile,expdir+'/'+base+'_'+str(chinfo[i].ccdnum,2)+'_meas.v1.fits',overwrite=True)
 
-            hdu1 = fits.table_to_hdu(meas)
+            # Append to the output HDUList
+            hdu1 = fits.table_to_hdu(final)
             hdu1.header['EXTNAME'] = ccdnum
             hdu.append(hdu1)
             mhdu1 = fits.table_to_hdu(chinfo[i:i+1])
@@ -1632,20 +1754,19 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
             mhdu.append(mhdu1)                    # add metadata for this chip
 
     # Write to file 
-    outfile = expdir+'/'+base+'_meas.fits'
+    outfile = expdir+'/'+base+'_meas2.fits'
     logger.info('Writing table to '+outfile)    
     hdu.writeto(outfile,overwrite=True)
     hdu.close()
                      
     # Meta-data file 
-    metafile = expdir+'/'+base+'_meta.fits' 
+    metafile = expdir+'/'+base+'_meta2.fits' 
     logger.info('Writing metadata to '+metafile)
     mhdu.writeto(metafile,overwrite=True)
     mhdu.close()
             
     dt = time.time()-t00 
     logger.info('dt = %.2f sec.' % dt)
-
 
 def calibrate_healpix(pix,version,nside=64,redo=False):
     """
