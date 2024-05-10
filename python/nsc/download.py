@@ -7,7 +7,7 @@ from astropy.io import fits,ascii
 from astropy.table import Table
 import subprocess
 from dlnpyutils import utils as dln,coords
-from dustmaps.sfd import SFDQuery
+#from dustmaps.sfd import SFDQuery
 from astroquery.vizier import Vizier
 from astropy.coordinates import Angle,SkyCoord
 import astropy.units as u
@@ -15,7 +15,7 @@ from . import utils
 
 Vizier.TIMEOUT = 600
 Vizier.ROW_LIMIT = -1
-Vizier.cache_location = None
+Vizier.cache_location = '' #None
 
 
 def getdata(refcat,minra,redo=False,silent=False,logger=None):
@@ -88,7 +88,9 @@ def getdata(refcat,minra,redo=False,silent=False,logger=None):
     elif refname == 'GAIA/GAIA': 
         refname = 'GAIA' 
     elif refname == 'Skymapper': 
-        refname = 'SKYMAPPER' 
+        refname = 'SKYMAPPER'
+    elif refname.lower() == 'skymapperdr4':
+        refname = 'SKYMAPPERDR4'
     elif refname == 'GLIMPSE': 
         catname = 'II/293/glimpse' 
     elif refname == 'SAGE': 
@@ -101,7 +103,8 @@ def getdata(refcat,minra,redo=False,silent=False,logger=None):
     ra1 = minra+1.0
 
 
-    outdir = '/net/dl1/users/dnidever/nsc/refcatalogs/'+refname+'/'
+    #outdir = '/net/dl1/users/dnidever/nsc/refcatalogs/'+refname+'/'
+    outdir = '/net/dl2/dnidever/nsc/refcatalogs/'+refname+'/'
     if os.path.exists(outdir)==False:
         os.makedirs(outdir)
     savefile = outdir+'ref_%.6f_%.6f_%s.fits' % (ra0,ra1,refname)
@@ -124,7 +127,7 @@ def getdata(refcat,minra,redo=False,silent=False,logger=None):
         
         # Use DataLab database search 
         #---------------------------- 
-        if refname in ['TMASS','GAIA','GAIADR2','GAIAEDR3','PS','SKYMAPPER','SKYMAPPERDR2','ALLWISE','ATLAS']:
+        if refname in ['TMASS','GAIA','GAIADR2','GAIAEDR3','PS','SKYMAPPER','SKYMAPPERDR2','SKYMAPPERDR4','ALLWISE','ATLAS']:
             if refname == 'TMASS': 
                 tablename = 'twomass.psc' 
                 cols = 'designation,ra as raj2000,dec as dej2000,j_m as jmag,j_cmsig as e_jmag,h_m as hmag,h_cmsig as e_hmag,k_m as kmag,k_cmsig as e_kmag,ph_qual as qflg' 
@@ -190,6 +193,16 @@ def getdata(refcat,minra,redo=False,silent=False,logger=None):
                 user = 'dlquery'
                 racol = 'raj2000' 
                 deccol = 'dej2000' 
+            if refname == 'SKYMAPPERDR4': 
+                tablename = 'skymapper_dr4.master' 
+                cols = 'raj2000 as ra, dej2000 as dec, u_psf as sm_umag, e_u_psf as e_sm_umag, g_psf as sm_gmag, e_g_psf as e_sm_gmag, r_psf as sm_rmag,'
+                cols += 'e_r_psf as e_sm_rmag, i_psf as sm_imag,e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag' 
+                #server = 'gp04.datalab.noirlab.edu' 
+                ##server = 'gp01.datalab.noao.edu' 
+                server = 'db02.datalab.noirlab.edu'
+                user = 'dlquery'
+                racol = 'raj2000' 
+                deccol = 'dej2000' 
             if refname == 'ALLWISE': 
                 tablename = 'allwise.source' 
                 #cols = 'ra, dec, w1mdef as w1mag, w1sigmdef as e_w1mag, w2mdef as w2mag, w2sigmdef as e_w2mag' 
@@ -210,7 +223,7 @@ def getdata(refcat,minra,redo=False,silent=False,logger=None):
             # Use Postgres command with q3c cone search 
             refcattemp = savefile.replace('.fits','.txt') 
             cmd = "psql -h "+server+" -U "+user+" -d tapdb -w --pset footer -c 'SELECT "+cols+" FROM "+tablename
-            if refname=='SKYMAPPER' or refname=='SKYMAPPERDR2':
+            if refname=='SKYMAPPER' or refname=='SKYMAPPERDR2' or refname=='SKYMAPPERDR4':
                 cmd += " WHERE raj2000 >= %.6f and raj2000 < %.6f'" % (ra0,ra1)
             else:
                 cmd += " WHERE ra >= %.6f and ra < %.6f'" % (ra0,ra1)
@@ -264,10 +277,11 @@ def getdata(refcat,minra,redo=False,silent=False,logger=None):
                 catname = 'II/335/galex_ais'
             elif refname.upper()=='GLIMPSE':
                 # Only includes GLIMPSE I,II,3D
-                cols = ['RAJ2000','DEJ2000','_2MASS','_3.6mag','e_3.6mag','_4.5mag','e_4.5mag']
+                cols = ['RAJ2000','DEJ2000','2MASS','3.6mag', 'e_3.6mag', '4.5mag', 'e_4.5mag']
                 catname = 'II/293/glimpse'
             elif refname.upper()=='SAGE':
-                cols = ['RAJ2000','DEJ2000','__3.6_','e__3.6_','__4.5_','e__4.5_']
+                #cols = ['RAJ2000','DEJ2000','__3.6_','e__3.6_','__4.5_','e__4.5_']
+                cols = ['*']
                 catname = 'II/305/catalog'
 
             Vizier.ROW_LIMIT = -1
@@ -339,6 +353,8 @@ def getdata(refcat,minra,redo=False,silent=False,logger=None):
         # Save the file 
         logger.info('Saving catalog to file '+savefile)
         ref.write(savefile,overwrite=True)
+
+        #import pdb; pdb.set_trace()
                 
     if silent==False:
         logger.info('%d sources found   dt=%.1f sec.' % (len(ref),time.time()-t0))
