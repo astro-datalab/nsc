@@ -59,10 +59,28 @@ def local_query(cenra,cendec,radius,refcat,server,nside=32,silent=False,logger=N
 
 
     refname = refcat.lower()
-    if refname=='ps':
+    if refname.lower()=='ps' or refname.lower()=='ps1':
         refname = 'ps1'
-    if refname=='2mass-psc':
+    elif refname.lower()[:5]=='2mass' or refname.lower()[:5]=='tmass':
         refname = '2mass'
+    elif refname.lower()=='allwise':
+        refname = 'allwise'
+    elif refname.lower()=='atlas':
+        refname = 'atlas'
+    elif refname.lower()=='gaia' or refname.lower()=='gaiaedr3':
+        refname = 'gaiaedr3'
+    elif refname.lower()=='galex':
+        refname = 'galex'
+    elif refname.lower()=='glimpse':
+        refname = 'glimpse'
+    elif refname.lower()=='sage':
+        refname = 'sage'
+    elif refname.lower()=='skymapperdr2':
+        refname = 'skymapperdr2'
+    elif refname.lower()=='skymapperdr4':
+        refname = 'skymapperdr4'
+    else:
+        raise ValueError(str(refname)+' not found')
 
     # What healpix do we need to load
     upix = hp.ang2pix(nside,cenra,cendec,lonlat=True)
@@ -236,9 +254,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
     refname = str(refcat).upper()
     if refname == 'II/312/AIS': 
         refname = 'GALEX' 
-    elif refname == '2MASS-PSC': 
-        refname = 'TMASS' 
-    elif refname == '2MASS': 
+    elif refname == '2MASS-PSC' or refname=='2MASS' or refname.lower()=='2mass' or refname.lower()=='tmass':
         refname = 'TMASS' 
     elif refname == 'GAIA/GAIA': 
         refname = 'GAIA' 
@@ -254,7 +270,9 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
         refname = 'II/305/archive' 
     elif refname == 'ATLASREFCAT2': 
         refname = 'ATLAS' 
-     
+    else:
+        raise ValueError(str(refname)+' not supported')
+
     if savefile is None:
         savefile = tmpdir+'ref_%.5f_%.5f_%.3f_%s.fits' % (cenra,cendec,radius,refname)
     if os.path.exists(os.path.abspath(os.path.dirname(savefile)))==False:
