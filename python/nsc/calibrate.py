@@ -16,9 +16,10 @@ from scipy.optimize import curve_fit
 from scipy import stats
 import subprocess
 import traceback
+import shutil
 from . import utils,query,modelmag
 
-def concatenate(expdir):
+def concatenate(expdir,deletetruncated=False):
     """
     Combine multiple chip-level measurement files into a single multi-extension FITS file.
     """
@@ -58,9 +59,17 @@ def concatenate(expdir):
     fitsfiles2 = glob('*_??.fits')
     fitsfiles2.sort()
     fitsfiles = fitsfiles1+fitsfiles2
-    # this assumes that it is a c4d exposure
-    if len(fitsfiles)<59:
-        print(len(fitsfiles),'fits files found. not enough.  skipping')
+    # c4d, too few files
+    if len(fitsfiles)<59 and expdir.find('/c4d/')>-1:
+        #print(len(fitsfiles),'fits files found. not enough.  skipping')
+        print(len(fitsfiles),'fits files found.  Truncated.  Deleting')
+        shutil.rmtree(expdir)
+        os.chdir(curdir)
+        return
+    # ksb/k4m, too few files
+    if len(fitsfiles)<4 and (expdir.find('/k4m/')>-1 or expdir.find('/ksb/')>-1):
+        print(len(fitsfiles),'fits files found.  Truncated.  Deleting')
+        shutil.rmtree(expdir)
         os.chdir(curdir)
         return
     chdu = fits.HDUList()

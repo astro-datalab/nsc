@@ -83,6 +83,11 @@ def local_query(cenra,cendec,radius,refcat,server,nside=32,silent=False,logger=N
                 reffile = '/mnt/home/dnidever/ceph/nsc/catalogs/gaia_synth_phot/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'
             else:
                 reffile = '/mnt/home/dnidever/ceph/nsc/catalogs/'+refname+'/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'                
+        elif server=='tacc':
+            if refname=="gsynth-phot":
+                reffile = '/corral/projects/NOIRLab/nsc/catalogs/gaia_synth_phot/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'
+            else:
+                reffile = '/corral/projects/NOIRLab/nsc/catalogs/'+refname+'/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'                
         if os.path.exists(reffile)==False:
             print(reffile,' NOT FOUND')
             continue
@@ -183,10 +188,10 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
     count = 0 
     t0 = time.time() 
 
-    host = socket.gethostname()
-    host = host.split('.')[0]
+    hostname = socket.gethostname()
+    host = hostname.split('.')[0]
     server = ''
-    if 'tempest' in host.lower():
+    if 'tempest' in host.lower() or 'tempest' in hostname.lower():
         tempest = True
         server = 'tempest'
     else:
@@ -196,12 +201,17 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
         server = 'rusty'
     else:
         rusty = False
-        
+    if 'tacc' in host.lower() or 'tacc' in hostname.lower():
+        tacc = True
+        server = 'tacc'
+    else:
+        tacc = False
+
     if logger is None:
         logger = dln.basiclogger()
         
     # Run query on local catalogs on disk
-    if tempest or rusty:
+    if tempest or rusty or tacc:
         return local_query(cenra,cendec,radius,refcat,server,nside=nside,silent=silent,logger=logger)
     
     # Check that we have psql installed 
@@ -234,6 +244,10 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
         refname = 'GAIA' 
     elif refname == 'Skymapper': 
         refname = 'SKYMAPPER' 
+    elif refname.lower() == 'skymapperdr2': 
+        refname = 'SKYMAPPERDR2' 
+    elif refname.lower() == 'skymapperdr4': 
+        refname = 'SKYMAPPERDR4' 
     elif refname == 'GLIMPSE': 
         refname = 'II/293/glimpse' 
     elif refname == 'SAGE': 
@@ -261,7 +275,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
          
         # Use DataLab database search 
         #---------------------------- 
-        if refname in ['TMASS','GAIA','GAIADR2','GAIAEDR3','PS','SKYMAPPER','SKYMAPPERDR2','ALLWISE','ATLAS']:
+        if refname in ['TMASS','GAIA','GAIADR2','GAIAEDR3','PS','SKYMAPPER','SKYMAPPERDR2','SKYMAPPERDR4','ALLWISE','ATLAS']:
             if refname == 'TMASS': 
                 tablename = 'twomass.psc' 
                 cols = 'designation,ra as raj2000,dec as dej2000,j_m as jmag,j_cmsig as e_jmag,h_m as hmag,h_cmsig as e_hmag,k_m as kmag,k_cmsig as e_kmag,ph_qual as qflg' 
@@ -319,6 +333,16 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 deccol = 'dej2000' 
             if refname == 'SKYMAPPERDR2': 
                 tablename = 'skymapper_dr2.master' 
+                cols = 'raj2000, dej2000, u_psf as sm_umag, e_u_psf as e_sm_umag, g_psf as sm_gmag, e_g_psf as e_sm_gmag, r_psf as sm_rmag,'
+                cols += 'e_r_psf as e_sm_rmag, i_psf as sm_imag,e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag' 
+                #server = 'gp04.datalab.noirlab.edu' 
+                ##server = 'gp01.datalab.noao.edu' 
+                server = 'db02.datalab.noirlab.edu'
+                user = 'dlquery'
+                racol = 'raj2000' 
+                deccol = 'dej2000' 
+            if refname == 'SKYMAPPERDR4': 
+                tablename = 'skymapper_dr4.master' 
                 cols = 'raj2000, dej2000, u_psf as sm_umag, e_u_psf as e_sm_umag, g_psf as sm_gmag, e_g_psf as e_sm_gmag, r_psf as sm_rmag,'
                 cols += 'e_r_psf as e_sm_rmag, i_psf as sm_imag,e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag' 
                 #server = 'gp04.datalab.noirlab.edu' 
@@ -663,7 +687,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
             # Use GAIA, 2MASS and GALEX to calibrate
             refcat += ['2MASS-PSC','II/312/ais']
             if cendec <= 0:
-                refcat += ['Skymapper']
+                refcat += ['Skymapperdr4']
         # DECam g-band
         elif instfilt=='c4d-g':
             # Use PS1 if possible
@@ -787,7 +811,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
             newcols += ['apass_gmag','e_apass_gmag','apass_rmag','e_apass_rmag']
         elif refcat[i]=='II/312/ais':
             newcols += ['nuv','e_nuv']  # Galex
-        elif refcat[i]=='Skymapper':
+        elif refcat[i].lower()[:9]=='skymapper':
             newcols += ['sm_umag','e_sm_umag','sm_gmag','e_sm_gmag','sm_rmag','e_sm_rmag','sm_imag','e_sm_imag','sm_zmag','e_sm_zmag']  # Skymapper DR1 
         elif refcat[i]=='ALLWISE':
             newcols += ['w1mag','e_w1mag','w2mag','e_w2mag']
@@ -933,7 +957,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
                 else: 
                     ref['nuv'][ind1] = ref1['nuvmag'][ind2]
                     ref['e_nuv'][ind1] = ref1['e_nuvmag'][ind2]
-            elif refcat[i]=='Skymapper':
+            elif refcat[i].lower()[:9]=='skymapper':
                 ref['sm_umag'][ind1] = ref1['sm_umag'][ind2]
                 ref['e_sm_umag'][ind1] = ref1['e_sm_umag'][ind2]
                 ref['sm_gmag'][ind1] = ref1['sm_gmag'][ind2]
@@ -1021,7 +1045,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
                 else: 
                     new['nuv'] = left1['nuvmag'] 
                     new['e_nuv'] = left1['e_nuvmag'] 
-            elif refcat[i]=='Skymapper':
+            elif refcat[i].lower()[:9]=='skymapper':
                 new['sm_umag'] = left1['sm_umag'] 
                 new['e_sm_umag'] = left1['e_sm_umag'] 
                 new['sm_gmag'] = left1['sm_gmag']

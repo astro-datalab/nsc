@@ -65,12 +65,16 @@ def rootdirs():
         dldir = '/net/dl2/'
         mssdir = '/net/mss1/'
         localdir = '/data0/'
-    elif host.find('tempest') > -1:
+    elif host.find('tempest') > -1 or hostname.find('tempest') > -1:
         dldir = '/home/x25h971/'
         mssdir = '/net/mss1/'
         localdir = '/tmp/'
-    elif host.find('rusty') > -1 or host.find('worker') > -1:
+    elif host.find('rusty') > -1 or host.find('worker') > -1 or hostname.find('rusty') > -1:
         dldir = '/mnt/ceph/users/'
+        mssdir = '/net/mss1/'
+        localdir = '/tmp/'
+    elif host.find('tacc') > -1 or hostname.find('tac') > -1:
+        dldir = '/corral/projects/NOIRLab/nsc/catalogs/'
         mssdir = '/net/mss1/'
         localdir = '/tmp/'
     else:
