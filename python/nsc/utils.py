@@ -1886,3 +1886,46 @@ def isnumber(s):
         return True
     except ValueError:
         return False
+
+def file_isfits(filename):
+    """
+    Check if this file is a FITS file or not. 
+ 
+    Parameters
+    ----------
+    filename   The name of the file to check. 
+ 
+    Returns
+    -------
+    return     1 if the file is a FITS file and 0 otherwise. 
+ 
+    Example
+    ------
+  
+    test = file_isfits(filename) 
+ 
+    By D. Nidever, Jan 2019 
+    Based partially from is_fits.pro by Dave Bazell 
+    Translated to python by D. Nidever, April 2022
+    """
+
+    # Does the file exist 
+    if os.path.exists(filename)==False:
+        return False
+
+    # Four possible possibilities: 
+    # 1) Regular FITS file (this includes fpacked FITS files) 
+    # 2) Gzipped FITS file 
+    # 3) ASCII file 
+    # 4) Some other binary file 
+     
+    # Try to open the file normally
+    # astropy will catch lots of problems
+    #  empty file, corrupted file, not a FITS file
+    try:
+        hdu = fits.open(filename)
+    except:
+        return False
+
+    hdu.close()
+    return True

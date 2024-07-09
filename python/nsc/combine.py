@@ -398,6 +398,149 @@ def seqcluster(cat,dcr=0.5,iter=False,inpobj=None,trim=False):
 
     return labels, obj
 
+def seqpms(obj):
+    """
+    Calculate mean coordinates and slopes.
+    """
+
+    ndet = obj['ndet']
+    sumra = obj['sumra']
+    sumdec = obj['sumdec']
+    sumt = obj['sumt']
+    sumt2 = obj['sumt2']
+    sumtra = obj['sumtra']
+    sumtdec = obj['sumtdec']
+    
+    # Calculate mean coordinates
+    mnra = sumra/ndet
+    mndec = sumdec/ndet
+    mnt = sumt/ndet
+    # Calculate proper motions
+    slpra = np.zeros(nmatch,float)
+    slpdec = np.zeros(nmatch,float)
+    twodet = (ndet > 1)
+    denom = (sumt2[twodet]/ndet[twodet]-mnt[twodet]**2)
+    slpra[twodet] = (sumtra[twodet]/ndet[twodet]-mnra[twodet]*mnt[twodet]) / denom
+    slpdec[twodet] = (sumtdec[twodet]/ndet[twodet]-mndec[twodet]*mnt[twodet]) / denom
+    
+    return mnra,mndec,slpra,slpdec
+    
+def seqclusterpm(tab,dcr=0.5,doiter=False,inpobj=None,trim=False):
+    """
+    Sequential clustering of measurements in exposures with proper motion.
+    """
+
+    ntab = len(tab)
+    labels = np.zeros(ntab)-1
+
+    # Create exposures index
+    index = dln.create_index(tab['EXPOSURE'])
+    nexp = len(index['value'])
+
+    # Create object catalog
+    dtype_obj = np.dtype([('label',int),('ra',np.float64),('dec',np.float64),('ndet',int),
+                          ('sumt',float),('sumt2',float),('sumra',float),('sumdec',float),
+                          ('sumtra',float),('sumtdec',float)])
+    # Is there an input object catalog that we are starting with?
+    if inpobj is not None:
+        obj = inpobj
+        cnt = len(obj)
+    else:
+        obj = np.zeros(np.min([500000,ntab]),dtype=dtype_obj)
+        cnt = 0
+    nobj = len(obj)
+
+    # Loop over exposures
+    for i in range(nexp):
+        #print(str(i)+' '+index['value'][i])
+        indx = index['index'][index['lo'][i]:index['hi'][i]+1]
+        tab1 = tab[indx]
+        ntab1 = len(tab1)
+        if dln.size(dcr)>1:
+            dcr1 = dcr[indx]
+        else:
+            dcr1 = dcr
+        
+        # First exposure
+        if cnt==0:
+            ind1 = np.arange(ntab1)
+            obj['label'][ind1] = ind1
+            obj['ra'][ind1] = tab1['RA']
+            obj['dec'][ind1] = tab1['DEC']
+            obj['ndet'][ind1] = 1
+            obj['sumt'][ind1] = tab1['MJD']
+            obj['sumt2'][ind1] = tab1['MJD']
+            obj['sumra'][ind1] = tab1['RA']
+            obj['sumdec'][ind1] = tab1['DEC']
+            obj['sumtra'][ind1] = tab1['MJD']*tab1['RA']
+            obj['sumtdec'][ind1] = tab1['MJD']*tab1['DEC']
+            labels[indx] = ind1
+            cnt += ntab1
+
+        # Second and up, or object catalog input
+        else:
+            ind2,ind1,dist = coords.xmatch(tab1['RA'],tab1['DEC'],obj[0:cnt]['ra'],
+                                           obj[0:cnt]['dec'],dcr1,unique=True)            
+            nmatch = dln.size(ind1)
+            #  Some matches, add data to existing records for these measurements
+            if nmatch>0:
+                obj['ndet'][ind1] += 1
+                obj['sumt'][ind1] += tab1['MJD'][ind2]
+                obj['sumt2'][ind1] += tab1['MJD'][ind2]
+                obj['sumra'][ind1] += tab1['RA'][ind2]
+                obj['sumdec'][ind1] += tab1['DEC'][ind2]
+                obj['sumtra'][ind1] += tab1['MJD'][ind2]*tab1['RA'][ind2]
+                obj['sumtdec'][ind1] += tab1['MJD'][ind2]*tab1['DEC'][ind2]
+                mnra,mndec,slpra,slpdec = seqpms(obj[ind1])
+                # Predict current coordinates with linear fit
+                thismjd = tab1['MJD'][ind2[0]]
+                predra = mnra+slpra*(thismjd-mnt)
+                preddec = mndec+slpdec*(thismjd-mnt)    
+                obj['ra'][ind1] = predra    # update coordinates
+                obj['dec'][ind1] = preddec
+                labels[indx[ind2]] = ind1
+                if nmatch<ntab1:
+                    indx0 = indx.copy()
+                    indx = np.delete(indx,ind2)
+                    tab1 = np.delete(tab1,ind2)
+                    ntab1 = dln.size(tab1)
+                else:
+                    tab1 = np.array([])
+                    ntab1 = 0
+
+            # Some left, add records for these sources
+            if ntab1>0:
+                # Add new elements
+                if (cnt+ntab1)>nobj:
+                    obj = add_elements(obj)
+                    nobj = len(obj)
+                ind1 = np.arange(ntab1)+cnt
+                obj['label'][ind1] = ind1
+                obj['ra'][ind1] = tab1['RA']
+                obj['dec'][ind1] = tab1['DEC']
+                obj['sumt'][ind1] = tab1['MJD']
+                obj['sumt2'][ind1] = tab1['MJD']
+                obj['sumra'][ind1] = tab1['RA']
+                obj['sumdec'][ind1] = tab1['DEC']
+                obj['sumtra'][ind1] = tab1['MJD']*tab1['RA']
+                obj['sumtdec'][ind1] = tab1['MJD']*tab1['DEC']
+                obj['ndet'][ind1] = 1
+                labels[indx] = ind1
+
+                cnt += ntab1
+    # Trim off the excess elements
+    obj = obj[0:cnt]
+    # Trim off any objects that do not have any detections
+    #  could happen if an object catalog was input
+    if trim is True:
+        bd, nbd = dln.where(obj['ndet']<1)
+        if nbd>0: obj = np.delete(obj,bd)
+    
+    # Maybe iterate
+    # -measure mean ra/dec for each object and go through the process again
+
+    return labels, obj
+
 def meancoords(cat,labels):
     """ Measure mean RA/DEC."""
 

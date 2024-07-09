@@ -1002,10 +1002,6 @@ def coadd(imagefiles,weightfiles,meta,outhead,statistic='mean',
     
     nimages = dln.size(imagefiles)
 
-    # PUT ALL CHIPS FROM THE SAME EXPOSURE INTO THE SAME REBINNED IMAGE!!!
-    # if they fiels are MEF, then interp them all!!
-    # make an interp_single() function interpim, resampim
-    
     # Figure out scales and weights
     # F_trans = 10^(-0.8*(delta_mag-0.2))    
     scales = meta['exptime'] * 10**(-0.8*(meta['zpterm']-0.2))
@@ -1036,10 +1032,12 @@ def coadd(imagefiles,weightfiles,meta,outhead,statistic='mean',
         meta['bgfile'][f] = tbgfile
         meta['wtfile'][f] = twtfile
         
-    # Step 4. Stack the images
+    # Stack the images
     #   this does the scaling and weighting
     final,error = stack(meta,statistic=statistic)
 
+
+    
     # Delete temporary files
     for i in range(len(meta)):
         if os.path.exists(meta['flxfile'][i]): os.remove(meta['flxfile'][i])
