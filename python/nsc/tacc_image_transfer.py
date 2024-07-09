@@ -53,3 +53,33 @@ def make_transfer_list(n=20000):
     outfile = 'transfer'+str(n)+'list_'+tstamp+'.lst'
     dln.writelines(listdir+outfile,lines)
     print('List written to '+listdir+outfile)
+
+def reorganize_files(stagedate):
+    """
+    Reorganize images transferred to TACC.
+    """
+
+    staging_dir = '/scratch1/09970/dnidever/nsc/instcal/v4/staging/'
+    image_dir = '/scratch1/09970/dnidever/nsc/instcal/v4/images/'
+
+    print('Checking staging directory '+os.path.join(staging_dir,stagedate))
+
+    files = glob(os.path.join([staging_dir,stagedate,'*.fits*']))
+    files.sort()
+    print(len(files),'files found')
+
+    import pdb; pdb.set_trace()
+
+    # Move files
+    for i in range(len(files)):
+        # move file
+        base = os.path.basename(files[i])
+        src = staging_dir + files[i]
+        instrument = 'c4d'
+        outdir = os.path.join([image_dir,instrument,year,night])
+        if os.path.exists(outdir)==False:
+            os.makedirs(outdir)
+        dst = os.path.join([outdir,base])
+        shutil.move(src,dst)
+
+        import pdb; pdb.set_trace()
