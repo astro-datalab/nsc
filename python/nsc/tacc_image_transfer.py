@@ -64,7 +64,7 @@ def reorganize_files(stagedate):
 
     print('Checking staging directory '+os.path.join(staging_dir,stagedate))
 
-    files = glob(os.path.join([staging_dir,stagedate,'*.fits*']))
+    files = glob(os.path.join(staging_dir,stagedate,'*.fits*'))
     files.sort()
     print(len(files),'files found')
 
@@ -75,11 +75,13 @@ def reorganize_files(stagedate):
         # move file
         base = os.path.basename(files[i])
         src = staging_dir + files[i]
-        instrument = 'c4d'
-        outdir = os.path.join([image_dir,instrument,year,night])
+        instrument = base.split('_')[0]
+        night = '20'+base.split('_')[1]
+        year = night[:4]
+        outdir = os.path.join(image_dir,instrument,year,night)
         if os.path.exists(outdir)==False:
             os.makedirs(outdir)
-        dst = os.path.join([outdir,base])
+        dst = os.path.join(outdir,base)
         shutil.move(src,dst)
 
         import pdb; pdb.set_trace()
