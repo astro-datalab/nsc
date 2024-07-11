@@ -30,7 +30,7 @@ import astropy.stats
 import struct
 import tempfile
 import time
-from slurm_funcs import *
+from .slurm_funcs import *
 
 pd.set_option('display.max_columns',None)
 
