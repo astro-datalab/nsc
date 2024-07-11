@@ -15,8 +15,7 @@ import logging
 import socket
 from datetime import datetime
 from argparse import ArgumentParser
-from nsc import utils,measure
-from nsc.nsc_instcal_measure import getnscdirs
+from nsc.nsc_instcal_measure import getnscdirs,Exposure
 
 if __name__ == "__main__":
 
