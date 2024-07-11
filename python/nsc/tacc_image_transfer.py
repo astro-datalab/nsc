@@ -68,13 +68,12 @@ def reorganize_files(stagedate):
     files.sort()
     print(len(files),'files found')
 
-    import pdb; pdb.set_trace()
-
     # Move files
     for i in range(len(files)):
         # move file
         base = os.path.basename(files[i])
-        src = staging_dir + files[i]
+        print(i,base)
+        src = files[i]
         instrument = base.split('_')[0]
         night = '20'+base.split('_')[1]
         year = night[:4]
@@ -84,4 +83,4 @@ def reorganize_files(stagedate):
         dst = os.path.join(outdir,base)
         shutil.move(src,dst)
 
-        import pdb; pdb.set_trace()
+    #import pdb; pdb.set_trace()
