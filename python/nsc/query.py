@@ -79,6 +79,8 @@ def local_query(cenra,cendec,radius,refcat,server,nside=32,silent=False,logger=N
         refname = 'skymapperdr2'
     elif refname.lower()=='skymapperdr4':
         refname = 'skymapperdr4'
+    elif refname.lower()=='gsynth-phot':
+        refname = 'gsynth-phot'
     else:
         raise ValueError(str(refname)+' not found')
 

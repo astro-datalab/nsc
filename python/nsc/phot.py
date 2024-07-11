@@ -765,8 +765,8 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",naxis1=None,naxis2=Non
 
 # Run Source Extractor
 #---------------------
-#def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,configdir=None,logfile=None,logger=None):
-def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,configdir=None,offset=0,sexiter=1,dthresh=2.0,logfile=None,logger=None,bindir=None): #ktedit:sex2
+def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,configdir=None,
+           offset=0,sexiter=1,dthresh=2.0,logfile=None,logger=None,bindir=None): #ktedit:sex2
     '''
     Run Source Extractor on an exposure.  The program is configured to work with files
     created by the NOAO Community Pipeline.
@@ -1758,7 +1758,8 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None,bindi
 
 # DAOPHOT aperture photometry
 #----------------------------
-def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=None,apersfile=None,logfile=None,logger=None,bindir=None):
+def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=None,apersfile=None,
+                logfile=None,logger=None,bindir=None):
     '''
     This runs DAOPHOT aperture photometry on an image.
 
