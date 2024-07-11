@@ -108,7 +108,7 @@ ed')
     t0 = time.time()
 
     # Create the Exposure object
-    exp = measure.Exposure(fluxfile,wtfile,maskfile,nscversion=version,host=host)
+    exp = Exposure(fluxfile,wtfile,maskfile,nscversion=version,host=host)
     # Run
     exp.run()
 
