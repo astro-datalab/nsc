@@ -6,6 +6,7 @@ import numpy as np
 import warnings
 from astropy.io import fits
 from astropy.utils.exceptions import AstropyWarning
+from astropy.table import Table
 import time
 import shutil
 import re
@@ -17,6 +18,19 @@ from datetime import datetime
 from argparse import ArgumentParser
 from dlnpyutils import utils as dln,slurm
 from nsc.nsc_instcal_measure import getnscdirs,Exposure
+
+
+def taccifyname(filename):
+    """ Modify mss filenames for tacc"""
+    imagedir = '/scratch1/09970/dnidever/nsc/instcal/v4/images'
+    if filename[:9]=='/net/mss1':
+        base = os.path.basename(filename)
+        instrument = base[:3] 
+        night = '20'+base[4:10]
+        newfilename = os.path.join(imagedir,instrument,night[:4],night,base)
+    else:
+        newfilename = filename
+    return newfilename        
 
 if __name__ == "__main__":
     # Run lots of NSC jobs
@@ -37,19 +51,24 @@ if __name__ == "__main__":
     if version=="None": version = None
     host = str(args.host[0])                 # hostname of server, default "None"                  
     if host=="None": host = None
-    x = args.x                               # if called, exposure version is of format "vX"
-    partition = args.partition[0]
-    maxtasks = args.maxtasks[0]                  # maximum number of tasks to run from input list
+    if isinstance(args.partition,list):
+        partition = args.partition[0]
+    else:
+        partition = args.partition
+    if isinstance(args.maxtasks,list):       # maximum number of tasks to run from input list
+        maxtasks = args.maxtasks[0]
+    else:
+        maxtasks = args.maxtasks
     redo = args.redo                         # if called, redo = True
 
     print('Input Parameters:')
     print('-----------------')
-    print('stage=',stage,)
-    print('inputfile=',inputfile)
-    print('version=',version)
-    print('host=',host)
-    print('maxtasks=',maxtasks)
-    print('redo=',redo)
+    print('stage =',stage,)
+    print('inputfile =',inputfile)
+    print('version =',version)
+    print('host =',host)
+    print('maxtasks =',maxtasks)
+    print('redo =',redo)
 
     # Check that the input file exists
     if os.path.exists(inputfile)==False:
@@ -74,7 +93,7 @@ if __name__ == "__main__":
     if not os.path.exists(tmpdir):
         os.makedirs(tmpdir)
 
-    dt = [('cmd',str,1000),('name',str,1000),('output',str,2000),
+    dt = [('cmd',str,1000),('name',str,1000),('output',str,1000),
           ('outfile',str,1000),('errfile',str,1000),('dir',str,1000)] 
 
     # Measurement
@@ -82,15 +101,20 @@ if __name__ == "__main__":
     if stage=='meas' or stage=='measure' or stage=='measurement':
         script = 'nsc_instcal_measure'
         label = 'measure'
-        tasks = Table(np.zeros(len(lines),dtype=np.dtype(dt)))
+        tasks = Table(np.zeros(np.minimum(len(inputdata),maxtasks),dtype=np.dtype(dt)))
         cnt = 0
-        for i in range(len(lines)):
+        for i in range(len(inputdata)):
             if isinstance(inputdata,Table):
                 fluxfile = inputdata['FLUXFILE'][i]
                 wtfile = inputdata['WTFILE'][i]
                 maskfile = inputdata['MASKFILE'][i]
             else:
                 fluxfile,wtfile,maskfile = lines[i].split()
+            # Might need to modify mss filenames for TACC
+            if host=='tacc':
+                fluxfile = taccifyname(fluxfile)
+                wtfile = taccifyname(wtfile)
+                maskfile = taccifyname(maskfile)
             base = os.path.basename(fluxfile)
             if base.endswith('.fits.fz'): base=base[:-8]
             if base.endswith('.fits'): base=base[:-5]
@@ -110,6 +134,7 @@ if __name__ == "__main__":
             if host:
                 cmd += ' --host '+host
             # Check output filename
+            night = '20'+base[4:10]
             outdir = os.path.join(basedir,instrument,night[:4],night,base)
             logfile = os.path.join(outdir,base+'.log')
             outfile = os.path.join(outdir,base+'_meas.fits')
@@ -124,6 +149,9 @@ if __name__ == "__main__":
             tasks['errfile'][cnt] = logfile.replace('.log','.err')
             tasks['dir'][cnt] = outdir
             cnt += 1
+            if cnt>=maxtasks:
+                print('Reached maxtasks ',maxtasks)
+                break
         tasks = tasks[:cnt]  # trim
 
         # Calculate nodes needed
@@ -139,9 +167,9 @@ if __name__ == "__main__":
     elif stage=='calib' or stage=='calibrate':
         script = 'nsc_instcal_calibrate'
         label = 'calib'
-        tasks = Table(np.zeros(len(lines),dtype=np.dtype(dt)))
+        tasks = Table(np.zeros(np.minimum(len(inputdata),maxtasks),dtype=np.dtype(dt)))
         cnt = 0
-        for i in range(len(lines)):
+        for i in range(len(inputdata)):
             # "exposure" is the full path to the exposure output directory
             if isinstance(inputdata,Table):
                 exposure = inputdata['EXPOSURE'][i]
@@ -186,6 +214,9 @@ if __name__ == "__main__":
             tasks['errfile'][cnt] = logfile.replace('.log','.err')
             tasks['dir'][cnt] = outdir
             cnt += 1
+            if cnt>=maxtasks:
+                print('Reached maxtasks ',maxtasks)
+                break
         tasks = tasks[:cnt]  # trim
 
         # Calculate nodes need
@@ -199,9 +230,9 @@ if __name__ == "__main__":
     elif stage=='combine':
         script = 'nsc_instcal_combine'
         label = 'combine'
-        tasks = Table(np.zeros(len(lines),dtype=np.dtype(dt)))
+        tasks = Table(np.zeros(np.minimum(len(inputdata),maxtasks),dtype=np.dtype(dt)))
         cnt = 0
-        for i in range(len(lines)):
+        for i in range(len(inputdata)):
             if isinstance(inputdata,Table):
                 healpix = inputdata['HEALPIX'][i]
             else:
@@ -225,6 +256,9 @@ if __name__ == "__main__":
             tasks['errfile'][cnt] = logfile.replace('.log','.err')
             tasks['dir'][cnt] = outdir
             cnt += 1
+            if cnt>=maxtasks:
+                print('Reached maxtasks ',maxtasks)
+                break
         tasks = tasks[:cnt]  # trim
 
         # Calculate nodes need
@@ -269,18 +303,18 @@ if __name__ == "__main__":
             print('small must be 2 nodes')
             nodes = 2
 
-    print('ntasks=',len(tasks))
-    print('partition=',partition)
-    print('nodes=',nodes)
-    print('label=',label)
-    print('walltime=',walltime)
+    print('Slurm Parameters:')
+    print('ntasks =',len(tasks))
+    print('partition =',partition)
+    print('nodes =',nodes)
+    print('label =',label)
+    print('walltime =',walltime)
+    slurmroot = os.environ['SCRATCH']
 
-    import pdb; pdb.set_trace()
-
-    key,jobid = slurm.submit(tasks,label,nodes=nodes,account=None,
-                             partition=partition,walltime=walltime,
-                             notification=True,stagger=True,
-                             verbose=True)
+    slurm.launcher(tasks,label,nodes=nodes,account=None,
+                   partition=partition,walltime=walltime,
+                   notification=True,stagger=True,
+                   slurmroot=slurmroot,verbose=True)
 
     # submit(tasks,label,nodes=1,cpus=64,ppn=None,account='priority-davidnidever',
     #        partition='priority',shared=True,walltime='12-00:00:00',notification=False,
