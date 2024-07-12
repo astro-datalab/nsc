@@ -114,6 +114,9 @@ if __name__ == "__main__":
         if os.path.exists(outfile):
             print(outfile,' output file already exists.  Use --redo to overwrite.')
             sys.exit()
+    if redo and os.path.exists(exp.outdir):
+        print('Removing old output directory ',exp.outdir)
+        shutil.rmtree(exp.outdir)
 
     # Run
     exp.run()
