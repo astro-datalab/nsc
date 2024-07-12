@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #AUTHORS: David Nidever (original author)
-#         david.nidever@montana.edi
+#         david.nidever@montana.edu
 #         Katie Fasbender (adapted for analysis on MSU Tempest Research Cluster)
 #         katiefasbender@montana.edu
 #
@@ -274,7 +274,7 @@ class Exposure:
         # Delete files and temporary directory
         self.logger.info("Deleting files and temporary directory.")
         # Move the final log file
-        shutil.move(self.logfile,self.outdir+self.base+".log")
+        shutil.move(self.logfile,os.path.join(self.outdir,self.base+".log"))
         # Delete temporary files and directory
         tmpfiles = glob("*")
         for f in tmpfiles: os.remove(f)
@@ -977,22 +977,22 @@ class Chip:
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
         # Copy the files we want to keep
         # final combined catalog, logs
-        outcatfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".fits"
+        outcatfile = os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".fits")
         if os.path.exists(outcatfile): os.remove(outcatfile)
         shutil.copyfile("flux.cat.fits",outcatfile)
         # Copy DAOPHOT opt files
-        outoptfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".opt"
+        outoptfile = os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".opt")
         if os.path.exists(outoptfile): os.remove(outoptfile)
         shutil.copyfile(daobase+".opt",outoptfile)
-        outalsoptfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".als.opt"
+        outalsoptfile = os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".als.opt")
         if os.path.exists(outalsoptfile): os.remove(outalsoptfile)
         shutil.copyfile(daobase+".als.opt",outalsoptfile)
         # Copy DAOPHOT PSF star list
-        outlstfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".psf.lst"
+        outlstfile = os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".psf.lst")
         if os.path.exists(outlstfile): os.remove(outlstfile)
         shutil.copyfile(daobase+".lst",outlstfile)
         # Copy DAOPHOT PSF file
-        outpsffile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".psf"
+        outpsffile = os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".psf")
         if os.path.exists(outpsffile): os.remove(outpsffile)
         shutil.copyfile(daobase+".psf",outpsffile)
         # Copy DAOPHOT .apers file??
@@ -1014,7 +1014,7 @@ class Chip:
         #    if os.path.exists(outsubfile): os.remove(outsubfile)
         #    shutil.copyfile(daobase+str(i)+"s.fits",outsubfile)
         # Copy SE config file
-        outconfigfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".sex.config"
+        outconfigfile = os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".sex.config")
         if os.path.exists(outconfigfile): os.remove(outconfigfile)
         shutil.copyfile("default.config",outconfigfile)
         # Copy SE segmentation files       #ktedit:sex2
@@ -1036,7 +1036,7 @@ class Chip:
         f = open(base+".logs","w")
         f.writelines("".join(loglines))
         f.close()
-        outlogfile =  self.outdir+self.bigbase+"_"+str(self.ccdnum)+".logs"
+        outlogfile =  os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".logs")
         if os.path.exists(outlogfile): os.remove(outlogfile)
         shutil.copyfile(base+".logs",outlogfile)
 
