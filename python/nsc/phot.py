@@ -3028,7 +3028,7 @@ def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=Non
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            "bindirdaogrow << DONE >> "+logfile+"\n" \
+            ""+bindir+"daogrow << DONE >> "+logfile+"\n" \
             ""+taperfile+"\n" \
             "\n" \
             ""+tinffile+"\n" \

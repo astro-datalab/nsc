@@ -1929,3 +1929,111 @@ def file_isfits(filename):
 
     hdu.close()
     return True
+
+def concatmeas(expdir,deletetruncated=False):
+    """
+    Combine multiple chip-level measurement files into a single multi-extension FITS file.
+    """
+    if os.path.exists(expdir)==False:
+        print(expdir,'not found')
+        return
+
+    print('Concatenate FITS files for ',expdir)
+    
+    curdir = os.getcwd()
+    
+    # Is this a tar file
+    if os.path.isdir(expdir)==False and expdir.endswith('.tar.gz') or expdir.endswith('.tgz'):
+        print('This is a tar file.  Uncompressing.')
+        tarfile = os.path.basename(expdir)
+        base = tarfile.replace('.tgz','').replace('.tar.gz','')
+        nightdir = os.path.abspath(os.path.dirname(expdir))
+        expdir = nightdir+'/'+base
+        os.chdir(nightdir)        
+        res = subprocess.run(['tar','xvf',tarfile],capture_output=True)
+        if res.returncode==0:
+            print('success: removing',tarfile)
+            os.remove(tarfile)
+        else:
+            print('problem untarring',tarfile)
+            import pdb; pdb.set_trace()
+
+    os.chdir(expdir)
+    base = os.path.basename(expdir)
+    outfile = base+'_meas.fits'
+    if os.path.exists(outfile):
+        print(outfile,'already exists')
+        os.chdir(curdir)
+        return
+    fitsfiles1 = glob('*_?.fits')
+    fitsfiles1.sort()
+    fitsfiles2 = glob('*_??.fits')
+    fitsfiles2.sort()
+    fitsfiles = fitsfiles1+fitsfiles2
+    # c4d, too few files
+    if len(fitsfiles)<59 and expdir.find('/c4d/')>-1:
+        #print(len(fitsfiles),'fits files found. not enough.  skipping')
+        print(len(fitsfiles),'fits files found.  Truncated.  Deleting')
+        shutil.rmtree(expdir)
+        os.chdir(curdir)
+        return
+    # ksb/k4m, too few files
+    if len(fitsfiles)<4 and (expdir.find('/k4m/')>-1 or expdir.find('/ksb/')>-1):
+        print(len(fitsfiles),'fits files found.  Truncated.  Deleting')
+        shutil.rmtree(expdir)
+        os.chdir(curdir)
+        return
+    chdu = fits.HDUList()
+    hhdu = fits.HDUList()
+    hhdu.append(fits.PrimaryHDU())
+    for i in range(len(fitsfiles)):
+        hdu1 = fits.open(fitsfiles[i])
+        tab1 = Table.read(fitsfiles[i])
+        base1 = os.path.basename(fitsfiles[i])
+        print('{:3d} {:s} {:8d}'.format(i+1,base1,len(tab1)))
+        ccdnum = base1[:-5].split('_')[-1]
+        newhdu = fits.table_to_hdu(Table(hdu1[1].data))
+        newhdu.header['extname'] = ccdnum
+        newhdu.header['ccdnum'] = ccdnum
+        newhead = hdu1[0].header.copy()
+        newhead['extname'] = ccdnum
+        chdu.append(newhdu)
+        hhdu.append(fits.ImageHDU(header=newhead))
+        hdu1.close()
+    print('Writing',outfile)
+    chdu.writeto(outfile,overwrite=True)
+    chdu.close()
+    houtfile = base+'_header.fits'
+    print('Writing',houtfile)
+    hhdu.writeto(houtfile,overwrite=True)
+    hhdu.close()
+    # Confirm that it is there
+    if os.path.exists(outfile) and os.path.exists(houtfile):
+        # Delete fits files
+        print('Deleting',len(fitsfiles),'individual fits files')
+        for f in fitsfiles:
+            if os.path.exists(f): os.remove(f)
+        # Tar up the rest of the files
+        # leave out meas.fits, log
+        logfile = base+'.log'
+        tarfile = base+'.tgz'
+        allfiles = glob('*')
+        allfiles = [f for f in allfiles if os.path.isfile(f)]
+        allfiles.sort()
+        if outfile in allfiles:
+            allfiles.remove(outfile)
+        if houtfile in allfiles:
+            allfiles.remove(houtfile)
+        if logfile in allfiles:
+            allfiles.remove(logfile)
+        if tarfile in allfiles:
+            allfiles.remove(tarfile)
+        cmd = ['tar','cvzf',tarfile]+allfiles
+        print('tarring',len(allfiles),'files in',tarfile)
+        res = subprocess.run(cmd,capture_output=True)
+        if res.returncode==0:
+            print('tar success')
+            print('Deleting tarred files')
+            for f in allfiles:
+                if os.path.exists(f): os.remove(f)
+    os.chdir(curdir)

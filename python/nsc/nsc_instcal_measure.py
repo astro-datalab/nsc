@@ -17,7 +17,7 @@ import astropy.stats
 from astropy.table import Table, Column,vstack
 from astropy.utils.exceptions import AstropyWarning
 from astropy.wcs import WCS
-import glob
+from glob import glob
 import logging
 import numpy as np
 import os
@@ -133,7 +133,8 @@ class Exposure:
         self.night = night
         # Output directory
         basedir,tmpdir = getnscdirs(nscversion,self.host)
-        self.outdir = basedir+self.instrument+"/"+self.night+"/"+self.base+"/"
+        self.outdir = os.path.join(basedir,self.instrument,self.night[:4],
+                                   self.night,self.base)
         
     # Setup
     def setup(self):
@@ -275,19 +276,20 @@ class Exposure:
         # Move the final log file
         shutil.move(self.logfile,self.outdir+self.base+".log")
         # Delete temporary files and directory
-        tmpfiles = glob.glob("*")
+        tmpfiles = glob("*")
         for f in tmpfiles: os.remove(f)
         os.rmdir(self.wdir)
         # Compress exposure directory
-        os.chdir("/".join(self.outdir.split("/")[:-2])) #go to one directory above outdir
-        reponame = self.outdir.split("/")[-2]+".tar"
-        outdirname = self.outdir.split("/")[-2]
-        #print(reponame,outdirname)
-        if os.path.exists(reponame+".gz"): os.remove(reponame+".gz") #get rid of old compressed folder if present
-        os.system("tar -cvf "+reponame+" "+outdirname)
-        self.logger.info("tarred exposure directory")
-        os.system("gzip "+reponame)
-        self.logger.info("gzipped exposure tar folder")
+        utils.concatmeas(self.outdir)
+        #os.chdir("/".join(self.outdir.split("/")[:-2])) # go to one directory above outdir
+        #reponame = self.outdir.split("/")[-2]+".tar"
+        #outdirname = self.outdir.split("/")[-2]
+        ##print(reponame,outdirname)
+        #if os.path.exists(reponame+".gz"): os.remove(reponame+".gz") # get rid of old compressed folder if present
+        #os.system("tar -cvf "+reponame+" "+outdirname)
+        #self.logger.info("tarred exposure directory")
+        #os.system("gzip "+reponame)
+        #self.logger.info("gzipped exposure tar folder")
         ## Remove uncompressed files & directory
         #old_files = glob.glob(self.outdir+"*")
         #for f in old_files: os.remove(f)
@@ -809,7 +811,7 @@ class Chip:
             return
 
         # Load ALS catalog
-        als = Table(daoread(daobase+".als")) 
+        als = Table(phot.daoread(daobase+".als")) 
         nals = len(als)
         # Apply aperture correction
         if self.apcorr is None:
@@ -1022,7 +1024,7 @@ class Chip:
         #    shutil.copyfile("seg_"+str(i)+".fits",outsegfile)
 
         # Combine all the log files
-        logfiles = glob.glob(base+"*.log")
+        logfiles = glob(base+"*.log")
         loglines = []
         for logfil in logfiles:
             loglines += ["==> "+logfil+" <==\n"]
@@ -1040,8 +1042,8 @@ class Chip:
 
         # Delete temporary directory/files
         self.logger.info("  Cleaning up")
-        files1 = glob.glob("flux*")
-        files2 = glob.glob("default*")
+        files1 = glob("flux*")
+        files2 = glob("default*")
         files = files1+files2+["flux.fits","wt.fits","mask.fits","daophot.opt","allstar.opt"]
         for f in files:
             if os.path.exists(f): os.remove(f)
