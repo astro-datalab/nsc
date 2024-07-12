@@ -464,8 +464,13 @@ def daoread(fil):
         names = cat.dtype.names
         for i in range(nstars):
             line1 = lines[i+3]
+            nline1 = len(line1)
             for j in range(len(names)):
-                cat[i][names[j]] = np.array(line1[lo[j]:hi[j]],dtype=dtype[names[j]])
+                # someimtes lst files are missing the SKY column
+                if hi[j]<=nline1:
+                    cat[i][names[j]] = np.array(line1[lo[j]:hi[j]],dtype=dtype[names[j]])
+                else:
+                    print('Warning: cannot read column '+names[j]+' for line '+str(i+1))
     else:
         print("Cannot load this file")
         return None
