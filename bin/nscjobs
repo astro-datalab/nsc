@@ -95,6 +95,13 @@ if __name__ == "__main__":
             if base.endswith('.fits.fz'): base=base[:-8]
             if base.endswith('.fits'): base=base[:-5]
             print('{:} {:}'.format(i+1,base))
+            # Check that all three files exist
+            infiles = [fluxfile,wtfile,maskfile]
+            exists = [os.path.exists(f) for f in infiles]
+            bd, = np.where(np.array(exists)==False)
+            if len(bd)>0:
+                print('Files not found: '+','.join(np.array(infiles)[bd])+'  SKIPPING')
+                continue
             if base[:3] not in ['c4d','ksb','k4m']:
                 print(base,'NOT in correct format. SKIPPING')
                 continue
@@ -135,6 +142,7 @@ if __name__ == "__main__":
         tasks = Table(np.zeros(len(lines),dtype=np.dtype(dt)))
         cnt = 0
         for i in range(len(lines)):
+            # "exposure" is the full path to the exposure output directory
             if isinstance(inputdata,Table):
                 exposure = inputdata['EXPOSURE'][i]
             else:
