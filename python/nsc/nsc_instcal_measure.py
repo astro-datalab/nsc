@@ -69,7 +69,8 @@ def getnscdirs(version=None,host=None):
         basedir = '/mnt/home/dnidever/ceph/nsc/instcal/'+verdir
         tmproot = '/mnt/home/dnidever/ceph/nsc/'+verdir+'tmp/'
     elif host=="tacc":
-        basedir = '/corral/projects/NOIRLab/nsc/instcal/'+verdir
+        #basedir = '/corral/projects/NOIRLab/nsc/instcal/'+verdir
+        basedir = '/scratch1/09970/dnidever/nsc/instcal/'+verdir
         tmproot = '/scratch1/09970/dnidever/nsc/'+verdir+'tmp/'
     else:
         basedir = os.getcwd()

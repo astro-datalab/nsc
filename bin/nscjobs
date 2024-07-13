@@ -158,9 +158,10 @@ if __name__ == "__main__":
         # it takes about 1 hour per exposure on average
         # there are ~120 cores per node
         # we can only run for 48 hours
+        # the tacc slurm queue limits launcher to a maximum of 56 tasks per node
         ntasks = np.minimum(len(tasks),maxtasks)
         total_time_hour = ntasks
-        nodes = int(np.ceil(total_time_hour/120/48))
+        nodes = int(np.ceil(total_time_hour/56/48))
 
     # Calibrate
     #-----------
@@ -221,9 +222,10 @@ if __name__ == "__main__":
 
         # Calculate nodes need
         # calibration is pretty fast, maybe 1 min. per exposure
+        # the tacc slurm queue limits launcher to a maximum of 56 tasks per node
         ntasks = np.minimum(len(tasks),maxtasks)
         total_time_hour = ntasks / 60.0
-        nodes = int(np.ceil(total_time_hour/120/48))
+        nodes = int(np.ceil(total_time_hour/56/48))
 
     # Combine
     #---------
@@ -262,10 +264,11 @@ if __name__ == "__main__":
         tasks = tasks[:cnt]  # trim
 
         # Calculate nodes need
+        # the tacc slurm queue limits launcher to a maximum of 56 tasks per node
         # how much per healpix??
         ntasks = np.minimum(len(tasks),maxtasks)
         total_time_hour = ntasks
-        nodes = int(np.ceil(total_time_hour/120/48))
+        nodes = int(np.ceil(total_time_hour/56/48))
     else:
         print('Stage ',stage,' not supported')
         sys.exit()
@@ -303,6 +306,9 @@ if __name__ == "__main__":
             print('small must be 2 nodes')
             nodes = 2
 
+    # the tacc slurm queue limits launcher to a maximum of 56 tasks per node
+    nparallel = nodes*56
+
     print('Slurm Parameters:')
     print('ntasks =',len(tasks))
     print('partition =',partition)
@@ -311,8 +317,8 @@ if __name__ == "__main__":
     print('walltime =',walltime)
     slurmroot = os.environ['SCRATCH']
 
-    slurm.launcher(tasks,label,nodes=nodes,account=None,
-                   partition=partition,walltime=walltime,
+    slurm.launcher(tasks,label,nodes=nodes,nparallel=nparallel,
+                   account=None,partition=partition,walltime=walltime,
                    notification=True,stagger=True,
                    slurmroot=slurmroot,verbose=True)
 
