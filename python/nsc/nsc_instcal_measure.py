@@ -33,7 +33,7 @@ import time
 import warnings
 
 from dlnpyutils.utils import *
-from . import phot,slurm_funcs
+from . import phot,slurm_funcs,utils
 
 # Ignore these warnings, it's a bug
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
