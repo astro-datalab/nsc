@@ -280,6 +280,8 @@ class Exposure:
         tmpfiles = glob("*")
         for f in tmpfiles: os.remove(f)
         os.rmdir(self.wdir)
+        # CD back to original directory
+        os.chdir(self.origdir)
         # Compress exposure directory
         utils.concatmeas(self.outdir)
         #os.chdir("/".join(self.outdir.split("/")[:-2])) # go to one directory above outdir
@@ -296,9 +298,8 @@ class Exposure:
         #for f in old_files: os.remove(f)
         ##os.listdir(self.outdir) # outdir contents
         #shutil.rmtree(self.outdir)
-        # CD back to original directory
-        os.chdir(self.origdir)
-
+        ## CD back to original directory
+        #os.chdir(self.origdir)
 
     # RUN all steps to process this exposure
     def run(self):
