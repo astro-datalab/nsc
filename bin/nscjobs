@@ -323,7 +323,7 @@ if __name__ == "__main__":
                                   notification=True,stagger=True,
                                   slurmroot=slurmroot,verbose=True)
     # Write list of output directories
-    dln.writelines(os.path.join(slurmdir,label+'_outdir.lst',tasks['dir']))
+    dln.writelines(os.path.join(slurmdir,label+'_outdir.lst'),tasks['dir'].data.astype(str))
     
 
     # submit(tasks,label,nodes=1,cpus=64,ppn=None,account='priority-davidnidever',
