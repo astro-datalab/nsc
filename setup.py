@@ -2,12 +2,12 @@
 
 from distutils.core import setup
 
-setup(name='noaosourcecatalog',
+setup(name='nsc',
       version='1.0.0',
       description='NOIRLab Source Catalog Processing Software',
       author='David Nidever',
       author_email='dnidever@montana.edu',
-      url='https://github.com/astro-datalab/noaosourcecatalog',
+      url='https://github.com/astro-datalab/nsc',
       packages=['nsc'],
       package_dir={'':'python'},
       package_data={'nsc': ['data/*','data/params/*','data/params/*/*']},
