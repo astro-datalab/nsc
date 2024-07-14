@@ -318,10 +318,13 @@ if __name__ == "__main__":
     print('walltime =',walltime)
     slurmroot = os.environ['SCRATCH']
 
-    slurm.launcher(tasks,label,nodes=nodes,nparallel=nparallel,
-                   account=None,partition=partition,walltime=walltime,
-                   notification=True,stagger=True,
-                   slurmroot=slurmroot,verbose=True)
+    slurmdir,key = slurm.launcher(tasks,label,nodes=nodes,nparallel=nparallel,
+                                  account=None,partition=partition,walltime=walltime,
+                                  notification=True,stagger=True,
+                                  slurmroot=slurmroot,verbose=True)
+    # Write list of output directories
+    dln.writelines(os.path.join(slurmdir,label+'_outdir.lst',tasks['dir'])
+    
 
     # submit(tasks,label,nodes=1,cpus=64,ppn=None,account='priority-davidnidever',
     #        partition='priority',shared=True,walltime='12-00:00:00',notification=False,
