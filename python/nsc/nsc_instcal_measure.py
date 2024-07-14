@@ -222,6 +222,13 @@ class Exposure:
         except:
             self.logger.error("No extension "+str(extension))
             return(False)
+        # Some ls9 reductions have different dimensions for flux/mask and wt
+        #  the wt image has an extra perimeter of pixels 
+        if flux.shape==(4094, 2046) and wt.shape==(4096, 2048):
+            self.logger.info('ls9 reduction error. flux/mask have (4094,4046) while wt has (4096,2048).  Trimming the wt image.')
+            wt = wt[1:-1,1:-1]   # trimming extra perimeter of pixels off
+            whead['naxis1'] = 2046
+            whead['naxis2'] = 4094
         # Write the data to the appropriate files
         if os.path.exists(fluxfile):
             os.remove(fluxfile)
