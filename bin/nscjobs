@@ -95,6 +95,7 @@ if __name__ == "__main__":
 
     dt = [('cmd',str,1000),('name',str,1000),('output',str,1000),
           ('outfile',str,1000),('errfile',str,1000),('dir',str,1000)] 
+    logtime = datetime.now().strftime("%Y%m%d%H%M%S")
 
     # Measurement
     #-------------
@@ -136,7 +137,7 @@ if __name__ == "__main__":
             # Check output filename
             night = '20'+base[4:10]
             outdir = os.path.join(basedir,instrument,night[:4],night,base)
-            logfile = os.path.join(outdir,base+'.log')
+            logfile = os.path.join(outdir,base+logtime+'.log')
             outfile = os.path.join(outdir,base+'_meas.fits')
             if os.path.exists(outfile) and redo==False:
                 print(outfile,' ALREADY EXISTS.  Skipping')
