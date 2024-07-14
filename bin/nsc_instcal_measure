@@ -15,7 +15,7 @@ import logging
 import socket
 from datetime import datetime
 from argparse import ArgumentParser
-from nsc import utils,measure
+from nsc.nsc_instcal_measure import getnscdirs,Exposure
 
 if __name__ == "__main__":
 
@@ -25,10 +25,29 @@ if __name__ == "__main__":
     parser.add_argument('wtfile', type=str, nargs=1, help='Absolute weight filename')
     parser.add_argument('maskfile', type=str, nargs=1, help='Absolute mask filename')
     parser.add_argument('version', type=str, nargs=1, help='NSC version')
-    parser.add_argument('--redo', action='store_true', help='Redo this image')
+    parser.add_argument('--host',type=str,nargs=1,default="None",help='hostname, default "None", other options supported are "cca","tempest_katie","tempest_group","gp09/7","tacc"')
+    parser.add_argument('--x',action='store_true', help='Exposure version is of format "vX"')
+    parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
     args = parser.parse_args()
 
-    t0 = time.time()
+    # Inputs                                                                                                  
+    version = args.version[0]     # NSC version, like "v4", default "None"                                    
+    if version=="None": version = None
+    host = str(args.host[0])                 # hostname of server, default "None"                             
+    if host=="None": host = None
+    x = args.x                               # if called, exposure version is of format "vX"                  
+    redo = args.redo                         # if called, redo = True                                         
+    print("version = ",version," host = ",host," x = ",x," redo = ",redo)
+
+
+    # Get NSC directories                                                                                     
+    basedir, tmpdir = getnscdirs(version,host)
+    print("Working in basedir,tmpdir = ",basedir,tmpdir)
+    # Make sure the directories exist                                                                         
+    if not os.path.exists(basedir):
+        os.makedirs(basedir)
+    if not os.path.exists(tmpdir):
+        os.makedirs(tmpdir)
 
     # File names
     fluxfile = args.fluxfile
@@ -41,6 +60,14 @@ if __name__ == "__main__":
     if type(maskfile) is list:
         maskfile = maskfile[0]
 
+    # Check if file naming convention lists version "vX"                                                      
+    if x:
+        vers = fluxfile.split(".")[0].split("_")[-1]
+        versx = re.split('(\d+)',vers)[0]+"x"
+        fluxfile = fluxfile.split(vers)[0]+versx+fluxfile.split(vers)[-1]
+        wtfile = wtfile.split(vers)[0]+versx+wtfile.split(vers)[-1]
+        maskfile = maskfile.split(vers)[0]+versx+maskfile
+
     # Check that the files exist
     if os.path.exists(fluxfile) is False:
         print(fluxfile+" file NOT FOUND")
@@ -52,35 +79,45 @@ if __name__ == "__main__":
         print(maskile+" file NOT FOUND")
         sys.exit()
 
-    # Measure catalogs for one exposure
-    dldir,mssdir,localdir = utils.rootdirs()
-          
-    t00 = time.time() 
     
     # Start the logfile 
     #------------------ 
-    host = socket.gethostname()
-    hostname = host.split('.')[0]
-    logtime = datetime.now().strftime("%Y%m%d%H%M%S") 
-    # Set up logging to screen and logfile
-    logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
-    logger = logging.getLogger() 
-    while logger.hasHandlers(): # some existing loggers, remove them   
-        logger.removeHandler(logger.handlers[0]) 
-    logger = logging.getLogger()
-    logtime = datetime.now().strftime("%Y%m%d%H%M%S")
-    logfile = expdir+'/'+base+'_meas.log'
-    if os.path.exists(logfile): os.remove(logfile)
-    fileHandler = logging.FileHandler(logfile)
-    fileHandler.setFormatter(logFormatter)
-    logger.addHandler(fileHandler)
-    consoleHandler = logging.StreamHandler()
-    consoleHandler.setFormatter(logFormatter)
-    logger.addHandler(consoleHandler)
-    logger.setLevel(logging.NOTSET)
+    #host = socket.gethostname()
+    #hostname = host.split('.')[0]
+    #logtime = datetime.now().strftime("%Y%m%d%H%M%S") 
+    ## Set up logging to screen and logfile
+    #logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
+    #logger = logging.getLogger() 
+    #while logger.hasHandlers(): # some existing loggers, remove them   
+    #    logger.removeHandler(logger.handlers[0]) 
+    #logger = logging.getLogger()
+    #logtime = datetime.now().strftime("%Y%m%d%H%M%S")
+    #logfile = expdir+'/'+base+'_meas.log'
+    #if os.path.exists(logfile): os.remove(logfile)
+    #fileHandler = logging.FileHandler(logfile)
+    #fileHandler.setFormatter(logFormatter)
+    #logger.addHandler(fileHandler)
+    #consoleHandler = logging.StreamHandler()
+    #consoleHandler.setFormatter(logFormatter)
+    #logger.addHandler(consoleHandler)
+    #logger.setLevel(logging.NOTSET)
+
+    # Start keeping time                                                                                      
+    t0 = time.time()
 
     # Create the Exposure object
-    exp = measure.Exposure(fluxfile,wtfile,maskfile,nscversion=version)
+    exp = Exposure(fluxfile,wtfile,maskfile,nscversion=version,host=host)
+
+    # Check if the output files already exist
+    if redo==False and os.path.exists(exp.outdir):
+        outfile = os.path.join(exp.outdir,exp.base+'_meas.fits')
+        if os.path.exists(outfile):
+            print(outfile,' output file already exists.  Use --redo to overwrite.')
+            sys.exit()
+    if redo and os.path.exists(exp.outdir):
+        print('Removing old output directory ',exp.outdir)
+        shutil.rmtree(exp.outdir)
+
     # Run
     exp.run()
 

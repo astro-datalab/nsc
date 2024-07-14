@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #AUTHORS: David Nidever (original author)
-#         david.nidever@montana.edi
+#         david.nidever@montana.edu
 #         Katie Fasbender (adapted for analysis on MSU Tempest Research Cluster)
 #         katiefasbender@montana.edu
 #
@@ -17,7 +17,7 @@ import astropy.stats
 from astropy.table import Table, Column,vstack
 from astropy.utils.exceptions import AstropyWarning
 from astropy.wcs import WCS
-import glob
+from glob import glob
 import logging
 import numpy as np
 import os
@@ -33,7 +33,7 @@ import time
 import warnings
 
 from dlnpyutils.utils import *
-from phot import *
+from . import phot,slurm_funcs,utils
 
 # Ignore these warnings, it's a bug
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -68,6 +68,10 @@ def getnscdirs(version=None,host=None):
     elif host=="cca":
         basedir = '/mnt/home/dnidever/ceph/nsc/instcal/'+verdir
         tmproot = '/mnt/home/dnidever/ceph/nsc/'+verdir+'tmp/'
+    elif host=="tacc":
+        #basedir = '/corral/projects/NOIRLab/nsc/instcal/'+verdir
+        basedir = '/scratch1/09970/dnidever/nsc/instcal/'+verdir
+        tmproot = '/scratch1/09970/dnidever/nsc/'+verdir+'tmp/'
     else:
         basedir = os.getcwd()
         tmproot = basedir+"tmp/"
@@ -108,7 +112,6 @@ class Exposure:
         self.outdir = None
         self.chip = None
 
-
         # Get instrument
         head0 = fits.getheader(fluxfile,0)
         if head0["DTINSTRU"] == 'mosaic3':
@@ -131,13 +134,13 @@ class Exposure:
         self.night = night
         # Output directory
         basedir,tmpdir = getnscdirs(nscversion,self.host)
-        self.outdir = basedir+self.instrument+"/"+self.night+"/"+self.base+"/"
-
+        self.outdir = os.path.join(basedir,self.instrument,self.night[:4],
+                                   self.night,self.base)
         
     # Setup
     def setup(self):
         #print("nscversion = ",nscversion)
-        basedir,tmproot = getnscdirs(nscversion,host)
+        basedir,tmproot = getnscdirs(self.nscversion,self.host)
         print("dirs, setup = ",basedir,tmproot)
         # Prepare temporary directory
         tmpcntr = 1#L 
@@ -175,7 +178,7 @@ class Exposure:
         fluxfile = "bigflux.fits.fz"
         wtfile = "bigwt.fits.fz"
         maskfile = "bigmask.fits.fz"
-        if host=="gp09" or host=="gp07": self.logger.info("Copying InstCal images from mass store archive")
+        if self.host=="gp09" or self.host=="gp07": self.logger.info("Copying InstCal images from mass store archive")
         else: self.logger.info("Copying InstCal images downloaded from Astro Data Archive")
         #getdata(rawname,self.origfluxfile,self.origwtfile,self.origmaskfile,tmpdir)
         shutil.copyfile(self.origfluxfile,tmpdir+"/"+os.path.basename(self.origfluxfile))
@@ -194,7 +197,7 @@ class Exposure:
         # Set local working filenames
         self.fluxfile = fluxfile
         self.wtfile = wtfile
-        self.maskfile = omaskfile
+        self.maskfile = maskfile
         
         # Make final output directory
         if not os.path.exists(self.outdir):
@@ -219,6 +222,13 @@ class Exposure:
         except:
             self.logger.error("No extension "+str(extension))
             return(False)
+        # Some ls9 reductions have different dimensions for flux/mask and wt
+        #  the wt image has an extra perimeter of pixels 
+        if flux.shape==(4094, 2046) and wt.shape==(4096, 2048):
+            self.logger.info('ls9 reduction error. flux/mask have (4094,4046) while wt has (4096,2048).  Trimming the wt image.')
+            wt = wt[1:-1,1:-1]   # trimming extra perimeter of pixels off
+            whead['naxis1'] = 2046
+            whead['naxis2'] = 4094
         # Write the data to the appropriate files
         if os.path.exists(fluxfile):
             os.remove(fluxfile)
@@ -237,7 +247,6 @@ class Exposure:
         # Add logger information
         self.chip.logger = self.logger
         return(True)
-
 
     # Process all chips
     def process(self):
@@ -263,7 +272,8 @@ class Exposure:
             self.logger.info("dt = "+str(time.time()-t0)+" seconds")
             if 2==1:
                 chiptimes = Table.read(basedir+'lists/nsc_dr3_chiptimes.fits')
-                chiptimes.add_row([(str(self.fluxfile).strip().split('/')[-1]).split('.')[0],i,int(self.chip.ccdnum),int(nsrc),int(t1_check-t0)])
+                chiptimes.add_row([(str(self.fluxfile).strip().split('/')[-1]).split('.')[0],i,
+                                   int(self.chip.ccdnum),int(nsrc),int(t1_check-t0)])
                 chiptimes = Table(np.unique(chiptimes))
                 chiptimes.write(basedir+'lists/nsc_dr3_chiptimes.fits',overwrite=True)
 
@@ -272,29 +282,31 @@ class Exposure:
         # Delete files and temporary directory
         self.logger.info("Deleting files and temporary directory.")
         # Move the final log file
-        shutil.move(self.logfile,self.outdir+self.base+".log")
+        shutil.move(self.logfile,os.path.join(self.outdir,self.base+".log"))
         # Delete temporary files and directory
-        tmpfiles = glob.glob("*")
+        tmpfiles = glob("*")
         for f in tmpfiles: os.remove(f)
         os.rmdir(self.wdir)
+        # CD back to original directory
+        os.chdir(self.origdir)
         # Compress exposure directory
-        os.chdir("/".join(self.outdir.split("/")[:-2])) #go to one directory above outdir
-        reponame = self.outdir.split("/")[-2]+".tar"
-        outdirname = self.outdir.split("/")[-2]
-        #print(reponame,outdirname)
-        if os.path.exists(reponame+".gz"): os.remove(reponame+".gz") #get rid of old compressed folder if present
-        os.system("tar -cvf "+reponame+" "+outdirname)
-        self.logger.info("tarred exposure directory")
-        os.system("gzip "+reponame)
-        self.logger.info("gzipped exposure tar folder")
+        utils.concatmeas(self.outdir)
+        #os.chdir("/".join(self.outdir.split("/")[:-2])) # go to one directory above outdir
+        #reponame = self.outdir.split("/")[-2]+".tar"
+        #outdirname = self.outdir.split("/")[-2]
+        ##print(reponame,outdirname)
+        #if os.path.exists(reponame+".gz"): os.remove(reponame+".gz") # get rid of old compressed folder if present
+        #os.system("tar -cvf "+reponame+" "+outdirname)
+        #self.logger.info("tarred exposure directory")
+        #os.system("gzip "+reponame)
+        #self.logger.info("gzipped exposure tar folder")
         ## Remove uncompressed files & directory
         #old_files = glob.glob(self.outdir+"*")
         #for f in old_files: os.remove(f)
         ##os.listdir(self.outdir) # outdir contents
         #shutil.rmtree(self.outdir)
-        # CD back to original directory
-        os.chdir(self.origdir)
-
+        ## CD back to original directory
+        #os.chdir(self.origdir)
 
     # RUN all steps to process this exposure
     def run(self):
@@ -312,14 +324,14 @@ class Chip:
         self.maskfile = maskfile
         self.bigbase = bigbase
         self.host = host
-        if host=="tempest_katie" or "tempest_group": self.bindir = "/home/x25h971/bin/"
-        else: self.bindir = ""
+        if host=="tempest_katie" or host=="tempest_group": self.bindir = "/home/x25h971/bin/"
+        else: self.bindir = os.path.expanduser("~/bin/")
         self.bigextension = None
         base = os.path.basename(fluxfile)
         base = os.path.splitext(os.path.splitext(base)[0])[0]
         self.dir = os.path.abspath(os.path.dirname(fluxfile))
         self.base = base
-        self.meta = makemeta(header=fits.getheader(fluxfile))
+        self.meta = phot.makemeta(header=fits.getheader(fluxfile))
         self.sexfile = self.dir+"/"+self.base+"_sex.fits"
         self.daofile = self.dir+"/"+self.base+"_dao.fits"
         self.sexcatfile = None
@@ -556,44 +568,49 @@ class Chip:
         self.logger.warning('Maglim not set yet')
         return None
 
-
     # Write SE catalog in DAO format
     #-------------------------------
     #def sextodao(self,cat=None,outfile=None,format="coo"):
     def sextodao(self,cat=None,outfile=None,format="coo",meta=None): #ktedit:sex2
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        if outfile is None: outfile=daobase+".coo"
-        if cat is None: cat=self.sexcat
-        if meta is None: meta=self.meta                      #ktedit:sex2
-        else: offs=0                                         #ktedit:sex2
+        if outfile is None:
+            outfile = daobase+".coo"
+        if cat is None:
+            cat = self.sexcat
+        if meta is None:
+            meta = self.meta                      #ktedit:sex2
+        else:
+            offs = 0                                         #ktedit:sex2
         #sextodao(self.sexcat,self.meta,outfile=outfile,format=format,logger=self.logger)
-        sextodao(cat,meta,outfile=outfile,format=format,logger=self.logger) #ktedit:sex2
+        phot.sextodao(cat,meta,outfile=outfile,format=format,logger=self.logger) #ktedit:sex2
 
     # Run Source Extractor
     #---------------------
     #def runsex(self,outfile=None):
-    def runsex(self,dthresh=1.1,bindir="/home/x25h971/bin/",outfile=None): #ktedit:sex2
+    #def runsex(self,dthresh=1.1,bindir="/home/x25h971/bin/",outfile=None): #ktedit:sex2
+    def runsex(self,dthresh=1.1,bindir="~/bin/",outfile=None): #ktedit:sex2
         #--------------------------------------------------------------------------------------------ktedit:sex2 T
         # if allsub=False, run SExtractor on the fluxfile.  Otherwise, run on the ALLSTAR PSF-subtracted image.
         if self.sexiter==1: 
-            infile=self.fluxfile
-            meta=self.meta
-            sexcatfile="flux_sex.cat.fits"
-            offset=0
+            infile = self.fluxfile
+            meta = self.meta
+            sexcatfile = "flux_sex.cat.fits"
+            offset = 0
         else:
             daobase = os.path.basename(self.daofile)
             daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]             
             infile = daobase+str(self.sexiter-1)+"s.fits"
-            self.smeta=makemeta(header=fits.getheader(infile,0))  #should this be self.smeta?  probably.
-            meta=self.smeta
+            self.smeta = phot.makemeta(header=fits.getheader(infile,0))  #should this be self.smeta?  probably.
+            meta = self.smeta
             sexcatfile = "flux_sex"+str(self.sexiter)+".cat.fits"
             if self.sexcat is not None: offset=int(self.sexcat['NUMBER'][-1]) #ktedit:sex2
         #--------------------------------------------------------------------------------------------ktedit:sex2 B
-        basedir, tmpdir = getnscdirs(self.nscversion)
+        basedir, tmpdir = getnscdirs(self.nscversion,self.host)
         configdir = basedir+"config/"
-        #sexcat, maglim = runsex(self.fluxfile,self.wtfile,self.maskfile,self.meta,sexcatfile,configdir,logger=self.logger)
-        sexcat, maglim = runsex(infile,self.wtfile,self.maskfile,meta,sexcatfile,configdir,offset=offset,sexiter=self.sexiter,dthresh=dthresh,logger=self.logger,bindir=self.bindir) #ktedit:sex2
+        sexcat, maglim = phot.runsex(infile,self.wtfile,self.maskfile,meta,sexcatfile,configdir,
+                                     offset=offset,sexiter=self.sexiter,dthresh=dthresh,
+                                     logger=self.logger,bindir=self.bindir) #ktedit:sex2
         #--------------------------------------------------------------------------------------------ktedit:sex2 T
         sexcat.add_column(np.repeat(self.sexiter,len(sexcat)),name="NDET_ITER") # keep track of what SExtractor iteration each source is from
         sexcat.add_column(np.zeros(len(sexcat)),name="REPEAT")                  # keep track of sources that were detected in multiple iterations
@@ -601,7 +618,7 @@ class Chip:
         #  0 = source only detected once
         #  1 = source detected in multiple iterations (all iterations but last), will be removed from sexcat
         #  2 = source detected in multiple iterations (last iteration source was detected in)
-        temp_sexcat=Table.read(sexcatfile,2)
+        temp_sexcat = Table.read(sexcatfile,2)
         temp_sexcat.add_column(np.repeat(self.sexiter,len(temp_sexcat)),name="NDET_ITER")
         temp_sexcat.add_column(np.zeros(len(temp_sexcat)),name="REPEAT")
         temp_sexcat.write(sexcatfile,overwrite=True)
@@ -611,7 +628,7 @@ class Chip:
             self.sexcat = sexcat
             self._sexmaglim = maglim
             # Set the FWHM as well
-            fwhm = sexfwhm(sexcat,logger=self.logger)
+            fwhm = phot.sexfwhm(sexcat,logger=self.logger)
             self.meta['FWHM'] = fwhm
         # --If 2nd+ SExtractor iteration, compare sources with
         # those from previous iteration and combine catalogs 
@@ -622,10 +639,14 @@ class Chip:
             prevsexcat = sexcat[sexcat['NDET_ITER']==(self.sexiter-1)]
             for newsource in newsexcat:
                 dpix = 2
-                prevsexcat_close = prevsexcat[(prevsexcat['X_IMAGE']<(newsource['X_IMAGE']+dpix)) & (prevsexcat['X_IMAGE']>(newsource['X_IMAGE']-dpix)) & (prevsexcat['Y_IMAGE']<(newsource['Y_IMAGE']+dpix)) & (prevsexcat['Y_IMAGE']>(newsource['Y_IMAGE']-dpix))]
+                prevsexcat_close = prevsexcat[(prevsexcat['X_IMAGE']<(newsource['X_IMAGE']+dpix)) & 
+                                              (prevsexcat['X_IMAGE']>(newsource['X_IMAGE']-dpix)) & 
+                                              (prevsexcat['Y_IMAGE']<(newsource['Y_IMAGE']+dpix)) & 
+                                              (prevsexcat['Y_IMAGE']>(newsource['Y_IMAGE']-dpix))]
                 if len(prevsexcat_close)>0:
                     for oldsource in prevsexcat_close:
-                        d_btwn_centers = np.sqrt((newsource['X_IMAGE']-oldsource['X_IMAGE'])**2+(newsource['Y_IMAGE']-oldsource['Y_IMAGE'])**2)
+                        d_btwn_centers = np.sqrt((newsource['X_IMAGE']-oldsource['X_IMAGE'])**2 + 
+                                                 (newsource['Y_IMAGE']-oldsource['Y_IMAGE'])**2)
                         if d_btwn_centers <= dpix:
                             old_repeat_index = int(np.where(sexcat['NUMBER']==oldsource['NUMBER'])[0])
                             new_repeat_index = int(np.where(sexcat['NUMBER']==newsource['NUMBER'])[0])
@@ -648,7 +669,8 @@ class Chip:
         base = os.path.basename(self.sexfile)
         base = os.path.splitext(os.path.splitext(base)[0])[0]
         fwhm = self.sexfwhm() if self.seeing is None else self.seeing
-        psfcat = sexpickpsf(self.sexcat,fwhm,self.meta,base+".lst",nstars=nstars,logger=self.logger)
+        psfcat = phot.sexpickpsf(self.sexcat,fwhm,self.meta,base+".lst",
+                                 nstars=nstars,logger=self.logger)
 
     # Make DAOPHOT option files
     #--------------------------
@@ -657,18 +679,18 @@ class Chip:
         base = os.path.basename(self.daofile)
         base = os.path.splitext(os.path.splitext(base)[0])[0]
         #mkopt(base,self.meta,logger=self.logger,**kwargs)
-        mkopt(base,self.meta,logger=self.logger)
+        phot.mkopt(base,self.meta,logger=self.logger)
         
     # Make image ready for DAOPHOT
     def mkdaoim(self):
-        mkdaoim(self.fluxfile,self.wtfile,self.maskfile,self.meta,self.daofile,logger=self.logger)
+        phot.mkdaoim(self.fluxfile,self.wtfile,self.maskfile,self.meta,self.daofile,logger=self.logger)
 
     # DAOPHOT detection
     #----------------------
     def daofind(self):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        cat = daofind(self.daofile,outfile=daobase+".coo",logger=self.logger,bindir=self.bindir)
+        cat = phot.daofind(self.daofile,outfile=daobase+".coo",logger=self.logger,bindir=self.bindir)
 
     # DAOPHOT aperture photometry
     #----------------------------
@@ -678,14 +700,14 @@ class Chip:
         #----------------------------------------------------------------#ktedit:sex2 T
         imfile=self.daofile
         if self.sexiter==1:
-            coofile=daobase+".coo"
-            outfile=daobase+".ap"
+            coofile = daobase+".coo"
+            outfile = daobase+".ap"
         else:
-            coofile=daobase+str(self.sexiter)+".coo"
-            outfile=daobase+str(self.sexiter)+".ap"
+            coofile = daobase+str(self.sexiter)+".coo"
+            outfile = daobase+str(self.sexiter)+".ap"
         #----------------------------------------------------------------#ktedit:sex2 B
-        #apcat, maglim = daoaperphot(self.daofile,daobase+".coo",outfile=daobase+".ap",logger=self.logger)
-        apcat, maglim = daoaperphot(imfile,coofile,outfile=outfile,optfile=daobase+".opt",logger=self.logger,bindir=self.bindir) #ktedit:sex2
+        apcat, maglim = phot.daoaperphot(imfile,coofile,outfile=outfile,optfile=daobase+".opt",
+                                         logger=self.logger,bindir=self.bindir) #ktedit:sex2
         #self._daomaglim = maglim
         if self.sexiter==1: self._daomaglim = maglim #ktedit:sex2
         #else: self._daomaglim2 = maglim            #ktedit:sex2
@@ -696,28 +718,31 @@ class Chip:
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
         if maglim is None: maglim=self.maglim
-        psfcat = daopickpsf(self.daofile,daobase+".ap",maglim,daobase+".lst",nstars,logger=self.logger,bindir=self.bindir)
+        psfcat = phot.daopickpsf(self.daofile,daobase+".ap",maglim,daobase+".lst",nstars,
+                                 logger=self.logger,bindir=self.bindir)
 
     # Run DAOPHOT PSF
     #-------------------
     def daopsf(self,verbose=False):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        psfcat = daopsf(self.daofile,daobase+".lst",outfile=daobase+".psf",verbose=verbose,logger=self.logger,bindir=self.bindir)
+        psfcat = phot.daopsf(self.daofile,daobase+".lst",outfile=daobase+".psf",
+                             verbose=verbose,logger=self.logger,bindir=self.bindir)
 
     # Subtract neighbors of PSF stars
     #--------------------------------
     def subpsfnei(self):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        psfcat = subpsfnei(self.daofile,daobase+".lst",daobase+".nei",daobase+"a.fits",logger=self.logger,bindir=self.bindir)
+        psfcat = phot.subpsfnei(self.daofile,daobase+".lst",daobase+".nei",
+                                daobase+"a.fits",logger=self.logger,bindir=self.bindir)
 
     # Create DAOPHOT PSF
     #-------------------
     def createpsf(self,listfile=None,apfile=None,doiter=True,maxiter=5,minstars=6,subneighbors=True,verbose=False):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        subit=createpsf(daobase+".fits",daobase+".ap",daobase+".lst",meta=self.meta,logger=self.logger)
+        subit = phot.createpsf(daobase+".fits",daobase+".ap",daobase+".lst",meta=self.meta,logger=self.logger)
         self.subiter=subit
         
     # Run ALLSTAR
@@ -727,7 +752,7 @@ class Chip:
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
         #-------------------------------------------------------------------#ktedit:sex2 T
         imfile = daobase+".fits"
-        meta=self.meta
+        meta = self.meta
         subfile = daobase+str(self.sexiter)+"s.fits"
         if self.sexiter==1: 
             apfile = daobase+".ap"
@@ -737,8 +762,9 @@ class Chip:
             apfile = daobase+str(self.sexiter)+".ap"
             outfile = daobase+str(self.sexiter)+".als"
         #-------------------------------------------------------------------#ktedit:sex2 B
-        #alscat = allstar(daobase+".fits",daobase+".psf",daobase+".ap",outfile=daobase+".als",meta=self.meta,logger=self.logger)
-        alscat = allstar(imfile,daobase+".psf",apfile=apfile,subfile=subfile,outfile=outfile,optfile=daobase+".als.opt",meta=meta,logger=self.logger,bindir=self.bindir) #ktedit:sex2
+        alscat = phot.allstar(imfile,daobase+".psf",apfile=apfile,subfile=subfile,
+                              outfile=outfile,optfile=daobase+".als.opt",meta=meta,
+                              logger=self.logger,bindir=self.bindir) #ktedit:sex2
 
 
     # Combine total + new SExtractor & ALLSTAR catalog files #ktedit:sex2; this function is new
@@ -750,7 +776,6 @@ class Chip:
         if type=="sexcat":
             file1 = daobase+".coo"                                      # total SExcat stored in this file
             file2 = daobase+str(self.sexiter)+".coo"                    # new SExcat stored in this file
-
             # must also combie .fits format of SE cat
             file3 = "flux_sex.cat.fits"
             file4 = "flux_sex"+str(self.sexiter)+".cat.fits"
@@ -768,13 +793,13 @@ class Chip:
         combined_cat = cat1+cat2[3:]                                    # combine the catalogs 
         writelines(file1,combined_cat,overwrite=True)
 
-
     # Get aperture correction
     #------------------------
     def getapcor(self):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        apcorr = apcor(daobase+"a.fits",daobase+".lst",daobase+".psf",self.meta,optfile=daobase+'.opt',alsoptfile=daobase+".als.opt",logger=self.logger)
+        apcorr = phot.apcor(daobase+"a.fits",daobase+".lst",daobase+".psf",self.meta,
+                            optfile=daobase+'.opt',alsoptfile=daobase+".als.opt",logger=self.logger)
         self.apcorr = apcorr
         self.meta['apcor'] = (apcorr,"Aperture correction in mags")
 
@@ -783,7 +808,6 @@ class Chip:
     def finalcat(self,outfile=None,both=True,sexdetect=True):
         # both       Only keep sources that have BOTH SE and ALLSTAR information
         # sexdetect  SE catalog was used for DAOPHOT detection list
-
         self.logger.info("--  Creating final combined catalog --")
 
         daobase = os.path.basename(self.daofile)
@@ -796,7 +820,7 @@ class Chip:
             return
 
         # Load ALS catalog
-        als = Table(daoread(daobase+".als")) 
+        als = Table(phot.daoread(daobase+".als")) 
         nals = len(als)
         # Apply aperture correction
         if self.apcorr is None:
@@ -808,8 +832,10 @@ class Chip:
         ncat = len(self.sexcat)
         newcat = self.sexcat.copy()
         alsnames = ['X','Y','MAG','ERR','SKY','ITER','CHI','SHARP']
-        newnames = ['XPSF','YPSF','MAGPSF','ERRPSF','SKY','ITER','CHI','SHARP','RAPSF','DECPSF']
-        newtypes = ['float64','float64','float','float','float','float','float','float','float64','float64']
+        newnames = ['XPSF','YPSF','MAGPSF','ERRPSF','SKY','ITER',
+                    'CHI','SHARP','RAPSF','DECPSF']
+        newtypes = ['float64','float64','float','float','float','float',
+                    'float','float','float64','float64']
         nan = float('nan')
         newvals = [nan, nan, nan, nan ,nan, nan, nan, nan, nan, nan]
         # DAOPHOT detection list used, need ALS ID
@@ -833,13 +859,13 @@ class Chip:
                 newcat[id1][ind1] = als[id2][ind2]
             # Only keep sources that have SE+ALLSTAR information
             #  trim out ones that don't have ALS
-            if (both is True) & (nals<ncat): newcat = newcat[ind1]
+            if (both is True) & (nals<ncat):
+                newcat = newcat[ind1]
             #self.logger.info("newcat has "+str(len(newcat))+" lines") #ktedit:sex2
 
         # Match up with coordinates, DAOPHOT detection list used
         else:
             print("Need to match up with coordinates")
-
             # Only keep sources that have SE+ALLSTAR information
             #  trim out ones that don't have ALS
             if (both is True) & (nals<ncat): newcat = newcat[ind1]
@@ -875,10 +901,12 @@ class Chip:
             self.logger.info("-- SExtractor run "+str(self.sexiter)+" --")
 
             # determine DETECT_THRESH value from SE iteration
-            if self.sexiter==1: sex_dt=1.7
-            else: sex_dt=1.1
+            if self.sexiter==1:
+                sex_dt=1.7
+            else:
+                sex_dt=1.1
 
-            self.runsex(dthresh=sex_dt,bindir=bdir)
+            self.runsex(dthresh=sex_dt,bindir=self.bindir)
 
             # get the info for this iteration's catalog
             nowcat = self.sexcat[self.sexcat['NDET_ITER']==self.sexiter]  # cat for current SE iteration
@@ -902,8 +930,10 @@ class Chip:
             #self.daodetect()
             # Create DAOPHOT-style coo file
             # Need to use SE positions
-            if self.sexiter==1: sdao_ofile="flux_dao.coo"          #ktedit:sex2; select aperphot output filename
-            else: sdao_ofile="flux_dao"+str(self.sexiter)+".coo"   #ktedit:sex2
+            if self.sexiter==1:
+                sdao_ofile="flux_dao.coo"          #ktedit:sex2; select aperphot output filename
+            else:
+                sdao_ofile="flux_dao"+str(self.sexiter)+".coo"   #ktedit:sex2
             self.sextodao(outfile=sdao_ofile)
 
             self.daoaperphot()
@@ -923,8 +953,10 @@ class Chip:
             # - at least 2 iterations, no more than 4
             # - median S/N of latest SE cat <=5
             # - #sources for which S/N>=5 latest cat is less than 25% #sources (also S/N>=5) in first cat
-            if self.sexiter>2 and (self.sexiter==4 or (np.median(1/nowcat['MAGERR_AUTO'])<=5)  or len(nowcat_sn5)<(.25*len(ogcat_sn5))): sexiter_endflag=1
-            self.sexiter+=1                                                          
+            if (self.sexiter>2 and (self.sexiter==4 or (np.median(1/nowcat['MAGERR_AUTO'])<=5) or
+                                    (len(nowcat_sn5)<(.25*len(ogcat_sn5))))):
+                sexiter_endflag = 1
+            self.sexiter += 1
 
         # Get aperture correction, create final cat from SE + ALLSTAR cats----------------------------------
         self.getapcor()
@@ -954,22 +986,22 @@ class Chip:
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
         # Copy the files we want to keep
         # final combined catalog, logs
-        outcatfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".fits"
+        outcatfile = os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".fits")
         if os.path.exists(outcatfile): os.remove(outcatfile)
         shutil.copyfile("flux.cat.fits",outcatfile)
         # Copy DAOPHOT opt files
-        outoptfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".opt"
+        outoptfile = os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".opt")
         if os.path.exists(outoptfile): os.remove(outoptfile)
         shutil.copyfile(daobase+".opt",outoptfile)
-        outalsoptfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".als.opt"
+        outalsoptfile = os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".als.opt")
         if os.path.exists(outalsoptfile): os.remove(outalsoptfile)
         shutil.copyfile(daobase+".als.opt",outalsoptfile)
         # Copy DAOPHOT PSF star list
-        outlstfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".psf.lst"
+        outlstfile = os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".psf.lst")
         if os.path.exists(outlstfile): os.remove(outlstfile)
         shutil.copyfile(daobase+".lst",outlstfile)
         # Copy DAOPHOT PSF file
-        outpsffile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".psf"
+        outpsffile = os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".psf")
         if os.path.exists(outpsffile): os.remove(outpsffile)
         shutil.copyfile(daobase+".psf",outpsffile)
         # Copy DAOPHOT .apers file??
@@ -991,7 +1023,7 @@ class Chip:
         #    if os.path.exists(outsubfile): os.remove(outsubfile)
         #    shutil.copyfile(daobase+str(i)+"s.fits",outsubfile)
         # Copy SE config file
-        outconfigfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+".sex.config"
+        outconfigfile = os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".sex.config")
         if os.path.exists(outconfigfile): os.remove(outconfigfile)
         shutil.copyfile("default.config",outconfigfile)
         # Copy SE segmentation files       #ktedit:sex2
@@ -1001,7 +1033,7 @@ class Chip:
         #    shutil.copyfile("seg_"+str(i)+".fits",outsegfile)
 
         # Combine all the log files
-        logfiles = glob.glob(base+"*.log")
+        logfiles = glob(base+"*.log")
         loglines = []
         for logfil in logfiles:
             loglines += ["==> "+logfil+" <==\n"]
@@ -1013,14 +1045,14 @@ class Chip:
         f = open(base+".logs","w")
         f.writelines("".join(loglines))
         f.close()
-        outlogfile =  self.outdir+self.bigbase+"_"+str(self.ccdnum)+".logs"
+        outlogfile =  os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".logs")
         if os.path.exists(outlogfile): os.remove(outlogfile)
         shutil.copyfile(base+".logs",outlogfile)
 
         # Delete temporary directory/files
         self.logger.info("  Cleaning up")
-        files1 = glob.glob("flux*")
-        files2 = glob.glob("default*")
+        files1 = glob("flux*")
+        files2 = glob("default*")
         files = files1+files2+["flux.fits","wt.fits","mask.fits","daophot.opt","allstar.opt"]
         for f in files:
             if os.path.exists(f): os.remove(f)

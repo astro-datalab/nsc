@@ -30,7 +30,7 @@ import astropy.stats
 import struct
 import tempfile
 import time
-from slurm_funcs import *
+from .slurm_funcs import *
 
 pd.set_option('display.max_columns',None)
 
@@ -464,8 +464,13 @@ def daoread(fil):
         names = cat.dtype.names
         for i in range(nstars):
             line1 = lines[i+3]
+            nline1 = len(line1)
             for j in range(len(names)):
-                cat[i][names[j]] = np.array(line1[lo[j]:hi[j]],dtype=dtype[names[j]])
+                # someimtes lst files are missing the SKY column
+                if hi[j]<=nline1:
+                    cat[i][names[j]] = np.array(line1[lo[j]:hi[j]],dtype=dtype[names[j]])
+                else:
+                    print('Warning: cannot read column '+names[j]+' for line '+str(i+1))
     else:
         print("Cannot load this file")
         return None
@@ -765,8 +770,8 @@ def sextodao(cat=None,meta=None,outfile=None,format="lst",naxis1=None,naxis2=Non
 
 # Run Source Extractor
 #---------------------
-#def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,configdir=None,logfile=None,logger=None):
-def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,configdir=None,offset=0,sexiter=1,dthresh=2.0,logfile=None,logger=None,bindir=None): #ktedit:sex2
+def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,configdir=None,
+           offset=0,sexiter=1,dthresh=2.0,logfile=None,logger=None,bindir=None): #ktedit:sex2
     '''
     Run Source Extractor on an exposure.  The program is configured to work with files
     created by the NOAO Community Pipeline.
@@ -1758,7 +1763,8 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None,bindi
 
 # DAOPHOT aperture photometry
 #----------------------------
-def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=None,apersfile=None,logfile=None,logger=None,bindir=None):
+def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=None,apersfile=None,
+                logfile=None,logger=None,bindir=None):
     '''
     This runs DAOPHOT aperture photometry on an image.
 
@@ -3027,7 +3033,7 @@ def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=Non
 
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
-            "bindirdaogrow << DONE >> "+logfile+"\n" \
+            ""+bindir+"daogrow << DONE >> "+logfile+"\n" \
             ""+taperfile+"\n" \
             "\n" \
             ""+tinffile+"\n" \
