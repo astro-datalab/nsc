@@ -88,3 +88,37 @@ def reorganize_files(stagedate):
         shutil.move(src,dst)
 
     #import pdb; pdb.set_trace()
+
+def measure_status():
+    """
+    Check how many exposures have been successfully processed with measurement.
+    """
+
+    basedir = '/scratch1/09970/dnidever/nsc/instcal/v4/c4d/'
+    #basedir = '/corral/projects/NOIRLab/nsc/instcal/v4/c4d/'
+
+    # Might be faster to just search for tgz files
+    # lfind tgz > tgzfiles
+
+    yeardir = glob(basedir+'20??')
+    expdir = []
+    count = 0
+    for y in range(len(yeardir)):
+        nightdir = glob(yeardir[y]+'/20??????')
+        for i in range(len(nightdir)):
+            edir = glob(nightdir[i]+'/*')
+            edir = [e for e in edir if os.path.isdir(e)]
+            print(i,nightdir[i],len(edir))
+            for j in range(len(edir)):
+                base = os.path.basename(edir[j])
+                tarfile = edir[j]+'/'+base+'.tgz'
+                measfile = edir[j]+'/'+base+'_meas.fits'
+                headfile = edir[j]+'/'+base+'_header.fits'
+                if os.path.exists(tarfile) and os.path.exists(measfile) and os.path.exists(headfile):
+                    print(count,j,edir[j],'good')
+                    expdir.append(edir[j])
+                else:
+                    print(count,j,edir[j],'bad')
+                count += 1
+    print(len(expdir),' exposures successfully completed measurement')
+    return expdir
