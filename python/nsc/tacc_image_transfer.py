@@ -37,6 +37,10 @@ def make_transfer_list(n=20000):
         del tab[ind2]
     print(len(tab),' exposures left')
 
+    if len(tab)<n:
+        print('Only',len(tab),' remain')
+        n = len(tab)
+
     # Start the list of files
     print('Making list of',n,'exposures')
     lines = []
