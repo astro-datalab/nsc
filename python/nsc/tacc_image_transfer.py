@@ -49,7 +49,7 @@ def make_transfer_list(n=20000):
             lines += [fluxfile,wtfile,maskfile]
 
     # Write the list to a file
-    tstamp = datetime.now().strftime('%Y%m%d')
+    tstamp = datetime.now().strftime('%Y%m%d%H%M%S')
     outfile = 'transfer'+str(n)+'list_'+tstamp+'.lst'
     dln.writelines(listdir+outfile,lines)
     print('List written to '+listdir+outfile)
