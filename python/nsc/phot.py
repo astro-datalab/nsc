@@ -30,6 +30,7 @@ import astropy.stats
 import struct
 import tempfile
 import time
+import traceback
 from .slurm_funcs import *
 
 pd.set_option('display.max_columns',None)
@@ -599,7 +600,8 @@ def makemeta(fluxfile=None,header=None):
 
 
 # Write SE catalog in DAO format
-def sextodao(cat=None,meta=None,outfile=None,format="lst",naxis1=None,naxis2=None,saturate=None,rdnoise=None,gain=None,lowbad=None,thresh=None,logger=None):
+def sextodao(cat=None,meta=None,outfile=None,format="lst",naxis1=None,naxis2=None,
+             saturate=None,rdnoise=None,gain=None,lowbad=None,thresh=None,logger=None):
     '''
     This writes out a Source Extractor catalog in a DAOPHOT format.
 
@@ -1055,6 +1057,7 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
     except OSError as e:
         logger.error("SExtractor Execution failed:"+str(e))
         logger.error(e)
+        traceback.print_exc()
 
     # Check that the output file exists
     if os.path.exists(outfile) is True:
@@ -1720,6 +1723,7 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None,bindi
     except OSError as e:
         logger.error("DAOPHOT detection failed:"+str(e))
         logger.error(e)
+        traceback.print_exc()        
         raise Exception("DAOPHOT failed")
 
     # Check that the output file exists
@@ -1763,8 +1767,8 @@ def daofind(imfile=None,optfile=None,outfile=None,logfile=None,logger=None,bindi
 
 # DAOPHOT aperture photometry
 #----------------------------
-def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=None,apersfile=None,
-                logfile=None,logger=None,bindir=None):
+def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=None,
+                apersfile=None,logfile=None,logger=None,bindir=None):
     '''
     This runs DAOPHOT aperture photometry on an image.
 
@@ -1922,6 +1926,7 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
     except OSError as e:
         logger.error("DAOPHOT aperture photometry failed:"+str(e))
         logger.error(e)
+        traceback.print_exc()        
         raise Exception("DAOPHOT failed")
 
     # Check that the output file exists
@@ -1962,7 +1967,8 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
 
 # Pick PSF stars using DAOPHOT
 #-----------------------------
-def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optfile=None,logfile=None,logger=None,bindir=None):
+def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,
+               optfile=None,logfile=None,logger=None,bindir=None):
     '''
     This runs DAOPHOT aperture photometry on an image.
 
@@ -2083,6 +2089,7 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
     except OSError as e:
         logger.error("DAOPHOT PICKPSF failed:"+str(e))
         logger.error(e)
+        traceback.print_exc()
         raise Exception("DAOPHOT failed")
 
     # Check that the output file exists
@@ -2113,7 +2120,8 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
 
 # Run DAOPHOT PSF
 #-------------------
-def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfile=None,logfile=None,verbose=False,logger=None,bindir=None):
+def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfile=None,
+           logfile=None,verbose=False,logger=None,bindir=None):
     '''
     This runs DAOPHOT PSF to create a .psf file.
 
@@ -2250,6 +2258,7 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
     except OSError as e:
         logger.error("DAOPHOT PSF failed:"+str(e))
         logger.error(e)
+        traceback.print_exc()
         raise Exception("DAOPHOT failed")
 
     # Check that the output file exists
@@ -2448,6 +2457,7 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
     except OSError as e:
         logger.error("PSF star neighbor subtracting failed:"+str(e))
         logger.error(e)
+        traceback.print_exc()
         raise Exception("PSF subtraction failed")
 
     # Check that the output file exists
@@ -2471,8 +2481,9 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
 
 # Create DAOPHOT PSF
 #-------------------
-def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,maxiter=5,minstars=6,nsigrej=2,subneighbors=True,
-              subfile=None,optfile=None,neifile=None,nstfile=None,grpfile=None,meta=None,logfile=None,verbose=False,logger=None,
+def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,maxiter=5,
+              minstars=6,nsigrej=2,subneighbors=True,subfile=None,optfile=None,neifile=None,
+              nstfile=None,grpfile=None,meta=None,logfile=None,verbose=False,logger=None,
               submaxit=5,subminit=2):#ktedit:cpsf
     '''
     Iteratively create a DAOPHOT PSF for an image.
@@ -2698,6 +2709,7 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
                 subpsfnei(imfile,wlistfile,neifile,subfile,psffile=psffile,logger=logger)
             except:
                 logger.error("Subtracting neighbors failed.  Keeping original PSF file")
+                traceback.print_exc()                
             # Check that the subtracted image exist and rerun DAOPSF
             if os.path.exists(subfile):
                 # Final run of DAOPSF
@@ -2730,6 +2742,7 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
 
                 except:
                     logger.error("Failure in DAOPSF")
+                    traceback.print_exc()                    
                     raise
                 
     #---------------------------------------------------------------- #ktedit:cpsf t
@@ -2759,7 +2772,8 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
 
 # Run ALLSTAR
 #-------------
-def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfile=None,meta=None,logfile=None,logger=None,bindir=None):
+def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfile=None,
+            meta=None,logfile=None,logger=None,bindir=None):
     '''
     Run DAOPHOT ALLSTAR on an image.
 
@@ -2888,6 +2902,7 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
     except OSError as e:
         logger.warning("ALLSTAR failed:"+str(e))
         logger.warning(e)
+        traceback.print_exc()
         raise Exception("ALLSTAR failed")
 
     # Check that the output file exists
@@ -2920,7 +2935,8 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
 
 # Calculate aperture corrections
 #-------------------------------
-def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=None,logger=None,bindir=None):
+def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=None,
+            logger=None,bindir=None):
     '''
     Run DAOGROW that calculates curve of growths using aperture photometry.
 
@@ -3021,7 +3037,8 @@ def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=Non
         airmass = meta['airmass']
     else: 
         airmass = 1.0
-    lines = " %-23s %9d %3d %2d %6.3f %9.3f\n" % (tbase,int(timearr[0]),int(timearr[1]),int(float(timearr[2])),airmass,meta['exptime'])
+    lines = " %-23s %9d %3d %2d %6.3f %9.3f\n" % (tbase,int(timearr[0]),int(timearr[1]),
+                                                  int(float(timearr[2])),airmass,meta['exptime'])
     writelines(tinffile,lines)
     # .ext just has the .ap filename
     writelines(textfile,tphotfile+"\n")
@@ -3058,6 +3075,7 @@ def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=Non
     except OSError as e:
         logger.error("DAOGROW failed:"+str(e))
         logger.error(e)
+        traceback.print_exc()
         raise Exception("DAOGROW failed")
 
     # Check that the outfile file exists
