@@ -13,7 +13,14 @@ def make_transfer_list(n=20000):
     """
 
     listdir = '/net/dl2/dnidever/nsc/instcal/v4/lists/'
-    tab = Table.read(listdir+'r16avails_decam_instcal_list.fits.gz')
+    tab = Table.read(listdir+'decam_instcal_list_exptime10sec_20240714.fits.gz')
+    #tab = Table.read(listdir+'r16avails_decam_instcal_list.fits.gz')
+
+    # Remove exposures that are done
+    done = dln.readlines(listdir+'/exposures_done_corral_20240714.txt')
+    done_exposure = [os.path.basename(d) for d in done]
+    _,ind1,ind2 = np.intersect1d(tab['base'],done_exposure,return_indices=True)
+    tab.remove_rows(ind1)
 
     print('Making TACC image transfer list')
 
@@ -30,7 +37,7 @@ def make_transfer_list(n=20000):
         prevlines += lines
 
     # Match them to FLUXFILE
-    _,ind1,ind2 = np.intersect1d(prevlines,tab['FLUXFILE'],return_indices=True)
+    _,ind1,ind2 = np.intersect1d(prevlines,tab['fluxfile'],return_indices=True)
     if len(ind1)>0:
         print(len(ind1),' exposures in previous lists')
         # Delete them from the list
@@ -45,9 +52,9 @@ def make_transfer_list(n=20000):
     print('Making list of',n,'exposures')
     lines = []
     for i in range(n):
-        fluxfile = tab['FLUXFILE'][i]
-        wtfile = tab['WTFILE'][i]
-        maskfile = tab['MASKFILE'][i]
+        fluxfile = tab['fluxfile'][i]
+        wtfile = tab['wtfile'][i]
+        maskfile = tab['maskfile'][i]
         print(i,os.path.basename(fluxfile))
         if os.path.exists(fluxfile) and os.path.exists(wtfile) and os.path.exists(maskfile):
             lines += [fluxfile,wtfile,maskfile]
@@ -77,9 +84,18 @@ def reorganize_files(stagedate):
         # move file
         base = os.path.basename(files[i])
         print(i,base)
-        src = files[i]
-        instrument = base.split('_')[0]
-        night = '20'+base.split('_')[1]
+        if base[:3] == 'c4d':
+            src = files[i]
+            instrument = base.split('_')[0]
+            night = '20'+base.split('_')[1]
+        else:
+            head = fits.getheader(files[i],0)
+            dateobs = head['date-obs']
+            instrument = 'c4d'  # assume it's decam
+            year = dateobs[:4]
+            month = dateobs[5:7]
+            day = dateobs[8:10]
+            night = year+month+day
         year = night[:4]
         outdir = os.path.join(image_dir,instrument,year,night)
         if os.path.exists(outdir)==False:
