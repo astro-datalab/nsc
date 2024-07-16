@@ -7,7 +7,7 @@ import shutil
 import time
 from datetime import datetime
 
-def make_transfer_list(n=20000):
+def make_transfer_list(n=10000):
     """
     Make a list of exposures to transfer from NOIRLab to TACC.
     """
