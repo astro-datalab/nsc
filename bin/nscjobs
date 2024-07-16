@@ -106,13 +106,13 @@ if __name__ == "__main__":
         label = 'measure'
         if isinstance(inputdata,Table)==False:
             inputlist = inputdata.copy()
-            dtinp = [('FLUXFILE',str,1000),('WTFILE',str,1000),('MASKFILE',str,1000)]
+            dtinp = [('fluxfile',str,1000),('wtfile',str,1000),('maskfile',str,1000)]
             inputdata = Table(np.zeros(len(inputlist),dtype=np.dtype(dtinp)))
             for i in range(len(inputlist)):
                 ff,wt,mf = inputlist[i].split()
-                inputdata['FLUXFILE'][i] = ff
-                inputdata['WTFILE'][i] = wt
-                inputdata['MASKFILE'][i] = mf
+                inputdata['fluxfile'][i] = ff
+                inputdata['wtfile'][i] = wt
+                inputdata['maskfile'][i] = mf
 
         # Check previously submitted tasks lists
         print('Checking previously submitted tasks lists')
@@ -131,7 +131,7 @@ if __name__ == "__main__":
             _,ui = np.unique(prevtasks['name'],return_index=True)
             prevtasks = prevtasks[ui]
             # Remove any previously submitted exposures
-            inpbases = [os.path.basename(r['FLUXFILE']).replace('.fits.fz','') for r in inputdata]
+            inpbases = [os.path.basename(r['fluxfile']).replace('.fits.fz','') for r in inputdata]
             inpbases = np.array(inpbases).astype(str)
             _,ind1,ind2 = np.intersect1d(prevtasks['name'],inpbases,return_indices=True)
             if len(ind1)>0:
@@ -142,9 +142,9 @@ if __name__ == "__main__":
         tasks = Table(np.zeros(np.minimum(len(inputdata),maxtasks),dtype=np.dtype(dt)))
         cnt = 0
         for i in range(len(inputdata)):
-            fluxfile = inputdata['FLUXFILE'][i]
-            wtfile = inputdata['WTFILE'][i]
-            maskfile = inputdata['MASKFILE'][i]
+            fluxfile = inputdata['fluxfile'][i]
+            wtfile = inputdata['wtfile'][i]
+            maskfile = inputdata['maskfile'][i]
             # Might need to modify mss filenames for TACC
             if host=='tacc':
                 fluxfile = taccifyname(fluxfile)
