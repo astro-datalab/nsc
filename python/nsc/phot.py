@@ -599,7 +599,8 @@ def makemeta(fluxfile=None,header=None):
 
 
 # Write SE catalog in DAO format
-def sextodao(cat=None,meta=None,outfile=None,format="lst",naxis1=None,naxis2=None,saturate=None,rdnoise=None,gain=None,lowbad=None,thresh=None,logger=None):
+def sextodao(cat=None,meta=None,outfile=None,format="lst",naxis1=None,naxis2=None,
+             saturate=None,rdnoise=None,gain=None,lowbad=None,thresh=None,logger=None):
     '''
     This writes out a Source Extractor catalog in a DAOPHOT format.
 
@@ -1046,7 +1047,8 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
     try:
         # Save the SExtractor info to a logfile
         sf = open(logfile,'w')
-        retcode = subprocess.call([bindir+"sex",sfluxfile,"-c","default.config"],stdout=sf,stderr=subprocess.STDOUT)
+        retcode = subprocess.call([bindir+"sex",sfluxfile,"-c","default.config"],stdout=sf,
+                                  stderr=subprocess.STDOUT)
         sf.close()
         if retcode < 0:
             logger.error("Child was terminated by signal"+str(-retcode))
@@ -1962,7 +1964,8 @@ def daoaperphot(imfile=None,coofile=None,apertures=None,outfile=None,optfile=Non
 
 # Pick PSF stars using DAOPHOT
 #-----------------------------
-def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optfile=None,logfile=None,logger=None,bindir=None):
+def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optfile=None,
+               logfile=None,logger=None,bindir=None):
     '''
     This runs DAOPHOT aperture photometry on an image.
 
@@ -2050,6 +2053,11 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
     os.symlink(optfile,toptfile)
     os.symlink(catfile,tcatfile)
 
+    usemaglim = maglim-1.0
+    # use larger range if there are few sources
+    if numlines(tcatfile)<200:
+        usemaglim = maglim
+
     # Lines for the DAOPHOT script
     lines = "#!/bin/sh\n" \
             ""+bindir+"daophot << END_DAOPHOT >> "+logfile+"\n" \
@@ -2059,7 +2067,7 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
             "ATTACH "+timfile+"\n" \
             "PICKPSF\n" \
             ""+tcatfile+"\n" \
-            ""+str(nstars)+","+str(maglim-1.0)+"\n" \
+            ""+str(nstars)+","+str(usemaglim)+"\n" \
             ""+toutfile+"\n" \
             "EXIT\n" \
             "EXIT\n" \
@@ -2113,7 +2121,8 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,optf
 
 # Run DAOPHOT PSF
 #-------------------
-def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfile=None,logfile=None,verbose=False,logger=None,bindir=None):
+def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfile=None,
+           logfile=None,verbose=False,logger=None,bindir=None):
     '''
     This runs DAOPHOT PSF to create a .psf file.
 
@@ -2471,8 +2480,9 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
 
 # Create DAOPHOT PSF
 #-------------------
-def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,maxiter=5,minstars=6,nsigrej=2,subneighbors=True,
-              subfile=None,optfile=None,neifile=None,nstfile=None,grpfile=None,meta=None,logfile=None,verbose=False,logger=None,
+def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,maxiter=5,
+              minstars=6,nsigrej=2,subneighbors=True,subfile=None,optfile=None,neifile=None,
+              nstfile=None,grpfile=None,meta=None,logfile=None,verbose=False,logger=None,
               submaxit=5,subminit=2):#ktedit:cpsf
     '''
     Iteratively create a DAOPHOT PSF for an image.
@@ -2605,7 +2615,8 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
     #---------------------------------------------------------------- #ktedit:cpsf t
         # check subiter to make sure psf is being run on the neighbor-subtracted 
         # image from the last iteration, if subiter>1
-        psfnames=["GAUSSIAN","MOFFAT15","MOFFAT25","MOFFAT35","LORENTZ","PENNY1","PENNY2"]
+        psfnames = ["GAUSSIAN","MOFFAT15","MOFFAT25","MOFFAT35",
+                    "LORENTZ","PENNY1","PENNY2"]
         if (subiter>1):
             imfile_new = base+str(subiter-1)+"a.fits" #nei-sub image from last iter.
             os.rename(imfile,"temp_"+imfile) #move the image to a temporary name
@@ -2615,10 +2626,10 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
         # make sure AN != -6 (in the opt file) after the first iteration 
         if (subiter==2):
             psfan = readlines(psffile)[0][0:10].strip() #the analytic function chosen for the psf
-            lookup_index=psfnames.index(psfan)+1 #the number to make AN based on the analytic function chosen
+            lookup_index = psfnames.index(psfan)+1 #the number to make AN based on the analytic function chosen
             logger.info("new AN = "+str(lookup_index))
-            opttable=readlines(optfile) #the option file that you need to change the AN value in
-            opttable[14]="AN = %8.2f"%(lookup_index)
+            opttable = readlines(optfile) #the option file that you need to change the AN value in
+            opttable[14] = "AN = %8.2f"%(lookup_index)
             writelines(optfile,opttable,overwrite=True)
     #---------------------------------------------------------------- #ktedit:cpsf b
 
@@ -2759,7 +2770,8 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
 
 # Run ALLSTAR
 #-------------
-def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfile=None,meta=None,logfile=None,logger=None,bindir=None):
+def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfile=None,
+            meta=None,logfile=None,logger=None,bindir=None):
     '''
     Run DAOPHOT ALLSTAR on an image.
 
@@ -2920,7 +2932,8 @@ def allstar(imfile=None,psffile=None,apfile=None,subfile=None,outfile=None,optfi
 
 # Calculate aperture corrections
 #-------------------------------
-def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=None,logger=None,bindir=None):
+def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=None,
+            logger=None,bindir=None):
     '''
     Run DAOGROW that calculates curve of growths using aperture photometry.
 
@@ -3021,7 +3034,8 @@ def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=Non
         airmass = meta['airmass']
     else: 
         airmass = 1.0
-    lines = " %-23s %9d %3d %2d %6.3f %9.3f\n" % (tbase,int(timearr[0]),int(timearr[1]),int(float(timearr[2])),airmass,meta['exptime'])
+    lines = " %-23s %9d %3d %2d %6.3f %9.3f\n" % (tbase,int(timearr[0]),int(timearr[1]),
+                                                  int(float(timearr[2])),airmass,meta['exptime'])
     writelines(tinffile,lines)
     # .ext just has the .ap filename
     writelines(textfile,tphotfile+"\n")
@@ -3168,7 +3182,8 @@ def apcor(imfile=None,listfile=None,psffile=None,meta=None,optfile=None,alsoptfi
     apertures = [3.0, 3.7965, 4.8046, 6.0803, 7.6947, 9.7377, 12.3232, 15.5952, 19.7360, \
                  24.9762, 31.6077, 40.0000, 50.0000]
     apersfile = base+".apers"
-    apcat, maglim = daoaperphot(imfile,listfile,apertures,optfile=optfile,apersfile=apersfile,logger=logger)
+    apcat, maglim = daoaperphot(imfile,listfile,apertures,optfile=optfile,
+                                apersfile=apersfile,logger=logger)
 
     # Step 2: Get PSF photometry from the same image
     psfcat = allstar(imfile,psffile,base+".ap",optfile=alsoptfile,logger=logger)
