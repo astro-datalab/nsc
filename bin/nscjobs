@@ -169,7 +169,13 @@ if __name__ == "__main__":
             if host:
                 cmd += ' --host '+host
             # Check output filename
-            night = '20'+base[4:10]
+            if base[:3]=='c4d':
+                night = '20'+base[4:10]
+            else:
+                instrument = 'c4d'  # assume decam for now
+                head = fits.getheader(fluxfile,0)
+                dateobs = head['DATE-OBS']
+                night = dateobs[:4]+dateobs[5:7]+dateobs[8:10]
             outdir = os.path.join(basedir,instrument,night[:4],night,base)
             logfile = os.path.join(outdir,base+'.'+logtime+'.log')
             outfile = os.path.join(outdir,base+'_meas.fits')
