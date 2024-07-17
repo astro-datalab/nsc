@@ -2400,7 +2400,7 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
             logger.warning(f+" NOT found")
             return
 
-    # Make temporary short filenames to DAOPHOT can handle them
+    # Make temporary short filenames so DAOPHOT can handle them
     tid,tfile = tempfile.mkstemp(prefix="tsubnei",dir=".")
     os.close(tid)   # close open file
     tbase = os.path.basename(tfile)
@@ -2451,7 +2451,8 @@ def subpsfnei(imfile=None,listfile=None,photfile=None,outfile=None,optfile=None,
     os.chmod(scriptfile,509)
 
     # Copy option file to daophot.opt
-    if os.path.exists("daophot.opt") is False: shutil.copyfile(base+".opt","daophot.opt")
+    if os.path.exists("daophot.opt") is False:
+        shutil.copyfile(base+".opt","daophot.opt")
 
     # Run the script
     try:
@@ -2599,56 +2600,54 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
     shutil.copy(listfile,listfile+".orig")
 
 
-    #---------------------------------------------------------------- #ktedit:cpsf; start of changed section
+    #----------------------------------------------------------------
     # Iterate entire flag & neighbor subtraction process 
     #----------------------------------------------------------------
     subiter = 1 
-    subendflag = 0 
+    subendflag = False
     sublastchi = 99.99
     mean_subchi_last = 0
     subdchi_thresh = 0.002
-    while (subendflag==0):    
+    while (subendflag==False):    
         logger.info("Flag & neighbor subtraction iter = "+str(subiter)) 
-    #---------------------------------------------------------------- #ktedit:cpsf b
 
-        # Iterate subtraction of flagged PSF sources from psf list #ktedit:cpsf
+        # Iterate subtraction of flagged PSF sources from psf list
         #---------
         if doiter is False: maxiter=1
-        iter = 1
-        endflag = 0
+        niter = 1
+        endflag = False
         lastchi = 99.99
         dchi_thresh = 0.002
 
-    #---------------------------------------------------------------- #ktedit:cpsf t
-        # check subiter to make sure psf is being run on the neighbor-subtracted 
+        # Check subiter to make sure psf is being run on the neighbor-subtracted 
         # image from the last iteration, if subiter>1
         psfnames = ["GAUSSIAN","MOFFAT15","MOFFAT25","MOFFAT35",
                     "LORENTZ","PENNY1","PENNY2"]
         if (subiter>1):
-            imfile_new = base+str(subiter-1)+"a.fits" #nei-sub image from last iter.
-            os.rename(imfile,"temp_"+imfile) #move the image to a temporary name
-            os.rename(imfile_new,imfile) #move the subimage from last iter to image's filename
+            imfile_new = base+str(subiter-1)+"a.fits" # nei-sub image from last iter.
+            os.rename(imfile,"temp_"+imfile)          # move the image to a temporary name
+            os.rename(imfile_new,imfile)              # move the subimage from last iter to image's filename
             logger.info(imfile+" moved to temp_"+imfile+", "+imfile_new+" moved to "+imfile)
 
-        # make sure AN != -6 (in the opt file) after the first iteration 
+        # Make sure AN != -6 (in the opt file) after the first iteration 
         if (subiter==2):
-            psfan = readlines(psffile)[0][0:10].strip() #the analytic function chosen for the psf
-            lookup_index = psfnames.index(psfan)+1 #the number to make AN based on the analytic function chosen
+            psfan = readlines(psffile)[0][0:10].strip() # the analytic function chosen for the psf
+            lookup_index = psfnames.index(psfan)+1      # the number to make AN based on the analytic function chosen
             logger.info("new AN = "+str(lookup_index))
-            opttable = readlines(optfile) #the option file that you need to change the AN value in
-            opttable[14] = "AN = %8.2f"%(lookup_index)
+            opttable = readlines(optfile)               # the option file that you need to change the AN value in
+            opttable[14] = "AN = {:8.2f}".format(lookup_index)
             writelines(optfile,opttable,overwrite=True)
-    #---------------------------------------------------------------- #ktedit:cpsf b
 
-        while (endflag==0):
-            logger.info("Iter = "+str(iter))
-
+        # Remove bad/flagged stars from PSF starlist iteratively
+        logger.info('Removing bad/flagged stars from PSF starlist iteratively')
+        while (endflag==False):
+            logger.info("Iter = "+str(niter))
             # Run DAOPSF
             try:
                 pararr, parchi, profs = daopsf(imfile,wlistfile,apfile,logger=logger)
                 chi = np.min(parchi)
-                mean_chi = np.mean(profs['SIG'])                         #ktedit:cpsf
-                logger.info("mean chi = "+str(mean_chi))                 #ktedit:cpsf    
+                mean_chi = np.mean(profs['SIG'])
+                logger.info("mean chi = "+str(mean_chi))
                 psfsuccess = True
             except:
                 logger.error("Failure in DAOPSF")
@@ -2682,7 +2681,7 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
                 si = np.argsort(profs['SIG'])[::-1]
                 bdstars = si[0:nbdstars]  # take the worse ones
             logger.info("  "+str(nbdstars)+" stars with flag or high sig")
-            # Delete stars with flags or high SIG values
+            # Delete stars with flags or high SIG values from list
             if (nbdstars>0) & (nstars>minstars):
                 listlines = readlines(wlistfile)
                 # Read the list
@@ -2695,18 +2694,17 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
                 writelines(wlistfile,newlistlines,overwrite=True)
                 logger.info("  Removing IDs="+str(" ".join(profs[bdstars]['ID'].astype(str))))
                 logger.info("  "+str(nbdstars)+" bad stars removed. "+str(nstars-nbdstars)+" PSF stars left")
-            # Should we end flagged star subtraction? #ktedit:cpsf
-            if (iter==maxiter) | (nbdstars==0) | (nstars<=minstars) | (np.abs(lastchi-chi)<dchi_thresh): endflag=1
-            iter = iter+1
+            # Should we end flagged star subtraction?
+            if (niter==maxiter) | (nbdstars==0) | (nstars<=minstars) | (np.abs(lastchi-chi)<dchi_thresh):
+                endflag = True
+            niter += 1
             lastchi = chi
         
-    #---------------------------------------------------------------- #ktedit:cpsf t
-        # copy image fil & last iteration's subtracted file back to their og names
+        # Copy image file & last iteration's subtracted file back to their original names
         if (subiter>1):
-            os.rename(imfile,imfile_new) # put last iteration's subfile back        
-            os.rename("temp_"+imfile,imfile) # put the imfile back
+            os.rename(imfile,imfile_new)       # put last iteration's subfile back        
+            os.rename("temp_"+imfile,imfile)   # put the imfile back
             logger.info(imfile+" moved to "+imfile_new+", "+"temp_"+imfile+" moved back to "+imfile)
-    #---------------------------------------------------------------- #ktedit:cpsf b
 
         # Subtract PSF star neighbors
         if subneighbors:
@@ -2717,52 +2715,58 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
             except:
                 logger.error("Subtracting neighbors failed.  Keeping original PSF file")
                 traceback.print_exc()                
+
             # Check that the subtracted image exist and rerun DAOPSF
             if os.path.exists(subfile):
                 # Final run of DAOPSF
                 logger.info("Final DAOPSF run (on subtracted image)") #ktedit:cpsf
 
-    #---------------------------------------------------------------- #ktedit:cpsf t
-                # copy the imfile somewhere temporary, again, and replace with THIS iteration's subfile that was just created
+                # copy the imfile somewhere temporary, again, and replace with
+                #  THIS iteration's subfile that was just created
                 os.rename(imfile,"temp_"+imfile)  
                 os.rename(subfile,imfile) 
                 logger.info(imfile+" once again moved to temp_"+imfile+", "+subfile+" moved to "+imfile) 
-    #---------------------------------------------------------------- #ktedit:cpsf b
-
                 try:
                     spararr, sparchi, sprofs = daopsf(imfile,wlistfile,apfile,logger=logger)
                     chi = np.min(sparchi)
 
-    #---------------------------------------------------------------- #ktedit:cpsf t
                     subsigs, profsind, sprofsind = np.intersect1d(profs['ID'],sprofs['ID'],return_indices=True)  
                     profsigs=profs['SIG'][profsind]                                                              
                     sprofsigs=sprofs['SIG'][sprofsind]                                                           
                     diffsigs=np.absolute(profsigs-sprofsigs)                                                     
                     mean_diffchi=np.mean(diffsigs)
                     mean_subchi=np.mean(sprofs['SIG'])                    
-                    logger.info("mean (diff in individual chi values) = "+str(mean_diffchi))                              
-                    logger.info("mean subchi, chi, last subchi values= "+str(mean_subchi)+", "+str(mean_chi)+", "+str(mean_subchi_last)) 
-                    logger.info("diff between mean chi and mean subchi values = "+str(abs(mean_chi-mean_subchi)))
-                    logger.info("diff between this and last mean subchi values = "+str(abs(mean_subchi_last-mean_subchi)))
+                    logger.info("mean (diff in individual chi values) = {:.5f}".format(mean_diffchi))                              
+                    logger.info("mean subchi, chi, last subchi values= {:.5f}, {:.5f}, {:.5f}".format(mean_subchi,mean_chi,mean_subchi_last))
+                    logger.info("diff between mean chi and mean subchi values = {:.5f}".format(abs(mean_chi-mean_subchi)))
+                    logger.info("diff between this and last mean subchi values = {:.5f}".format(abs(mean_subchi_last-mean_subchi)))
                     mean_subchi_last = mean_subchi
-    #---------------------------------------------------------------- #ktedit:cpsf b
 
                 except:
                     logger.error("Failure in DAOPSF")
                     traceback.print_exc()                    
-                    raise
-                
-    #---------------------------------------------------------------- #ktedit:cpsf t
-        finalsubfile=base+str(subiter)+"a.fits"
-        if ((subiter==submaxit) | (np.abs(sublastchi-chi)<dchi_thresh)) & (subiter>=subminit): 
-            subendflag=1
-            finalsubfile=base+"a.fits"
-        sublastchi=chi
-        os.rename(imfile,finalsubfile)  #copy subfile to a version that marks the iteration
-        os.rename("temp_"+imfile,imfile) #copy the image file back to its name
-        logger.info(imfile+" moved back to "+finalsubfile+", temp_"+imfile+" moved back to "+imfile)
-        subiter=subiter+1        
-    #---------------------------------------------------------------- #ktedit:cpsf; end of changed section
+                    raise Exception("Failure in DAOPSF")
+
+            # No subtracted image
+            else:
+                if os.getcwd()=='/scratch1/09970/dnidever/nsc/v4/tmp/c4d_140405_101149_ooi_i_MT1.1':
+                    import pdb; pdb.set_trace()
+                print('No PSF star neighbor subtracted image. Ending iteration')
+                subendflag = True
+
+        finalsubfile = base+str(subiter)+"a.fits"
+        if os.path.exists(finalsubfile)==False: finalsubfile=''
+        if ((((subiter==submaxit) | (np.abs(sublastchi-chi)<dchi_thresh)) & (subiter>=subminit)) | subendflag):
+            subendflag = True
+            finalsubfile = base+"a.fits"
+        sublastchi = chi
+        # Rename image files
+        #  if the subtraction failed, then the temp_ file won't exist
+        if os.path.exists("temp_"+imfile):
+            os.rename(imfile,finalsubfile)   # copy subfile to a version that marks the iteration
+            os.rename("temp_"+imfile,imfile) # move the image file back to its original name
+            logger.info(imfile+" moved back to "+finalsubfile+", temp_"+imfile+" moved back to "+imfile)
+        subiter = subiter+1        
 
     # Put information in meta
     if meta is not None:
@@ -2774,7 +2778,7 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
     shutil.move(wlistfile,listfile)
     logger.info("Final list of PSF stars in "+listfile+".  Original list in "+listfile+".orig")
     
-    return subiter #ktedit:cpsf
+    return subiter
 
 
 # Run ALLSTAR
