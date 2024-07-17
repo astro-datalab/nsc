@@ -2,6 +2,7 @@ import os
 import numpy as np
 from glob import glob
 from astropy.table import Table
+from astropy.io import fits
 from dlnpyutils import utils as dln
 import shutil
 import time
@@ -84,8 +85,8 @@ def reorganize_files(stagedate):
         # move file
         base = os.path.basename(files[i])
         print(i,base)
+        src = files[i]
         if base[:3] == 'c4d':
-            src = files[i]
             instrument = base.split('_')[0]
             night = '20'+base.split('_')[1]
         else:
@@ -110,31 +111,71 @@ def measure_status():
     Check how many exposures have been successfully processed with measurement.
     """
 
-    basedir = '/scratch1/09970/dnidever/nsc/instcal/v4/c4d/'
-    #basedir = '/corral/projects/NOIRLab/nsc/instcal/v4/c4d/'
+    basedir = '/scratch1/09970/dnidever/nsc/instcal/v4/'
+    corraldir = '/corral/projects/NOIRLab/nsc/instcal/v4/'
+    imagedir = '/scratch1/09970/dnidever/nsc/instcal/v4/images/'
 
     # Might be faster to just search for tgz files
     # lfind tgz > tgzfiles
 
-    yeardir = glob(basedir+'20??')
-    expdir = []
-    count = 0
-    for y in range(len(yeardir)):
-        nightdir = glob(yeardir[y]+'/20??????')
-        for i in range(len(nightdir)):
-            edir = glob(nightdir[i]+'/*')
-            edir = [e for e in edir if os.path.isdir(e)]
-            print(i,nightdir[i],len(edir))
-            for j in range(len(edir)):
-                base = os.path.basename(edir[j])
-                tarfile = edir[j]+'/'+base+'.tgz'
-                measfile = edir[j]+'/'+base+'_meas.fits'
-                headfile = edir[j]+'/'+base+'_header.fits'
-                if os.path.exists(tarfile) and os.path.exists(measfile) and os.path.exists(headfile):
-                    print(count,j,edir[j],'good')
-                    expdir.append(edir[j])
-                else:
-                    print(count,j,edir[j],'bad')
-                count += 1
-    print(len(expdir),' exposures successfully completed measurement')
-    return expdir
+    tab = Table.read(basedir+'lists/decam_instcal_list_exptime10sec_20240714.fits.gz')
+    instrument = 'c4d'
+
+    tab['corraldone'] = False
+    tab['scratchdone'] = False
+    tab['haveimages'] = False
+
+    for i in range(len(tab)):
+        base = tab['base'][i]
+        dateobs = tab['date_obs'][i]
+        night = dateobs[:4]+dateobs[5:7]+dateobs[8:10]
+        year = dateobs[:4]
+        # Check scratch output files
+        outdir = os.path.join(basedir,instrument,year,night,base)
+        measfile = os.path.join(outdir,base+'_meas.fits')
+        tgzfile = os.path.join(outdir,base+'.tgz')
+        if os.path.exists(outdir) and os.path.exists(measfile) and os.path.exists(tgzfile):
+            tab['scratchdone'][i] = True
+        # Check corral output files
+        coutdir = os.path.join(corraldir,instrument,year,night,base)
+        cmeasfile = os.path.join(coutdir,base+'_meas.fits')
+        ctgzfile = os.path.join(coutdir,base+'.tgz')
+        if os.path.exists(coutdir) and os.path.exists(cmeasfile) and os.path.exists(ctgzfile):
+            tab['corraldone'][i] = True
+        # Check images
+        fluxfile = os.path.join(imagedir,instrument,year,night,os.path.basename(tab['fluxfile'][i]))
+        wtfile = os.path.join(imagedir,instrument,year,night,os.path.basename(tab['wtfile'][i]))
+        maskfile = os.path.join(imagedir,instrument,year,night,os.path.basename(tab['maskfile'][i]))
+        if os.path.exists(fluxfile) and os.path.exists(wtfile) and os.path.exists(maskfile):
+            tab['haveimages'][i] = True
+
+        print(i,base,tab['corraldone'][i],tab['haveimages'][i],tab['scratchdone'][i])
+
+    #import pdb; pdb.set_trace()
+
+    return tab
+
+
+    #yeardir = glob(basedir+'20??')
+    #expdir = []
+    #count = 0
+    #for y in range(len(yeardir)):
+    #    nightdir = glob(yeardir[y]+'/20??????')
+    #    for i in range(len(nightdir)):
+    #        edir = glob(nightdir[i]+'/*')
+    #        edir = [e for e in edir if os.path.isdir(e)]
+    #        print(i,nightdir[i],len(edir))
+    #        for j in range(len(edir)):
+    #            base = os.path.basename(edir[j])
+    #            tarfile = edir[j]+'/'+base+'.tgz'
+    #            measfile = edir[j]+'/'+base+'_meas.fits'
+    #            headfile = edir[j]+'/'+base+'_header.fits'
+    #            if os.path.exists(tarfile) and os.path.exists(measfile) and os.path.exists(headfile):
+    #                print(count,j,edir[j],'good')
+    #                expdir.append(edir[j])
+    #            else:
+    #                print(count,j,edir[j],'bad')
+    #            count += 1
+    #print(len(expdir),' exposures successfully completed measurement')
+    #return expdir
+
