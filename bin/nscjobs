@@ -12,6 +12,7 @@ import shutil
 import re
 import subprocess
 from glob import glob
+from datetime import datetime
 import logging
 import socket
 from datetime import datetime
@@ -25,8 +26,14 @@ def taccifyname(filename):
     imagedir = '/scratch1/09970/dnidever/nsc/instcal/v4/images'
     if filename[:9]=='/net/mss1':
         base = os.path.basename(filename)
-        instrument = base[:3] 
-        night = '20'+base[4:10]
+        if base[:3]=='c4d':
+            instrument = base[:3] 
+            night = '20'+base[4:10]
+        else:
+            instrument = 'c4d'   # assume all decam for now
+            head = fits.getheader(filename,0)
+            dateobs = head['DATE-OBS']
+            night = dateobs[:4]+dateobs[5:7]+dateobs[8:10]
         newfilename = os.path.join(imagedir,instrument,night[:4],night,base)
     else:
         newfilename = filename
@@ -93,7 +100,6 @@ if __name__ == "__main__":
     if not os.path.exists(tmpdir):
         os.makedirs(tmpdir)
 
-
     dt = [('cmd',str,1000),('name',str,1000),('output',str,1000),
           ('outfile',str,1000),('errfile',str,1000),('dir',str,1000)] 
     logtime = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -113,6 +119,43 @@ if __name__ == "__main__":
                 inputdata['fluxfile'][i] = ff
                 inputdata['wtfile'][i] = wt
                 inputdata['maskfile'][i] = mf
+
+        # Fix image filenames on TACC
+        if host=='tacc':
+            print('Fixing TACC filenames')
+            imlistfile = basedir+'images/allimages.lst'
+            if os.path.exists(imlistfile)==False or (os.path.getctime(imlistfile) < (datetime.now().timestamp()-7200)):
+                print('Remaking image list')
+                if os.path.exists(imlistfile):
+                    os.remove(imlistfile)
+                curdir = os.getcwd()
+                os.chdir(os.path.dirname(imlistfile))
+                ret = subprocess.call('lfind fits.fz > allimages.lst',shell=True)
+                os.chdir(curdir)
+                nlines = dln.numlines(imlistfile)
+                print(nlines,' files in image list')
+            imlines = dln.readlines(basedir+'images/allimages.lst')
+            imlines = [basedir+'images/'+f[1:] for f in imlines]  # make absolute
+            imlines = np.array(imlines)
+            imbase = np.array([os.path.basename(f) for f in imlines])
+            fluxfiles = inputdata['fluxfile']
+            fluxbase = np.array([os.path.basename(f) for f in fluxfiles])
+            _,ind1,ind2 = np.intersect1d(fluxbase,imbase,return_indices=True)
+            if len(ind1)>0:
+                print(len(ind1),' fluxfile names')
+                inputdata['fluxfile'][ind1] = imlines[ind2]
+            wtfiles = inputdata['wtfile']
+            wtbase = np.array([os.path.basename(w) for w in wtfiles])
+            _,ind1,ind2 = np.intersect1d(wtbase,imbase,return_indices=True)
+            if len(ind1)>0:
+                print(len(ind1),' wtfile names')
+                inputdata['wtfile'][ind1] = imlines[ind2]
+            maskfiles = inputdata['maskfile']
+            maskbase = np.array([os.path.basename(m) for m in maskfiles])
+            _,ind1,ind2 = np.intersect1d(maskbase,imbase,return_indices=True)
+            if len(ind1)>0:
+                print(len(ind1),' maskfile names')
+                inputdata['maskfile'][ind1] = imlines[ind2]
 
         # Check previously submitted tasks lists
         print('Checking previously submitted tasks lists')
@@ -145,15 +188,21 @@ if __name__ == "__main__":
             fluxfile = inputdata['fluxfile'][i]
             wtfile = inputdata['wtfile'][i]
             maskfile = inputdata['maskfile'][i]
-            # Might need to modify mss filenames for TACC
-            if host=='tacc':
-                fluxfile = taccifyname(fluxfile)
-                wtfile = taccifyname(wtfile)
-                maskfile = taccifyname(maskfile)
             base = os.path.basename(fluxfile)
             if base.endswith('.fits.fz'): base=base[:-8]
             if base.endswith('.fits'): base=base[:-5]
             print('{:} {:}'.format(i+1,base))
+            # Might need to modify mss filenames for TACC
+            if host=='tacc':
+                #fluxfile = taccifyname(fluxfile)
+                #wtfile = taccifyname(wtfile)
+                #maskfile = taccifyname(maskfile)
+                # The filenames are fixed above for the files that exist
+                #if fluxfile[:9] != '/net/mss1':
+                #    import pdb; pdb.set_trace()
+                if fluxfile[:9]=='/net/mss1' or wtfile[:9]=='/net/mss1' or maskfile[:9]=='/net/mss1':
+                    print('Exposure files not at TACC yet. SKIPPING')
+                    continue
             # Check that all three files exist
             infiles = [fluxfile,wtfile,maskfile]
             exists = [os.path.exists(f) for f in infiles]
@@ -161,9 +210,9 @@ if __name__ == "__main__":
             if len(bd)>0:
                 print('Files not found: '+','.join(np.array(infiles)[bd])+'  SKIPPING')
                 continue
-            if base[:3] not in ['c4d','ksb','k4m']:
-                print(base,'NOT in correct format. SKIPPING')
-                continue
+            #if base[:3] not in ['c4d','ksb','k4m']:
+            #    print(base,'NOT in correct format. SKIPPING')
+            #    continue
             instrument = base[:3]
             cmd = script+' '+fluxfile+' '+wtfile+' '+maskfile+' '+version
             if host:
@@ -374,6 +423,10 @@ if __name__ == "__main__":
     if len(tasks)>maxtasks:
         print('Trimming to maximum tasks',maxtasks)
         tasks = tasks[:maxtasks]
+
+    if len(tasks)==0:
+        print('No tasks to run')
+        sys.exit()
     
     # Nodes to request
     print(nodes,'nodes requested')
