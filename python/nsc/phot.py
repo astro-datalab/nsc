@@ -2755,7 +2755,7 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
                 subendflag = True
 
         finalsubfile = base+str(subiter)+"a.fits"
-        if os.path.exists(finalsubfile)==False: finalsubfile=''
+        #if os.path.exists(finalsubfile)==False: finalsubfile=''
         if ((((subiter==submaxit) | (np.abs(sublastchi-chi)<dchi_thresh)) & (subiter>=subminit)) | subendflag):
             subendflag = True
             finalsubfile = base+"a.fits"
