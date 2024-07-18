@@ -151,6 +151,15 @@ def measure_status():
 
         print(i,base,tab['corraldone'][i],tab['haveimages'][i],tab['scratchdone'][i])
 
+    corraldone = np.sum(tab['corraldone'])
+    haveimages = np.sum(tab['haveimages'])
+    scratchdone = np.sum(tab['scratchdone'])
+    done = np.sum(tab['corraldone'] | tab['scratchdone'])
+    print('corral done = ',corraldone)
+    print('scratch done = ',scratchdone)
+    print('done = ',done)
+    print('have images = ',haveimages)
+
     #import pdb; pdb.set_trace()
 
     return tab

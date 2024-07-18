@@ -31,13 +31,19 @@ import subprocess
 import sys
 import time
 import warnings
-
 from dlnpyutils.utils import *
 from . import phot,slurm_funcs,utils
 
 # Ignore these warnings, it's a bug
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
+
+# Load default DECam chip data
+if os.path.exists(utils.datadir()+'params/decam_chip_data.fits'):
+    DECAM_DATA = Table.read(utils.datadir()+'params/decam_chip_data.fits')
+else:
+    print('Could not find decam_chip_data.fits file')
+    DECAM_DATA = None
 
 #-------------------------------------------------
 # Functions
@@ -246,7 +252,7 @@ class Exposure:
         self.chip.outdir = self.outdir
         # Add logger information
         self.chip.logger = self.logger
-        return(True)
+        return True
 
     # Process all chips
     def process(self):
@@ -314,7 +320,20 @@ class Exposure:
         self.process()
         self.teardown()
 
-        
+def fixdecamheader(header):
+    """ Fix early decam header that were missing lots of information."""
+    ccdnum = header['ccdnum']
+    ind, = np.where(DECAM_DATA['ccdnum']==ccdnum)
+    if 'rdnoisea' not in header:
+        header['rdnoise'] = DECAM_DATA['rdnoise'][ind[0]]
+    if 'gaina' not in header:
+        header['gain'] = DECAM_DATA['gain'][ind[0]]
+    if 'saturata' not in header:
+        header['saturate'] = DECAM_DATA['saturation'][ind[0]]
+    if 'plver' not in header:
+        header['plver'] = 'V1.0.0'
+    return header
+
 # Class to represent a single chip of an exposure
 class Chip:
 
@@ -331,7 +350,13 @@ class Chip:
         base = os.path.splitext(os.path.splitext(base)[0])[0]
         self.dir = os.path.abspath(os.path.dirname(fluxfile))
         self.base = base
-        self.meta = phot.makemeta(header=fits.getheader(fluxfile))
+        header = fits.getheader(fluxfile)
+        # Fix early decam headers
+        if header["DTINSTRU"]!='mosaic3' and header["DTINSTRU"]!='90primt':
+            header = fixdecamheader(header)
+        self.meta = phot.makemeta(header=header)
+        if self.meta is None:
+            import pdb; pdb.set_trace()
         self.sexfile = self.dir+"/"+self.base+"_sex.fits"
         self.daofile = self.dir+"/"+self.base+"_dao.fits"
         self.sexcatfile = None
@@ -363,7 +388,6 @@ class Chip:
         self.sexiter = 1          #ktedit:sex2; to keep track of which SExtractor run we're on
         # Logger
         self.logger = None
-
     
     def __repr__(self):
         return "Chip object"
@@ -391,6 +415,11 @@ class Chip:
             if name in self.meta.keys():
                 self._rdnoise = self.meta[name]
                 return self._rdnoise
+        # Early tu decam files do not have rdnoise/gain, etc.
+        # get it from a lookup table
+        import pdb; pdb.set_trace()
+        if self.instrument=='c4d':
+            import pdb; pdb.set_trace()
         self.logger.warning('No RDNOISE found')
         return None
             
