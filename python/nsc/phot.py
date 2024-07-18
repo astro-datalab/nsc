@@ -1602,6 +1602,8 @@ def mkdaoim(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,logge
 
     fhead.append('GAIN',meta["GAIN"])
     fhead.append('RDNOISE',meta["RDNOISE"])
+    if 'plver' not in fhead:
+        fhead['plver'] = meta['PLVER']
 
     # DAOPHOT can only handle BITPIX=16, 32, -32
     if fhead['BITPIX'] not in [16,32,-32]:

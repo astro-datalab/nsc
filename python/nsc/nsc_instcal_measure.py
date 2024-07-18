@@ -355,8 +355,6 @@ class Chip:
         if header["DTINSTRU"]!='mosaic3' and header["DTINSTRU"]!='90primt':
             header = fixdecamheader(header)
         self.meta = phot.makemeta(header=header)
-        if self.meta is None:
-            import pdb; pdb.set_trace()
         self.sexfile = self.dir+"/"+self.base+"_sex.fits"
         self.daofile = self.dir+"/"+self.base+"_dao.fits"
         self.sexcatfile = None
@@ -415,9 +413,6 @@ class Chip:
             if name in self.meta.keys():
                 self._rdnoise = self.meta[name]
                 return self._rdnoise
-        # Early tu decam files do not have rdnoise/gain, etc.
-        # get it from a lookup table
-        import pdb; pdb.set_trace()
         if self.instrument=='c4d':
             import pdb; pdb.set_trace()
         self.logger.warning('No RDNOISE found')
@@ -922,32 +917,31 @@ class Chip:
     #----------------------
     def process(self):
 
-        # Set up SE iteration-------------------------------------------------------------------------------
-        sexiter_endflag=0                       
-        while sexiter_endflag==0:
+        # Set up SE iteration
+        sexiter_endflag = 0
+        while (sexiter_endflag==0):
 
-            # For every iteration, run Source Extractor-----------------------------------------------------
+            # For every iteration, run Source Extractor
             self.logger.info("-- SExtractor run "+str(self.sexiter)+" --")
 
             # determine DETECT_THRESH value from SE iteration
             if self.sexiter==1:
-                sex_dt=1.7
+                sex_dt = 1.7
             else:
-                sex_dt=1.1
+                sex_dt = 1.1
 
             self.runsex(dthresh=sex_dt,bindir=self.bindir)
 
-            # get the info for this iteration's catalog
+            # Get the info for this iteration's catalog
             nowcat = self.sexcat[self.sexcat['NDET_ITER']==self.sexiter]  # cat for current SE iteration
             nowcat = nowcat[nowcat['REPEAT']==0]                          # select only newly detected sources
             self.logger.info(str(len(nowcat))+" new sources detected")
             nowcat_sn5 = nowcat[1/nowcat['MAGERR_AUTO']>=5]               # select only the entries with SN>=5
             if self.sexiter==1: 
-                ogcat = nowcat                                            #to check the current cat against the first one
+                ogcat = nowcat                                            # to check the current cat against the first one
                 ogcat_sn5 = nowcat_sn5
-            #self.logger.info("sex"+str(self.sexiter)+" stats: mean"+str(np.mean(1/nowcat['MAGERR_AUTO']))+" median"+str(np.median(1/nowcat['MAGERR_AUTO'])))
 
-            # Perform aperture photometry and PSF fitting with DAOPHOT--------------------------------------
+            # Perform aperture photometry and PSF fitting with DAOPHOT
             self.logger.info("-- Getting ready to run DAOPHOT --")
 
             # for first iteration only, make DAO-ready files
@@ -955,29 +949,29 @@ class Chip:
                 self.mkopt()
                 self.mkdaoim()
             
-            # convert SE cat to DAO format
+            # Convert SE cat to DAO format
             #self.daodetect()
             # Create DAOPHOT-style coo file
             # Need to use SE positions
             if self.sexiter==1:
-                sdao_ofile="flux_dao.coo"          #ktedit:sex2; select aperphot output filename
+                sdao_ofile = "flux_dao.coo"          # select aperphot output filename
             else:
-                sdao_ofile="flux_dao"+str(self.sexiter)+".coo"   #ktedit:sex2
+                sdao_ofile = "flux_dao"+str(self.sexiter)+".coo"
             self.sextodao(outfile=sdao_ofile)
 
             self.daoaperphot()
 
-            # for first iteration only, fit PSF 
+            # For first iteration only, fit PSF 
             if self.sexiter==1:
                 self.daopickpsf()   
                 self.createpsf()
 
-            # combine SE cats, run ALLSTAR, combine ALLSTAR cats--------------------------------------------
+            # Combine SE cats, run ALLSTAR, combine ALLSTAR cats
             if self.sexiter>1: self.combine_cats(type="sexcat")           
             self.allstar()
             if self.sexiter>1: self.combine_cats(type="alscat")                      
 
-            # Check to see if we've run enough SExtractor iterations----------------------------------------
+            # Check to see if we've run enough SExtractor iterations
             # Requirements to end:
             # - at least 2 iterations, no more than 4
             # - median S/N of latest SE cat <=5
@@ -987,7 +981,7 @@ class Chip:
                 sexiter_endflag = 1
             self.sexiter += 1
 
-        # Get aperture correction, create final cat from SE + ALLSTAR cats----------------------------------
+        # Get aperture correction, create final cat from SE + ALLSTAR cats
         self.getapcor()
         self.finalcat()
 
