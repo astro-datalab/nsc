@@ -90,7 +90,11 @@ def reorganize_files(stagedate):
             instrument = base.split('_')[0]
             night = '20'+base.split('_')[1]
         else:
-            head = fits.getheader(files[i],0)
+            try:
+                head = fits.getheader(files[i],0)
+            except:
+                print('Problem reading',files[i],'skipping')
+                continue
             dateobs = head['date-obs']
             instrument = 'c4d'  # assume it's decam
             year = dateobs[:4]
