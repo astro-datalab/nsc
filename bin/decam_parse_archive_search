@@ -38,7 +38,7 @@ def parse_archive_file(filename):
 
     # Initialize the final output catalog
     dt = np.dtype([('instrument',str,10),('base',str,100),('expnum',str,20),('rawname',str,100),
-                   ('date_obs',str,50),('mjd_obs',np.float64),('filter',str,50),
+                   ('date_obs',str,50),('md5sum',str,100),('mjd_obs',np.float64),('filter',str,50),
                    ('prop_id',str,50),('ra',np.float64),('dec',np.float64),('exposure',float),
                    ('release_date',str,50),('plver',str,20),('proctype',str,20),('fluxfile',str,200),
                    ('maskfile',str,200),('wtfile',str,200)])
@@ -46,7 +46,8 @@ def parse_archive_file(filename):
     cat['instrument'] = 'c4d'
     cat['fluxfile'] = imstr['uri']
     # Copy over most of the columns
-    cols = ['date_obs','mjd_obs','filter','prop_id','ra','dec','exposure','release_date','plver','proctype']
+    cols = ['date_obs','md5sum','mjd_obs','filter','prop_id','ra','dec',
+            'exposure','release_date','plver','proctype']
     for c in cols: cat[c] = imstr[c].copy()
 
     # rawname and expnum

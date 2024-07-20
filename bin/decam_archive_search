@@ -11,7 +11,7 @@ read -s password
 export PGPASSWORD=${password}
 export PSQL="psql -h db.sdm.noao.edu -p 5432 -U dbreader -d metadata"
 # Get header line
-$PSQL -E  -c "select b.instrument,a.dtnsanam,a.dtacqnam, \
+$PSQL -E  -c "select b.instrument,a.md5sum,a.dtnsanam,a.dtacqnam, \
                 a.uri,b.prop_id,b.ra,b.dec,b.exposure,b.release_date,b.date_obs,b.filter, \
                 b.mjd_obs,b.plver,b.proctype,b.prodtype \
                 from edu_noao_nsa.data_product a, voi.siap b where a.data_product_id=b.fits_data_product_id limit 1;" | head -1  > ${FILE}.txt
@@ -23,7 +23,7 @@ if [ "$#" -gt 1 ]; then
   if [ "$#" -gt 2 ]; then
     date2=${3}
     echo "Selecting exposures with ${date1} <= DATE_OBS <= ${date2}"
-    $PSQL -E -t -c "select b.instrument,a.dtnsanam,a.dtacqnam, \
+    $PSQL -E -t -c "select b.instrument,a.md5sum,a.dtnsanam,a.dtacqnam, \
                     a.uri,b.prop_id,b.ra,b.dec,b.exposure,b.release_date,b.date_obs,b.filter, \
                     b.mjd_obs,b.plver,b.proctype,b.prodtype \
                     from edu_noao_nsa.data_product a, voi.siap b where a.data_product_id=b.fits_data_product_id \
@@ -31,7 +31,7 @@ if [ "$#" -gt 1 ]; then
   # Only lower dates
   else
     echo "Selecting exposures with DATE_OBS >= ${date1}"
-    $PSQL -E -t -c "select b.instrument,a.dtnsanam,a.dtacqnam, \
+    $PSQL -E -t -c "select b.instrument,a.md5sum,a.dtnsanam,a.dtacqnam, \
                     a.uri,b.prop_id,b.ra,b.dec,b.exposure,b.release_date,b.date_obs,b.filter, \
                     b.mjd_obs,b.plver,b.proctype,b.prodtype \
                     from edu_noao_nsa.data_product a, voi.siap b where a.data_product_id=b.fits_data_product_id \
@@ -39,7 +39,7 @@ if [ "$#" -gt 1 ]; then
   fi
 # No date range input
 else
-  $PSQL -E -t -c "select b.instrument,a.dtnsanam,a.dtacqnam, \
+  $PSQL -E -t -c "select b.instrument,a.md5sum,a.dtnsanam,a.dtacqnam, \
                   a.uri,b.prop_id,b.ra,b.dec,b.exposure,b.release_date,b.date_obs,b.filter, \
                   b.mjd_obs,b.plver,b.proctype,b.prodtype \
                   from edu_noao_nsa.data_product a, voi.siap b where a.data_product_id=b.fits_data_product_id \
