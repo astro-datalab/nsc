@@ -31,6 +31,7 @@ import subprocess
 import sys
 import time
 import warnings
+import requests
 from dlnpyutils.utils import *
 from . import phot,slurm_funcs,utils
 
@@ -82,6 +83,50 @@ def getnscdirs(version=None,host=None):
         basedir = os.getcwd()
         tmproot = basedir+"tmp/"
     return basedir,tmproot
+
+def download_from_archive(md5sum,outdir='./'):
+    """
+    Download an image from the NOIRLAB Astro Science Archive
+    using it's md5sum string
+    """
+    urlbase = "https://astroarchive.noirlab.edu/api/retrieve/"
+    t0 = time.time()
+    print('Downloading md5sum =',md5sum)
+    try:
+        resp = requests.get(urlbase+md5sum+'/')
+        status = 0    # success
+    except:
+        print('Problem downloading data from archive')
+        traceback.print_exc()
+        status = resp.status_code
+        return status,''
+    # The "headers" has a "filename" keyword.
+    # resp.headers['Content-Disposition']
+    # 'attachment; filename="c4d_160730_062708_ood_g_vx.fits.fz"'
+    try:
+        filename = resp.headers['Content-Disposition'].split('=')[-1].replace('"','')
+    except:
+        filename = md5sum+'.fits.fz'
+    filename = os.path.join(os.path.abspath(outdir),filename)
+    print('Writing to',filename)
+    # Check if output directory exists
+    if os.path.exists(os.path.dirname(filename))==False:
+        try:
+            os.makedirs(os.path.dirname)
+        except:
+            print('Cannot make output directory')
+            traceback.print_exc()
+            return 2,''
+    # Write the actual fime
+    try:
+        open(filename, 'wb').write(resp.content)
+    except:
+        print('Problem writing file to '+filename)
+        traceback.print_exc()
+        return 3,''
+    print('dt = {:.1f} sec'.format(time.time()-t0))
+    
+    return status,filename
 
 
 # Class to represent an exposure to process
