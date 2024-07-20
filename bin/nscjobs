@@ -19,6 +19,7 @@ from datetime import datetime
 from argparse import ArgumentParser
 from dlnpyutils import utils as dln,slurm
 from nsc.nsc_instcal_measure import getnscdirs,Exposure
+from nsc import slurm as slrm
 
 
 def taccifyname(filename):
@@ -48,6 +49,7 @@ if __name__ == "__main__":
     parser.add_argument('--host',type=str,nargs=1,default="None",help='hostname, default "None", other options supported are "cca","tempest_katie","tempest_group","gp09/7","tacc"')
     parser.add_argument('--partition',type=str,nargs=1,default='normal',help='what TACC partition to use')
     parser.add_argument('--maxtasks',type=int,nargs=1,default=20000,help='Maximum number of tasks to run')
+    parser.add_argument('--delete',action='store_true',help='Delete image files at end')
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
     args = parser.parse_args()
 
@@ -203,13 +205,20 @@ if __name__ == "__main__":
                 if fluxfile[:9]=='/net/mss1' or wtfile[:9]=='/net/mss1' or maskfile[:9]=='/net/mss1':
                     print('Exposure files not at TACC yet. SKIPPING')
                     continue
+            # Need to download files on tempest
+            #   use md5sum as filenames
+            if host.startswith('tempest'):
+                fluxfile = inputdata['fluxmd5sum'][i]
+                wtfile = inputdata['wtmd5sum'][i]
+                maskfile = inputdata['maskmd5sum'][i]
             # Check that all three files exist
-            infiles = [fluxfile,wtfile,maskfile]
-            exists = [os.path.exists(f) for f in infiles]
-            bd, = np.where(np.array(exists)==False)
-            if len(bd)>0:
-                print('Files not found: '+','.join(np.array(infiles)[bd])+'  SKIPPING')
-                continue
+            else:
+                infiles = [fluxfile,wtfile,maskfile]
+                exists = [os.path.exists(f) for f in infiles]
+                bd, = np.where(np.array(exists)==False)
+                if len(bd)>0:
+                    print('Files not found: '+','.join(np.array(infiles)[bd])+'  SKIPPING')
+                    continue
             #if base[:3] not in ['c4d','ksb','k4m']:
             #    print(base,'NOT in correct format. SKIPPING')
             #    continue
@@ -217,13 +226,20 @@ if __name__ == "__main__":
             cmd = script+' '+fluxfile+' '+wtfile+' '+maskfile+' '+version
             if host:
                 cmd += ' --host '+host
+            if redo:
+                cmd += ' --redo'
+            if delete:
+                cmd += ' --delete'
             # Check output filename
             if base[:3]=='c4d':
                 night = '20'+base[4:10]
             else:
                 instrument = 'c4d'  # assume decam for now
-                head = fits.getheader(fluxfile,0)
-                dateobs = head['DATE-OBS']
+                if host.startswith('tempest'):
+                    dateobs = inputdata['date_obs'][i]
+                else:
+                    head = fits.getheader(fluxfile,0)
+                    dateobs = head['DATE-OBS']
                 night = dateobs[:4]+dateobs[5:7]+dateobs[8:10]
             outdir = os.path.join(basedir,instrument,night[:4],night,base)
             logfile = os.path.join(outdir,base+'.'+logtime+'.log')
@@ -465,14 +481,22 @@ if __name__ == "__main__":
     print('walltime =',walltime)
     slurmroot = os.environ['SCRATCH']
 
-    slurmdir,key,jobid = slurm.launcher(tasks,label,nodes=nodes,nparallel=nparallel,
-                                        account=None,partition=partition,walltime=walltime,
-                                        notification=True,stagger=True,
-                                        slurmroot=slurmroot,verbose=True)
-    # Write list of output directories
-    dln.writelines(os.path.join(slurmdir,label+'_outdir.lst'),tasks['dir'].data.astype(str))
-    # Write task list to lists/ 
-    tasks.write(os.path.join(basedir,'lists',label+'_'+key+'_tasks.fits'))
+    # For measurement on Tempest we'll use our own job manager/launcher per mode
+    if stage.lower()[:4]=='meas' and host.lower().stargswith('tempest'):
+        print('Using own launcher')
+        import pdb; pdb.set_trace()
+        out = slrm.submit(tasks,stage,nodes=nodes,version=version,partition=partition,
+                          host=host,walltime=walltime,verbose=True)
+        
+    else:
+        slurmdir,key,jobid = slurm.launcher(tasks,label,nodes=nodes,nparallel=nparallel,
+                                            account=None,partition=partition,walltime=walltime,
+                                            notification=True,stagger=True,
+                                            slurmroot=slurmroot,verbose=True)
+        # Write list of output directories
+        dln.writelines(os.path.join(slurmdir,label+'_outdir.lst'),tasks['dir'].data.astype(str))
+        # Write task list to lists/ 
+        tasks.write(os.path.join(basedir,'lists',label+'_'+key+'_tasks.fits'))
     
 
     # submit(tasks,label,nodes=1,cpus=64,ppn=None,account='priority-davidnidever',

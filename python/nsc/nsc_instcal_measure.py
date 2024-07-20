@@ -63,25 +63,25 @@ def getnscdirs(version=None,host=None):
     print("host = ",host)
     # on gp07 use
     if (host == "gp09") | (host == "gp08") | (host == "gp07") | (host == "gp06") | (host == "gp05"): 
-        basedir = "/net/dl2/kfas/nsc/instcal/"+verdir
-        tpmroot = basedir+"tmp/"
+        basedir = os.path.join("/net/dl2/kfas/nsc/instcal/",verdir)
+        tpmroot = os.path.join(basedir,"tmp")
     # on tempest use
     elif host=="tempest_katie":
-        basedir = "/home/x25h971/nsc/instcal/"+verdir
-        tmproot = basedir+"tmp/"
+        basedir = os.path.join("/home/x25h971/nsc/instcal/",verdir)
+        tmproot = os.path.join(basedir,"tmp/")
     elif host=="tempest_group":
-        basedir = "/home/group/davidnidever/nsc/instcal/"+verdir
-        tmproot = basedir+"tmp/"
+        basedir = os.path.join("/home/group/davidnidever/nsc/instcal/",verdir)
+        tmproot = os.path.join(basedir,"tmp")
     elif host=="cca":
-        basedir = '/mnt/home/dnidever/ceph/nsc/instcal/'+verdir
-        tmproot = '/mnt/home/dnidever/ceph/nsc/'+verdir+'tmp/'
+        basedir = os.path.join('/mnt/home/dnidever/ceph/nsc/instcal/',verdir)
+        tmproot = os.path.join('/mnt/home/dnidever/ceph/nsc/',verdir,'tmp')
     elif host=="tacc":
         #basedir = '/corral/projects/NOIRLab/nsc/instcal/'+verdir
-        basedir = '/scratch1/09970/dnidever/nsc/instcal/'+verdir
-        tmproot = '/scratch1/09970/dnidever/nsc/'+verdir+'tmp/'
+        basedir = os.path.join('/scratch1/09970/dnidever/nsc/instcal/',verdir)
+        tmproot = os.path.join('/scratch1/09970/dnidever/nsc/',verdir,'tmp')
     else:
         basedir = os.getcwd()
-        tmproot = basedir+"tmp/"
+        tmproot = os.path.join(basedir,"tmp")
     return basedir,tmproot
 
 def download_from_archive(md5sum,outdir='./'):

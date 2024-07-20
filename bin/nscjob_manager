@@ -4,6 +4,7 @@ import os
 import sys
 import numpy as np
 import warnings
+from astropy.table import Table
 from astropy.io import fits
 from astropy.utils.exceptions import AstropyWarning
 import time
@@ -24,25 +25,27 @@ if __name__ == "__main__":
 
     # Run measurement on one full DECam/Mosaic3/Bok InstCal image
     parser = ArgumentParser(description='Run multiple NSC jobs on a cluster node')
-    parser.add_argument('stage', type=str, nargs=1, help='Stage (measure, calibrate or combine)')
-    parser.add_argument('inputfile', type=str, nargs=1, help='Input list filename')
+    parser.add_argument('tasksfile', type=str, nargs=1, help='Input list filename')
     parser.add_argument('version', type=str, nargs=1, help='NSC version')
     parser.add_argument('--host',type=str,nargs=1,default="None",help='hostname, default "None", other options supported are "cca","tempest_katie","tempest_group","gp09/7","tacc"')
+    parser.add_argument('--staggertime',type=int,nargs=1,help='Stagger time.  Default is 60')
     parser.add_argument('--partition',type=str,nargs=1,default='normal',help='what TACC partition to use')
     parser.add_argument('--njobs',type=int,nargs=1,default=64,help='Number of jobs to run, default is 64')
     parser.add_argument('--maxtasks',type=int,nargs=1,default=20000,help='Maximum number of tasks to run')
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
-    parser.add_argument('--delete',action='store_true', help='Delete downloaded exposures at end')
-    parser.add_argument('--x',action='store_true', help='Exposure version is of format "vX"')
     args = parser.parse_args()
 
     # Inputs                                        
     stage = args.stage[0].lower()
-    inputfile = args.inputfile[0]
+    tasksfile = args.tasksfile[0]
     version = args.version[0]                # NSC version, like "v4", default "None"
     if version=="None": version = None
     host = str(args.host[0])                 # hostname of server, default "None"                  
     if host=="None": host = None
+    if isinstance(args.staggertime,list):
+        staggertime = args.staggertime[0]
+    else:
+        staggertime = args.staggertime
     if isinstance(args.partition,list):
         partition = args.partition[0]
     else:
@@ -50,41 +53,29 @@ if __name__ == "__main__":
     if isinstance(args.njobs,list):          # number of parallel jobs to run
         njobs = args.njobs[0]
     else:
-        njobs = args.njobs[0]
-    if isinstance(args.maxtasks,list):       # maximum number of tasks to run from input list
-        maxtasks = args.maxtasks[0]
-    else:
-        maxtasks = args.maxtasks
-    redo = args.redo                         # if called, redo = True
-    #x = args.x                               # if called, exposure version is of format "vX"
-    delete = args.delete
+        njobs = args.njobs
 
     t0 = time.time()
     
     print('Input Parameters:')
     print('-----------------')
     print('stage =',stage,)
-    print('inputfile =',inputfile)
+    print('tasksfile =',tasksfile)
     print('version =',version)
-    print('host =',host)
+    print('host =',host)    
+    print('staggertime =',staggertime)
+    print('partition =',partition)
     print('njobs = ',njobs)
-    print('maxtasks =',maxtasks)
-    print('redo =',redo)
-    print("delete = ",delete)
 
     # Check that the input file exists
-    if os.path.exists(inputfile)==False:
-        print(inputfile,'NOT FOUND')
+    if os.path.exists(tasksfile)==False:
+        print(tasksfile,'NOT FOUND')
         sys.exit()
 
-    # Load the input lines
-    if inputfile.endswith('.fits') or inputfile.endswith('.fits.gz'):
-        print('Loading',inputfile,' FITS file')
-        inputdata = Table.read(inputfile)
-    else:
-        print('Loading',inputfile,' ASCII file')
-        inputdata = dln.readlines(inputfile)
-    print(len(inputdata),'inputs')
+    # Input must be a tasks table fits file
+    print('Loading',tasksfile)
+    tasks = Table.read(tasksfile)
+    print(len(tasks),'tasks')
 
     # Get NSC directories                                                                                     
     basedir, tmpdir = getnscdirs(version,host)
@@ -95,83 +86,31 @@ if __name__ == "__main__":
     if not os.path.exists(tmpdir):
         os.makedirs(tmpdir)
 
-    dt = [('cmd',str,1000),('name',str,1000),('output',str,1000),
-          ('outfile',str,1000),('errfile',str,1000),('dir',str,1000)] 
-    logtime = datetime.now().strftime("%Y%m%d%H%M%S")
+    # Use job_daemon with delay/stagger time to allow for the files to
+    # download before the next job is run
 
-    ##############################################################################
-    # Measurement
-    #============
-    if stage=='meas' or stage=='measure' or stage=='measurement':
-        script = 'nsc_instcal_measure'
-        label = 'measure'
-        if isinstance(inputdata,Table)==False:
-            inputlist = inputdata.copy()
-            dtinp = [('fluxfile',str,1000),('wtfile',str,1000),('maskfile',str,1000)]
-            inputdata = Table(np.zeros(len(inputlist),dtype=np.dtype(dtinp)))
-            for i in range(len(inputlist)):
-                ff,wt,mf = inputlist[i].split()
-                inputdata['fluxfile'][i] = ff
-                inputdata['wtfile'][i] = wt
-                inputdata['maskfile'][i] = mf
+    jobs = jd.job_daemon(tasks['cmd'],tasks['dir'],tasks['name'],nmulti=njobs,
+                         prefix='meas',hyperthread=True,waittime=100,statustime=60)
 
-        ## Check previously submitted tasks lists
-        #print('Checking previously submitted tasks lists')
-        #tasklist = glob(os.path.join(basedir,'lists',label+'_*_tasks.fits'))
-        #prevtasks = None
-        #for tf in tasklist:
-        #    print('Loading ',tf)
-        #    ptasks = Table.read(tf)
-        #    if prevtasks is None:
-        #        prevtasks = ptasks
-        #    else:
-        #        prevtasks = vstack((prevtasks,ptasks))
-        ## Some previous lists
-        #if prevtasks is not None:
-        #    # Get unique exposures
-        #    _,ui = np.unique(prevtasks['name'],return_index=True)
-        #    prevtasks = prevtasks[ui]
-        #    # Remove any previously submitted exposures
-        #    inpbases = [os.path.basename(r['fluxfile']).replace('.fits.fz','') for r in inputdata]
-        #    inpbases = np.array(inpbases).astype(str)
-        #    _,ind1,ind2 = np.intersect1d(prevtasks['name'],inpbases,return_indices=True)
-        #    if len(ind1)>0:
-        #        print(len(ind1),' previously submitted exposures to remove')
-        #        inputdata.remove_rows(ind2)
 
-        # Loop over input data and populate the tasks list
-        tasks = Table(np.zeros(np.minimum(len(inputdata),maxtasks),dtype=np.dtype(dt)))
-        cnt = 0
-        for i in range(len(inputdata)):
-            fluxfile = inputdata['fluxfile'][i]
-            wtfile = inputdata['wtfile'][i]
-            maskfile = inputdata['maskfile'][i]
-            base = os.path.basename(fluxfile)
-            if base.endswith('.fits.fz'): base=base[:-8]
-            if base.endswith('.fits'): base=base[:-5]
-            print('{:} {:}'.format(i+1,base))
-            # Might need to modify mss filenames for TACC
-            if host=='tacc':
-                #fluxfile = taccifyname(fluxfile)
-                #wtfile = taccifyname(wtfile)
-                #maskfile = taccifyname(maskfile)
-                # The filenames are fixed above for the files that exist
-                #if fluxfile[:9] != '/net/mss1':
-                #    import pdb; pdb.set_trace()
-                if fluxfile[:9]=='/net/mss1' or wtfile[:9]=='/net/mss1' or maskfile[:9]=='/net/mss1':
-                    print('Exposure files not at TACC yet. SKIPPING')
-                    continue
+            # Need to download files on tempest
+            #   use md5sum as filenames
+            if host.startswith('tempest'):
+                fluxfile = inputdata['fluxmd5sum'][i]
+                wtfile = inputdata['wtmd5sum'][i]
+                maskfile = inputdata['maskmd5sum'][i]
             # Check that all three files exist
-            infiles = [fluxfile,wtfile,maskfile]
-            exists = [os.path.exists(f) for f in infiles]
-            bd, = np.where(np.array(exists)==False)
-            if len(bd)>0:
-                print('Files not found: '+','.join(np.array(infiles)[bd])+'  SKIPPING')
-                continue
+            else:
+                infiles = [fluxfile,wtfile,maskfile]
+                exists = [os.path.exists(f) for f in infiles]
+                bd, = np.where(np.array(exists)==False)
+                if len(bd)>0:
+                    print('Files not found: '+','.join(np.array(infiles)[bd])+'  SKIPPING')
+                    continue
             #if base[:3] not in ['c4d','ksb','k4m']:
             #    print(base,'NOT in correct format. SKIPPING')
             #    continue
-            instrument = base[:3]        
+            instrument = base[:3]
             cmd = script+' '+fluxfile+' '+wtfile+' '+maskfile+' '+version
             if host:
                 cmd += ' --host '+host
@@ -182,127 +121,12 @@ if __name__ == "__main__":
                 night = '20'+base[4:10]
             else:
                 instrument = 'c4d'  # assume decam for now
-                head = fits.getheader(fluxfile,0)
-                dateobs = head['DATE-OBS']
+                if host.startswith('tempest'):
+                    dateobs = inputdata['date_obs'][i]
+                else:
+                    head = fits.getheader(fluxfile,0)
+                    dateobs = head['DATE-OBS']
                 night = dateobs[:4]+dateobs[5:7]+dateobs[8:10]
-            outdir = os.path.join(basedir,instrument,night[:4],night,base)
-            logfile = os.path.join(outdir,base+'.'+logtime+'.log')
-            outfile = os.path.join(outdir,base+'_meas.fits')
-            if os.path.exists(outfile) and redo==False:
-                print(outfile,' ALREADY EXISTS.  Skipping')
-                continue
-            # Skip information in the tasks table
-            tasks['cmd'][cnt] = cmd
-            tasks['name'][cnt] = base
-            tasks['output'][cnt] = outfile
-            tasks['outfile'][cnt] = logfile 
-            tasks['errfile'][cnt] = logfile.replace('.log','.err')
-            tasks['dir'][cnt] = outdir
-            cnt += 1
-            if cnt>=maxtasks:
-                print('Reached maxtasks ',maxtasks)
-                break
-        tasks = tasks[:cnt]  # trim        
-
-        import pdb; pdb.set_trace()
-
-        # Use job_daemon with delay/stagger time to allow for the files to
-        # download before the next job is run
-
-        scriptsdir = tmpdir
-        jobs = jd.job_daemon(tasks,scriptsdir,nmulti=njobs,prefix='meas',
-                             hyperthread=True,waittime=100,statustime60)
-
-        
-    ##############################################################################
-    # Calibrate
-    #==========
-    elif stage=='calib' or stage=='calibrate':
-        script = 'nsc_instcal_calibrate'
-        label = 'calib'
-        if isinstance(inputdata,Table)==False:
-            inputlist = inputdata.copy()
-            inputdata = Table(np.zeros(len(inputlist),dtype=np.dtype([('EXPOSURE',str,1000)])))
-            inputdata['EXPOSURE'] = inputlist
-
-        # Check previously submitted tasks lists
-        print('Checking previously submitted tasks lists')
-        tasklist = glob(os.path.join(basedir,'lists',label+'_*_tasks.fits'))
-        prevtasks = None
-        for tf in tasklist:
-            print('Loading ',tf)
-            ptasks = Table.read(tf)
-            if prevtasks is None:
-                prevtasks = ptasks
-            else:
-                prevtasks = vstack((prevtasks,ptasks))
-        
-        # Check previously submitted tasks lists
-        print('Checking previously submitted tasks lists')
-        tasklist = glob(os.path.join(basedir,'lists',label+'_*_tasks.fits'))
-        prevtasks = None
-        for tf in tasklist:
-            print('Loading ',tf)
-            ptasks = Table.read(tf)
-            if prevtasks is None:
-                prevtasks = ptasks
-            else:
-                prevtasks = vstack((prevtasks,ptasks))
-        # Some previous lists
-        if prevtasks is not None:
-            # Get unique exposures
-            _,ui = np.unique(prevtasks['name'],return_index=True)
-            prevtasks = prevtasks[ui]
-            # Remove any previously submitted exposures
-            inpexposure = np.char.array(inputdata['EXPOSURE']).astype(str)
-            _,ind1,ind2 = np.intersect1d(prevtasks['name'],inpexposure,return_indices=True)
-            if len(ind1)>0:
-                print(len(ind1),' previously submitted exposures to remove')
-                inputdata.remove_rows(ind2)
-
-
-        import pdb; pdb.set_trace()
-                
-    ##############################################################################
-    # Combine
-    #========
-    elif stage=='combine':
-        script = 'nsc_instcal_combine'
-        label = 'combine'
-        if isinstance(inputdata,Table)==False:
-            inputlist = inputdata.copy()
-            inputdata = Table(np.zeros(len(inputlist),dtype=np.dtype([('HEALPIX',str,1000)])))
-            inputdata['HEALPILX'] = inputlist
-
-        # Check previously submitted tasks lists
-        print('Checking previously submitted tasks lists')
-        tasklist = glob(os.path.join(basedir,'lists',label+'_*_tasks.fits'))
-        prevtasks = None
-        for tf in tasklist:
-            print('Loading ',tf)
-            ptasks = Table.read(tf)
-            if prevtasks is None:
-                prevtasks = ptasks
-            else:
-                prevtasks = vstack((prevtasks,ptasks))
-        # Some previous lists
-        if prevtasks is not None:
-            # Get unique exposures
-            _,ui = np.unique(prevtasks['name'],return_index=True)
-            prevtasks = prevtasks[ui]
-            # Remove any previously submitted exposures
-            inphealpixpix = inputdata['HEALPIX']
-            _,ind1,ind2 = np.intersect1d(prevtasks['name'],inphealpix,return_indices=True)
-            if len(ind1)>0:
-                print(len(ind1),' previously submitted exposures to remove')
-                inputdata.remove_rows(ind2)
-
-        import pdb; pdb.set_trace()
-
-
-    else:
-        print('Stage ',stage,' not supported')
-        sys.exit()
     
     print("Total time = "+str(time.time()-t0)+" seconds")
 
