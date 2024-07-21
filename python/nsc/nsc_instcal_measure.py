@@ -117,11 +117,11 @@ class Exposure:
         print("dirs, setup = ",basedir,tmproot)
         # Prepare temporary directory
         tmpcntr = 1#L 
-        tmpdir = tmproot+self.base+"."+str(tmpcntr)
+        tmpdir = os.path.join(tmproot,self.base+"."+str(tmpcntr))
         print("temp dir = ",tmpdir)
         while (os.path.exists(tmpdir)):
             tmpcntr = tmpcntr+1
-            tmpdir = tmproot+self.base+"."+str(tmpcntr)
+            tmpdir = os.path.join(tmproot,self.base+"."+str(tmpcntr))
             if tmpcntr > 20:
                 print("Temporary Directory counter getting too high. Exiting")
                 sys.exit()
@@ -154,15 +154,15 @@ class Exposure:
         if self.host=="gp09" or self.host=="gp07": self.logger.info("Copying InstCal images from mass store archive")
         else: self.logger.info("Copying InstCal images downloaded from Astro Data Archive")
         #getdata(rawname,self.origfluxfile,self.origwtfile,self.origmaskfile,tmpdir)
-        shutil.copyfile(self.origfluxfile,tmpdir+"/"+os.path.basename(self.origfluxfile))
+        shutil.copyfile(self.origfluxfile,os.path.join(tmpdir,os.path.basename(self.origfluxfile)))
         self.logger.info("  "+self.origfluxfile)
         if (os.path.basename(self.origfluxfile) != fluxfile):
             os.symlink(os.path.basename(self.origfluxfile),fluxfile)
-        shutil.copyfile(self.origwtfile,tmpdir+"/"+os.path.basename(self.origwtfile))
+        shutil.copyfile(self.origwtfile,os.path.join(tmpdir,os.path.basename(self.origwtfile)))
         self.logger.info("  "+self.origwtfile)
         if (os.path.basename(self.origwtfile) != wtfile):
             os.symlink(os.path.basename(self.origwtfile),wtfile)
-        shutil.copyfile(self.origmaskfile,tmpdir+"/"+os.path.basename(self.origmaskfile))
+        shutil.copyfile(self.origmaskfile,os.path.join(tmpdir,os.path.basename(self.origmaskfile)))
         self.logger.info("  "+self.origmaskfile)
         if (os.path.basename(self.origmaskfile) != maskfile):
             os.symlink(os.path.basename(self.origmaskfile),maskfile)

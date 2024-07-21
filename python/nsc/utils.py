@@ -35,7 +35,7 @@ import requests
 #from scipy.ndimage.filters import convolve
 import subprocess
 import warnings
-
+import traceback
 
 # Ignore these warnings, it's a bug
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
