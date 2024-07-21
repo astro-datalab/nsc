@@ -18,7 +18,8 @@ import socket
 from datetime import datetime
 from argparse import ArgumentParser
 from dlnpyutils import utils as dln,slurm
-from nsc.nsc_instcal_measure import getnscdirs,Exposure
+from nsc import utils
+from nsc.nsc_instcal_measure import Exposure
 from nsc import slurm as slrm
 
 
@@ -47,8 +48,10 @@ if __name__ == "__main__":
     parser.add_argument('inputfile', type=str, nargs=1, help='Input list filename')
     parser.add_argument('version', type=str, nargs=1, help='NSC version')
     parser.add_argument('--host',type=str,nargs=1,default="None",help='hostname, default "None", other options supported are "cca","tempest_katie","tempest_group","gp09/7","tacc"')
-    parser.add_argument('--partition',type=str,nargs=1,default='normal',help='what TACC partition to use')
+    parser.add_argument('--partition',type=str,nargs=1,default='',help='what TACC partition to use')
+    parser.add_argument('--walltime',type=str,nargs=1,default='2-00:00:00',help='Slurm job runtime')
     parser.add_argument('--maxtasks',type=int,nargs=1,default=20000,help='Maximum number of tasks to run')
+    parser.add_argument('--nodes',type=int,nargs=1,default=0,help='Number of nodes')
     parser.add_argument('--delete',action='store_true',help='Delete image files at end')
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
     args = parser.parse_args()
@@ -64,12 +67,29 @@ if __name__ == "__main__":
         partition = args.partition[0]
     else:
         partition = args.partition
+    if isinstance(args.walltime,list):
+        walltime = args.walltime[0]
+    else:
+        walltime = args.walltime
     if isinstance(args.maxtasks,list):       # maximum number of tasks to run from input list
         maxtasks = args.maxtasks[0]
     else:
         maxtasks = args.maxtasks
+    if isinstance(args.nodes,list):
+        nodes = args.nodes[0]
+    else:
+        nodes = args.nodes
+    if nodes==0: nodes=None
+    delete = args.delete
     redo = args.redo                         # if called, redo = True
 
+    # Default partitions
+    if partition=='':
+        if host=='tacc':
+            partition = 'small'
+        elif host.lower()[:7]=='tempest':
+            partition = 'priority'
+            
     print('Input Parameters:')
     print('-----------------')
     print('stage =',stage,)
@@ -77,6 +97,8 @@ if __name__ == "__main__":
     print('version =',version)
     print('host =',host)
     print('maxtasks =',maxtasks)
+    if nodes is not None:
+        print('nodes =',nodes)
     print('redo =',redo)
 
     # Check that the input file exists
@@ -93,8 +115,13 @@ if __name__ == "__main__":
         inputdata = dln.readlines(inputfile)
     print(len(inputdata),'inputs')
 
+    # Processes per node
+    ppn = 64
+    if host=='tacc':
+        ppn = 56
+    
     # Get NSC directories                                                                                     
-    basedir, tmpdir = getnscdirs(version,host)
+    basedir, tmpdir = utils.getnscdirs(version,host)
     print("Working in basedir,tmpdir = ",basedir,tmpdir)
     # Make sure the directories exist                                                                         
     if not os.path.exists(basedir):
@@ -247,6 +274,9 @@ if __name__ == "__main__":
             if os.path.exists(outfile) and redo==False:
                 print(outfile,' ALREADY EXISTS.  Skipping')
                 continue
+            # Make sure the output directory exists
+            if os.path.exists(outdir)==False:
+                os.makedirs(outdir)
             # Skip information in the tasks table
             tasks['cmd'][cnt] = cmd
             tasks['name'][cnt] = base
@@ -266,8 +296,9 @@ if __name__ == "__main__":
         # we can only run for 48 hours
         # the tacc slurm queue limits launcher to a maximum of 56 tasks per node
         ntasks = np.minimum(len(tasks),maxtasks)
-        total_time_hour = ntasks
-        nodes = int(np.ceil(total_time_hour/56/48))
+        if nodes is None:
+            total_time_hour = ntasks
+            nodes = int(np.ceil(total_time_hour/ppn/48))
 
     ##############################################################################
     # Calibrate
@@ -357,8 +388,9 @@ if __name__ == "__main__":
         # calibration is pretty fast, maybe 1 min. per exposure
         # the tacc slurm queue limits launcher to a maximum of 56 tasks per node
         ntasks = np.minimum(len(tasks),maxtasks)
-        total_time_hour = ntasks / 60.0
-        nodes = int(np.ceil(total_time_hour/56/48))
+        if nodes is None:
+            total_time_hour = ntasks / 60.0
+            nodes = int(np.ceil(total_time_hour/ppn/48))
 
     ##############################################################################
     # Combine
@@ -427,8 +459,9 @@ if __name__ == "__main__":
         # the tacc slurm queue limits launcher to a maximum of 56 tasks per node
         # how much per healpix??
         ntasks = np.minimum(len(tasks),maxtasks)
-        total_time_hour = ntasks
-        nodes = int(np.ceil(total_time_hour/56/48))
+        if nodes is None:
+            total_time_hour = ntasks
+            nodes = int(np.ceil(total_time_hour/56/48))
     else:
         print('Stage ',stage,' not supported')
         sys.exit()
@@ -444,34 +477,35 @@ if __name__ == "__main__":
         print('No tasks to run')
         sys.exit()
     
-    # Nodes to request
-    print(nodes,'nodes requested')
-
-    # Get walltime based on partition
-    wtimedict = {'normal':'47:59:00','small':'47:59:00','development':'01:59:59'}
-    walltime = wtimedict[partition]
-    # nodes:
-    # development 1-40
-    # normal      3-512
-    # small       2
-    if partition=='development':
-        if int(nodes)>40:
-            print('development node limit is 40')
-            nodes = 40
-    elif partition=='normal':
-        if int(nodes)<3:
-            print('normal needs at least 3 nodes')
-            nodes = 3
-        if int(nodes)>512:
-            print('normal node limit is 512')
-            nodes = 512
-    elif partition=='small':
-        if int(nodes) != 2:
-            print('small must be 2 nodes')
-            nodes = 2
+    # TACC settings
+    if host=='tacc':
+        # Nodes to request
+        print(nodes,'nodes requested')
+        # Get walltime based on partition
+        wtimedict = {'normal':'47:59:00','small':'47:59:00','development':'01:59:59'}
+        walltime = wtimedict[partition]
+        # nodes:
+        # development 1-40
+        # normal      3-512
+        # small       2
+        if partition=='development':
+            if int(nodes)>40:
+                print('development node limit is 40')
+                nodes = 40
+        elif partition=='normal':
+            if int(nodes)<3:
+                print('normal needs at least 3 nodes')
+                nodes = 3
+            if int(nodes)>512:
+                print('normal node limit is 512')
+                nodes = 512
+        elif partition=='small':
+            if int(nodes) != 2:
+                print('small must be 2 nodes')
+                nodes = 2
 
     # the tacc slurm queue limits launcher to a maximum of 56 tasks per node
-    nparallel = nodes*56
+    nparallel = nodes*ppn
 
     print('Slurm Parameters:')
     print('ntasks =',len(tasks))
@@ -479,15 +513,18 @@ if __name__ == "__main__":
     print('nodes =',nodes)
     print('label =',label)
     print('walltime =',walltime)
-    slurmroot = os.environ['SCRATCH']
+    slurmroot = os.environ.get('SCRATCH')
+    if slurmroot is None:
+        slurmroot = os.path.join(os.path.expanduser('~'),'slurm')
+        if os.path.exists(slurmroot)==False:
+            os.makedirs(slurmroot)
 
     # For measurement on Tempest we'll use our own job manager/launcher per mode
-    if stage.lower()[:4]=='meas' and host.lower().stargswith('tempest'):
-        print('Using own launcher')
-        import pdb; pdb.set_trace()
+    if stage.lower()[:4]=='meas' and host.lower().startswith('tempest'):
+        slurmdir = os.path.join(os.path.expanduser('~'),'slurm')
+        print('Using nscjob_manager')
         out = slrm.submit(tasks,stage,nodes=nodes,version=version,partition=partition,
-                          host=host,walltime=walltime,verbose=True)
-        
+                          host=host,walltime=walltime,slurmdir=slurmdir,verbose=True)
     else:
         slurmdir,key,jobid = slurm.launcher(tasks,label,nodes=nodes,nparallel=nparallel,
                                             account=None,partition=partition,walltime=walltime,

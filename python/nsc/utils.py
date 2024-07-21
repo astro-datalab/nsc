@@ -27,6 +27,8 @@ from scipy.interpolate import interp1d
 from scipy.linalg import svd
 import socket
 import sys
+import time
+import requests
 #from astropy.utils.exceptions import AstropyWarning
 #import socket
 #from scipy.signal import convolve2d
@@ -2037,3 +2039,84 @@ def concatmeas(expdir,deletetruncated=False):
             for f in allfiles:
                 if os.path.exists(f): os.remove(f)
     os.chdir(curdir)
+
+
+# Get NSC directories
+def getnscdirs(version=None,host=None):
+    # Version
+    verdir = ""
+    if version is not None:
+       verdir = version if version.endswith('/') else version+"/"
+    # Host
+    if host is None:
+        hostname = socket.gethostname()
+        host = hostname.split('.')[0].strip()
+    print("host = ",host)
+    # on gp07 use
+    if (host == "gp09") | (host == "gp08") | (host == "gp07") | (host == "gp06") | (host == "gp05"): 
+        basedir = os.path.join("/net/dl2/kfas/nsc/instcal/",verdir)
+        tpmroot = os.path.join(basedir,"tmp")
+    # on tempest use
+    elif host=="tempest_katie":
+        basedir = os.path.join("/home/x25h971/nsc/instcal/",verdir)
+        tmproot = os.path.join(basedir,"tmp/")
+    elif host=="tempest_group":
+        basedir = os.path.join("/home/group/davidnidever/nsc/instcal/",verdir)
+        tmproot = os.path.join(basedir,"tmp")
+    elif host=="cca":
+        basedir = os.path.join('/mnt/home/dnidever/ceph/nsc/instcal/',verdir)
+        tmproot = os.path.join('/mnt/home/dnidever/ceph/nsc/',verdir,'tmp')
+    elif host=="tacc":
+        #basedir = '/corral/projects/NOIRLab/nsc/instcal/'+verdir
+        basedir = os.path.join('/scratch1/09970/dnidever/nsc/instcal/',verdir)
+        tmproot = os.path.join('/scratch1/09970/dnidever/nsc/',verdir,'tmp')
+    else:
+        basedir = os.getcwd()
+        tmproot = os.path.join(basedir,"tmp")
+    return basedir,tmproot
+
+def download_from_archive(md5sum,outdir='./'):
+    """
+    Download an image from the NOIRLAB Astro Science Archive
+    using it's md5sum string
+    """
+    urlbase = "https://astroarchive.noirlab.edu/api/retrieve/"
+    t0 = time.time()
+    print('Downloading md5sum =',md5sum)
+    url = urlbase+md5sum+'/'
+    print(url)
+    try:
+        resp = requests.get(url,timeout=1000)
+        status = 0    # success
+    except:
+        print('Problem downloading data from archive')
+        traceback.print_exc()
+        status = resp.status_code
+        return status,''
+    # The "headers" has a "filename" keyword.
+    # resp.headers['Content-Disposition']
+    # 'attachment; filename="c4d_160730_062708_ood_g_vx.fits.fz"'
+    try:
+        filename = resp.headers['Content-Disposition'].split('=')[-1].replace('"','')
+    except:
+        filename = md5sum+'.fits.fz'
+    filename = os.path.join(os.path.abspath(outdir),filename)
+    print('Writing to',filename)
+    # Check if output directory exists
+    if os.path.exists(os.path.dirname(filename))==False:
+        try:
+            os.makedirs(os.path.dirname)
+        except:
+            print('Cannot make output directory')
+            traceback.print_exc()
+            return 2,''
+    # Write the actual fime
+    try:
+        open(filename, 'wb').write(resp.content)
+    except:
+        print('Problem writing file to '+filename)
+        traceback.print_exc()
+        return 3,''
+    print('dt = {:.1f} sec'.format(time.time()-t0))
+    
+    return status,filename
