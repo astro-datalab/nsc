@@ -132,7 +132,7 @@ if __name__ == "__main__":
         os.makedirs(tmpdir)
 
     if 'tempest' in host:
-        download_dir = os.path.join(tmpdir,'download')
+        download_dir = os.path.join(basedir,'download')
         
     dt = [('cmd',str,1000),('name',str,1000),('output',str,1000),
           ('outfile',str,1000),('errfile',str,1000),('dir',str,1000)] 
@@ -146,7 +146,7 @@ if __name__ == "__main__":
         script = 'nsc_download'
         label ='download'
         cmd = script+' '+os.path.abspath(inputfile)+' '+version+' --host '+host+' --maximages '+str(maxtasks)
-        logfile = os.path.join(tmpdir,'download','download.'+logtime+'.log')
+        logfile = os.path.join(basedir,'download','download.'+logtime+'.log')
         if os.path.exists(os.path.dirname(logfile))==False:
             os.makedirs(os.path.dirname(logfile))
         # Put information in the tasks table
@@ -565,7 +565,7 @@ if __name__ == "__main__":
             #export LAUNCHER_JOB_FILE=/home/x51j468/test_cmds.lst
             #export LAUNCHER_PPN=10
             precommands = ['export LAUNCHER_DIR=/home/x51j468/projects/launcher']
-            precommands += ['export LAUNCHER_PPN='+str(ppn)]
+            precommands += ['export LAUNCHER_PPN='+str(nparallel)]
         else:
             precommands = None
         slurmdir,key,jobid = slurm.launcher(tasks,label,nodes=nodes,nparallel=nparallel,

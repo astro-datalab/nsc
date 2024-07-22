@@ -68,7 +68,7 @@ if __name__ == "__main__":
     if not os.path.exists(tmpdir):
         os.makedirs(tmpdir)
 
-    outdir = os.path.join(tmpdir,'download')
+    outdir = os.path.join(basedir,'download')
     print('Output directory =',outdir)
     if os.path.exists(outdir)==False:
         os.makedirs(outdir)
