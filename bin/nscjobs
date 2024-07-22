@@ -44,7 +44,7 @@ def taccifyname(filename):
 if __name__ == "__main__":
     # Run lots of NSC jobs
     parser = ArgumentParser(description='Run NSC jobs')
-    parser.add_argument('stage', type=str, nargs=1, help='Stage (measure, calibrate or combine)')
+    parser.add_argument('stage', type=str, nargs=1, help='Stage (download, measure, calibrate or combine)')
     parser.add_argument('inputfile', type=str, nargs=1, help='Input list filename')
     parser.add_argument('version', type=str, nargs=1, help='NSC version')
     parser.add_argument('--host',type=str,nargs=1,default="None",help='hostname, default "None", other options supported are "cca","tempest_katie","tempest_group","gp09/7","tacc"')
@@ -133,10 +133,30 @@ if __name__ == "__main__":
           ('outfile',str,1000),('errfile',str,1000),('dir',str,1000)] 
     logtime = datetime.now().strftime("%Y%m%d%H%M%S")
 
+
+    ##############################################################################
+    # Download
+    #============
+    if stage=='download':
+        script = 'nsc_download'
+        label ='download'
+        cmd = script+' '+os.path.abspath(inputfile)+' '+version+' --host '+host+' --maximages '+str(maxtasks)
+        logfile = os.path.join(tmpdir,'download','download.'+logtime+'.log')
+        if os.path.exists(os.path.dirname(logfile))==False:
+            os.makedirs(os.path.dirname(logfile))
+        # Put information in the tasks table
+        tasks = Table(np.zeros(1,dtype=np.dtype(dt)))
+        tasks['cmd'][0] = cmd
+        tasks['name'][0] = 'download.'+logtime
+        tasks['outfile'][0] = logfile 
+        tasks['errfile'][0] = logfile.replace('.log','.err')
+        tasks['dir'][0] = os.path.dirname(logfile)
+        nodes = 1
+        
     ##############################################################################
     # Measurement
     #============
-    if stage=='meas' or stage=='measure' or stage=='measurement':
+    elif stage=='meas' or stage=='measure' or stage=='measurement':
         script = 'nsc_instcal_measure'
         label = 'measure'
         if isinstance(inputdata,Table)==False:
@@ -371,7 +391,7 @@ if __name__ == "__main__":
             if os.path.exists(outfile) and redo==False:
                 print(outfile,' ALREADY EXISTS.  Skipping')
                 continue
-            # Skip information in the tasks table
+            # Put information in the tasks table
             tasks['cmd'][cnt] = cmd
             tasks['name'][cnt] = base
             tasks['output'][cnt] = outfile
@@ -525,6 +545,9 @@ if __name__ == "__main__":
         print('Using nscjob_manager')
         out = slrm.submit(tasks,stage,nodes=nodes,version=version,partition=partition,
                           host=host,walltime=walltime,slurmdir=slurmdir,verbose=True)
+    elif stage=='download':
+        key,jobid = slurm.submit(tasks,label,nodes=1,cpus=1,partition=partition,
+                                 walltime=walltime,slurmroot=slurmroot)
     else:
         slurmdir,key,jobid = slurm.launcher(tasks,label,nodes=nodes,nparallel=nparallel,
                                             account=None,partition=partition,walltime=walltime,

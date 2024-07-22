@@ -29,6 +29,7 @@ import socket
 import sys
 import time
 import requests
+from requests.adapters import HTTPAdapter, Retry
 #from astropy.utils.exceptions import AstropyWarning
 #import socket
 #from scipy.signal import convolve2d
@@ -2086,7 +2087,11 @@ def download_from_archive(md5sum,outdir='./'):
     url = urlbase+md5sum+'/'
     print(url)
     try:
-        resp = requests.get(url,timeout=1000)
+        s = requests.Session()
+        retries = Retry(total=5,backoff_factor=0.1,
+                        status_forcelist=[ 500, 502, 503, 504 ])
+        s.mount('http://', HTTPAdapter(max_retries=retries))
+        resp = s.get(url,timeout=1000)
         status = 0    # success
     except:
         print('Problem downloading data from archive')
