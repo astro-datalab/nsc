@@ -87,8 +87,10 @@ if __name__ == "__main__":
     if partition=='':
         if host=='tacc':
             partition = 'small'
+            account = None
         elif host.lower()[:7]=='tempest':
             partition = 'priority'
+            account = 'priority-davidnidever'
             
     print('Input Parameters:')
     print('-----------------')
@@ -129,6 +131,9 @@ if __name__ == "__main__":
     if not os.path.exists(tmpdir):
         os.makedirs(tmpdir)
 
+    if 'tempest' in host:
+        download_dir = os.path.join(tmpdir,'download')
+        
     dt = [('cmd',str,1000),('name',str,1000),('output',str,1000),
           ('outfile',str,1000),('errfile',str,1000),('dir',str,1000)] 
     logtime = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -252,12 +257,17 @@ if __name__ == "__main__":
                 if fluxfile[:9]=='/net/mss1' or wtfile[:9]=='/net/mss1' or maskfile[:9]=='/net/mss1':
                     print('Exposure files not at TACC yet. SKIPPING')
                     continue
-            # Need to download files on tempest
-            #   use md5sum as filenames
-            if host.startswith('tempest'):
-                fluxfile = inputdata['fluxmd5sum'][i]
-                wtfile = inputdata['wtmd5sum'][i]
-                maskfile = inputdata['maskmd5sum'][i]
+            # One tempest files are downloaded by the nsc_download script
+            if 'tempest' in host:
+                fluxfile = os.path.join(download_dir,os.path.basename(inputdata['fluxfile'][i]))
+                wtfile = os.path.join(download_dir,os.path.basename(inputdata['wtfile'][i]))
+                maskfile = os.path.join(download_dir,os.path.basename(inputdata['maskfile'][i]))                
+            ## Need to download files on tempest
+            ##   use md5sum as filenames
+            #if host.startswith('tempest'):
+            #    fluxfile = inputdata['fluxmd5sum'][i]
+            #    wtfile = inputdata['wtmd5sum'][i]
+            #    maskfile = inputdata['maskmd5sum'][i]
             # Check that all three files exist
             else:
                 infiles = [fluxfile,wtfile,maskfile]
@@ -540,18 +550,27 @@ if __name__ == "__main__":
             os.makedirs(slurmroot)
 
     # For measurement on Tempest we'll use our own job manager/launcher per mode
-    if stage.lower()[:4]=='meas' and host.lower().startswith('tempest'):
-        slurmdir = os.path.join(os.path.expanduser('~'),'slurm')
-        print('Using nscjob_manager')
-        out = slrm.submit(tasks,stage,nodes=nodes,version=version,partition=partition,
-                          host=host,walltime=walltime,slurmdir=slurmdir,verbose=True)
-    elif stage=='download':
+    #if stage.lower()[:4]=='meas' and host.lower().startswith('tempest'):
+    #    slurmdir = os.path.join(os.path.expanduser('~'),'slurm')
+    #    print('Using nscjob_manager')
+    #    out = slrm.submit(tasks,stage,nodes=nodes,version=version,partition=partition,
+    #                      host=host,walltime=walltime,slurmdir=slurmdir,verbose=True)
+    if stage=='download':
         key,jobid = slurm.submit(tasks,label,nodes=1,cpus=1,partition=partition,
                                  walltime=walltime,slurmroot=slurmroot)
     else:
+        if host[:7]=='tempest':
+            #export LAUNCHER_DIR=/home/x51j468/projects/launcher
+            #export LAUNCHER_WORKDIR=/home/x51j468
+            #export LAUNCHER_JOB_FILE=/home/x51j468/test_cmds.lst
+            #export LAUNCHER_PPN=10
+            precommands = ['export LAUNCHER_DIR=/home/x51j468/projects/launcher']
+            precommands += ['export LAUNCHER_PPN='+str(ppn)]
+        else:
+            precommands = None
         slurmdir,key,jobid = slurm.launcher(tasks,label,nodes=nodes,nparallel=nparallel,
-                                            account=None,partition=partition,walltime=walltime,
-                                            notification=True,stagger=True,
+                                            account=account,partition=partition,walltime=walltime,
+                                            notification=True,stagger=True,precommands=precommands,
                                             slurmroot=slurmroot,verbose=True)
         # Write list of output directories
         dln.writelines(os.path.join(slurmdir,label+'_outdir.lst'),tasks['dir'].data.astype(str))

@@ -88,7 +88,17 @@ if __name__ == "__main__":
         fluxfile = files['fluxfile']
         wtfile = files['wtfile']
         maskfile = files['maskfile']
-            
+
+    # Tempest images are in the download directory
+    if host[:7]=='tempest' and 'download' in fluxfile:
+        # Need to wait until the files are downloaded
+        while (True):
+            if os.path.exists(fluxfile) and os.path.exists(wtfile) and os.path.exists(maskfile):
+                break
+            else:
+                print(time.asctime(),'files not found. waiting')
+                time.sleep(60)
+        
     # Check that the files exist
     if os.path.exists(fluxfile) is False:
         print(fluxfile+" file NOT FOUND")
