@@ -81,7 +81,8 @@ class Exposure:
         self.logfile = base+".log"
         self.logger = None
         self.origdir = None
-        self.wdir = None     # the temporary working directory
+        self.workdir = None     # the temporary working directory
+        self.keepdir = None     # where to keep the final files before bundling
         self.outdir = None
         self.chip = None
 
@@ -116,7 +117,7 @@ class Exposure:
         basedir,tmproot = utils.getnscdirs(self.nscversion,self.host)
         print("dirs, setup = ",basedir,tmproot)
         # Prepare temporary directory
-        tmpcntr = 1#L 
+        tmpcntr = 1
         tmpdir = os.path.join(tmproot,self.base+"."+str(tmpcntr))
         print("temp dir = ",tmpdir)
         while (os.path.exists(tmpdir)):
@@ -125,11 +126,13 @@ class Exposure:
             if tmpcntr > 20:
                 print("Temporary Directory counter getting too high. Exiting")
                 sys.exit()
-        os.mkdir(tmpdir)
+        if os.path.exist(tmpdir)==False:
+            os.makedirs(tmpdir)
         origdir = os.getcwd()
         self.origdir = origdir
         os.chdir(tmpdir)
-        self.wdir = tmpdir
+        self.workdir = tmpdir
+        self.keepdir = os.path.join(tmpdir,'keep')
 
         # Set up logging to screen and logfile
         logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
@@ -252,18 +255,27 @@ class Exposure:
 
     # Teardown
     def teardown(self):
+        # Move the final log file
+        shutil.move(self.logfile,os.path.join(self.keepdir,self.base+".log"))        
+        # Bundle files in the "keep" directory
+        utils.concatmeas(self.keepdir)        
+        # Move the final bundled files
+        finalfiles = [os.path.join(self.outdir,self.base,f) for f in ['_meas.fits','.tgz','.log']]
+        for f in finalfiles:
+            if os.path.exists(f):
+                self.logger.info('Moving',f,'to',self.outdir)
+                shutil.move(f,os.path.join(self.outdir,os.path.basename(f)))
+            else:
+                self.logger.info(f,'not found')
         # Delete files and temporary directory
         self.logger.info("Deleting files and temporary directory.")
-        # Move the final log file
-        shutil.move(self.logfile,os.path.join(self.outdir,self.base+".log"))
-        # Delete temporary files and directory
-        tmpfiles = glob("*")
-        for f in tmpfiles: os.remove(f)
-        os.rmdir(self.wdir)
+        ## Delete temporary files and directory
+        #tmpfiles = glob("*")
+        #for f in tmpfiles: os.remove(f)
+        #os.rmdir(self.workdir)
+        shutil.rmtree(self.workdir)
         # CD back to original directory
         os.chdir(self.origdir)
-        # Compress exposure directory
-        utils.concatmeas(self.outdir)
         #os.chdir("/".join(self.outdir.split("/")[:-2])) # go to one directory above outdir
         #reponame = self.outdir.split("/")[-2]+".tar"
         #outdirname = self.outdir.split("/")[-2]
@@ -969,29 +981,30 @@ class Chip:
     # Clean up the files
     #--------------------
     def cleanup(self):
-        self.logger.info("Copying final files to output directory "+self.outdir)
+        # Move files we want to keep to temporary "keep" subdirectory
+        self.logger.info("Copying final files to 'keep' directory "+self.keepdir)
         base = os.path.basename(self.fluxfile)
         base = os.path.splitext(os.path.splitext(base)[0])[0]
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
         # Copy the files we want to keep
         # final combined catalog, logs
-        outcatfile = os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".fits")
+        outcatfile = os.path.join(self.keepdir,self.bigbase+"_"+str(self.ccdnum)+".fits")
         if os.path.exists(outcatfile): os.remove(outcatfile)
         shutil.copyfile("flux.cat.fits",outcatfile)
         # Copy DAOPHOT opt files
-        outoptfile = os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".opt")
+        outoptfile = os.path.join(self.keepdir,self.bigbase+"_"+str(self.ccdnum)+".opt")
         if os.path.exists(outoptfile): os.remove(outoptfile)
         shutil.copyfile(daobase+".opt",outoptfile)
-        outalsoptfile = os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".als.opt")
+        outalsoptfile = os.path.join(self.keepdir,self.bigbase+"_"+str(self.ccdnum)+".als.opt")
         if os.path.exists(outalsoptfile): os.remove(outalsoptfile)
         shutil.copyfile(daobase+".als.opt",outalsoptfile)
         # Copy DAOPHOT PSF star list
-        outlstfile = os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".psf.lst")
+        outlstfile = os.path.join(self.keepdir,self.bigbase+"_"+str(self.ccdnum)+".psf.lst")
         if os.path.exists(outlstfile): os.remove(outlstfile)
         shutil.copyfile(daobase+".lst",outlstfile)
         # Copy DAOPHOT PSF file
-        outpsffile = os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".psf")
+        outpsffile = os.path.join(self.keepdir,self.bigbase+"_"+str(self.ccdnum)+".psf")
         if os.path.exists(outpsffile): os.remove(outpsffile)
         shutil.copyfile(daobase+".psf",outpsffile)
         # Copy DAOPHOT .apers file??
@@ -999,26 +1012,26 @@ class Chip:
         #for i in range(0,int(self.subiter-1)):
         #    if int(i)==int(self.subiter-2): nsub=""
         #    else:nsub=str(i+1)
-        #    outnsubfile=self.outdir+self.bigbase+"_"+str(self.ccdnum)+"_"+nsub+"a.fits"
+        #    outnsubfile=self.keepdir+self.bigbase+"_"+str(self.ccdnum)+"_"+nsub+"a.fits"
         #    nsubfile=daobase+nsub+"a.fits"
         #    if os.path.exists(outnsubfile): os.remove(outnsubfile)
         #    shutil.copyfile(nsubfile,outnsubfile)
         # Copy daophot-ready image to output dir
-        #outdimfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+"daoim.fits"
+        #outdimfile = self.keepdir+self.bigbase+"_"+str(self.ccdnum)+"daoim.fits"
         #if os.path.exists(outdimfile): os.remove(outdimfile)
         #shutil.copyfile(daobase+".fits",outdimfile)
         # copy Allstar PSF subtracted files to output dir #ktedit
         #for i in range(1,int(self.sexiter)):
-        #    outsubfile = self.outdir+self.bigbase+"_"+str(self.ccdnum)+"_"+str(i)+"s.fits"
+        #    outsubfile = self.keepdir+self.bigbase+"_"+str(self.ccdnum)+"_"+str(i)+"s.fits"
         #    if os.path.exists(outsubfile): os.remove(outsubfile)
         #    shutil.copyfile(daobase+str(i)+"s.fits",outsubfile)
         # Copy SE config file
-        outconfigfile = os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".sex.config")
+        outconfigfile = os.path.join(self.keepdir,self.bigbase+"_"+str(self.ccdnum)+".sex.config")
         if os.path.exists(outconfigfile): os.remove(outconfigfile)
         shutil.copyfile("default.config",outconfigfile)
         # Copy SE segmentation files       #ktedit:sex2
         #for i in range(1,int(self.sexiter)):
-        #    outsegfile=self.outdir+self.bigbase+"_"+str(self.ccdnum)+"_"+str(i)+"seg.fits"
+        #    outsegfile=self.keepdir+self.bigbase+"_"+str(self.ccdnum)+"_"+str(i)+"seg.fits"
         #    if os.path.exists(outsegfile): os.remove(outsegfile)
         #    shutil.copyfile("seg_"+str(i)+".fits",outsegfile)
 
@@ -1035,7 +1048,7 @@ class Chip:
         f = open(base+".logs","w")
         f.writelines("".join(loglines))
         f.close()
-        outlogfile =  os.path.join(self.outdir,self.bigbase+"_"+str(self.ccdnum)+".logs")
+        outlogfile =  os.path.join(self.keepdir,self.bigbase+"_"+str(self.ccdnum)+".logs")
         if os.path.exists(outlogfile): os.remove(outlogfile)
         shutil.copyfile(base+".logs",outlogfile)
 

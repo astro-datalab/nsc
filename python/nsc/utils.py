@@ -2070,7 +2070,8 @@ def getnscdirs(version=None,host=None):
     elif host=="tacc":
         #basedir = '/corral/projects/NOIRLab/nsc/instcal/'+verdir
         basedir = os.path.join('/scratch1/09970/dnidever/nsc/instcal/',verdir)
-        tmproot = os.path.join('/scratch1/09970/dnidever/nsc/',verdir,'tmp')
+        #tmproot = os.path.join('/scratch1/09970/dnidever/nsc/',verdir,'tmp')
+        tmproot = os.path.join('tmp',os.getlogin(),'nsc',verdir)
     else:
         basedir = os.getcwd()
         tmproot = os.path.join(basedir,"tmp")
