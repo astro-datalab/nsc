@@ -19,6 +19,8 @@ import logging
 import numpy as np
 import os
 import re
+from pwd import getpwuid
+from grp import getgrgid
 from scipy.signal import medfilt
 from scipy.ndimage.filters import median_filter,gaussian_filter1d
 from scipy.optimize import curve_fit, least_squares
@@ -2044,6 +2046,11 @@ def concatmeas(expdir,deletetruncated=False):
 
 # Get NSC directories
 def getnscdirs(version=None,host=None):
+    # username
+    try:
+        username = getpwuid(os.getuid())[0]
+    except:
+        username = 'defaultuser'
     # Version
     verdir = ""
     if version is not None:
@@ -2064,7 +2071,7 @@ def getnscdirs(version=None,host=None):
     elif host=="tempest_group":
         basedir = os.path.join("/home/group/davidnidever/nsc/instcal/",verdir)
         #tmproot = os.path.join(basedir,"tmp")
-        tmproot = os.path.join('tmp',os.getlogin(),'nsc','instcal',verdir)
+        tmproot = os.path.join('/tmp',username,'nsc','instcal',verdir)
     elif host=="cca":
         basedir = os.path.join('/mnt/home/dnidever/ceph/nsc/instcal/',verdir)
         tmproot = os.path.join('/mnt/home/dnidever/ceph/nsc/',verdir,'tmp')
@@ -2072,7 +2079,7 @@ def getnscdirs(version=None,host=None):
         #basedir = '/corral/projects/NOIRLab/nsc/instcal/'+verdir
         basedir = os.path.join('/scratch1/09970/dnidever/nsc/instcal/',verdir)
         #tmproot = os.path.join('/scratch1/09970/dnidever/nsc/',verdir,'tmp')
-        tmproot = os.path.join('tmp',os.getlogin(),'nsc',verdir)
+        tmproot = os.path.join('/tmp',username,'nsc',verdir)
     else:
         basedir = os.getcwd()
         tmproot = os.path.join(basedir,"tmp")

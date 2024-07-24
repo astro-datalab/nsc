@@ -16,6 +16,7 @@ import logging
 import socket
 from datetime import datetime
 from argparse import ArgumentParser
+from dlnpyutils import utils as dln
 from nsc import utils
 
 # This drives nsc tasks on a single process 
@@ -65,7 +66,7 @@ if __name__ == "__main__":
 
     # Input must be a tasks table fits file
     print('Loading',tasksfile)
-    tasks = Table.read(tasksfile)
+    tasks = dln.readlines(tasksfile)
     print(len(tasks),'tasks')
 
     # Get NSC directories                                                                                     
@@ -89,7 +90,7 @@ if __name__ == "__main__":
             ind = int(res)
         
         # Get task command
-        cmd = tasks['cmd'][ind-1]
+        cmd = tasks[ind-1]
         res = subprocess.call(cmd,capture_output=True)
         print('dt = {:.1f} sec'.format(time.time()-t0))
                

@@ -266,7 +266,7 @@ def nsclauncher(tasks,label,nodes=1,cpus=64,version='v4',account='priority-david
             lines += ['#SBATCH --account='+account]
         if partition is not None:
             lines += ['#SBATCH --partition='+partition]
-        lines += ['#SBATCH --nodes=1']
+        lines += ['#SBATCH --nodes=1']        
         lines += ['#SBATCH --ntasks='+str(cpus)]
         lines += ['#SBATCH --mem-per-cpu='+str(memory)]
         lines += ['#SBATCH --cpus-per-task=1']
@@ -307,7 +307,8 @@ def nsclauncher(tasks,label,nodes=1,cpus=64,version='v4',account='priority-david
         lines += ['#SBATCH --account='+account]
     if partition is not None:
         lines += ['#SBATCH --partition='+partition]
-    lines += ['#SBATCH --nodes=1']
+    #lines += ['#SBATCH --nodes=1']
+    lines += ['#SBATCH --nodes='+str(nodes)]
     #lines += ['#SBATCH --ntasks='+str(nproc)]
     lines += ['#SBATCH --mem-per-cpu='+str(memory)]
     lines += ['#SBATCH --cpus-per-task=1']
