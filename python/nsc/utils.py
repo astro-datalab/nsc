@@ -2138,7 +2138,7 @@ def download_from_archive(md5sum,outdir='./'):
 
 def taskcount(netcathost='localhost',netcatport=9471):
     """ Get a new task number from the task server."""
-    cmd = 'echo \'{"hostUp": true}\' | nc '+netcathost+' '+netcatport
+    cmd = 'echo \'{"hostUp": true}\' | nc '+netcathost+' '+str(netcatport)
     res = subprocess.run(cmd,shell=True,capture_output=True)
     val = res.stdout
     if isinstance(val,bytes):

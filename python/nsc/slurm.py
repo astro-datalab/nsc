@@ -337,8 +337,9 @@ def nsclauncher(tasks,label,nodes=1,cpus=64,version='v4',account='priority-david
     lines += ["export LAUNCHER_NJOBS=`wc -l $LAUNCHER_JOB_FILE | awk '{print $1}'`"]
     lines += ['']
     # Start the taskserver
-    lines += ['NETCATHOST=$HOSTNAME']    
-    lines += ['/home/x51j468/projects/launcher/tskserver $NETCATHOST 9471 2>/dev/null &']
+    lines += ['NETCATHOST=$HOSTNAME']
+    tskserverlog = os.path.join(jobdir,'tskserver.log')
+    lines += ['nsctskserver '+str(nprocs)+' $NETCATHOST 9471 2> '+tskserverlog+' &']
     lines += ['LAUNCHER_DYN_PID=$!']
     lines += ['disown $LAUNCHER_DYN_PID']
     lines += ['sleep 1s']
