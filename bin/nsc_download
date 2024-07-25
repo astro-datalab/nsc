@@ -107,13 +107,14 @@ if __name__ == "__main__":
                 base = os.path.basename(inputdata['fluxfile'][imcount])
                 if base.endswith('.fits.fz'): base=base[:-8]
                 if base.endswith('.fits'): base=base[:-5]                
-                obsdate = inputdata['date_obs'][imcount]
+                dateobs = inputdata['date_obs'][imcount]
                 instrument = 'c4d'  # assume decam for now
                 night = dateobs[:4]+dateobs[5:7]+dateobs[8:10]
-                outdir = os.path.join(basedir,instrument,night[:4],night,base)
-                outfile = os.path.join(outdir,base+'_meas.fits')
+                measdir = os.path.join(basedir,instrument,night[:4],night,base)
+                outfile = os.path.join(measdir,base+'_meas.fits')
                 if os.path.exists(outfile) and redo==False:
                     print(outfile,' ALREADY EXISTS.  Skipping')
+                    imcount += 1
                     continue
             print('----- Downloading images for exposure =',inputdata['base'][imcount],'-----')
             ofluxfile = os.path.join(outdir,os.path.basename(inputdata['fluxfile'][imcount]))
