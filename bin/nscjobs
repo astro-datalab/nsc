@@ -52,6 +52,7 @@ if __name__ == "__main__":
     parser.add_argument('--walltime',type=str,nargs=1,default='2-00:00:00',help='Slurm job runtime')
     parser.add_argument('--maxtasks',type=int,nargs=1,default=20000,help='Maximum number of tasks to run')
     parser.add_argument('--nodes',type=int,nargs=1,default=0,help='Number of nodes')
+    parser.add_argument('--stagger',type=int,nargs=1,default=60,help='Stagger time')
     parser.add_argument('--delete',action='store_true',help='Delete image files at end')
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
     args = parser.parse_args()
@@ -80,6 +81,10 @@ if __name__ == "__main__":
     else:
         nodes = args.nodes
     if nodes==0: nodes=None
+    if isinstance(args.stagger,list):
+        stagger = args.stagger[0]
+    else:
+        stagger = args.stagger
     delete = args.delete
     redo = args.redo                         # if called, redo = True
 
@@ -101,6 +106,8 @@ if __name__ == "__main__":
     print('maxtasks =',maxtasks)
     if nodes is not None:
         print('nodes =',nodes)
+    print('stagger =',stagger)
+    print('delete =',delete)
     print('redo =',redo)
 
     # Check that the input file exists
@@ -287,6 +294,8 @@ if __name__ == "__main__":
                 cmd += ' --redo'
             if delete:
                 cmd += ' --delete'
+            if stagger>0:
+                cmd += ' --stagger '+str(stagger)
             # Check output filename
             if base[:3]=='c4d':
                 night = '20'+base[4:10]
