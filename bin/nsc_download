@@ -27,7 +27,9 @@ if __name__ == "__main__":
     parser.add_argument('inputfile', type=str, nargs=1, help='Input list filename')
     parser.add_argument('version', type=str, nargs=1, help='NSC version')
     parser.add_argument('--host',type=str,nargs=1,default="None",help='hostname, default "None", other options supported are "cca","tempest_katie","tempest_group","gp09/7","tacc"')
+    parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
     parser.add_argument('--maximages',type=int,nargs=1,default=100,help='Maximum number of images to have downloaded')    
+    
     args = parser.parse_args()
 
     # Inputs
@@ -36,6 +38,7 @@ if __name__ == "__main__":
     if version=="None": version = None
     host = str(args.host[0])                 # hostname of server, default "None"                  
     if host=="None": host = None
+    redo = args.redo
     if isinstance(args.maximages,list):       # maximum number of files to have downloaded at the same time
         maximages = args.maximages[0]
     else:
@@ -46,6 +49,7 @@ if __name__ == "__main__":
     print('inputfile =',inputfile)
     print('version =',version)
     print('host =',host)
+    print('redo =',redo)
     print('maximages =',maximages)
 
     # Check that the input file exists
@@ -81,7 +85,6 @@ if __name__ == "__main__":
     count = 0
     imcount = 0
     while (True):
-
         # Check how many files are in the output directory
         files = os.listdir(outdir)
         files = [f for f in files if f.find('.fits')>-1]
@@ -99,6 +102,19 @@ if __name__ == "__main__":
         else:
             print(time.asctime())
             print(nfiles,'files out of',maximages,'files maximum')
+            # Check if output files exist for this exposure
+            if redo==False:
+                base = os.path.basename(inputdata['fluxfile'][imcount])
+                if base.endswith('.fits.fz'): base=base[:-8]
+                if base.endswith('.fits'): base=base[:-5]                
+                obsdate = inputdata['date_obs'][imcount]
+                instrument = 'c4d'  # assume decam for now
+                night = dateobs[:4]+dateobs[5:7]+dateobs[8:10]
+                outdir = os.path.join(basedir,instrument,night[:4],night,base)
+                outfile = os.path.join(outdir,base+'_meas.fits')
+                if os.path.exists(outfile) and redo==False:
+                    print(outfile,' ALREADY EXISTS.  Skipping')
+                    continue
             print('----- Downloading images for exposure =',inputdata['base'][imcount],'-----')
             ofluxfile = os.path.join(outdir,os.path.basename(inputdata['fluxfile'][imcount]))
             if os.path.exists(ofluxfile)==False:
