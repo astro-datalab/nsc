@@ -2095,6 +2095,7 @@ def download_from_archive(md5sum,outdir='./'):
     print('Downloading md5sum =',md5sum)
     url = urlbase+md5sum+'/'
     print(url)
+    resp = None
     try:
         s = requests.Session()
         retries = Retry(total=5,backoff_factor=0.1,
@@ -2105,7 +2106,10 @@ def download_from_archive(md5sum,outdir='./'):
     except:
         print('Problem downloading data from archive')
         traceback.print_exc()
-        status = resp.status_code
+        if resp is not None and hasattr(resp,'status_code'):
+            status = resp.status_code
+        else:
+            status = 1
         return status,''
     # The "headers" has a "filename" keyword.
     # resp.headers['Content-Disposition']
