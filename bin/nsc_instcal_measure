@@ -102,7 +102,7 @@ if __name__ == "__main__":
             if os.path.exists(fluxfile) and os.path.exists(wtfile) and os.path.exists(maskfile):
                 break
             else:
-                print(time.asctime(),'files not found. waiting')
+                print(time.asctime(),'\nfiles not found. waiting')
                 time.sleep(60)
         
     # Check that the files exist

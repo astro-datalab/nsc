@@ -297,6 +297,7 @@ class Exposure:
         #tmpfiles = glob("*")
         #for f in tmpfiles: os.remove(f)
         #os.rmdir(self.workdir)
+        self.logger.info('Removing '+self.workdir)
         shutil.rmtree(self.workdir)
         # CD back to original directory
         os.chdir(self.origdir)
