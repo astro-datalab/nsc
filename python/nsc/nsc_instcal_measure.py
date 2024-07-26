@@ -280,17 +280,17 @@ class Exposure:
     # Teardown
     def teardown(self):
         # Move the final log file
-        shutil.move(self.logfile,os.path.join(self.keepdir,self.base+".log"))        
+        shutil.move(self.logfile,os.path.join(self.keepdir,self.base+".log"))
         # Bundle files in the "keep" directory
-        utils.concatmeas(self.keepdir)        
+        utils.concatmeas(self.keepdir,self.base)
         # Move the final bundled files
-        finalfiles = [os.path.join(self.outdir,self.base,f) for f in ['_meas.fits','.tgz','.log']]
+        finalfiles = [os.path.join(self.keepdir,self.base+f) for f in ['_meas.fits','.tgz','.log']]
         for f in finalfiles:
             if os.path.exists(f):
-                self.logger.info('Moving',f,'to',self.outdir)
+                self.logger.info('Moving '+f+' to '+self.outdir)
                 shutil.move(f,os.path.join(self.outdir,os.path.basename(f)))
             else:
-                self.logger.info(f,'not found')
+                self.logger.info(f+'not found')
         # Delete files and temporary directory
         self.logger.info("Deleting files and temporary directory.")
         ## Delete temporary files and directory
