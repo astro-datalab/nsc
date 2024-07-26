@@ -157,23 +157,29 @@ class Exposure:
         fluxfile = "bigflux.fits.fz"
         wtfile = "bigwt.fits.fz"
         maskfile = "bigmask.fits.fz"
-        if self.host=="gp09" or self.host=="gp07": self.logger.info("Copying InstCal images from mass store archive")
-        else: self.logger.info("Copying InstCal images downloaded from Astro Data Archive")
-        #getdata(rawname,self.origfluxfile,self.origwtfile,self.origmaskfile,tmpdir)
-        if delete:
+        if self.delete:
+            self.logger.info('Moving InstCal images to temporary directory')
             newfluxfile = os.path.join(tmpdir,os.path.basename(self.origfluxfile))
             if os.path.exists(newfluxfile): os.remove(newfluxfile)
             shutil.move(self.origfluxfile,newfluxfile)
             self.origfluxfile = newfluxfile
+            os.symlink(os.path.basename(self.origfluxfile),fluxfile)
             newwtfile = os.path.join(tmpdir,os.path.basename(self.origwtfile))
             if os.path.exists(newwtfile): os.remove(newwtfile)
             shutil.move(self.origwtfile,newwtfile)
             self.origwtfile = newwtfile
+            os.symlink(os.path.basename(self.origwtfile),wtfile)
             newmaskfile = os.path.join(tmpdir,os.path.basename(self.origmaskfile))
             if os.path.exists(newmaskfile): os.remove(newmaskfile)
             shutil.move(self.origmaskfile,newmaskfile)
             self.origmaskfile = newmaskfile
+            os.symlink(os.path.basename(self.origmaskfile),maskfile)
         else:
+            if self.host=="gp09" or self.host=="gp07":
+                self.logger.info("Copying InstCal images from mass store archive")
+            else:
+                self.logger.info("Copying InstCal images downloaded from Astro Data Archive")
+            #getdata(rawname,self.origfluxfile,self.origwtfile,self.origmaskfile,tmpdir)            
             shutil.copyfile(self.origfluxfile,os.path.join(tmpdir,os.path.basename(self.origfluxfile)))
             self.logger.info("  "+self.origfluxfile)
             if (os.path.basename(self.origfluxfile) != fluxfile):
