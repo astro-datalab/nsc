@@ -126,14 +126,16 @@ class Exposure:
             if tmpcntr > 20:
                 print("Temporary Directory counter getting too high. Exiting")
                 sys.exit()
-        if os.path.exist(tmpdir)==False:
+        if os.path.exists(tmpdir)==False:
             os.makedirs(tmpdir)
         origdir = os.getcwd()
         self.origdir = origdir
         os.chdir(tmpdir)
         self.workdir = tmpdir
         self.keepdir = os.path.join(tmpdir,'keep')
-
+        if os.path.exists(self.keepdir)==False:
+            os.makedirs(self.keepdir)
+        
         # Set up logging to screen and logfile
         logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
         rootLogger = logging.getLogger()
@@ -220,6 +222,7 @@ class Exposure:
         self.chip.bigextension = extension
         self.chip.nscversion = self.nscversion
         self.chip.outdir = self.outdir
+        self.chip.keepdir = self.keepdir
         # Add logger information
         self.chip.logger = self.logger
         return True
@@ -329,6 +332,7 @@ class Chip:
         base = os.path.splitext(os.path.splitext(base)[0])[0]
         self.dir = os.path.abspath(os.path.dirname(fluxfile))
         self.base = base
+        self.keepdir = None
         header = fits.getheader(fluxfile)
         # Fix early decam headers
         if header["DTINSTRU"]!='mosaic3' and header["DTINSTRU"]!='90primt':
