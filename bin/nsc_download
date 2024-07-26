@@ -114,6 +114,13 @@ if __name__ == "__main__":
                 outfile = os.path.join(measdir,base+'_meas.fits')
                 if os.path.exists(outfile) and redo==False:
                     print(outfile,' ALREADY EXISTS.  Skipping')
+                    # Deleting these files if they were already downloaded
+                    ofluxfile = os.path.join(outdir,os.path.basename(inputdata['fluxfile'][imcount]))
+                    if os.path.exists(ofluxfile): os.remove(ofluxfile)
+                    owtfile = os.path.join(outdir,os.path.basename(inputdata['wtfile'][imcount]))
+                    if os.path.exists(owtfile): os.remove(owtfile)
+                    omaskfile = os.path.join(outdir,os.path.basename(inputdata['maskfile'][imcount]))
+                    if os.path.exists(omaskfile): os.remove(omaskfile)
                     imcount += 1
                     continue
             print('----- Downloading images for exposure =',inputdata['base'][imcount],'-----')
