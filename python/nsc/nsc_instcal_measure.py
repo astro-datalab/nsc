@@ -55,7 +55,7 @@ else:
 class Exposure:
 
     # Initialize Exposure object
-    def __init__(self,fluxfile,wtfile,maskfile,nscversion,host): #"t3a"):
+    def __init__(self,fluxfile,wtfile,maskfile,nscversion,host,delete=True):
         # Check that the files exist
         if os.path.exists(fluxfile) is False:
             print(fluxfile+" NOT found")
@@ -66,6 +66,7 @@ class Exposure:
         if os.path.exists(maskfile) is False:
             print(maskfile+" NOT found")
             return
+        self.delete = delete  # delete original files
         # Setting up the object properties
         self.origfluxfile = fluxfile
         self.origwtfile = wtfile
@@ -159,18 +160,32 @@ class Exposure:
         if self.host=="gp09" or self.host=="gp07": self.logger.info("Copying InstCal images from mass store archive")
         else: self.logger.info("Copying InstCal images downloaded from Astro Data Archive")
         #getdata(rawname,self.origfluxfile,self.origwtfile,self.origmaskfile,tmpdir)
-        shutil.copyfile(self.origfluxfile,os.path.join(tmpdir,os.path.basename(self.origfluxfile)))
-        self.logger.info("  "+self.origfluxfile)
-        if (os.path.basename(self.origfluxfile) != fluxfile):
-            os.symlink(os.path.basename(self.origfluxfile),fluxfile)
-        shutil.copyfile(self.origwtfile,os.path.join(tmpdir,os.path.basename(self.origwtfile)))
-        self.logger.info("  "+self.origwtfile)
-        if (os.path.basename(self.origwtfile) != wtfile):
-            os.symlink(os.path.basename(self.origwtfile),wtfile)
-        shutil.copyfile(self.origmaskfile,os.path.join(tmpdir,os.path.basename(self.origmaskfile)))
-        self.logger.info("  "+self.origmaskfile)
-        if (os.path.basename(self.origmaskfile) != maskfile):
-            os.symlink(os.path.basename(self.origmaskfile),maskfile)
+        if delete:
+            newfluxfile = os.path.join(tmpdir,os.path.basename(self.origfluxfile))
+            if os.path.exists(newfluxfile): os.remove(newfluxfile)
+            shutil.move(self.origfluxfile,newfluxfile)
+            self.origfluxfile = newfluxfile
+            newwtfile = os.path.join(tmpdir,os.path.basename(self.origwtfile))
+            if os.path.exists(newwtfile): os.remove(newwtfile)
+            shutil.move(self.origwtfile,newwtfile)
+            self.origwtfile = newwtfile
+            newmaskfile = os.path.join(tmpdir,os.path.basename(self.origmaskfile))
+            if os.path.exists(newmaskfile): os.remove(newmaskfile)
+            shutil.move(self.origmaskfile,newmaskfile)
+            self.origmaskfile = newmaskfile
+        else:
+            shutil.copyfile(self.origfluxfile,os.path.join(tmpdir,os.path.basename(self.origfluxfile)))
+            self.logger.info("  "+self.origfluxfile)
+            if (os.path.basename(self.origfluxfile) != fluxfile):
+                os.symlink(os.path.basename(self.origfluxfile),fluxfile)
+            shutil.copyfile(self.origwtfile,os.path.join(tmpdir,os.path.basename(self.origwtfile)))
+            self.logger.info("  "+self.origwtfile)
+            if (os.path.basename(self.origwtfile) != wtfile):
+                os.symlink(os.path.basename(self.origwtfile),wtfile)
+            shutil.copyfile(self.origmaskfile,os.path.join(tmpdir,os.path.basename(self.origmaskfile)))
+            self.logger.info("  "+self.origmaskfile)
+            if (os.path.basename(self.origmaskfile) != maskfile):
+                os.symlink(os.path.basename(self.origmaskfile),maskfile)
 
         # Set local working filenames
         self.fluxfile = fluxfile
