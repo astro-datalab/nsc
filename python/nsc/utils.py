@@ -19,6 +19,8 @@ import logging
 import numpy as np
 import os
 import re
+from pwd import getpwuid
+from grp import getgrgid
 from scipy.signal import medfilt
 from scipy.ndimage.filters import median_filter,gaussian_filter1d
 from scipy.optimize import curve_fit, least_squares
@@ -1933,7 +1935,7 @@ def file_isfits(filename):
     hdu.close()
     return True
 
-def concatmeas(expdir,deletetruncated=False):
+def concatmeas(expdir,base=None,deletetruncated=False):
     """
     Combine multiple chip-level measurement files into a single multi-extension FITS file.
     """
@@ -1962,7 +1964,8 @@ def concatmeas(expdir,deletetruncated=False):
             import pdb; pdb.set_trace()
 
     os.chdir(expdir)
-    base = os.path.basename(expdir)
+    if base is None:
+        base = os.path.basename(expdir)
     outfile = base+'_meas.fits'
     if os.path.exists(outfile):
         print(outfile,'already exists')
@@ -2044,6 +2047,11 @@ def concatmeas(expdir,deletetruncated=False):
 
 # Get NSC directories
 def getnscdirs(version=None,host=None):
+    # username
+    try:
+        username = getpwuid(os.getuid())[0]
+    except:
+        username = 'defaultuser'
     # Version
     verdir = ""
     if version is not None:
@@ -2063,7 +2071,8 @@ def getnscdirs(version=None,host=None):
         tmproot = os.path.join(basedir,"tmp/")
     elif host=="tempest_group":
         basedir = os.path.join("/home/group/davidnidever/nsc/instcal/",verdir)
-        tmproot = os.path.join(basedir,"tmp")
+        #tmproot = os.path.join(basedir,"tmp")
+        tmproot = os.path.join('/tmp',username,'nsc','instcal',verdir)
     elif host=="cca":
         basedir = os.path.join('/mnt/home/dnidever/ceph/nsc/instcal/',verdir)
         tmproot = os.path.join('/mnt/home/dnidever/ceph/nsc/',verdir,'tmp')
@@ -2071,7 +2080,7 @@ def getnscdirs(version=None,host=None):
         #basedir = '/corral/projects/NOIRLab/nsc/instcal/'+verdir
         basedir = os.path.join('/scratch1/09970/dnidever/nsc/instcal/',verdir)
         #tmproot = os.path.join('/scratch1/09970/dnidever/nsc/',verdir,'tmp')
-        tmproot = os.path.join('tmp',os.getlogin(),'nsc',verdir)
+        tmproot = os.path.join('/tmp',username,'nsc',verdir)
     else:
         basedir = os.getcwd()
         tmproot = os.path.join(basedir,"tmp")
@@ -2087,6 +2096,7 @@ def download_from_archive(md5sum,outdir='./'):
     print('Downloading md5sum =',md5sum)
     url = urlbase+md5sum+'/'
     print(url)
+    resp = None
     try:
         s = requests.Session()
         retries = Retry(total=5,backoff_factor=0.1,
@@ -2097,7 +2107,10 @@ def download_from_archive(md5sum,outdir='./'):
     except:
         print('Problem downloading data from archive')
         traceback.print_exc()
-        status = resp.status_code
+        if resp is not None and hasattr(resp,'status_code'):
+            status = resp.status_code
+        else:
+            status = 1
         return status,''
     # The "headers" has a "filename" keyword.
     # resp.headers['Content-Disposition']
@@ -2126,3 +2139,13 @@ def download_from_archive(md5sum,outdir='./'):
     print('dt = {:.1f} sec'.format(time.time()-t0))
     
     return status,filename
+
+
+def taskcount(netcathost='localhost',netcatport=9471):
+    """ Get a new task number from the task server."""
+    cmd = 'echo \'{"hostUp": true}\' | nc '+netcathost+' '+str(netcatport)
+    res = subprocess.run(cmd,shell=True,capture_output=True)
+    val = res.stdout
+    if isinstance(val,bytes):
+        val = val.decode()
+    return val

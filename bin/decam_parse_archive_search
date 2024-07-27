@@ -38,27 +38,29 @@ def parse_archive_file(filename):
 
     # Initialize the final output catalog
     dt = np.dtype([('instrument',str,10),('base',str,100),('expnum',str,20),('rawname',str,100),
-                   ('date_obs',str,50),('md5sum',str,100),('mjd_obs',np.float64),('filter',str,50),
+                   ('date_obs',str,50),('mjd_obs',np.float64),('filter',str,50),
                    ('prop_id',str,50),('ra',np.float64),('dec',np.float64),('exposure',float),
                    ('release_date',str,50),('plver',str,20),('proctype',str,20),('fluxfile',str,200),
-                   ('maskfile',str,200),('wtfile',str,200)])
-    cat = np.zeros(ngdim,dtype=dt)
-    cat['instrument'] = 'c4d'
-    cat['fluxfile'] = imstr['uri']
+                   ('fluxmd5sum',str,50),('maskfile',str,200),('maskmd5sum',str,50),
+                   ('wtfile',str,200),('wtmd5sum',str,50)])
+    tab = np.zeros(ngdim,dtype=dt)
+    tab['instrument'] = 'c4d'
+    tab['fluxfile'] = imstr['uri']
+    tab['fluxmd5sum'] = imstr['md5sum']
     # Copy over most of the columns
-    cols = ['date_obs','md5sum','mjd_obs','filter','prop_id','ra','dec',
+    cols = ['date_obs','mjd_obs','filter','prop_id','ra','dec',
             'exposure','release_date','plver','proctype']
-    for c in cols: cat[c] = imstr[c].copy()
+    for c in cols: tab[c] = imstr[c].copy()
 
     # rawname and expnum
     for i in range(ngdim):
         rawbase = os.path.basename(imstr['dtacqnam'][i])
         if rawbase[-8:]=='.fits.fz': rawbase=rawbase[:-8]  # trim .fits.fz
-        cat['rawname'][i] = rawbase
-        cat['expnum'][i] = rawbase[6:]
-        base = os.path.basename(cat['fluxfile'][i])
+        tab['rawname'][i] = rawbase
+        tab['expnum'][i] = rawbase[6:]
+        base = os.path.basename(tab['fluxfile'][i])
         if base[-8:]=='.fits.fz': base=base[:-8]  # trim .fits.fz
-        cat['base'][i] = base
+        tab['base'][i] = base
 
     # match to mask and wt files
 
@@ -67,53 +69,55 @@ def parse_archive_file(filename):
     mind, = np.where((archive['proctype'] == 'InstCal') & (archive['prodtype']=='dqmask'))
     marchive = archive[mind]
     mexpnum = expnum[mind].copy()
-    id = dln.strjoin(cat['expnum'],cat['plver'])
+    id = dln.strjoin(tab['expnum'],tab['plver'])
     mid = dln.strjoin(mexpnum,marchive['plver'])
     ind1,ind2 = dln.match(mid,id)
     if len(ind1)>0:
-        cat['maskfile'][ind2] = marchive['uri'][ind1].copy()
+        tab['maskfile'][ind2] = marchive['uri'][ind1].copy()
+        tab['maskmd5sum'][ind2] = marchive['md5sum'][ind1].copy()
     # wt file
     wind, = np.where((archive['proctype'] == 'InstCal') & (archive['prodtype']=='wtmap'))
     warchive = archive[wind]
     wexpnum = expnum[wind].copy()
-    id = dln.strjoin(cat['expnum'],cat['plver'])
+    id = dln.strjoin(tab['expnum'],tab['plver'])
     wid = dln.strjoin(wexpnum,warchive['plver'])
     ind1,ind2 = dln.match(wid,id)
     if len(ind1)>0:
-        cat['wtfile'][ind2] = warchive['uri'][ind1].copy()
+        tab['wtfile'][ind2] = warchive['uri'][ind1].copy()
+        tab['wtmd5sum'][ind2] = warchive['md5sum'][ind1].copy()
 
     # Only keep images with flux, mask and wt files
-    gd, = np.where((cat['fluxfile'] != '') & (cat['maskfile'] != '') & (cat['wtfile'] != ''))
+    gd, = np.where((tab['fluxfile'] != '') & (tab['maskfile'] != '') & (tab['wtfile'] != ''))
     ngd = len(gd)
-    print(str(ngd)+' exposures out of '+str(len(cat))+' have flux/mask/wt files')
-    cat = cat[gd]
+    print(str(ngd)+' exposures out of '+str(len(tab))+' have flux/mask/wt files')
+    tab = tab[gd]
 
-    # Deal with duplicates??
-    nu = len(np.unique(cat['date_obs']))
-    ndup = len(cat)-nu
+    # Deal with duplitabes??
+    nu = len(np.unique(tab['date_obs']))
+    ndup = len(tab)-nu
     if ndup>0:
         print('Dealing with '+str(ndup)+' duplicates')
-        indx = dln.create_index(cat['date_obs'])
+        indx = dln.create_index(tab['date_obs'])
         bd, = np.where(indx['num']>1)
         nbd = len(bd)
         torem = np.zeros(np.sum(indx['num'][bd]-1),int)-1
         cnt = 0
         for i in range(nbd):
             ind = indx['index'][indx['lo'][bd[i]]:indx['hi'][bd[i]]+1]
-            plver = cat['plver'][ind].copy()
+            plver = tab['plver'][ind].copy()
             bestind = np.flip(np.argsort(plver),axis=0)[0]
             torem[cnt:cnt+len(ind)-1] = np.delete(ind,bestind)
             cnt += len(ind)-1
-        cat = np.delete(cat,torem)
+        tab = np.delete(tab,torem)
     else:
         print('There are no duplicates')
 
-    return cat
+    return tab
 
 if __name__ == "__main__":
     filename = sys.argv[1]
     outfile = sys.argv[2]
-    cat = parse_archive_file(filename)
+    tab = parse_archive_file(filename)
     if os.path.exists(outfile): os.remove(outfile)
     print('Writing catalog to '+outfile)
-    Table(cat,copy=False).write(outfile)
+    Table(tab,copy=False).write(outfile)

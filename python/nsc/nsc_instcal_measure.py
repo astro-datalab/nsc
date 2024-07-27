@@ -55,7 +55,7 @@ else:
 class Exposure:
 
     # Initialize Exposure object
-    def __init__(self,fluxfile,wtfile,maskfile,nscversion,host): #"t3a"):
+    def __init__(self,fluxfile,wtfile,maskfile,nscversion,host,delete=True):
         # Check that the files exist
         if os.path.exists(fluxfile) is False:
             print(fluxfile+" NOT found")
@@ -66,6 +66,7 @@ class Exposure:
         if os.path.exists(maskfile) is False:
             print(maskfile+" NOT found")
             return
+        self.delete = delete  # delete original files
         # Setting up the object properties
         self.origfluxfile = fluxfile
         self.origwtfile = wtfile
@@ -126,14 +127,16 @@ class Exposure:
             if tmpcntr > 20:
                 print("Temporary Directory counter getting too high. Exiting")
                 sys.exit()
-        if os.path.exist(tmpdir)==False:
+        if os.path.exists(tmpdir)==False:
             os.makedirs(tmpdir)
         origdir = os.getcwd()
         self.origdir = origdir
         os.chdir(tmpdir)
         self.workdir = tmpdir
         self.keepdir = os.path.join(tmpdir,'keep')
-
+        if os.path.exists(self.keepdir)==False:
+            os.makedirs(self.keepdir)
+        
         # Set up logging to screen and logfile
         logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
         rootLogger = logging.getLogger()
@@ -154,21 +157,41 @@ class Exposure:
         fluxfile = "bigflux.fits.fz"
         wtfile = "bigwt.fits.fz"
         maskfile = "bigmask.fits.fz"
-        if self.host=="gp09" or self.host=="gp07": self.logger.info("Copying InstCal images from mass store archive")
-        else: self.logger.info("Copying InstCal images downloaded from Astro Data Archive")
-        #getdata(rawname,self.origfluxfile,self.origwtfile,self.origmaskfile,tmpdir)
-        shutil.copyfile(self.origfluxfile,os.path.join(tmpdir,os.path.basename(self.origfluxfile)))
-        self.logger.info("  "+self.origfluxfile)
-        if (os.path.basename(self.origfluxfile) != fluxfile):
+        if self.delete:
+            self.logger.info('Moving InstCal images to temporary directory')
+            newfluxfile = os.path.join(tmpdir,os.path.basename(self.origfluxfile))
+            if os.path.exists(newfluxfile): os.remove(newfluxfile)
+            shutil.move(self.origfluxfile,newfluxfile)
+            self.origfluxfile = newfluxfile
             os.symlink(os.path.basename(self.origfluxfile),fluxfile)
-        shutil.copyfile(self.origwtfile,os.path.join(tmpdir,os.path.basename(self.origwtfile)))
-        self.logger.info("  "+self.origwtfile)
-        if (os.path.basename(self.origwtfile) != wtfile):
+            newwtfile = os.path.join(tmpdir,os.path.basename(self.origwtfile))
+            if os.path.exists(newwtfile): os.remove(newwtfile)
+            shutil.move(self.origwtfile,newwtfile)
+            self.origwtfile = newwtfile
             os.symlink(os.path.basename(self.origwtfile),wtfile)
-        shutil.copyfile(self.origmaskfile,os.path.join(tmpdir,os.path.basename(self.origmaskfile)))
-        self.logger.info("  "+self.origmaskfile)
-        if (os.path.basename(self.origmaskfile) != maskfile):
+            newmaskfile = os.path.join(tmpdir,os.path.basename(self.origmaskfile))
+            if os.path.exists(newmaskfile): os.remove(newmaskfile)
+            shutil.move(self.origmaskfile,newmaskfile)
+            self.origmaskfile = newmaskfile
             os.symlink(os.path.basename(self.origmaskfile),maskfile)
+        else:
+            if self.host=="gp09" or self.host=="gp07":
+                self.logger.info("Copying InstCal images from mass store archive")
+            else:
+                self.logger.info("Copying InstCal images downloaded from Astro Data Archive")
+            #getdata(rawname,self.origfluxfile,self.origwtfile,self.origmaskfile,tmpdir)            
+            shutil.copyfile(self.origfluxfile,os.path.join(tmpdir,os.path.basename(self.origfluxfile)))
+            self.logger.info("  "+self.origfluxfile)
+            if (os.path.basename(self.origfluxfile) != fluxfile):
+                os.symlink(os.path.basename(self.origfluxfile),fluxfile)
+            shutil.copyfile(self.origwtfile,os.path.join(tmpdir,os.path.basename(self.origwtfile)))
+            self.logger.info("  "+self.origwtfile)
+            if (os.path.basename(self.origwtfile) != wtfile):
+                os.symlink(os.path.basename(self.origwtfile),wtfile)
+            shutil.copyfile(self.origmaskfile,os.path.join(tmpdir,os.path.basename(self.origmaskfile)))
+            self.logger.info("  "+self.origmaskfile)
+            if (os.path.basename(self.origmaskfile) != maskfile):
+                os.symlink(os.path.basename(self.origmaskfile),maskfile)
 
         # Set local working filenames
         self.fluxfile = fluxfile
@@ -220,6 +243,7 @@ class Exposure:
         self.chip.bigextension = extension
         self.chip.nscversion = self.nscversion
         self.chip.outdir = self.outdir
+        self.chip.keepdir = self.keepdir
         # Add logger information
         self.chip.logger = self.logger
         return True
@@ -256,23 +280,24 @@ class Exposure:
     # Teardown
     def teardown(self):
         # Move the final log file
-        shutil.move(self.logfile,os.path.join(self.keepdir,self.base+".log"))        
+        shutil.move(self.logfile,os.path.join(self.keepdir,self.base+".log"))
         # Bundle files in the "keep" directory
-        utils.concatmeas(self.keepdir)        
+        utils.concatmeas(self.keepdir,self.base)
         # Move the final bundled files
-        finalfiles = [os.path.join(self.outdir,self.base,f) for f in ['_meas.fits','.tgz','.log']]
+        finalfiles = [os.path.join(self.keepdir,self.base+f) for f in ['_meas.fits','.tgz','.log']]
         for f in finalfiles:
             if os.path.exists(f):
-                self.logger.info('Moving',f,'to',self.outdir)
+                self.logger.info('Moving '+f+' to '+self.outdir)
                 shutil.move(f,os.path.join(self.outdir,os.path.basename(f)))
             else:
-                self.logger.info(f,'not found')
+                self.logger.info(f+'not found')
         # Delete files and temporary directory
         self.logger.info("Deleting files and temporary directory.")
         ## Delete temporary files and directory
         #tmpfiles = glob("*")
         #for f in tmpfiles: os.remove(f)
         #os.rmdir(self.workdir)
+        self.logger.info('Removing '+self.workdir)
         shutil.rmtree(self.workdir)
         # CD back to original directory
         os.chdir(self.origdir)
@@ -329,6 +354,7 @@ class Chip:
         base = os.path.splitext(os.path.splitext(base)[0])[0]
         self.dir = os.path.abspath(os.path.dirname(fluxfile))
         self.base = base
+        self.keepdir = None
         header = fits.getheader(fluxfile)
         # Fix early decam headers
         if header["DTINSTRU"]!='mosaic3' and header["DTINSTRU"]!='90primt':

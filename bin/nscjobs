@@ -52,6 +52,8 @@ if __name__ == "__main__":
     parser.add_argument('--walltime',type=str,nargs=1,default='2-00:00:00',help='Slurm job runtime')
     parser.add_argument('--maxtasks',type=int,nargs=1,default=20000,help='Maximum number of tasks to run')
     parser.add_argument('--nodes',type=int,nargs=1,default=0,help='Number of nodes')
+    parser.add_argument('--ppn',type=int,nargs=1,default=0,help='Processes per node')
+    parser.add_argument('--stagger',type=int,nargs=1,default=60,help='Stagger time')
     parser.add_argument('--delete',action='store_true',help='Delete image files at end')
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
     args = parser.parse_args()
@@ -80,6 +82,15 @@ if __name__ == "__main__":
     else:
         nodes = args.nodes
     if nodes==0: nodes=None
+    if isinstance(args.ppn,list):
+        ppn = args.ppn[0]
+    else:
+        ppn = args.ppn
+    if ppn==0: ppn=None
+    if isinstance(args.stagger,list):
+        stagger = args.stagger[0]
+    else:
+        stagger = args.stagger
     delete = args.delete
     redo = args.redo                         # if called, redo = True
 
@@ -101,6 +112,10 @@ if __name__ == "__main__":
     print('maxtasks =',maxtasks)
     if nodes is not None:
         print('nodes =',nodes)
+    if ppn is not None:
+        print('ppn =',ppn)
+    print('stagger =',stagger)
+    print('delete =',delete)
     print('redo =',redo)
 
     # Check that the input file exists
@@ -118,9 +133,10 @@ if __name__ == "__main__":
     print(len(inputdata),'inputs')
 
     # Processes per node
-    ppn = 64
-    if host=='tacc':
-        ppn = 56
+    if ppn is None:
+        ppn = 64
+        if host=='tacc':
+            ppn = 56
     
     # Get NSC directories                                                                                     
     basedir, tmpdir = utils.getnscdirs(version,host)
@@ -287,6 +303,8 @@ if __name__ == "__main__":
                 cmd += ' --redo'
             if delete:
                 cmd += ' --delete'
+            if stagger>0:
+                cmd += ' --stagger '+str(stagger)
             # Check output filename
             if base[:3]=='c4d':
                 night = '20'+base[4:10]
@@ -550,12 +568,14 @@ if __name__ == "__main__":
             os.makedirs(slurmroot)
 
     # For measurement on Tempest we'll use our own job manager/launcher per mode
-    #if stage.lower()[:4]=='meas' and host.lower().startswith('tempest'):
-    #    slurmdir = os.path.join(os.path.expanduser('~'),'slurm')
-    #    print('Using nscjob_manager')
-    #    out = slrm.submit(tasks,stage,nodes=nodes,version=version,partition=partition,
-    #                      host=host,walltime=walltime,slurmdir=slurmdir,verbose=True)
-    if stage=='download':
+    if stage.lower()[:4]=='meas' and host.lower().startswith('tempest'):
+        slurmdir = os.path.join(os.path.expanduser('~'),'slurm')
+        print('Using nsc_launcher')
+        logdir = os.path.join(tmpdir,'logs')
+        out = slrm.nsclauncher(tasks,stage,nodes=nodes,ppn=ppn,version=version,partition=partition,
+                               host=host,walltime=walltime,slurmdir=slurmdir,logdir=logdir,
+                               verbose=True)
+    elif stage=='download':
         key,jobid = slurm.submit(tasks,label,nodes=1,cpus=1,partition=partition,
                                  walltime=walltime,slurmroot=slurmroot)
     else:

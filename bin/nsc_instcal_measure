@@ -27,6 +27,7 @@ if __name__ == "__main__":
     parser.add_argument('maskfile', type=str, nargs=1, help='Absolute mask filename')
     parser.add_argument('version', type=str, nargs=1, help='NSC version')
     parser.add_argument('--host',type=str,nargs=1,default="None",help='hostname, default "None", other options supported are "cca","tempest_katie","tempest_group","gp09/7","tacc"')
+    parser.add_argument('--stagger',type=int, nargs=1, default=60, help='Stagger time')
     parser.add_argument('--x',action='store_true', help='Exposure version is of format "vX"')
     parser.add_argument('--delete',action='store_true', help='Delete downloaded exposures at end')
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
@@ -37,16 +38,21 @@ if __name__ == "__main__":
     if version=="None": version = None
     host = str(args.host[0])                 # hostname of server, default "None"
     if host=="None": host = None
+    if isinstance(args.stagger,list):
+        stagger = args.stagger[0]
+    else:
+        stagger = args.stagger
     x = args.x                               # if called, exposure version is of format "vX"
     redo = args.redo                         # if called, redo = True
     delete = args.delete
-    print("version = ",version)
-    print("host = ",host)
-    print("x = ",x)
-    print("redo = ",redo)
-    print("delete = ",delete)
+    print("version =",version)
+    print("host =",host)
+    print("stagger =",stagger)
+    print("x =",x)
+    print("redo =",redo)
+    print("delete =",delete)
 
-    # Get NSC directories                                                                                     
+    # Get NSC directories
     basedir, tmpdir = utils.getnscdirs(version,host)
     print("Working in basedir,tmpdir = ",basedir,tmpdir)
     # Make sure the directories exist                                                                         
@@ -96,7 +102,7 @@ if __name__ == "__main__":
             if os.path.exists(fluxfile) and os.path.exists(wtfile) and os.path.exists(maskfile):
                 break
             else:
-                print(time.asctime(),'files not found. waiting')
+                print(time.asctime(),'\nfiles not found. waiting')
                 time.sleep(60)
         
     # Check that the files exist
@@ -110,6 +116,12 @@ if __name__ == "__main__":
         print(maskile+" file NOT FOUND")
         sys.exit()
 
+    # Stagger time
+    if stagger > 0:
+        sleeptime = np.random.randint(1,stagger)
+        print('Sleeping {:} seconds'.format(sleeptime))
+        time.sleep(sleeptime)
+        
     
     # Start the logfile 
     #------------------ 
