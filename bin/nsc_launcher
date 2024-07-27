@@ -1,0 +1,114 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import numpy as np
+import warnings
+from astropy.table import Table
+from astropy.io import fits
+from astropy.utils.exceptions import AstropyWarning
+import time
+import shutil
+import re
+import subprocess
+import glob
+import logging
+import socket
+from datetime import datetime
+from argparse import ArgumentParser
+from dlnpyutils import utils as dln
+from nsc import utils
+
+# This drives nsc tasks on a single process 
+    
+if __name__ == "__main__":
+    # Run nsc tasks on a single process
+    parser = ArgumentParser(description='Drive nsc tasks on a single process')
+    parser.add_argument('tasksfile', type=str, nargs=1, help='Input list filename')
+    parser.add_argument('version', type=str, nargs=1, help='NSC version')
+    parser.add_argument('--host',type=str,nargs=1,default="None",help='hostname, default "None", other options supported are "cca","tempest_katie","tempest_group","gp09/7","tacc"')
+    parser.add_argument('--nchost',type=str,nargs=1,default='',help='NETCAT hostname')
+    parser.add_argument('--ncport',type=int,nargs=1,default=9471,help='NETCAT port')
+    args = parser.parse_args()
+
+    # Inputs
+    tasksfile = args.tasksfile[0]
+    version = args.version[0]                # NSC version, like "v4", default "None"
+    if version=="None": version = None
+    host = str(args.host[0])                 # hostname of server, default "None"
+    if host=="None": host = None
+    if isinstance(args.nchost,list):
+        netcathost = args.nchost[0]
+    else:
+        netcathost = args.nchost
+    if isinstance(args.ncport,list):
+        netcatport = args.ncport[0]
+    else:
+        netcatport = args.ncport
+
+    if netcathost=='':
+        raise Exception('Must input nchost')
+        
+    t0 = time.time()
+    
+    print('Input Parameters:')
+    print('-----------------')
+    print('tasksfile =',tasksfile)
+    print('version =',version)
+    print('host =',host)
+    print('nchost =',netcathost)
+    print('ncport =',netcatport)
+
+    # Check that the input file exists
+    if os.path.exists(tasksfile)==False:
+        print(tasksfile,'NOT FOUND')
+        sys.exit()
+
+    # Input must be a tasks table fits file
+    print('Loading',tasksfile)
+    tasks = dln.readlines(tasksfile)
+    print(len(tasks),'tasks')
+
+    # Get NSC directories                                                                                     
+    basedir, tmpdir = utils.getnscdirs(version,host)
+    print("Working in basedir,tmpdir = ",basedir,tmpdir)
+    # Make sure the directories exist                                                                         
+    if not os.path.exists(basedir):
+        os.makedirs(basedir)
+    if not os.path.exists(tmpdir):
+        os.makedirs(tmpdir)
+
+    logdir = os.path.join(tmpdir,'logs')
+    if os.path.exists(logdir)==False:
+        os.makedirs(logdir)
+        
+    # While loop until we are done
+    count = 0
+    ind = -1
+    while (True):
+        # Get new 
+        res = utils.taskcount(netcathost,netcatport)
+        if str(res)=='Done':
+            break
+        else:
+            ind = int(res)
+        
+        # Get task command
+        cmd = tasks[ind-1]
+        print('Running command {:d}'.format(count+1))
+        print(cmd)
+        logtime = datetime.now().strftime("%Y%m%d%H%M%S") 
+        logfile = os.path.join(logdir,'task'+str(ind)+'.'+logtime+'.log')
+        #with open(logfile,'w') as f:
+        #    res = subprocess.run(cmd,shell=True,stderr=subprocess.STDOUT,stdout=f)
+        res = subprocess.run(cmd,shell=True,capture_output=True)
+        print('dt = {:.1f} sec'.format(time.time()-t0))
+               
+        count += 1
+    
+    print("Total time = "+str(time.time()-t0)+" seconds")
+
+
+
+
+

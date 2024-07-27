@@ -18,7 +18,9 @@ import socket
 from datetime import datetime
 from argparse import ArgumentParser
 from dlnpyutils import utils as dln,slurm
-from nsc.nsc_instcal_measure import getnscdirs,Exposure
+from nsc import utils
+from nsc.nsc_instcal_measure import Exposure
+from nsc import slurm as slrm
 
 
 def taccifyname(filename):
@@ -42,12 +44,17 @@ def taccifyname(filename):
 if __name__ == "__main__":
     # Run lots of NSC jobs
     parser = ArgumentParser(description='Run NSC jobs')
-    parser.add_argument('stage', type=str, nargs=1, help='Stage (measure, calibrate or combine)')
+    parser.add_argument('stage', type=str, nargs=1, help='Stage (download, measure, calibrate or combine)')
     parser.add_argument('inputfile', type=str, nargs=1, help='Input list filename')
     parser.add_argument('version', type=str, nargs=1, help='NSC version')
     parser.add_argument('--host',type=str,nargs=1,default="None",help='hostname, default "None", other options supported are "cca","tempest_katie","tempest_group","gp09/7","tacc"')
-    parser.add_argument('--partition',type=str,nargs=1,default='normal',help='what TACC partition to use')
+    parser.add_argument('--partition',type=str,nargs=1,default='',help='what TACC partition to use')
+    parser.add_argument('--walltime',type=str,nargs=1,default='2-00:00:00',help='Slurm job runtime')
     parser.add_argument('--maxtasks',type=int,nargs=1,default=20000,help='Maximum number of tasks to run')
+    parser.add_argument('--nodes',type=int,nargs=1,default=0,help='Number of nodes')
+    parser.add_argument('--ppn',type=int,nargs=1,default=0,help='Processes per node')
+    parser.add_argument('--stagger',type=int,nargs=1,default=60,help='Stagger time')
+    parser.add_argument('--delete',action='store_true',help='Delete image files at end')
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
     args = parser.parse_args()
 
@@ -62,12 +69,40 @@ if __name__ == "__main__":
         partition = args.partition[0]
     else:
         partition = args.partition
+    if isinstance(args.walltime,list):
+        walltime = args.walltime[0]
+    else:
+        walltime = args.walltime
     if isinstance(args.maxtasks,list):       # maximum number of tasks to run from input list
         maxtasks = args.maxtasks[0]
     else:
         maxtasks = args.maxtasks
+    if isinstance(args.nodes,list):
+        nodes = args.nodes[0]
+    else:
+        nodes = args.nodes
+    if nodes==0: nodes=None
+    if isinstance(args.ppn,list):
+        ppn = args.ppn[0]
+    else:
+        ppn = args.ppn
+    if ppn==0: ppn=None
+    if isinstance(args.stagger,list):
+        stagger = args.stagger[0]
+    else:
+        stagger = args.stagger
+    delete = args.delete
     redo = args.redo                         # if called, redo = True
 
+    # Default partitions
+    if partition=='':
+        if host=='tacc':
+            partition = 'small'
+            account = None
+        elif host.lower()[:7]=='tempest':
+            partition = 'priority'
+            account = 'priority-davidnidever'
+            
     print('Input Parameters:')
     print('-----------------')
     print('stage =',stage,)
@@ -75,6 +110,12 @@ if __name__ == "__main__":
     print('version =',version)
     print('host =',host)
     print('maxtasks =',maxtasks)
+    if nodes is not None:
+        print('nodes =',nodes)
+    if ppn is not None:
+        print('ppn =',ppn)
+    print('stagger =',stagger)
+    print('delete =',delete)
     print('redo =',redo)
 
     # Check that the input file exists
@@ -91,8 +132,14 @@ if __name__ == "__main__":
         inputdata = dln.readlines(inputfile)
     print(len(inputdata),'inputs')
 
+    # Processes per node
+    if ppn is None:
+        ppn = 64
+        if host=='tacc':
+            ppn = 56
+    
     # Get NSC directories                                                                                     
-    basedir, tmpdir = getnscdirs(version,host)
+    basedir, tmpdir = utils.getnscdirs(version,host)
     print("Working in basedir,tmpdir = ",basedir,tmpdir)
     # Make sure the directories exist                                                                         
     if not os.path.exists(basedir):
@@ -100,14 +147,37 @@ if __name__ == "__main__":
     if not os.path.exists(tmpdir):
         os.makedirs(tmpdir)
 
+    if 'tempest' in host:
+        download_dir = os.path.join(basedir,'download')
+        
     dt = [('cmd',str,1000),('name',str,1000),('output',str,1000),
           ('outfile',str,1000),('errfile',str,1000),('dir',str,1000)] 
     logtime = datetime.now().strftime("%Y%m%d%H%M%S")
 
+
+    ##############################################################################
+    # Download
+    #============
+    if stage=='download':
+        script = 'nsc_download'
+        label ='download'
+        cmd = script+' '+os.path.abspath(inputfile)+' '+version+' --host '+host+' --maximages '+str(maxtasks)
+        logfile = os.path.join(basedir,'download','download.'+logtime+'.log')
+        if os.path.exists(os.path.dirname(logfile))==False:
+            os.makedirs(os.path.dirname(logfile))
+        # Put information in the tasks table
+        tasks = Table(np.zeros(1,dtype=np.dtype(dt)))
+        tasks['cmd'][0] = cmd
+        tasks['name'][0] = 'download.'+logtime
+        tasks['outfile'][0] = logfile 
+        tasks['errfile'][0] = logfile.replace('.log','.err')
+        tasks['dir'][0] = os.path.dirname(logfile)
+        nodes = 1
+        
     ##############################################################################
     # Measurement
     #============
-    if stage=='meas' or stage=='measure' or stage=='measurement':
+    elif stage=='meas' or stage=='measure' or stage=='measurement':
         script = 'nsc_instcal_measure'
         label = 'measure'
         if isinstance(inputdata,Table)==False:
@@ -203,13 +273,25 @@ if __name__ == "__main__":
                 if fluxfile[:9]=='/net/mss1' or wtfile[:9]=='/net/mss1' or maskfile[:9]=='/net/mss1':
                     print('Exposure files not at TACC yet. SKIPPING')
                     continue
+            # One tempest files are downloaded by the nsc_download script
+            if 'tempest' in host:
+                fluxfile = os.path.join(download_dir,os.path.basename(inputdata['fluxfile'][i]))
+                wtfile = os.path.join(download_dir,os.path.basename(inputdata['wtfile'][i]))
+                maskfile = os.path.join(download_dir,os.path.basename(inputdata['maskfile'][i]))                
+            ## Need to download files on tempest
+            ##   use md5sum as filenames
+            #if host.startswith('tempest'):
+            #    fluxfile = inputdata['fluxmd5sum'][i]
+            #    wtfile = inputdata['wtmd5sum'][i]
+            #    maskfile = inputdata['maskmd5sum'][i]
             # Check that all three files exist
-            infiles = [fluxfile,wtfile,maskfile]
-            exists = [os.path.exists(f) for f in infiles]
-            bd, = np.where(np.array(exists)==False)
-            if len(bd)>0:
-                print('Files not found: '+','.join(np.array(infiles)[bd])+'  SKIPPING')
-                continue
+            else:
+                infiles = [fluxfile,wtfile,maskfile]
+                exists = [os.path.exists(f) for f in infiles]
+                bd, = np.where(np.array(exists)==False)
+                if len(bd)>0:
+                    print('Files not found: '+','.join(np.array(infiles)[bd])+'  SKIPPING')
+                    continue
             #if base[:3] not in ['c4d','ksb','k4m']:
             #    print(base,'NOT in correct format. SKIPPING')
             #    continue
@@ -217,13 +299,22 @@ if __name__ == "__main__":
             cmd = script+' '+fluxfile+' '+wtfile+' '+maskfile+' '+version
             if host:
                 cmd += ' --host '+host
+            if redo:
+                cmd += ' --redo'
+            if delete:
+                cmd += ' --delete'
+            if stagger>0:
+                cmd += ' --stagger '+str(stagger)
             # Check output filename
             if base[:3]=='c4d':
                 night = '20'+base[4:10]
             else:
                 instrument = 'c4d'  # assume decam for now
-                head = fits.getheader(fluxfile,0)
-                dateobs = head['DATE-OBS']
+                if host.startswith('tempest'):
+                    dateobs = inputdata['date_obs'][i]
+                else:
+                    head = fits.getheader(fluxfile,0)
+                    dateobs = head['DATE-OBS']
                 night = dateobs[:4]+dateobs[5:7]+dateobs[8:10]
             outdir = os.path.join(basedir,instrument,night[:4],night,base)
             logfile = os.path.join(outdir,base+'.'+logtime+'.log')
@@ -231,6 +322,9 @@ if __name__ == "__main__":
             if os.path.exists(outfile) and redo==False:
                 print(outfile,' ALREADY EXISTS.  Skipping')
                 continue
+            # Make sure the output directory exists
+            if os.path.exists(outdir)==False:
+                os.makedirs(outdir)
             # Skip information in the tasks table
             tasks['cmd'][cnt] = cmd
             tasks['name'][cnt] = base
@@ -250,8 +344,9 @@ if __name__ == "__main__":
         # we can only run for 48 hours
         # the tacc slurm queue limits launcher to a maximum of 56 tasks per node
         ntasks = np.minimum(len(tasks),maxtasks)
-        total_time_hour = ntasks
-        nodes = int(np.ceil(total_time_hour/56/48))
+        if nodes is None:
+            total_time_hour = ntasks
+            nodes = int(np.ceil(total_time_hour/ppn/48))
 
     ##############################################################################
     # Calibrate
@@ -324,7 +419,7 @@ if __name__ == "__main__":
             if os.path.exists(outfile) and redo==False:
                 print(outfile,' ALREADY EXISTS.  Skipping')
                 continue
-            # Skip information in the tasks table
+            # Put information in the tasks table
             tasks['cmd'][cnt] = cmd
             tasks['name'][cnt] = base
             tasks['output'][cnt] = outfile
@@ -341,8 +436,9 @@ if __name__ == "__main__":
         # calibration is pretty fast, maybe 1 min. per exposure
         # the tacc slurm queue limits launcher to a maximum of 56 tasks per node
         ntasks = np.minimum(len(tasks),maxtasks)
-        total_time_hour = ntasks / 60.0
-        nodes = int(np.ceil(total_time_hour/56/48))
+        if nodes is None:
+            total_time_hour = ntasks / 60.0
+            nodes = int(np.ceil(total_time_hour/ppn/48))
 
     ##############################################################################
     # Combine
@@ -411,8 +507,9 @@ if __name__ == "__main__":
         # the tacc slurm queue limits launcher to a maximum of 56 tasks per node
         # how much per healpix??
         ntasks = np.minimum(len(tasks),maxtasks)
-        total_time_hour = ntasks
-        nodes = int(np.ceil(total_time_hour/56/48))
+        if nodes is None:
+            total_time_hour = ntasks
+            nodes = int(np.ceil(total_time_hour/56/48))
     else:
         print('Stage ',stage,' not supported')
         sys.exit()
@@ -428,34 +525,35 @@ if __name__ == "__main__":
         print('No tasks to run')
         sys.exit()
     
-    # Nodes to request
-    print(nodes,'nodes requested')
-
-    # Get walltime based on partition
-    wtimedict = {'normal':'47:59:00','small':'47:59:00','development':'01:59:59'}
-    walltime = wtimedict[partition]
-    # nodes:
-    # development 1-40
-    # normal      3-512
-    # small       2
-    if partition=='development':
-        if int(nodes)>40:
-            print('development node limit is 40')
-            nodes = 40
-    elif partition=='normal':
-        if int(nodes)<3:
-            print('normal needs at least 3 nodes')
-            nodes = 3
-        if int(nodes)>512:
-            print('normal node limit is 512')
-            nodes = 512
-    elif partition=='small':
-        if int(nodes) != 2:
-            print('small must be 2 nodes')
-            nodes = 2
+    # TACC settings
+    if host=='tacc':
+        # Nodes to request
+        print(nodes,'nodes requested')
+        # Get walltime based on partition
+        wtimedict = {'normal':'47:59:00','small':'47:59:00','development':'01:59:59'}
+        walltime = wtimedict[partition]
+        # nodes:
+        # development 1-40
+        # normal      3-512
+        # small       2
+        if partition=='development':
+            if int(nodes)>40:
+                print('development node limit is 40')
+                nodes = 40
+        elif partition=='normal':
+            if int(nodes)<3:
+                print('normal needs at least 3 nodes')
+                nodes = 3
+            if int(nodes)>512:
+                print('normal node limit is 512')
+                nodes = 512
+        elif partition=='small':
+            if int(nodes) != 2:
+                print('small must be 2 nodes')
+                nodes = 2
 
     # the tacc slurm queue limits launcher to a maximum of 56 tasks per node
-    nparallel = nodes*56
+    nparallel = nodes*ppn
 
     print('Slurm Parameters:')
     print('ntasks =',len(tasks))
@@ -463,16 +561,41 @@ if __name__ == "__main__":
     print('nodes =',nodes)
     print('label =',label)
     print('walltime =',walltime)
-    slurmroot = os.environ['SCRATCH']
+    slurmroot = os.environ.get('SCRATCH')
+    if slurmroot is None:
+        slurmroot = os.path.join(os.path.expanduser('~'),'slurm')
+        if os.path.exists(slurmroot)==False:
+            os.makedirs(slurmroot)
 
-    slurmdir,key,jobid = slurm.launcher(tasks,label,nodes=nodes,nparallel=nparallel,
-                                        account=None,partition=partition,walltime=walltime,
-                                        notification=True,stagger=True,
-                                        slurmroot=slurmroot,verbose=True)
-    # Write list of output directories
-    dln.writelines(os.path.join(slurmdir,label+'_outdir.lst'),tasks['dir'].data.astype(str))
-    # Write task list to lists/ 
-    tasks.write(os.path.join(basedir,'lists',label+'_'+key+'_tasks.fits'))
+    # For measurement on Tempest we'll use our own job manager/launcher per mode
+    if stage.lower()[:4]=='meas' and host.lower().startswith('tempest'):
+        slurmdir = os.path.join(os.path.expanduser('~'),'slurm')
+        print('Using nsc_launcher')
+        logdir = os.path.join(tmpdir,'logs')
+        out = slrm.nsclauncher(tasks,stage,nodes=nodes,ppn=ppn,version=version,partition=partition,
+                               host=host,walltime=walltime,slurmdir=slurmdir,logdir=logdir,
+                               verbose=True)
+    elif stage=='download':
+        key,jobid = slurm.submit(tasks,label,nodes=1,cpus=1,partition=partition,
+                                 walltime=walltime,slurmroot=slurmroot)
+    else:
+        if host[:7]=='tempest':
+            #export LAUNCHER_DIR=/home/x51j468/projects/launcher
+            #export LAUNCHER_WORKDIR=/home/x51j468
+            #export LAUNCHER_JOB_FILE=/home/x51j468/test_cmds.lst
+            #export LAUNCHER_PPN=10
+            precommands = ['export LAUNCHER_DIR=/home/x51j468/projects/launcher']
+            precommands += ['export LAUNCHER_PPN='+str(nparallel)]
+        else:
+            precommands = None
+        slurmdir,key,jobid = slurm.launcher(tasks,label,nodes=nodes,nparallel=nparallel,
+                                            account=account,partition=partition,walltime=walltime,
+                                            notification=True,stagger=True,precommands=precommands,
+                                            slurmroot=slurmroot,verbose=True)
+        # Write list of output directories
+        dln.writelines(os.path.join(slurmdir,label+'_outdir.lst'),tasks['dir'].data.astype(str))
+        # Write task list to lists/ 
+        tasks.write(os.path.join(basedir,'lists',label+'_'+key+'_tasks.fits'))
     
 
     # submit(tasks,label,nodes=1,cpus=64,ppn=None,account='priority-davidnidever',

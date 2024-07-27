@@ -1,0 +1,155 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import numpy as np
+import warnings
+from astropy.io import fits
+from astropy.utils.exceptions import AstropyWarning
+from astropy.table import Table,vstack
+import time
+import shutil
+import re
+import subprocess
+from glob import glob
+from datetime import datetime
+import logging
+import socket
+from datetime import datetime
+from argparse import ArgumentParser
+from dlnpyutils import utils as dln,slurm
+from nsc import utils
+from nsc import slurm as slrm
+
+if __name__ == "__main__":
+    # Download images from NOIRLab
+    parser = ArgumentParser(description='Download images from NOIRLab')
+    parser.add_argument('inputfile', type=str, nargs=1, help='Input list filename')
+    parser.add_argument('version', type=str, nargs=1, help='NSC version')
+    parser.add_argument('--host',type=str,nargs=1,default="None",help='hostname, default "None", other options supported are "cca","tempest_katie","tempest_group","gp09/7","tacc"')
+    parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
+    parser.add_argument('--maximages',type=int,nargs=1,default=100,help='Maximum number of images to have downloaded')    
+    
+    args = parser.parse_args()
+
+    # Inputs
+    inputfile = args.inputfile[0]
+    version = args.version[0]                # NSC version, like "v4", default "None"
+    if version=="None": version = None
+    host = str(args.host[0])                 # hostname of server, default "None"                  
+    if host=="None": host = None
+    redo = args.redo
+    if isinstance(args.maximages,list):       # maximum number of files to have downloaded at the same time
+        maximages = args.maximages[0]
+    else:
+        maximages = args.maximages
+        
+    print('Input Parameters:')
+    print('-----------------')
+    print('inputfile =',inputfile)
+    print('version =',version)
+    print('host =',host)
+    print('redo =',redo)
+    print('maximages =',maximages)
+
+    # Check that the input file exists
+    if os.path.exists(inputfile)==False:
+        print(inputfile,'NOT FOUND')
+        sys.exit()
+        
+    # Load the input lines
+    print('Loading',inputfile,' FITS file')
+    inputdata = Table.read(inputfile)
+    ninput = len(inputdata)
+    print(ninput,'inputs')
+    
+    # Get NSC directories                                                                                     
+    basedir, tmpdir = utils.getnscdirs(version,host)
+    print("Working in basedir,tmpdir = ",basedir,tmpdir)
+    # Make sure the directories exist                                                                         
+    if not os.path.exists(basedir):
+        os.makedirs(basedir)
+    if not os.path.exists(tmpdir):
+        os.makedirs(tmpdir)
+
+    outdir = os.path.join(basedir,'download')
+    print('Output directory =',outdir)
+    if os.path.exists(outdir)==False:
+        os.makedirs(outdir)
+
+    updatetime = 120  # update at least every 2 minutes
+    lastdownloadtime = 0
+    lastupdatetime = 0
+    
+    # Loop until done
+    count = 0
+    imcount = 0
+    while (True):
+        # Check how many files are in the output directory
+        files = os.listdir(outdir)
+        files = [f for f in files if f.find('.fits')>-1]
+        nfiles = len(files)
+        # Enough files, sleep
+        if nfiles >= maximages:
+            time.sleep(5)   # sleep
+            if (datetime.now().timestamp()-lastdownloadtime > updatetime and
+                datetime.now().timestamp()-lastupdatetime > updatetime):
+                print(time.asctime())
+                print(nfiles,'files out of',maximages,'files maximum.',
+                      imcount,'exposures downloaded.',ninput-imcount,'exposures left')
+                lastupdatetime = datetime.now().timestamp()
+        # Download more files
+        else:
+            print(time.asctime())
+            print(nfiles,'files out of',maximages,'files maximum')
+            # Check if output files exist for this exposure
+            if redo==False:
+                base = os.path.basename(inputdata['fluxfile'][imcount])
+                if base.endswith('.fits.fz'): base=base[:-8]
+                if base.endswith('.fits'): base=base[:-5]                
+                dateobs = inputdata['date_obs'][imcount]
+                instrument = 'c4d'  # assume decam for now
+                night = dateobs[:4]+dateobs[5:7]+dateobs[8:10]
+                measdir = os.path.join(basedir,instrument,night[:4],night,base)
+                outfile = os.path.join(measdir,base+'_meas.fits')
+                if os.path.exists(outfile) and redo==False:
+                    print(outfile,' ALREADY EXISTS.  Skipping')
+                    # Deleting these files if they were already downloaded
+                    ofluxfile = os.path.join(outdir,os.path.basename(inputdata['fluxfile'][imcount]))
+                    if os.path.exists(ofluxfile): os.remove(ofluxfile)
+                    owtfile = os.path.join(outdir,os.path.basename(inputdata['wtfile'][imcount]))
+                    if os.path.exists(owtfile): os.remove(owtfile)
+                    omaskfile = os.path.join(outdir,os.path.basename(inputdata['maskfile'][imcount]))
+                    if os.path.exists(omaskfile): os.remove(omaskfile)
+                    imcount += 1
+                    continue
+            print('----- Downloading images for exposure =',inputdata['base'][imcount],'-----')
+            ofluxfile = os.path.join(outdir,os.path.basename(inputdata['fluxfile'][imcount]))
+            if os.path.exists(ofluxfile)==False:
+                out = utils.download_from_archive(inputdata['fluxmd5sum'][imcount],outdir=outdir)
+                lastdownloadtime = datetime.now().timestamp()
+            else:
+                print(ofluxfile,'already exists')
+            owtfile = os.path.join(outdir,os.path.basename(inputdata['wtfile'][imcount]))
+            if os.path.exists(owtfile)==False:
+                out = utils.download_from_archive(inputdata['wtmd5sum'][imcount],outdir=outdir)
+                lastdownloadtime = datetime.now().timestamp()
+            else:
+                print(owtfile,'already exists')
+            omaskfile = os.path.join(outdir,os.path.basename(inputdata['maskfile'][imcount]))
+            if os.path.exists(omaskfile)==False:
+                out = utils.download_from_archive(inputdata['maskmd5sum'][imcount],outdir=outdir)
+                lastdownloadtime = datetime.now().timestamp()
+            else:
+                print(omaskfile,'already exists')
+            print(ninput-imcount,'exposures left to download')
+            imcount += 1
+
+        # All done with the images
+        if imcount>=(len(inputdata)-1):
+            print('Downloaded all expsures')
+            break
+        
+        count += 1
+
+    print('dt = {:.1f} sec'.format(time.time()-t0))
