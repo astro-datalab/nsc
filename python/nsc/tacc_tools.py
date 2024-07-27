@@ -14,7 +14,8 @@ def make_transfer_list(n=10000):
     """
 
     listdir = '/net/dl2/dnidever/nsc/instcal/v4/lists/'
-    tab = Table.read(listdir+'decam_instcal_list_exptime10sec_20240714.fits.gz')
+    tab = Table.read(listdir+'decam_instcal_list_exptime10sec_20240727_left.fits.gz')
+    #tab = Table.read(listdir+'decam_instcal_list_exptime10sec_20240714.fits.gz')
     #tab = Table.read(listdir+'r16avails_decam_instcal_list.fits.gz')
 
     # Remove exposures that are done
