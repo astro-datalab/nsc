@@ -78,6 +78,10 @@ if __name__ == "__main__":
     if not os.path.exists(tmpdir):
         os.makedirs(tmpdir)
 
+    logdir = os.path.join(tmpdir,'logs')
+    if os.path.exists(logdir)==False:
+        os.makedirs(logdir)
+        
     # While loop until we are done
     count = 0
     ind = -1
@@ -94,7 +98,7 @@ if __name__ == "__main__":
         print('Running command {:d}'.format(count+1))
         print(cmd)
         logtime = datetime.now().strftime("%Y%m%d%H%M%S") 
-        logfile = os.path.join(tmpdir,'task'+str(ind)+'.'+logtime+'.log')
+        logfile = os.path.join(logdir,'task'+str(ind)+'.'+logtime+'.log')
         with open(logfile,'w') as f:
             res = subprocess.run(cmd,shell=True,stderr=subprocess.STDOUT,stdout=f)
         print('dt = {:.1f} sec'.format(time.time()-t0))
