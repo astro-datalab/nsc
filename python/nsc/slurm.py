@@ -213,7 +213,7 @@ def nsclauncher(tasks,label,nodes=1,cpus=64,version='v4',account='priority-david
                 partition='priority',staggertime=60,host='tempest_group',shared=True,
                 walltime='12-00:00:00',notification=False,memory=7500,numpy_num_threads=2,
                 precommands=None,nosubmit=False,slurmroot='/tmp',slurmdir=None,
-                verbose=True,logger=None):
+                logdir=None,verbose=True,logger=None):
     """
     Submit a bunch of jobs
 
@@ -232,6 +232,12 @@ def nsclauncher(tasks,label,nodes=1,cpus=64,version='v4',account='priority-david
         if os.path.exists(slurmdir)==False:
             os.makedirs(slurmdir)
 
+    # Log directory for the nsc_launcher output
+    if logdir is None:
+        logdir = os.path.join('/tmp',username,'logs')
+    if os.path.exists(logdir)==False:
+        os.makedirs(logdir)
+            
     # Generate unique key
     key = genkey()
     if verbose:
@@ -283,14 +289,20 @@ def nsclauncher(tasks,label,nodes=1,cpus=64,version='v4',account='priority-david
         lines += ['# ------------------------------------------------------------------------------']
         lines += ['export CLUSTER=1']
         lines += [' ']
+        lines += ['echo "HOSTNAME="$HOSTNAME']
+        lines += ['echo "Making logdir = '+logdir+'"']
+        lines += ['mkdir -p '+logdir]
 
         # nscjob_manager tasksfile version --host host --staggertime 60 --njobs 64
         cmd = 'nsc_launcher '+taskfile+' '+version+' --host '+host
         cmd += ' --nchost NETCATHOST --ncport NETCATPORT'
-
+        
         # Loop over the processes
         for j in range(cpus):
-            lines += [cmd+' &']
+            logtime = datetime.now().strftime("%Y%m%d%H%M%S") 
+            logfile = os.path.join(logdir,'node{:02d}_proc{:02d}.{:s}.log'.format(node,j+1,logtime))
+            cmd1 = cmd+' > '+logfile+' 2>&1'
+            lines += [cmd1]
 
         lines += ['wait']
         lines += ['echo "Done"']
@@ -327,6 +339,7 @@ def nsclauncher(tasks,label,nodes=1,cpus=64,version='v4',account='priority-david
     lines += ['']
     nprocs = cpus*nodes
     lines += ['cd '+jobdir]
+    lines += ['echo "HOSTNAME="$HOSTNAME']    
     lines += ['export LAUNCHER_JOB_FILE='+taskfile]
     lines += ['export LAUNCHER_HOSTFILE=nodelist']
     lines += ['scontrol show hostname > nodelist']

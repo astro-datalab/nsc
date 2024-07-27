@@ -1935,7 +1935,7 @@ def file_isfits(filename):
     hdu.close()
     return True
 
-def concatmeas(expdir,deletetruncated=False):
+def concatmeas(expdir,base=None,deletetruncated=False):
     """
     Combine multiple chip-level measurement files into a single multi-extension FITS file.
     """
@@ -1964,7 +1964,8 @@ def concatmeas(expdir,deletetruncated=False):
             import pdb; pdb.set_trace()
 
     os.chdir(expdir)
-    base = os.path.basename(expdir)
+    if base is None:
+        base = os.path.basename(expdir)
     outfile = base+'_meas.fits'
     if os.path.exists(outfile):
         print(outfile,'already exists')

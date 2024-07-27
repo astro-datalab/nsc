@@ -562,8 +562,10 @@ if __name__ == "__main__":
     if stage.lower()[:4]=='meas' and host.lower().startswith('tempest'):
         slurmdir = os.path.join(os.path.expanduser('~'),'slurm')
         print('Using nsc_launcher')
+        logdir = os.path.join(tmpdir,'logs')
         out = slrm.nsclauncher(tasks,stage,nodes=nodes,version=version,partition=partition,
-                               host=host,walltime=walltime,slurmdir=slurmdir,verbose=True)
+                               host=host,walltime=walltime,slurmdir=slurmdir,logdir=logdir,
+                               verbose=True)
     elif stage=='download':
         key,jobid = slurm.submit(tasks,label,nodes=1,cpus=1,partition=partition,
                                  walltime=walltime,slurmroot=slurmroot)
