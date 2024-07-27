@@ -99,8 +99,9 @@ if __name__ == "__main__":
         print(cmd)
         logtime = datetime.now().strftime("%Y%m%d%H%M%S") 
         logfile = os.path.join(logdir,'task'+str(ind)+'.'+logtime+'.log')
-        with open(logfile,'w') as f:
-            res = subprocess.run(cmd,shell=True,stderr=subprocess.STDOUT,stdout=f)
+        #with open(logfile,'w') as f:
+        #    res = subprocess.run(cmd,shell=True,stderr=subprocess.STDOUT,stdout=f)
+        res = subprocess.run(cmd,shell=True,capture_output=True)
         print('dt = {:.1f} sec'.format(time.time()-t0))
                
         count += 1

@@ -299,10 +299,11 @@ def nsclauncher(tasks,label,nodes=1,cpus=64,version='v4',account='priority-david
         
         # Loop over the processes
         for j in range(cpus):
-            logtime = datetime.now().strftime("%Y%m%d%H%M%S") 
-            logfile = os.path.join(logdir,'node{:02d}_proc{:02d}.{:s}.log'.format(node,j+1,logtime))
-            cmd1 = cmd+' > '+logfile+' 2>&1 &'
-            lines += [cmd1]
+            #logtime = datetime.now().strftime("%Y%m%d%H%M%S") 
+            #logfile = os.path.join(logdir,'node{:02d}_proc{:02d}.{:s}.log'.format(node,j+1,logtime))
+            #cmd1 = cmd+' > '+logfile+' 2>&1 &'
+            #lines += [cmd1]
+            lines += [cmd+' &']
 
         lines += ['wait']
         lines += ['echo "Done"']
