@@ -6,7 +6,13 @@ import numpy as np
 from glob import glob
 from astropy.io import fits
 from argparse import ArgumentParser
+#from dlnpyutils import utils as dln
 from nsc import utils
+
+# get rid of annoying warnings
+import warnings
+from astropy.utils.exceptions import AstropyWarning
+warnings.simplefilter('ignore', AstropyWarning)
 
 if __name__ == "__main__":
     # Check FITS files
