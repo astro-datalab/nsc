@@ -1,0 +1,35 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import numpy as np
+from glob import glob
+from astropy.io import fits
+from argparse import ArgumentParser
+from nsc import utils
+
+if __name__ == "__main__":
+    # Check FITS files
+    parser = ArgumentParser(description='Check FITS files')
+    parser.add_argument('files', type=str, nargs='+', help='Files to check')
+    args = parser.parse_args()
+
+    if isinstance(args.files,list):
+        files = args.files
+    else:
+        files = [args.files]
+    if len(files)==1:
+        infiles = files[0]
+        files = glob(infiles)
+    if len(files)>1:
+        print('Checking',len(files),'files')
+
+    for i in range(len(files)):
+        okay,error = utils.fitscheck(files[i])
+        if okay:
+            cmt = 'OK'
+            ecmt = ''
+        else:
+            cmt = 'BAD'
+            ecmt = ','.join(error)
+        print(cmt,"'"+files[i]+"'",ecmt)

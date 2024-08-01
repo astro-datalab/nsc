@@ -2149,3 +2149,19 @@ def taskcount(netcathost='localhost',netcatport=9471):
     if isinstance(val,bytes):
         val = val.decode()
     return val
+
+def fitscheck(filename):
+    """ Check that all of the data looks okay."""
+    okay = True
+    error = []
+    if os.path.exists(filename)==False:
+        return False,[str(filename)+' NOT FOUND']
+    hdu = fits.open(filename)
+    for i in range(len(hdu)):
+        try:
+            d = hdu[i].data
+        except Exception as e:
+            okay = False
+            error.append('HDU '+str(i)+' error - '+str(e))
+    hdu.close()
+    return okay,error
