@@ -30,6 +30,7 @@ if __name__ == "__main__":
     parser.add_argument('--stagger',type=int, nargs=1, default=60, help='Stagger time')
     parser.add_argument('--x',action='store_true', help='Exposure version is of format "vX"')
     parser.add_argument('--delete',action='store_true', help='Delete downloaded exposures at end')
+    parser.add_argument('--nowait',action='store_true', help='Do not wait for files to be downloaded')
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
     args = parser.parse_args()
 
@@ -45,13 +46,15 @@ if __name__ == "__main__":
     x = args.x                               # if called, exposure version is of format "vX"
     redo = args.redo                         # if called, redo = True
     delete = args.delete
+    nowait = args.nowait
     print("version =",version)
     print("host =",host)
     print("stagger =",stagger)
     print("x =",x)
     print("redo =",redo)
     print("delete =",delete)
-
+    print("nowait =",nowait)
+    
     # Get NSC directories
     basedir, tmpdir = utils.getnscdirs(version,host)
     print("Working in basedir,tmpdir = ",basedir,tmpdir)
@@ -102,6 +105,9 @@ if __name__ == "__main__":
             if os.path.exists(fluxfile) and os.path.exists(wtfile) and os.path.exists(maskfile):
                 break
             else:
+                if nowait:
+                    print(time.asctime(),'\nfiles not found. nowait set.  Quitting')
+                    sys.exit()
                 print(time.asctime(),'\nfiles not found. waiting')
                 time.sleep(60)
         

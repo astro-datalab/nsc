@@ -55,6 +55,7 @@ if __name__ == "__main__":
     parser.add_argument('--ppn',type=int,nargs=1,default=0,help='Processes per node')
     parser.add_argument('--stagger',type=int,nargs=1,default=60,help='Stagger time')
     parser.add_argument('--delete',action='store_true',help='Delete image files at end')
+    parser.add_argument('--nowait',action='store_true',help='Do not wait for files to be downloaded')
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
     args = parser.parse_args()
 
@@ -92,6 +93,7 @@ if __name__ == "__main__":
     else:
         stagger = args.stagger
     delete = args.delete
+    nowait = args.nowait
     redo = args.redo                         # if called, redo = True
 
     # Default partitions
@@ -116,6 +118,7 @@ if __name__ == "__main__":
         print('ppn =',ppn)
     print('stagger =',stagger)
     print('delete =',delete)
+    print('nowait =',nowait)
     print('redo =',redo)
 
     # Check that the input file exists
@@ -273,7 +276,7 @@ if __name__ == "__main__":
                 if fluxfile[:9]=='/net/mss1' or wtfile[:9]=='/net/mss1' or maskfile[:9]=='/net/mss1':
                     print('Exposure files not at TACC yet. SKIPPING')
                     continue
-            # One tempest files are downloaded by the nsc_download script
+            # On tempest files are downloaded by the nsc_download script
             if 'tempest' in host:
                 fluxfile = os.path.join(download_dir,os.path.basename(inputdata['fluxfile'][i]))
                 wtfile = os.path.join(download_dir,os.path.basename(inputdata['wtfile'][i]))
@@ -305,6 +308,8 @@ if __name__ == "__main__":
                 cmd += ' --delete'
             if stagger>0:
                 cmd += ' --stagger '+str(stagger)
+            if nowait:
+                cmd += ' --nowait'
             # Check output filename
             if base[:3]=='c4d':
                 night = '20'+base[4:10]
@@ -566,11 +571,14 @@ if __name__ == "__main__":
     # For measurement on Tempest we'll use our own job manager/launcher per mode
     if stage.lower()[:4]=='meas' and host.lower().startswith('tempest'):
         slurmdir = os.path.join(os.path.expanduser('~'),'slurm')
-        print('Using nsc_launcher')
+        #print('Using nsc_launcher')
         logdir = os.path.join(tmpdir,'logs')
-        out = slrm.nsclauncher(tasks,stage,nodes=nodes,ppn=ppn,version=version,partition=partition,
-                               host=host,walltime=walltime,slurmdir=slurmdir,logdir=logdir,
-                               verbose=True)
+        #out = slrm.nsclauncher(tasks,stage,nodes=nodes,cpus=ppn,version=version,partition=partition,
+        #                       host=host,walltime=walltime,slurmdir=slurmdir,logdir=logdir,
+        #                       verbose=True)
+        out = slurm.submit(tasks,label,nodes=nodes,cpus=ppn,partition=partition,
+                           shared=False,walltime=walltime,slurmroot=slurmroot,stagger=True,
+                           verbose=True)
     elif stage=='download':
         key,jobid = slurm.submit(tasks,label,nodes=1,cpus=1,partition=partition,
                                  walltime=walltime,slurmroot=slurmroot)
