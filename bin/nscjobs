@@ -100,11 +100,14 @@ if __name__ == "__main__":
     if partition=='':
         if host=='tacc':
             partition = 'small'
-            account = None
         elif host.lower()[:7]=='tempest':
             partition = 'priority'
-            account = 'priority-davidnidever'
-            
+    # Account
+    if host=='tacc':
+        account = None
+    elif host.lower()[:7]=='tempest':
+        account = 'priority-davidnidever'
+
     print('Input Parameters:')
     print('-----------------')
     print('stage =',stage,)
@@ -134,6 +137,11 @@ if __name__ == "__main__":
         print('Loading',inputfile,' ASCII file')
         inputdata = dln.readlines(inputfile)
     print(len(inputdata),'inputs')
+
+    # Make sure the filename columns are long enough
+    inputdata['fluxfile'] = inputdata['fluxfile'].astype((str,150))
+    inputdata['wtfile'] = inputdata['wtfile'].astype((str,150))
+    inputdata['maskfile'] = inputdata['maskfile'].astype((str,150))
 
     # Processes per node
     if ppn is None:
