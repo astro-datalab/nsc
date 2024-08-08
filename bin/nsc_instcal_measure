@@ -155,7 +155,7 @@ if __name__ == "__main__":
     t0 = time.time()
 
     # Create the Exposure object
-    exp = Exposure(fluxfile,wtfile,maskfile,nscversion=version,host=host)
+    exp = Exposure(fluxfile,wtfile,maskfile,nscversion=version,host=host,delete=delete)
 
     # Check if the output files already exist
     if redo==False and os.path.exists(exp.outdir):
