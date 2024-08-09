@@ -119,9 +119,25 @@ if __name__ == "__main__":
         print(wtfile+" file NOT FOUND")
         sys.exit()
     if os.path.exists(maskfile) is False:
-        print(maskile+" file NOT FOUND")
+        print(maskfile+" file NOT FOUND")
         sys.exit()
 
+    # Check that the InstCal files are not corrupted
+    print('Checking the InstCal files')
+    res = subprocess.run(['nsccheck',fluxfile,wtfile,maskfile],shell=False,capture_output=True)
+    txt = res.stdout
+    if type(txt)==bytes:
+        txt = txt.decode()
+    txt = txt.split('\n')
+    if 'Checking' in txt[0]:
+        txt.pop(0)
+    if txt[-1]=='':
+        txt.pop(len(txt)-1)
+    okay = [True if t[:2]=='OK' else False for t in txt]
+    if np.sum(okay)<3:
+        print('Some files have problems')
+        sys.exit()
+        
     # Stagger time
     if stagger > 0:
         sleeptime = np.random.randint(1,stagger)

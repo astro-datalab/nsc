@@ -2156,8 +2156,17 @@ def fitscheck(filename):
     error = []
     if os.path.exists(filename)==False:
         return False,[str(filename)+' NOT FOUND']
-    hdu = fits.open(filename)
-    for i in range(len(hdu)):
+
+    try:
+        hdu = fits.open(filename)
+        nhdu = len(hdu)
+    except Exception as e:
+        okay = False
+        error.append('Error - '+str(e))
+        hdu.close()
+        return okay,error
+    
+    for i in range(nhdu):
         try:
             d = hdu[i].data
         except Exception as e:
