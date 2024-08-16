@@ -62,7 +62,11 @@ if __name__ == "__main__":
     if not os.path.exists(basedir):
         os.makedirs(basedir)
     if not os.path.exists(tmpdir):
-        os.makedirs(tmpdir)
+        # try/except to handle race condition
+        try:
+            os.makedirs(tmpdir)
+        except:
+            pass
 
     # File names
     fluxfile = args.fluxfile
