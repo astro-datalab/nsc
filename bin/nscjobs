@@ -161,8 +161,8 @@ if __name__ == "__main__":
     if 'tempest' in host:
         download_dir = os.path.join(basedir,'download')
         
-    dt = [('cmd',str,1000),('name',str,1000),('output',str,1000),
-          ('outfile',str,1000),('errfile',str,1000),('dir',str,1000)] 
+    dt = [('cmd',str,1000),('name',str,100),('output',str,300),
+          ('outfile',str,300),('errfile',str,300),('dir',str,300)] 
     logtime = datetime.now().strftime("%Y%m%d%H%M%S")
 
 
@@ -254,6 +254,9 @@ if __name__ == "__main__":
             # Get unique exposures
             _,ui = np.unique(prevtasks['name'],return_index=True)
             prevtasks = prevtasks[ui]
+            # Trim string column lengths
+            for c in prevtasks.colnames:
+                prevtasks[c] = prevtasks[c].tolist()
             # Remove any previously submitted exposures
             inpbases = [os.path.basename(r['fluxfile']).replace('.fits.fz','') for r in inputdata]
             inpbases = np.array(inpbases).astype(str)
