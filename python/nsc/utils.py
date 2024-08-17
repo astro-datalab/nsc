@@ -1961,8 +1961,9 @@ def concatmeas(expdir,base=None,deletetruncated=False):
             os.remove(tarfile)
         else:
             print('problem untarring',tarfile)
-            import pdb; pdb.set_trace()
-
+            #import pdb; pdb.set_trace()
+            return
+            
     os.chdir(expdir)
     if base is None:
         base = os.path.basename(expdir)
@@ -2104,6 +2105,9 @@ def download_from_archive(md5sum,outdir='./'):
         s.mount('http://', HTTPAdapter(max_retries=retries))
         resp = s.get(url,timeout=1000)
         status = 0    # success
+    except KeyboardInterrupt:
+        print('Keyboard interrupted.  Quitting')
+        return
     except:
         print('Problem downloading data from archive')
         traceback.print_exc()
