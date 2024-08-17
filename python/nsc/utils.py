@@ -39,6 +39,7 @@ from requests.adapters import HTTPAdapter, Retry
 import subprocess
 import warnings
 import traceback
+import shutil
 
 # Ignore these warnings, it's a bug
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
