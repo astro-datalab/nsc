@@ -8,43 +8,49 @@ import shutil
 import time
 from datetime import datetime
 
-def make_transfer_list(n=10000):
+def make_transfer_list(n=10000,checkprev=True):
     """
     Make a list of exposures to transfer from NOIRLab to TACC.
     """
 
     listdir = '/net/dl2/dnidever/nsc/instcal/v4/lists/'
-    tab = Table.read(listdir+'decam_instcal_list_exptime10sec_20240727_left.fits.gz')
+    tab = Table.read(listdir+'decam_instcal_list_exptime10sec_20240727_left2transfer.fits.gz')
+    #tab = Table.read(listdir+'decam_instcal_list_exptime10sec_20240727_left.fits.gz')
+    #tab['fluxfile'] = np.char.array(tab['fluxfile']).astype(str).replace('/net/archive','/net/mss1/archive')
+    #tab['wtfile'] = np.char.array(tab['wtfile']).astype(str).replace('/net/archive','/net/mss1/archive')
+    #tab['maskfile'] = np.char.array(tab['maskfile']).astype(str).replace('/net/archive','/net/mss1/archive')
     #tab = Table.read(listdir+'decam_instcal_list_exptime10sec_20240714.fits.gz')
     #tab = Table.read(listdir+'r16avails_decam_instcal_list.fits.gz')
 
-    # Remove exposures that are done
-    done = dln.readlines(listdir+'/exposures_done_corral_20240714.txt')
-    done_exposure = [os.path.basename(d) for d in done]
-    _,ind1,ind2 = np.intersect1d(tab['base'],done_exposure,return_indices=True)
-    tab.remove_rows(ind1)
+    ## Remove exposures that are done
+    #done = dln.readlines(listdir+'/exposures_done_corral_20240714.txt')
+    #done_exposure = [os.path.basename(d) for d in done]
+    #_,ind1,ind2 = np.intersect1d(tab['base'],done_exposure,return_indices=True)
+    #tab.remove_rows(ind1)
 
     print('Making TACC image transfer list')
 
-    # Check any existing lists
-    files = glob(listdir+'transfer*list_*.lst')
-    files.sort()
-    print('Found',len(files),'previous lists')
+    # Checking previous lists
+    if checkprev:
+        # Check any existing lists
+        files = glob(listdir+'transfer*list_*.lst')
+        files.sort()
+        print('Found',len(files),'previous lists')
 
-    # Load the previous lists
-    prevlines = []
-    for i in range(len(files)):
-        print(files[i])
-        lines = dln.readlines(files[i])
-        prevlines += lines
+        # Load the previous lists
+        prevlines = []
+        for i in range(len(files)):
+            print(files[i])
+            lines = dln.readlines(files[i])
+            prevlines += lines
 
-    # Match them to FLUXFILE
-    _,ind1,ind2 = np.intersect1d(prevlines,tab['fluxfile'],return_indices=True)
-    if len(ind1)>0:
-        print(len(ind1),' exposures in previous lists')
-        # Delete them from the list
-        del tab[ind2]
-    print(len(tab),' exposures left')
+        # Match them to FLUXFILE
+        _,ind1,ind2 = np.intersect1d(prevlines,tab['fluxfile'],return_indices=True)
+        if len(ind1)>0:
+            print(len(ind1),' exposures in previous lists')
+            # Delete them from the list
+            del tab[ind2]
+        print(len(tab),' exposures left')
 
     if len(tab)<n:
         print('Only',len(tab),' remain')
