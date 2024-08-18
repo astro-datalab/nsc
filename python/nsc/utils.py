@@ -39,6 +39,7 @@ from requests.adapters import HTTPAdapter, Retry
 import subprocess
 import warnings
 import traceback
+import shutil
 
 # Ignore these warnings, it's a bug
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -1961,8 +1962,9 @@ def concatmeas(expdir,base=None,deletetruncated=False):
             os.remove(tarfile)
         else:
             print('problem untarring',tarfile)
-            import pdb; pdb.set_trace()
-
+            #import pdb; pdb.set_trace()
+            return
+            
     os.chdir(expdir)
     if base is None:
         base = os.path.basename(expdir)
@@ -2104,6 +2106,9 @@ def download_from_archive(md5sum,outdir='./'):
         s.mount('http://', HTTPAdapter(max_retries=retries))
         resp = s.get(url,timeout=1000)
         status = 0    # success
+    except KeyboardInterrupt:
+        print('Keyboard interrupted.  Quitting')
+        return
     except:
         print('Problem downloading data from archive')
         traceback.print_exc()
@@ -2149,3 +2154,28 @@ def taskcount(netcathost='localhost',netcatport=9471):
     if isinstance(val,bytes):
         val = val.decode()
     return val
+
+def fitscheck(filename):
+    """ Check that all of the data looks okay."""
+    okay = True
+    error = []
+    if os.path.exists(filename)==False:
+        return False,[str(filename)+' NOT FOUND']
+
+    try:
+        hdu = fits.open(filename)
+        nhdu = len(hdu)
+    except Exception as e:
+        okay = False
+        error.append('Error - '+str(e))
+        hdu.close()
+        return okay,error
+    
+    for i in range(nhdu):
+        try:
+            d = hdu[i].data
+        except Exception as e:
+            okay = False
+            error.append('HDU '+str(i)+' error - '+str(e))
+    hdu.close()
+    return okay,error

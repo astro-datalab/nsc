@@ -55,7 +55,7 @@ else:
 class Exposure:
 
     # Initialize Exposure object
-    def __init__(self,fluxfile,wtfile,maskfile,nscversion,host,delete=True):
+    def __init__(self,fluxfile,wtfile,maskfile,nscversion,host,delete=False):
         # Check that the files exist
         if os.path.exists(fluxfile) is False:
             print(fluxfile+" NOT found")

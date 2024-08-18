@@ -30,6 +30,7 @@ if __name__ == "__main__":
     parser.add_argument('--stagger',type=int, nargs=1, default=60, help='Stagger time')
     parser.add_argument('--x',action='store_true', help='Exposure version is of format "vX"')
     parser.add_argument('--delete',action='store_true', help='Delete downloaded exposures at end')
+    parser.add_argument('--nowait',action='store_true', help='Do not wait for files to be downloaded')
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
     args = parser.parse_args()
 
@@ -45,13 +46,15 @@ if __name__ == "__main__":
     x = args.x                               # if called, exposure version is of format "vX"
     redo = args.redo                         # if called, redo = True
     delete = args.delete
+    nowait = args.nowait
     print("version =",version)
     print("host =",host)
     print("stagger =",stagger)
     print("x =",x)
     print("redo =",redo)
     print("delete =",delete)
-
+    print("nowait =",nowait)
+    
     # Get NSC directories
     basedir, tmpdir = utils.getnscdirs(version,host)
     print("Working in basedir,tmpdir = ",basedir,tmpdir)
@@ -59,7 +62,11 @@ if __name__ == "__main__":
     if not os.path.exists(basedir):
         os.makedirs(basedir)
     if not os.path.exists(tmpdir):
-        os.makedirs(tmpdir)
+        # try/except to handle race condition
+        try:
+            os.makedirs(tmpdir)
+        except:
+            pass
 
     # File names
     fluxfile = args.fluxfile
@@ -102,6 +109,9 @@ if __name__ == "__main__":
             if os.path.exists(fluxfile) and os.path.exists(wtfile) and os.path.exists(maskfile):
                 break
             else:
+                if nowait:
+                    print(time.asctime(),'\nfiles not found. nowait set.  Quitting')
+                    sys.exit()
                 print(time.asctime(),'\nfiles not found. waiting')
                 time.sleep(60)
         
@@ -113,9 +123,25 @@ if __name__ == "__main__":
         print(wtfile+" file NOT FOUND")
         sys.exit()
     if os.path.exists(maskfile) is False:
-        print(maskile+" file NOT FOUND")
+        print(maskfile+" file NOT FOUND")
         sys.exit()
 
+    # Check that the InstCal files are not corrupted
+    print('Checking the InstCal files')
+    res = subprocess.run(['nsccheck',fluxfile,wtfile,maskfile],shell=False,capture_output=True)
+    txt = res.stdout
+    if type(txt)==bytes:
+        txt = txt.decode()
+    txt = txt.split('\n')
+    if 'Checking' in txt[0]:
+        txt.pop(0)
+    if txt[-1]=='':
+        txt.pop(len(txt)-1)
+    okay = [True if t[:2]=='OK' else False for t in txt]
+    if np.sum(okay)<3:
+        print('Some files have problems')
+        sys.exit()
+        
     # Stagger time
     if stagger > 0:
         sleeptime = np.random.randint(1,stagger)
@@ -149,7 +175,7 @@ if __name__ == "__main__":
     t0 = time.time()
 
     # Create the Exposure object
-    exp = Exposure(fluxfile,wtfile,maskfile,nscversion=version,host=host)
+    exp = Exposure(fluxfile,wtfile,maskfile,nscversion=version,host=host,delete=delete)
 
     # Check if the output files already exist
     if redo==False and os.path.exists(exp.outdir):

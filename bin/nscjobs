@@ -55,6 +55,7 @@ if __name__ == "__main__":
     parser.add_argument('--ppn',type=int,nargs=1,default=0,help='Processes per node')
     parser.add_argument('--stagger',type=int,nargs=1,default=60,help='Stagger time')
     parser.add_argument('--delete',action='store_true',help='Delete image files at end')
+    parser.add_argument('--nowait',action='store_true',help='Do not wait for files to be downloaded')
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
     args = parser.parse_args()
 
@@ -92,17 +93,21 @@ if __name__ == "__main__":
     else:
         stagger = args.stagger
     delete = args.delete
+    nowait = args.nowait
     redo = args.redo                         # if called, redo = True
 
     # Default partitions
     if partition=='':
         if host=='tacc':
             partition = 'small'
-            account = None
         elif host.lower()[:7]=='tempest':
             partition = 'priority'
-            account = 'priority-davidnidever'
-            
+    # Account
+    if host=='tacc':
+        account = None
+    elif host.lower()[:7]=='tempest':
+        account = 'priority-davidnidever'
+
     print('Input Parameters:')
     print('-----------------')
     print('stage =',stage,)
@@ -116,6 +121,7 @@ if __name__ == "__main__":
         print('ppn =',ppn)
     print('stagger =',stagger)
     print('delete =',delete)
+    print('nowait =',nowait)
     print('redo =',redo)
 
     # Check that the input file exists
@@ -132,12 +138,17 @@ if __name__ == "__main__":
         inputdata = dln.readlines(inputfile)
     print(len(inputdata),'inputs')
 
+    # Make sure the filename columns are long enough
+    inputdata['fluxfile'] = inputdata['fluxfile'].astype((str,150))
+    inputdata['wtfile'] = inputdata['wtfile'].astype((str,150))
+    inputdata['maskfile'] = inputdata['maskfile'].astype((str,150))
+
     # Processes per node
     if ppn is None:
         ppn = 64
         if host=='tacc':
-            ppn = 56
-    
+            ppn = 28
+
     # Get NSC directories                                                                                     
     basedir, tmpdir = utils.getnscdirs(version,host)
     print("Working in basedir,tmpdir = ",basedir,tmpdir)
@@ -150,8 +161,8 @@ if __name__ == "__main__":
     if 'tempest' in host:
         download_dir = os.path.join(basedir,'download')
         
-    dt = [('cmd',str,1000),('name',str,1000),('output',str,1000),
-          ('outfile',str,1000),('errfile',str,1000),('dir',str,1000)] 
+    dt = [('cmd',str,1000),('name',str,100),('output',str,300),
+          ('outfile',str,300),('errfile',str,300),('dir',str,300)] 
     logtime = datetime.now().strftime("%Y%m%d%H%M%S")
 
 
@@ -243,6 +254,9 @@ if __name__ == "__main__":
             # Get unique exposures
             _,ui = np.unique(prevtasks['name'],return_index=True)
             prevtasks = prevtasks[ui]
+            # Trim string column lengths
+            for c in prevtasks.colnames:
+                prevtasks[c] = prevtasks[c].tolist()
             # Remove any previously submitted exposures
             inpbases = [os.path.basename(r['fluxfile']).replace('.fits.fz','') for r in inputdata]
             inpbases = np.array(inpbases).astype(str)
@@ -273,7 +287,7 @@ if __name__ == "__main__":
                 if fluxfile[:9]=='/net/mss1' or wtfile[:9]=='/net/mss1' or maskfile[:9]=='/net/mss1':
                     print('Exposure files not at TACC yet. SKIPPING')
                     continue
-            # One tempest files are downloaded by the nsc_download script
+            # On tempest files are downloaded by the nsc_download script
             if 'tempest' in host:
                 fluxfile = os.path.join(download_dir,os.path.basename(inputdata['fluxfile'][i]))
                 wtfile = os.path.join(download_dir,os.path.basename(inputdata['wtfile'][i]))
@@ -305,6 +319,8 @@ if __name__ == "__main__":
                 cmd += ' --delete'
             if stagger>0:
                 cmd += ' --stagger '+str(stagger)
+            if nowait:
+                cmd += ' --nowait'
             # Check output filename
             if base[:3]=='c4d':
                 night = '20'+base[4:10]
@@ -342,7 +358,6 @@ if __name__ == "__main__":
         # it takes about 1 hour per exposure on average
         # there are ~120 cores per node
         # we can only run for 48 hours
-        # the tacc slurm queue limits launcher to a maximum of 56 tasks per node
         ntasks = np.minimum(len(tasks),maxtasks)
         if nodes is None:
             total_time_hour = ntasks
@@ -434,7 +449,6 @@ if __name__ == "__main__":
 
         # Calculate nodes need
         # calibration is pretty fast, maybe 1 min. per exposure
-        # the tacc slurm queue limits launcher to a maximum of 56 tasks per node
         ntasks = np.minimum(len(tasks),maxtasks)
         if nodes is None:
             total_time_hour = ntasks / 60.0
@@ -504,12 +518,11 @@ if __name__ == "__main__":
         tasks = tasks[:cnt]  # trim
 
         # Calculate nodes need
-        # the tacc slurm queue limits launcher to a maximum of 56 tasks per node
         # how much per healpix??
         ntasks = np.minimum(len(tasks),maxtasks)
         if nodes is None:
             total_time_hour = ntasks
-            nodes = int(np.ceil(total_time_hour/56/48))
+            nodes = int(np.ceil(total_time_hour/ppn/48))
     else:
         print('Stage ',stage,' not supported')
         sys.exit()
@@ -552,7 +565,6 @@ if __name__ == "__main__":
                 print('small must be 2 nodes')
                 nodes = 2
 
-    # the tacc slurm queue limits launcher to a maximum of 56 tasks per node
     nparallel = nodes*ppn
 
     print('Slurm Parameters:')
@@ -570,11 +582,14 @@ if __name__ == "__main__":
     # For measurement on Tempest we'll use our own job manager/launcher per mode
     if stage.lower()[:4]=='meas' and host.lower().startswith('tempest'):
         slurmdir = os.path.join(os.path.expanduser('~'),'slurm')
-        print('Using nsc_launcher')
+        #print('Using nsc_launcher')
         logdir = os.path.join(tmpdir,'logs')
-        out = slrm.nsclauncher(tasks,stage,nodes=nodes,ppn=ppn,version=version,partition=partition,
-                               host=host,walltime=walltime,slurmdir=slurmdir,logdir=logdir,
-                               verbose=True)
+        #out = slrm.nsclauncher(tasks,stage,nodes=nodes,cpus=ppn,version=version,partition=partition,
+        #                       host=host,walltime=walltime,slurmdir=slurmdir,logdir=logdir,
+        #                       verbose=True)
+        out = slurm.submit(tasks,label,nodes=nodes,cpus=ppn,partition=partition,
+                           shared=False,walltime=walltime,slurmroot=slurmroot,stagger=True,
+                           verbose=True)
     elif stage=='download':
         key,jobid = slurm.submit(tasks,label,nodes=1,cpus=1,partition=partition,
                                  walltime=walltime,slurmroot=slurmroot)
