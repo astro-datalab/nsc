@@ -14,7 +14,9 @@ def make_transfer_list(n=10000,checkprev=True):
     """
 
     listdir = '/net/dl2/dnidever/nsc/instcal/v4/lists/'
-    tab = Table.read(listdir+'decam_instcal_list_exptime10sec_20240727_left2transfer.fits.gz')
+
+    tab = Table.read(listdir+'decam_instcal_list_exptime10sec_20240823_left2transfer.fits')
+    #tab = Table.read(listdir+'decam_instcal_list_exptime10sec_20240727_left2transfer.fits.gz')
     #tab = Table.read(listdir+'decam_instcal_list_exptime10sec_20240727_left.fits.gz')
     #tab['fluxfile'] = np.char.array(tab['fluxfile']).astype(str).replace('/net/archive','/net/mss1/archive')
     #tab['wtfile'] = np.char.array(tab['wtfile']).astype(str).replace('/net/archive','/net/mss1/archive')
@@ -29,6 +31,28 @@ def make_transfer_list(n=10000,checkprev=True):
     #tab.remove_rows(ind1)
 
     print('Making TACC image transfer list')
+
+    # Making list of exposures left to transfer
+    #lines = dln.readlines(listdir+'tacc_allimages.082324.lst')
+    #base = [os.path.basename(l) for l in lines]
+    #fluxbase = [b for b in base if b.find('ooi')>-1]
+    #wtbase = [b for b in base if b.find('oow')>-1]
+    #maskbase = [b for b in base if b.find('ood')>-1]
+    #exists = np.zeros([len(tab),3],bool)
+    #tfluxbase = [os.path.basename(f) for f in tab['fluxfile']]
+    #_,ind1,ind2 = np.intersect1d(tfluxbase,fluxbase,return_indices=True)
+    #exists[ind1,0] = True
+    #twtbase = [os.path.basename(f) for f in tab['wtfile']]
+    #_,ind1,ind2 = np.intersect1d(twtbase,wtbase,return_indices=True)
+    #exists[ind1,1] = True
+    #tmaskbase = [os.path.basename(f) for f in tab['maskfile']]
+    #_,ind1,ind2 = np.intersect1d(tmaskbase,maskbase,return_indices=True)
+    #exists[ind1,2] = True
+    #totexists = np.sum(exists,axis=1)
+    #bd, = np.where(totexists<3)
+    # 28209
+    #tab = tab[bd]
+    #tab.write(listdir+'decam_instcal_list_exptime10sec_20240823_left2transfer.fits.gz')  
 
     # Checking previous lists
     if checkprev:
