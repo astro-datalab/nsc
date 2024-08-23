@@ -242,13 +242,18 @@ if __name__ == "__main__":
         print('Checking previously submitted tasks lists')
         tasklist = glob(os.path.join(basedir,'lists',label+'_*_tasks.fits'))
         prevtasks = None
+        ntotprev = 0
+        for tf in tasklist:
+            head = fits.getheader(tf,1)
+            ntotprev += head['naxis2']
+        ptasks1 = Table.read(tasklist[0])
+        prevtasks = Table(np.zeros(ntotprev,dtype=ptasks1.dtype))
+        count = 0
         for tf in tasklist:
             print('Loading ',tf)
             ptasks = Table.read(tf)
-            if prevtasks is None:
-                prevtasks = ptasks
-            else:
-                prevtasks = vstack((prevtasks,ptasks))
+            prevtasks[count:count+len(ptasks)] = ptasks
+            count += len(ptasks)
         # Some previous lists
         if prevtasks is not None:
             # Get unique exposures
