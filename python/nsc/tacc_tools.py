@@ -73,6 +73,66 @@ def make_transfer_list(n=10000,checkprev=True):
     dln.writelines(listdir+outfile,lines)
     print('List written to '+listdir+outfile)
 
+def make_transfer_list_tempest(n=10000,checkprev=True):
+    """
+    Make a list of exposures to transfer from TACC to Tempest.
+    """
+
+    listdir = '/scratch1/09970/dnidever/nsc/instcal/v4/lists/'
+    #listdir = '/home/x51j468/group/nsc/instcal/v4/lists/'
+    tab = Table.read(listdir+'decam_instcal_list_exptime10sec_20240727_left.fits.gz')
+
+    ## Remove exposures that are done
+    #done = dln.readlines(listdir+'/exposures_done_corral_20240714.txt')
+    #done_exposure = [os.path.basename(d) for d in done]
+    #_,ind1,ind2 = np.intersect1d(tab['base'],done_exposure,return_indices=True)
+    #tab.remove_rows(ind1)
+
+    print('Making TACC image transfer list')
+
+    # Checking previous lists
+    if checkprev:
+        # Check any existing lists
+        files = glob(listdir+'transfer*list_*.lst')
+        files.sort()
+        print('Found',len(files),'previous lists')
+
+        # Load the previous lists
+        prevlines = []
+        for i in range(len(files)):
+            print(files[i])
+            lines = dln.readlines(files[i])
+            prevlines += lines
+
+        # Match them to FLUXFILE
+        _,ind1,ind2 = np.intersect1d(prevlines,tab['fluxfile'],return_indices=True)
+        if len(ind1)>0:
+            print(len(ind1),' exposures in previous lists')
+            # Delete them from the list
+            del tab[ind2]
+        print(len(tab),' exposures left')
+
+    if len(tab)<n:
+        print('Only',len(tab),' remain')
+        n = len(tab)
+
+    # Start the list of files
+    print('Making list of',n,'exposures')
+    lines = []
+    for i in range(n):
+        fluxfile = tab['fluxfile'][i]
+        wtfile = tab['wtfile'][i]
+        maskfile = tab['maskfile'][i]
+        print(i,os.path.basename(fluxfile))
+        if os.path.exists(fluxfile) and os.path.exists(wtfile) and os.path.exists(maskfile):
+            lines += [fluxfile,wtfile,maskfile]
+
+    # Write the list to a file
+    tstamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    outfile = 'transfer'+str(n)+'list_'+tstamp+'.lst'
+    dln.writelines(listdir+outfile,lines)
+    print('List written to '+listdir+outfile)
+
 def reorganize_files(stagedate):
     """
     Reorganize images transferred to TACC.
