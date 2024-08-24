@@ -116,6 +116,34 @@ def make_transfer_list_tempest(n=10000,checkprev=True):
         print('Only',len(tab),' remain')
         n = len(tab)
 
+    # Fix image filenames on TACC
+    basedir = '/scratch1/09970/dnidever/nsc/instcal/v4/'
+    imlines = dln.readlines(basedir+'images/allimages.lst')
+    imlines = [basedir+'images/'+f[1:] for f in imlines]  # make absolute
+    imlines = np.array(imlines)
+    imbase = np.array([os.path.basename(f) for f in imlines])
+    tab['fluxfile'] = tab['fluxfile'].astype((str,300))
+    fluxfiles = tab['fluxfile']
+    fluxbase = np.array([os.path.basename(f) for f in fluxfiles])
+    _,ind1,ind2 = np.intersect1d(fluxbase,imbase,return_indices=True)
+    if len(ind1)>0:
+        print(len(ind1),' fluxfile names')
+        tab['fluxfile'][ind1] = imlines[ind2]
+    tab['wtfile'] = tab['wtfile'].astype((str,300))
+    wtfiles = tab['wtfile']
+    wtbase = np.array([os.path.basename(w) for w in wtfiles])
+    _,ind1,ind2 = np.intersect1d(wtbase,imbase,return_indices=True)
+    if len(ind1)>0:
+        print(len(ind1),' wtfile names')
+        tab['wtfile'][ind1] = imlines[ind2]
+    tab['maskfile'] = tab['maskfile'].astype((str,300))
+    maskfiles = tab['maskfile']
+    maskbase = np.array([os.path.basename(m) for m in maskfiles])
+    _,ind1,ind2 = np.intersect1d(maskbase,imbase,return_indices=True)
+    if len(ind1)>0:
+        print(len(ind1),' maskfile names')
+        tab['maskfile'][ind1] = imlines[ind2]
+
     # Start the list of files
     print('Making list of',n,'exposures')
     lines = []
@@ -123,6 +151,7 @@ def make_transfer_list_tempest(n=10000,checkprev=True):
         fluxfile = tab['fluxfile'][i]
         wtfile = tab['wtfile'][i]
         maskfile = tab['maskfile'][i]
+        # Fix paths for TACC
         print(i,os.path.basename(fluxfile))
         if os.path.exists(fluxfile) and os.path.exists(wtfile) and os.path.exists(maskfile):
             lines += [fluxfile,wtfile,maskfile]
@@ -140,6 +169,50 @@ def reorganize_files(stagedate):
 
     staging_dir = '/scratch1/09970/dnidever/nsc/instcal/v4/staging/'
     image_dir = '/scratch1/09970/dnidever/nsc/instcal/v4/images/'
+
+    print('Checking staging directory '+os.path.join(staging_dir,stagedate))
+
+    files = glob(os.path.join(staging_dir,stagedate,'*.fits*'))
+    files.sort()
+    print(len(files),'files found')
+
+    # Move files
+    for i in range(len(files)):
+        # move file
+        base = os.path.basename(files[i])
+        print(i,base)
+        src = files[i]
+        if base[:3] == 'c4d':
+            instrument = base.split('_')[0]
+            night = '20'+base.split('_')[1]
+        else:
+            try:
+                head = fits.getheader(files[i],0)
+            except:
+                print('Problem reading',files[i],'skipping')
+                continue
+            dateobs = head['date-obs']
+            instrument = 'c4d'  # assume it's decam
+            year = dateobs[:4]
+            month = dateobs[5:7]
+            day = dateobs[8:10]
+            night = year+month+day
+        year = night[:4]
+        outdir = os.path.join(image_dir,instrument,year,night)
+        if os.path.exists(outdir)==False:
+            os.makedirs(outdir)
+        dst = os.path.join(outdir,base)
+        shutil.move(src,dst)
+
+    #import pdb; pdb.set_trace()
+
+def reorganize_files_tempest(stagedate):
+    """
+    Reorganize images transferred to TACC.
+    """
+
+    staging_dir = '/home/group/davidnidever/nsc/instcal/v4/staging/'
+    image_dir = '/home/group/davidnidever/nsc/instcal/v4/images/'
 
     print('Checking staging directory '+os.path.join(staging_dir,stagedate))
 
