@@ -206,7 +206,8 @@ def reorganize_files(stagedate):
 
     #import pdb; pdb.set_trace()
 
-def reorganize_files_tempest(stagedate):
+
+def reorganize_files_tempest():
     """
     Reorganize images transferred to TACC.
     """
@@ -214,9 +215,9 @@ def reorganize_files_tempest(stagedate):
     staging_dir = '/home/group/davidnidever/nsc/instcal/v4/staging/'
     image_dir = '/home/group/davidnidever/nsc/instcal/v4/images/'
 
-    print('Checking staging directory '+os.path.join(staging_dir,stagedate))
+    print('Checking staging directory '+staging_dir)
 
-    files = glob(os.path.join(staging_dir,stagedate,'*.fits*'))
+    files = glob(os.path.join(staging_dir,'*.fits*'))
     files.sort()
     print(len(files),'files found')
 
