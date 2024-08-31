@@ -201,9 +201,9 @@ if __name__ == "__main__":
                 inputdata['wtfile'][i] = wt
                 inputdata['maskfile'][i] = mf
 
-        # Fix image filenames on TACC
-        if host=='tacc':
-            print('Fixing TACC filenames')
+        # Fix image filenames on TACC and tempest
+        if host=='tacc' or 'tempest' in host:
+            print('Fixing filenames')
             imlistfile = basedir+'images/allimages.lst'
             if os.path.exists(imlistfile)==False or (os.path.getctime(imlistfile) < (datetime.now().timestamp()-7200)):
                 print('Remaking image list')
@@ -237,23 +237,24 @@ if __name__ == "__main__":
             if len(ind1)>0:
                 print(len(ind1),' maskfile names')
                 inputdata['maskfile'][ind1] = imlines[ind2]
-
+                
         # Check previously submitted tasks lists
         print('Checking previously submitted tasks lists')
         tasklist = glob(os.path.join(basedir,'lists',label+'_*_tasks.fits'))
-        prevtasks = None
-        ntotprev = 0
-        for tf in tasklist:
-            head = fits.getheader(tf,1)
-            ntotprev += head['naxis2']
-        ptasks1 = Table.read(tasklist[0])
-        prevtasks = Table(np.zeros(ntotprev,dtype=ptasks1.dtype))
-        count = 0
-        for tf in tasklist:
-            print('Loading ',tf)
-            ptasks = Table.read(tf)
-            prevtasks[count:count+len(ptasks)] = ptasks
-            count += len(ptasks)
+        prevtasks = None        
+        if len(tasklist)>0:
+            ntotprev = 0
+            for tf in tasklist:
+                head = fits.getheader(tf,1)
+                ntotprev += head['naxis2']
+            ptasks1 = Table.read(tasklist[0])
+            prevtasks = Table(np.zeros(ntotprev,dtype=ptasks1.dtype))
+            count = 0
+            for tf in tasklist:
+                print('Loading ',tf)
+                ptasks = Table.read(tf)
+                prevtasks[count:count+len(ptasks)] = ptasks
+                count += len(ptasks)
         # Some previous lists
         if prevtasks is not None:
             # Get unique exposures
@@ -293,10 +294,10 @@ if __name__ == "__main__":
                     print('Exposure files not at TACC yet. SKIPPING')
                     continue
             # On tempest files are downloaded by the nsc_download script
-            if 'tempest' in host:
-                fluxfile = os.path.join(download_dir,os.path.basename(inputdata['fluxfile'][i]))
-                wtfile = os.path.join(download_dir,os.path.basename(inputdata['wtfile'][i]))
-                maskfile = os.path.join(download_dir,os.path.basename(inputdata['maskfile'][i]))                
+            #if 'tempest' in host:
+            #    fluxfile = os.path.join(download_dir,os.path.basename(inputdata['fluxfile'][i]))
+            #    wtfile = os.path.join(download_dir,os.path.basename(inputdata['wtfile'][i]))
+            #    maskfile = os.path.join(download_dir,os.path.basename(inputdata['maskfile'][i]))                
             ## Need to download files on tempest
             ##   use md5sum as filenames
             #if host.startswith('tempest'):
@@ -583,7 +584,7 @@ if __name__ == "__main__":
         slurmroot = os.path.join(os.path.expanduser('~'),'slurm')
         if os.path.exists(slurmroot)==False:
             os.makedirs(slurmroot)
-
+            
     # For measurement on Tempest we'll use our own job manager/launcher per mode
     if stage.lower()[:4]=='meas' and host.lower().startswith('tempest'):
         slurmdir = os.path.join(os.path.expanduser('~'),'slurm')
