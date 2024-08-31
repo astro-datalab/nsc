@@ -1,0 +1,9 @@
+#!/bin/csh
+set running=`squeue --me | grep small | grep measure | wc -l`
+if ( $running > 5 ) then
+  echo "6 small measure jobs running already.  Will try again when it drops below 6"
+  exit
+endif
+module load TACC
+module load cfitsio/4.2.0
+/home1/09970/dnidever/projects/nsc/bin/nscjobs measure /scratch1/09970/dnidever/nsc/instcal/v4/lists/decam_instcal_list_exptime10sec_20240727_left.fits.gz v4 --host tacc --maxtasks 3000 --partition small
