@@ -205,7 +205,8 @@ if __name__ == "__main__":
         if host=='tacc' or 'tempest' in host:
             print('Fixing filenames')
             imlistfile = basedir+'images/allimages.lst'
-            if os.path.exists(imlistfile)==False or (os.path.getctime(imlistfile) < (datetime.now().timestamp()-7200)):
+            #if os.path.exists(imlistfile)==False or (os.path.getctime(imlistfile) < (datetime.now().timestamp()-7200)):
+            if os.path.exists(imlistfile)==False:
                 print('Remaking image list')
                 if os.path.exists(imlistfile):
                     os.remove(imlistfile)
@@ -607,12 +608,14 @@ if __name__ == "__main__":
             #export LAUNCHER_PPN=10
             precommands = ['export LAUNCHER_DIR=/home/x51j468/projects/launcher']
             precommands += ['export LAUNCHER_PPN='+str(nparallel)]
+            postcommands = None
         else:
-            precommands = None
+            precommands = ['/usr/bin/rm -fR /tmp/dnidever/nsc/v4/*']
+            postcommands = ['/usr/bin/rm -fR /tmp/dnidever/nsc/v4/*']
         slurmdir,key,jobid = slurm.launcher(tasks,label,nodes=nodes,nparallel=nparallel,
                                             account=account,partition=partition,walltime=walltime,
                                             notification=True,stagger=True,precommands=precommands,
-                                            slurmroot=slurmroot,verbose=True)
+                                            postcommands=postcommands,slurmroot=slurmroot,verbose=True)
         # Write list of output directories
         dln.writelines(os.path.join(slurmdir,label+'_outdir.lst'),tasks['dir'].data.astype(str))
         # Write task list to lists/ 
