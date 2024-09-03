@@ -1,0 +1,95 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import numpy as np
+import warnings
+from astropy.io import fits
+from astropy.utils.exceptions import AstropyWarning
+from astropy.table import Table,vstack
+import time
+import subprocess
+from glob import glob
+from datetime import datetime
+import logging
+import socket
+from datetime import datetime
+from argparse import ArgumentParser
+from dlnpyutils import utils as dln,email
+from nsc import utils
+
+if __name__ == "__main__":
+    # NSC status
+    parser = ArgumentParser(description='NSC status')
+    parser.add_argument('stage', type=str, nargs=1, help='Stage (download, measure, calibrate or combine)')
+    parser.add_argument('version', type=str, nargs=1, help='NSC version')
+    parser.add_argument('host',type=str,nargs=1,help='hostname: "cca","tempest_katie","tempest_group","gp09/7","tacc"')
+    args = parser.parse_args()
+
+    stage = args.stage[0]
+    version = args.version[0]
+    host = args.host[0]
+
+    basedir, tmpdir = utils.getnscdirs(version,host)
+    print("basedir,tmpdir = ",basedir,tmpdir)
+
+    # Slurm jobs running
+    res1 = subprocess.run(['squeue','--me'],capture_output=True,shell=False)
+    out1 = res1.stdout
+    if isinstance(out1,bytes):
+        out1 = out1.decode()
+    out1 = out1.split('\n')
+    if out1[-1]=='':
+        out1.pop(-1)
+    njobs = len(out1)-1
+
+    # Number of meas.fits files
+    cmd = 'find '+basedir+'/c4d | grep meas.fits | wc -l'
+    res2 = subprocess.run(cmd,capture_output=True,shell=True)
+    out2 = res2.stdout
+    if isinstance(out2,bytes):
+        out2 = out2.decode()
+    out2 = out2.split('\n')
+    nmeasfiles = out2[0]
+
+    # Number of image files
+    cmd = 'find '+basedir+'/images | grep fits.fz | wc -l'
+    res3 = subprocess.run(cmd,capture_output=True,shell=True)
+    out3 = res3.stdout
+    if isinstance(out3,bytes):
+        out3 = out3.decode()
+    out3 = out3.split('\n')
+    nimagefiles = out3[0]
+    nexpfiles = int(nimagefiles)//3
+
+    message = """\
+              <html>
+                <body>
+              """
+
+    message += '<b>NSC {:} status </b><br>\n'.format(stage)
+    message += str(datetime.datetime.now().ctime())+'<br>\n'
+    message += '<p>\n'
+
+    # Number of slurm jobs
+    message += 'Slurm jobs: '+str(njobs)+'<br>\n'
+    # Number of meas.fits files
+    message += 'meas.fits files: '+str(nmeasfiles)+'<br>\n'
+    # Number of image files and exp image files
+    message += 'image files: '+str(nimagefiles)+'<br>\n'
+    message += 'image exposures: '+str(nexpfiles)+'<br>\n'
+    # slurm jobs
+    for o in out3:
+        message += o+'<br>\n'
+
+    message += """\
+                 </p>
+                 </body>
+               </html>
+               """
+
+    import pdb; pdb.set_trace()
+
+    address = 'dnidever@montana.edu'
+    subject = 'NSC Status'
+    email.send(address,subject,message,send_from='noreply.nscstatus')
