@@ -5,7 +5,7 @@ if ( $running > 5 ) then
   exit
 endif
 
-setenv PATH "/work2/09970/dnidever/anaconda3/bin:$PATH"
+setenv PATH "/work2/09970/dnidever/anaconda3/bin:$HOME/bin:$PATH"
 module load TACC
 module load cfitsio/4.2.0
 module list
