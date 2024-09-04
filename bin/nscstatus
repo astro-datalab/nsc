@@ -68,7 +68,7 @@ if __name__ == "__main__":
               """
 
     message += '<b>NSC {:} status </b><br>\n'.format(stage)
-    message += str(datetime.datetime.now().ctime())+'<br>\n'
+    message += str(datetime.now().ctime())+'<br>\n'
     message += '<p>\n'
 
     # Number of slurm jobs
@@ -79,7 +79,7 @@ if __name__ == "__main__":
     message += 'image files: '+str(nimagefiles)+'<br>\n'
     message += 'image exposures: '+str(nexpfiles)+'<br>\n'
     # slurm jobs
-    for o in out3:
+    for o in out1:
         message += o+'<br>\n'
 
     message += """\
@@ -92,4 +92,4 @@ if __name__ == "__main__":
 
     address = 'dnidever@montana.edu'
     subject = 'NSC Status'
-    email.send(address,subject,message,send_from='noreply.nscstatus')
+    email.send(address,subject,message,send_from='noreply.nscstatus',hostname='frontera.tacc.utexas.edu')
