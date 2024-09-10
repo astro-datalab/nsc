@@ -1,0 +1,9 @@
+#!/bin/csh
+
+setenv PATH "/work2/09970/dnidever/anaconda3/bin:$HOME/bin:$PATH"
+module load TACC
+module load cfitsio/4.2.0
+module list
+which python
+
+/home1/09970/dnidever/projects/nsc/bin/nscstatus measure v4 tacc

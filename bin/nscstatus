@@ -88,8 +88,6 @@ if __name__ == "__main__":
                </html>
                """
 
-    import pdb; pdb.set_trace()
-
     address = 'dnidever@montana.edu'
     subject = 'NSC Status'
     email.send(address,subject,message,send_from='noreply.nscstatus',hostname='frontera.tacc.utexas.edu')

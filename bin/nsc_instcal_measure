@@ -15,6 +15,7 @@ import logging
 import socket
 from datetime import datetime
 from argparse import ArgumentParser
+import traceback
 from nsc import utils
 from nsc.nsc_instcal_measure import Exposure
 
@@ -188,7 +189,19 @@ if __name__ == "__main__":
         shutil.rmtree(exp.outdir)
 
     # Run
-    exp.run()
+    try:
+        exp.run()
+    except:
+        traceback.print_exc()
+        print('Problem running exposure')
+
+    # Always delete temporary files
+    try:
+        print('Deleting temporary directory',tmpdir)
+        shutil.rmtree(tmpdir)
+    except:
+        traceback.print_exc()
+        print('Problems deleting temporary directory',tmpdir)
 
     # Delete files
     if delete:
