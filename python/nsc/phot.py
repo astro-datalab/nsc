@@ -2190,11 +2190,11 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
     # Make sure we have the image file name
     if imfile is None:
         logger.warning("No image filename input")
-        return None
+        return None,None,None
     # Make sure we have the list file name
     if listfile is None:
         logger.warning("No list filename input")
-        return None
+        return None,None,None
     
     logger.info("Input file = "+imfile) #ktedit:cpsf
 
@@ -2214,7 +2214,7 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
     for f in [imfile,listfile,optfile,apfile]:
         if os.path.exists(f) is False:
             logger.warning(f+" NOT found")
-            return None
+            return None,None,None
 
     # Make temporary short filenames to DAOPHOT can handle them
     tid,tfile = tempfile.mkstemp(prefix="tpsf",dir=".")
@@ -2268,6 +2268,15 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
         logger.error(e)
         traceback.print_exc()
         raise Exception("DAOPHOT failed")
+
+    # Check if it failed to converage
+    if os.path.exists(logfile):
+        plines = readlines(logfile)
+        bad = grep(plines,'Failed to converge',index=True)
+        results = grep(plines,'>> ',index=True)
+        if len(bad)>0 and len(results)==0:
+            logger.error("DAOPHOT PSF failed to converge")
+            return None,None,None
 
     # Check that the output file exists
     if (os.path.exists(toutfile)) is True and (os.path.getsize(toutfile)!=0):
@@ -2647,10 +2656,13 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
             # Run DAOPSF
             try:
                 pararr, parchi, profs = daopsf(imfile,wlistfile,apfile,logger=logger)
-                chi = np.min(parchi)
-                mean_chi = np.mean(profs['SIG'])
-                logger.info("mean chi = "+str(mean_chi))
-                psfsuccess = True
+                if pararr is not None:
+                    chi = np.min(parchi)
+                    mean_chi = np.mean(profs['SIG'])
+                    logger.info("mean chi = "+str(mean_chi))
+                    psfsuccess = True
+                else:
+                    psfsuccess = False
             except:
                 logger.error("Failure in DAOPSF")
                 traceback.print_exc()
@@ -2666,10 +2678,14 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
                     writelines(optfile,opttable,overwrite=True)                    
                     logger.info('Retrying DAOPHOT PSF with AN='+newanpsf)
                     pararr, parchi, profs = daopsf(imfile,wlistfile,apfile,logger=logger)
-                    chi = np.min(parchi)
-                    mean_chi = np.mean(profs['SIG'])     
-                    logger.info("mean chi = "+str(mean_chi))
-                    psfsuccess = True
+                    if pararr is not None:
+                        chi = np.min(parchi)
+                        mean_chi = np.mean(profs['SIG'])     
+                        logger.info("mean chi = "+str(mean_chi))
+                        psfsuccess = True
+
+            if psfsuccess==False:
+                raise Exception('no psf success')
 
             # Check for bad stars
             nstars = len(profs)
@@ -2732,12 +2748,12 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
                     spararr, sparchi, sprofs = daopsf(imfile,wlistfile,apfile,logger=logger)
                     chi = np.min(sparchi)
 
-                    subsigs, profsind, sprofsind = np.intersect1d(profs['ID'],sprofs['ID'],return_indices=True)  
-                    profsigs=profs['SIG'][profsind]                                                              
-                    sprofsigs=sprofs['SIG'][sprofsind]                                                           
-                    diffsigs=np.absolute(profsigs-sprofsigs)                                                     
-                    mean_diffchi=np.mean(diffsigs)
-                    mean_subchi=np.mean(sprofs['SIG'])                    
+                    subsigs, profsind, sprofsind = np.intersect1d(profs['ID'],sprofs['ID'],return_indices=True)
+                    profsigs = profs['SIG'][profsind]
+                    sprofsigs = sprofs['SIG'][sprofsind]
+                    diffsigs = np.absolute(profsigs-sprofsigs)
+                    mean_diffchi = np.mean(diffsigs)
+                    mean_subchi = np.mean(sprofs['SIG'])                    
                     logger.info("mean (diff in individual chi values) = {:.5f}".format(mean_diffchi))                              
                     logger.info("mean subchi, chi, last subchi values= {:.5f}, {:.5f}, {:.5f}".format(mean_subchi,mean_chi,mean_subchi_last))
                     logger.info("diff between mean chi and mean subchi values = {:.5f}".format(abs(mean_chi-mean_subchi)))
@@ -2768,7 +2784,17 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
             os.rename(imfile,finalsubfile)   # copy subfile to a version that marks the iteration
             os.rename("temp_"+imfile,imfile) # move the image file back to its original name
             logger.info(imfile+" moved back to "+finalsubfile+", temp_"+imfile+" moved back to "+imfile)
+
+        # Keep a copy of the success PSF file
+        if os.path.exists(psffile):
+            shutil.copy(psffile,psffile+'.'+str(subiter))
+        if os.path.exists(logfile):
+            shutil.copy(logfile,logfile+'.'+str(subiter))
+
+        # Increment the counter 
         subiter = subiter+1        
+
+        # end of cleaning iteration
 
     # Put information in meta
     if meta is not None:
