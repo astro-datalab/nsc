@@ -172,7 +172,7 @@ if __name__ == "__main__":
     #logger.addHandler(consoleHandler)
     #logger.setLevel(logging.NOTSET)
 
-    # Start keeping time                                                                                      
+    # Start keeping time                                                            
     t0 = time.time()
 
     # Create the Exposure object
@@ -196,12 +196,19 @@ if __name__ == "__main__":
         print('Problem running exposure')
 
     # Always delete temporary files
+    if exp.workdir is not None and exp.workdir is not '':
+        tmpexpdir = exp.workdir
+    else:
+        tmpexpdir = os.path.join(tmpdir,exp.base+'.1')
     try:
-        print('Deleting temporary directory',tmpdir)
-        shutil.rmtree(tmpdir)
+        print('Deleting temporary directory',tmpexpdir)
+        if os.path.exists(tmpexpdir):
+            shutil.rmtree(tmpexpdir)
+        else:
+            print(tmpexpdir,'does not exist')
     except:
         traceback.print_exc()
-        print('Problems deleting temporary directory',tmpdir)
+        print('Problems deleting temporary directory',tmpexpdir)
 
     # Delete files
     if delete:
