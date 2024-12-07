@@ -196,7 +196,7 @@ if __name__ == "__main__":
         print('Problem running exposure')
 
     # Always delete temporary files
-    if exp.workdir is not None and exp.workdir is not '':
+    if exp.workdir != None and exp.workdir != '':
         tmpexpdir = exp.workdir
     else:
         tmpexpdir = os.path.join(tmpdir,exp.base+'.1')

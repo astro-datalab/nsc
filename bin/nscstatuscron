@@ -6,4 +6,6 @@ module load cfitsio/4.2.0
 module list
 which python
 
+date
 /home1/09970/dnidever/projects/nsc/bin/nscstatus measure v4 tacc
+date
