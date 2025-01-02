@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import os
 import sys
@@ -7,12 +7,37 @@ from glob import glob
 from astropy.io import fits
 from argparse import ArgumentParser
 #from dlnpyutils import utils as dln
-from nsc import utils
+#from nsc import utils
 
 # get rid of annoying warnings
 import warnings
 from astropy.utils.exceptions import AstropyWarning
 warnings.simplefilter('ignore', AstropyWarning)
+
+def fitscheck(filename):
+    """ Check that all of the data looks okay."""
+    okay = True
+    error = []
+    if os.path.exists(filename)==False:
+        return False,[str(filename)+' NOT FOUND']
+
+    try:
+        hdu = fits.open(filename)
+        nhdu = len(hdu)
+    except Exception as e:
+        okay = False
+        error.append('Error - '+str(e))
+        hdu.close()
+        return okay,error
+
+    for i in range(nhdu):
+        try:
+            d = hdu[i].data
+        except Exception as e:
+            okay = False
+            error.append('HDU '+str(i)+' error - '+str(e))
+    hdu.close()
+    return okay,error
 
 if __name__ == "__main__":
     # Check FITS files
@@ -31,7 +56,7 @@ if __name__ == "__main__":
         print('Checking',len(files),'files')
 
     for i in range(len(files)):
-        okay,error = utils.fitscheck(files[i])
+        okay,error = fitscheck(files[i])
         if okay:
             cmt = 'OK'
             ecmt = ''

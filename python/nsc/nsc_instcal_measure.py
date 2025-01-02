@@ -31,8 +31,9 @@ import subprocess
 import sys
 import time
 import warnings
-import requests
-from dlnpyutils.utils import *
+#import requests
+#from dlnpyutils.utils import *
+#from dlnpyutils.utils import readlines,writelines
 from . import phot,slurm_funcs,utils
 
 # Ignore these warnings, it's a bug
@@ -817,10 +818,10 @@ class Chip:
             file1 = daobase+".als"                                      # total ALLSTAR cat stored in this file
             file2 = daobase+str(self.sexiter)+".als"                    # new ALLSTAR cat stored in this file
 
-        cat1 = readlines(file1)
-        cat2 = readlines(file2)
+        cat1 = utils.readlines(file1)
+        cat2 = utils.readlines(file2)
         combined_cat = cat1+cat2[3:]                                    # combine the catalogs 
-        writelines(file1,combined_cat,overwrite=True)
+        utils.writelines(file1,combined_cat,overwrite=True)
 
     # Get aperture correction
     #------------------------

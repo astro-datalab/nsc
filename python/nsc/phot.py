@@ -8,6 +8,7 @@ from __future__ import print_function
 __authors__ = 'David Nidever <dnidever@noao.edu>'
 __version__ = '20180823'  # yyyymmdd
 
+import re
 import os
 import sys
 import numpy as np
@@ -19,12 +20,11 @@ from astropy.table import Table, Column
 import time
 import shutil
 import subprocess
-import requests
-import urllib.request
-import pandas as pd
+#import requests
+#import urllib.request
 import logging
 #from scipy.signal import convolve2d
-from dlnpyutils.utils import *
+#from dlnpyutils.utils import *
 from scipy.ndimage.filters import convolve
 import astropy.stats
 import struct
@@ -32,8 +32,7 @@ import tempfile
 import time
 import traceback
 from .slurm_funcs import *
-
-pd.set_option('display.max_columns',None)
+from .utils import readlines,writelines,grep,numlines,remove_indices
 
 # Ignore these warnings, it's a bug
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -41,6 +40,8 @@ warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
 # Query the Astro Data Archive (ADA)
 def ada_query(type,adsurl,search_params,rawname,udir,outdir="",fbase=""):
+    import pandas as pd
+    pd.set_option('display.max_columns',None)
     query_eflag = 0                # to redo query if denied
     while query_eflag==0:
         try:                       # Try to do query
@@ -1072,7 +1073,7 @@ def runsex(fluxfile=None,wtfile=None,maskfile=None,meta=None,outfile=None,config
         ngdcat = np.sum(gdcat)
         mag = cat["MAG_AUTO"][gdcat]
         mag_sorted = np.sort(mag)
-        maglim = mag_sorted[int(np.round(0.90*ngdcat))]
+        maglim = mag_sorted[int(np.round(0.90*ngdcat))-1]
         logger.info("Estimated magnitude limit = %6.2f mag" % maglim)
         # Get background value and RMS and add to meta
         plines = readlines(logfile)
@@ -2123,6 +2124,11 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,
 
     # Return the catalog
     logger.info("Output file = "+outfile)
+
+    # Get number of PSF stars
+    npsfstars = numlines(outfile)-2
+    logger.info(str(npsfstars)+' PSF stars')
+
     return daoread(outfile)
 
 
@@ -2215,6 +2221,12 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
         if os.path.exists(f) is False:
             logger.warning(f+" NOT found")
             return None,None,None
+
+    # Check number of PSF stars, we need at least 3 to create a PSF
+    npsfstars = numlines(listfile)-2
+    if npsfstars<3:
+        logger.error('Only '+str(npsfstars)+' PSF stars. Need at least 3 to create a PSF')
+        raise Exception('Not enough PSF stars')
 
     # Make temporary short filenames to DAOPHOT can handle them
     tid,tfile = tempfile.mkstemp(prefix="tpsf",dir=".")
@@ -2601,6 +2613,12 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
             logger.warning(f+" NOT found")
             return
 
+    # Check number of PSF stars, we need at least 3 to create a PSF
+    npsfstars = numlines(listfile)-2
+    if npsfstars<3:
+        logger.error('Only '+str(npsfstars)+' PSF stars. Need at least 3 to create a PSF')
+        raise Exception('Not enough PSF stars')
+
     # Working list file
     wlistfile = listfile+"1"
     if os.path.exists(wlistfile): os.remove(wlistfile)
@@ -2610,6 +2628,9 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
     if os.path.exists(listfile+".orig"): os.remove(listfile+".orig")
     shutil.copy(listfile,listfile+".orig")
 
+    # Check that we have enough PSF stars, need at least 3
+    npsfstars = numlines(wlistfile)-2
+    logger.info(str(npsfstars)+' PSF stars')
 
     #----------------------------------------------------------------
     # Iterate entire flag & neighbor subtraction process 
@@ -2684,8 +2705,13 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
                         logger.info("mean chi = "+str(mean_chi))
                         psfsuccess = True
 
+            #if psfsuccess==False and os.path.basename(os.getcwd())=='c4d_141231_083025_ooi_z_v1.2':
+            #    import pdb; pdb.set_trace()
             if psfsuccess==False:
-                raise Exception('no psf success')
+                npsfstars = numlines(wlistfile)-2
+                if npsfstars<3:
+                    raise Exception('Not enough PSF stars')
+                raise Exception('createpsf failed')
 
             # Check for bad stars
             nstars = len(profs)
@@ -3106,7 +3132,7 @@ def daogrow(photfile,aperfile,meta,nfree=3,fixedvals=None,maxerr=0.2,logfile=Non
 
     # Run the script
     try:
-        retcode = subprocess.call(["./"+scriptfile],stderr=subprocess.STDOUT,shell=False)
+        retcode = subprocess.call(["./"+scriptfile],stderr=subprocess.STDOUT,shell=False,timeout=100)
         if retcode < 0:
             logger.error("Child was terminated by signal"+str(-retcode))
         else:
