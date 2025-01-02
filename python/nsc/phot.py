@@ -2126,7 +2126,7 @@ def daopickpsf(imfile=None,catfile=None,maglim=None,outfile=None,nstars=100,
     logger.info("Output file = "+outfile)
 
     # Get number of PSF stars
-    npsfstars = numlines(outfile)-2
+    npsfstars = numlines(outfile)-3
     logger.info(str(npsfstars)+' PSF stars')
 
     return daoread(outfile)
@@ -2223,7 +2223,7 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
             return None,None,None
 
     # Check number of PSF stars, we need at least 3 to create a PSF
-    npsfstars = numlines(listfile)-2
+    npsfstars = numlines(listfile)-3
     if npsfstars<3:
         logger.error('Only '+str(npsfstars)+' PSF stars. Need at least 3 to create a PSF')
         raise Exception('Not enough PSF stars')
@@ -2614,7 +2614,7 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
             return
 
     # Check number of PSF stars, we need at least 3 to create a PSF
-    npsfstars = numlines(listfile)-2
+    npsfstars = numlines(listfile)-3
     if npsfstars<3:
         logger.error('Only '+str(npsfstars)+' PSF stars. Need at least 3 to create a PSF')
         raise Exception('Not enough PSF stars')
@@ -2627,10 +2627,6 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
     # Make copy of original PSF list
     if os.path.exists(listfile+".orig"): os.remove(listfile+".orig")
     shutil.copy(listfile,listfile+".orig")
-
-    # Check that we have enough PSF stars, need at least 3
-    npsfstars = numlines(wlistfile)-2
-    logger.info(str(npsfstars)+' PSF stars')
 
     #----------------------------------------------------------------
     # Iterate entire flag & neighbor subtraction process 
