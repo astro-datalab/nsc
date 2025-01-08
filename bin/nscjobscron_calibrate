@@ -1,0 +1,14 @@
+#!/bin/csh
+set running=`squeue --me | grep small | grep measure | wc -l`
+if ( $running > 3 ) then
+  echo "4 small measure jobs running already.  Will try again when it drops below 4"
+  exit
+endif
+
+#setenv PATH "/work2/09979/kfas/anaconda3/bin:$HOME/bin:$PATH"
+module load TACC
+module load cfitsio/4.2.0
+module list
+which python
+
+/home1/09979/kfas/bin/nsc/bin/nscjobs calibrate /scratch1/09971/kfas/nsc/instcal/v4/lists/decam_strip.fits.gz v4 --host tacc --maxtasks 1000 --partition small
