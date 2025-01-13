@@ -1,5 +1,5 @@
 # BAND INSTRUMENT DECRANGE       COLOREQN           COLORANGE    MODELMAGEQN                                                    QUALITYCUTS
-  g      c4d      [-11,11]   SM_GMAG-SM_IMAG        [0.0,3.0]    SM_GMAG                                                        PS_GMAG<21.0
-  r      c4d      [-11,11]   SM_GMAG-SM_IMAG        [0.0,3.0]    SM_RMAG                                                        PS_RMAG<21.0
-  i      c4d      [-11,11]   SM_GMAG-SM_IMAG        [0.0,3.0]    SM_IMAG                                                        PS_IMAG<21.0
-  z      c4d      [-11,11]   SM_GMAG-SM_IMAG        [0.0,3.0]    SM_ZMAG                                                        PS_ZMAG<21.0
+  g      c4d      [-11,11]   SM_GMAG-SM_IMAG        [0.0,3.0]    SM_GMAG                                                        SM_GMAG<21.0
+  r      c4d      [-11,11]   SM_GMAG-SM_IMAG        [0.0,3.0]    SM_RMAG                                                        SM_RMAG<21.0
+  i      c4d      [-11,11]   SM_GMAG-SM_IMAG        [0.0,3.0]    SM_IMAG                                                        SM_IMAG<21.0
+  z      c4d      [-11,11]   SM_GMAG-SM_IMAG        [0.0,3.0]    SM_ZMAG                                                        SM_ZMAG<21.0

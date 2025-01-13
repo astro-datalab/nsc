@@ -11,4 +11,4 @@ module load cfitsio/4.2.0
 module list
 which python
 
-/home1/09979/kfas/bin/nsc/bin/nscjobs calibrate /scratch1/09971/kfas/nsc/instcal/v4/lists/decam_strip.fits.gz v4 --host tacc --maxtasks 1000 --partition small
+/home1/09979/kfas/bin/nsc/bin/nscjobs calibrate /scratch1/09971/kfas/nsc/instcal/v4/lists/decam_strip.fits.gz v4 --host tacc --maxtasks 4000 --partition small
