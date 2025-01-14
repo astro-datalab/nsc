@@ -360,7 +360,7 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
     return expinfo,chinfo
 
 
-def calibrate(expdir,inpref=None,refcatfile=None,logfilename=None,eqnfile=None,redo=False,selfcal=False,saveref=False,ncpu=1,logger=None,gsynthphot=False,psf=False):
+def calibrate(expdir,inpref=None,refcatfile=None,logfilename=None,eqnfile=None,redo=False,selfcal=False,saveref=False,ncpu=1,logger=None,caltype="og",psf=False):
     """
     Perform photometry and astrometric calibration of an NSC exposure using
     external catalogs.
@@ -382,8 +382,10 @@ def calibrate(expdir,inpref=None,refcatfile=None,logfilename=None,eqnfile=None,r
        Save the reference catalog.  Default is False.
     ncpu : int, optional
        Number of cpus to use.  Default is 1.
-    gsynthphot: bool, optional
-       If True, perform photometric calibration with
+    caltype: str, optional
+       If "og", photometric calibration with default modelmag file.
+       If "ps", phot calibration with PAN-STARRS (testing mode)
+       If "sm", phot cali with SkyMapper (testing mode)
        Gaia synthetic photometry.  Default is False.
     psf : bool, optional
         If True, perform astrometric calibration with
