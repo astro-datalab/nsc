@@ -25,6 +25,9 @@ if __name__ == "__main__":
     parser.add_argument('expdir', type=str, nargs=1, help='Exposure directory')
     #parser.add_argument('inpref', type=str, nargs=1, help='Input reference')
     parser.add_argument('--eqnfile', type=str, nargs=1, help='Modelmag equations filename')
+    parser.add_argument('version', type=str, nargs=1, help='NSC version')
+    parser.add_argument('--host',type=str,nargs=1,default="None",help='hostname, default "None", other options supported are "tacc"')
+    parser.add_argument('--stagger',type=int, nargs=1, default=60, help='Stagger time')
     parser.add_argument('--redo', action='store_true', help='Redo this image')
     parser.add_argument('--selfcal', action='store_true', help='Self calibration')
     parser.add_argument('--saveref', action='store_true', help='Save the reference catalog')
@@ -33,16 +36,36 @@ if __name__ == "__main__":
 
     t0 = time.time()
 
+    # Inputs
+    expdir = args.expdir[0]                # exposure directory path
+    eqnfile = args.eqnfile[0]              # file with modelmag equations
+    version = args.version[0]              # processing version "v#"
+    host = args.host[0]                    # server host
+    if isinstance(args.stagger,list):
+        stagger = args.stagger[0]
+    else:
+        stagger = args.stagger
+    redo = args.redo                        # redo
+    selfcal = args.selfcal                  # self calibrate
+    saveref = args.saveref                  # save reference catalog
+    ncpu = args.ncpu                        # number of cpus
+
+    print("version =",version)
+    print("host =",host)
+    print("stagger =",stagger)
+    print("expdir =",expdir)
+    print("redo =",redo)
+    print("eqnfile =",eqnfile)
+    print("ncpu =",ncpu)
+
     # File names
-    expdir = args.expdir
     if type(expdir) is list:
         expdir = expdir[0]
-    eqnfile = args.eqnfile
     if type(eqnfile) is list:
         eqnfile = eqnfile[0]
 
     # Calibrate catalogs for one exposure
-    dldir,mssdir,localdir = utils.rootdirs()
+    #dldir,mssdir,localdir = utils.rootdirs()
      
     # Make sure the directory exists 
     if os.path.exists(expdir) == False:
@@ -54,8 +77,8 @@ if __name__ == "__main__":
     
     # Start the logfile 
     #------------------ 
-    host = socket.gethostname()
-    hostname = host.split('.')[0]
+    #host = socket.gethostname()
+    #hostname = host.split('.')[0]
     logtime = datetime.now().strftime("%Y%m%d%H%M%S") 
     # Set up logging to screen and logfile
     logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
@@ -74,5 +97,5 @@ if __name__ == "__main__":
     logger.addHandler(consoleHandler)
     logger.setLevel(logging.NOTSET)
 
-    calibrate.calibrate(expdir,eqnfile=eqnfile,redo=args.redo,
-                        selfcal=args.selfcal,saveref=args.saveref,ncpu=args.ncpu)
+    calibrate.calibrate(expdir,eqnfile=eqnfile,redo=redo,
+                        selfcal=selfcal,saveref=saveref,ncpu=ncpu)
