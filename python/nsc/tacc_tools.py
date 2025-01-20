@@ -3,10 +3,11 @@ import numpy as np
 from glob import glob
 from astropy.table import Table
 from astropy.io import fits
-from dlnpyutils import utils as dln
+#from dlnpyutils import utils as dln
 import shutil
 import time
 from datetime import datetime
+from . import utils
 
 def make_transfer_list(n=10000,checkprev=True):
     """
@@ -23,7 +24,7 @@ def make_transfer_list(n=10000,checkprev=True):
     #tab = Table.read(listdir+'r16avails_decam_instcal_list.fits.gz')
 
     ## Remove exposures that are done
-    #done = dln.readlines(listdir+'/exposures_done_corral_20240714.txt')
+    #done = utils.readlines(listdir+'/exposures_done_corral_20240714.txt')
     #done_exposure = [os.path.basename(d) for d in done]
     #_,ind1,ind2 = np.intersect1d(tab['base'],done_exposure,return_indices=True)
     #tab.remove_rows(ind1)
@@ -41,7 +42,7 @@ def make_transfer_list(n=10000,checkprev=True):
         prevlines = []
         for i in range(len(files)):
             print(files[i])
-            lines = dln.readlines(files[i])
+            lines = utils.readlines(files[i])
             prevlines += lines
 
         # Match them to FLUXFILE
@@ -70,7 +71,7 @@ def make_transfer_list(n=10000,checkprev=True):
     # Write the list to a file
     tstamp = datetime.now().strftime('%Y%m%d%H%M%S')
     outfile = 'transfer'+str(n)+'list_'+tstamp+'.lst'
-    dln.writelines(listdir+outfile,lines)
+    utils.writelines(listdir+outfile,lines)
     print('List written to '+listdir+outfile)
 
 def make_transfer_list_tempest(n=10000,checkprev=True):
@@ -80,10 +81,11 @@ def make_transfer_list_tempest(n=10000,checkprev=True):
 
     listdir = '/scratch1/09970/dnidever/nsc/instcal/v4/lists/'
     #listdir = '/home/x51j468/group/nsc/instcal/v4/lists/'
-    tab = Table.read(listdir+'decam_instcal_list_exptime10sec_20240727_left.fits.gz')
+    #tab = Table.read(listdir+'decam_instcal_list_exptime10sec_20240727_left.fits.gz')
+    tab = Table.read(listdir+'decam_instcal_list_exptime10sec_corrupted_fwhm2_20250119_left.fits.gz')
 
     ## Remove exposures that are done
-    #done = dln.readlines(listdir+'/exposures_done_corral_20240714.txt')
+    #done = utils.readlines(listdir+'/exposures_done_corral_20240714.txt')
     #done_exposure = [os.path.basename(d) for d in done]
     #_,ind1,ind2 = np.intersect1d(tab['base'],done_exposure,return_indices=True)
     #tab.remove_rows(ind1)
@@ -101,7 +103,7 @@ def make_transfer_list_tempest(n=10000,checkprev=True):
         prevlines = []
         for i in range(len(files)):
             print(files[i])
-            lines = dln.readlines(files[i])
+            lines = utils.readlines(files[i])
             prevlines += lines
 
         # Match them to FLUXFILE
@@ -118,7 +120,7 @@ def make_transfer_list_tempest(n=10000,checkprev=True):
 
     # Fix image filenames on TACC
     basedir = '/scratch1/09970/dnidever/nsc/instcal/v4/'
-    imlines = dln.readlines(basedir+'images/allimages.lst')
+    imlines = utils.readlines(basedir+'images/allimages.lst')
     imlines = [basedir+'images/'+f[1:] for f in imlines]  # make absolute
     imlines = np.array(imlines)
     imbase = np.array([os.path.basename(f) for f in imlines])
@@ -159,7 +161,7 @@ def make_transfer_list_tempest(n=10000,checkprev=True):
     # Write the list to a file
     tstamp = datetime.now().strftime('%Y%m%d%H%M%S')
     outfile = 'transfer'+str(n)+'list_'+tstamp+'.lst'
-    dln.writelines(listdir+outfile,lines)
+    utils.writelines(listdir+outfile,lines)
     print('List written to '+listdir+outfile)
 
 def reorganize_files(stagedate):
