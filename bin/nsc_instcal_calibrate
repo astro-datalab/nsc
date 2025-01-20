@@ -15,34 +15,73 @@ import logging
 import socket
 from datetime import datetime
 from argparse import ArgumentParser
-from nsc import utils,calibrate
+from nsc import utils,calibrate_tacc
 
 if __name__ == "__main__":
 
     # Calibrate one full DECam/Mosaic3/Bok InstCal image
 
     parser = ArgumentParser(description='Calibrate one NSC InstCal image')
-    parser.add_argument('expdir', type=str, nargs=1, help='Exposure directory')
-    #parser.add_argument('inpref', type=str, nargs=1, help='Input reference')
+    parser.add_argument('expdir', type=str, nargs=1,default="None",help='Exposure directory if calibrating by exposure')
+    #parser.add_argument('inpref', type=str, nargs=1,help='Input reference')
+    parser.add_argument("refcatfile",type=str,nargs=1,default="None",help="Reference catalog if available")
+    parser.add_argument('--pix', type=str, nargs=1, default="-9",help='HEALPix index if calibrating by pix')
+    parser.add_argument('--nside', type=str, nargs=1, default="-9",help='HEALPix NSIDE (ring ordering, please!)')
     parser.add_argument('--eqnfile', type=str, nargs=1, help='Modelmag equations filename')
+    parser.add_argument('version', type=str, nargs=1, help='NSC version')
+    parser.add_argument('--host',type=str,nargs=1,default="None",help='hostname, default "None", other options supported are "tacc"')
+    parser.add_argument('--stagger',type=int, nargs=1, default=60, help='Stagger time')
     parser.add_argument('--redo', action='store_true', help='Redo this image')
     parser.add_argument('--selfcal', action='store_true', help='Self calibration')
-    parser.add_argument('--saveref', action='store_true', help='Save the reference catalog')
+    parser.add_argument('--saveref', action='store_false', help='Save the reference catalog')
     parser.add_argument('--ncpu', type=int, nargs=1, help='Number of cpus to use')
     args = parser.parse_args()
 
     t0 = time.time()
 
+    # Inputs
+    expdir = args.expdir[0]                # exposure directory path
+    pix = int(args.pix[0])                 # index of HEALPix to calibrate
+    nside = int(args.nside[0])             # HEALPix NSIDE (ring ordering)
+    eqnfile = args.eqnfile[0]              # file with modelmag equations
+    version = args.version[0]              # processing version "v#"
+    host = args.host[0]                    # server host
+    if isinstance(args.stagger,list):
+        stagger = args.stagger[0]
+    else:
+        stagger = args.stagger
+    redo = args.redo                        # redo
+    selfcal = args.selfcal                  # self calibrate
+    saveref = args.saveref                  # save reference catalog
+    ncpu = args.ncpu                        # number of cpus
+
+
+    if expdir=="None" and pix!=-9: 
+        print("Calibrating healpix, not yet supported on TACC")
+        print("pix = ",pix)
+        print("NSIDE = ",nside)
+        type="exposure"
+    if pix==-9 and expdir!="None": 
+        print("Calibrating single exposure")
+        print("expdir =",expdir)
+        type="healpix"
+    else: print("no expdir or pix selected! uh oh!")
+
+    print("version =",version)
+    print("host =",host)
+    print("stagger =",stagger)
+    print("redo =",redo)
+    print("eqnfile =",eqnfile)
+    print("ncpu =",ncpu)
+
     # File names
-    expdir = args.expdir
     if type(expdir) is list:
         expdir = expdir[0]
-    eqnfile = args.eqnfile
     if type(eqnfile) is list:
         eqnfile = eqnfile[0]
 
     # Calibrate catalogs for one exposure
-    dldir,mssdir,localdir = utils.rootdirs()
+    #dldir,mssdir,localdir = utils.rootdirs()
      
     # Make sure the directory exists 
     if os.path.exists(expdir) == False:
@@ -51,28 +90,42 @@ if __name__ == "__main__":
     t00 = time.time() 
      
     base = os.path.basename(expdir) 
+
+    # Stagger time
+    if stagger > 0:
+        sleeptime = np.random.randint(1,stagger)
+        print('Sleeping {:} seconds'.format(sleeptime))
+        time.sleep(sleeptime)
+
     
     # Start the logfile 
     #------------------ 
-    host = socket.gethostname()
-    hostname = host.split('.')[0]
-    logtime = datetime.now().strftime("%Y%m%d%H%M%S") 
+    ##host = socket.gethostname()
+    ##hostname = host.split('.')[0]
+    ##logtime = datetime.now().strftime("%Y%m%d%H%M%S") 
     # Set up logging to screen and logfile
-    logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
-    logger = logging.getLogger() 
-    while logger.hasHandlers(): # some existing loggers, remove them   
-        logger.removeHandler(logger.handlers[0]) 
-    logger = logging.getLogger()
-    logtime = datetime.now().strftime("%Y%m%d%H%M%S")
-    logfile = expdir+'/'+base+'_calib.log'
-    if os.path.exists(logfile): os.remove(logfile)
-    fileHandler = logging.FileHandler(logfile)
-    fileHandler.setFormatter(logFormatter)
-    logger.addHandler(fileHandler)
-    consoleHandler = logging.StreamHandler()
-    consoleHandler.setFormatter(logFormatter)
-    logger.addHandler(consoleHandler)
-    logger.setLevel(logging.NOTSET)
+    ##logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
+    ##logger = logging.getLogger() 
+    ##while logger.hasHandlers(): # some existing loggers, remove them   
+    ##    logger.removeHandler(logger.handlers[0]) 
+    ##logger = logging.getLogger()
+    ##logtime = datetime.now().strftime("%Y%m%d%H%M%S")
+    ##logfile = expdir+'/'+base+'_calib.log'
+    ##if os.path.exists(logfile): os.remove(logfile)
+    ##fileHandler = logging.FileHandler(logfile)
+    ##fileHandler.setFormatter(logFormatter)
+    ##logger.addHandler(fileHandler)
+    ##consoleHandler = logging.StreamHandler()
+    ##consoleHandler.setFormatter(logFormatter)
+    ##logger.addHandler(consoleHandler)
+    ##logger.setLevel(logging.NOTSET)
 
-    calibrate.calibrate(expdir,eqnfile=eqnfile,redo=args.redo,
-                        selfcal=args.selfcal,saveref=args.saveref,ncpu=args.ncpu)
+
+    if type=="exposure": 
+        print("Calibrating Exposure "+str(expdir))
+        calibrate_tacc.calibrate(expdir,inpref=None,refcatfile=refcatfile,logfilename=None,eqnfile=eqnfile,redo=redo,selfcal=selfcal,saveref=saveref,ncpu=ncpu,logger=None,gsynthphot=False,psf=False)
+        #calibrate(expdir,eqnfile=eqnfile,redo=redo,selfcal=selfcal,saveref=saveref,ncpu=ncpu)
+    elif type=="healpix": 
+        print("Calibrating HEALPix "+str(pix))
+        print("nside = "+str(nside))
+        calibrate_tacc.calibrate_healpix(pix,version,nside=32,maxexp=10,logtime="000",gsynth=True,psf=True,redo=redo,logger=None)
