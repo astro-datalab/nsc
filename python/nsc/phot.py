@@ -32,7 +32,7 @@ import tempfile
 import time
 import traceback
 from .slurm_funcs import *
-from .utils import readlines,writelines,grep,numlines,remove_indices
+from .utils import readlines,writelines,grep,numlines,remove_indices,basiclogger
 
 # Ignore these warnings, it's a bug
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -2196,11 +2196,11 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
     # Make sure we have the image file name
     if imfile is None:
         logger.warning("No image filename input")
-        return None,None,None
+        return None,None,None,False
     # Make sure we have the list file name
     if listfile is None:
         logger.warning("No list filename input")
-        return None,None,None
+        return None,None,None,False
     
     logger.info("Input file = "+imfile) #ktedit:cpsf
 
@@ -2220,13 +2220,13 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
     for f in [imfile,listfile,optfile,apfile]:
         if os.path.exists(f) is False:
             logger.warning(f+" NOT found")
-            return None,None,None
+            return None,None,None,False
 
     # Check number of PSF stars, we need at least 3 to create a PSF
     npsfstars = numlines(listfile)-3
     if npsfstars<3:
         logger.error('Only '+str(npsfstars)+' PSF stars. Need at least 3 to create a PSF')
-        raise Exception('Not enough PSF stars')
+        return None,None,None,False
 
     # Make temporary short filenames to DAOPHOT can handle them
     tid,tfile = tempfile.mkstemp(prefix="tpsf",dir=".")
@@ -2279,57 +2279,67 @@ def daopsf(imfile=None,listfile=None,apfile=None,optfile=None,neifile=None,outfi
         logger.error("DAOPHOT PSF failed:"+str(e))
         logger.error(e)
         traceback.print_exc()
-        raise Exception("DAOPHOT failed")
+
+    pararr,parchi,profs,success = None,None,None,False
 
     # Check if it failed to converage
     if os.path.exists(logfile):
         plines = readlines(logfile)
+        # Get parameter errors
+        l1 = grep(plines,"Chi    Parameters",index=True)
+        l2 = grep(plines,"Profile errors",index=True)
+        l3 = grep(plines,"File with PSF stars and neighbors",index=True)
+        if len(l1)>0:
+            parlines = plines[l1[0]+1:l2[0]-1]
+            pararr, parchi = parsepars(parlines)
+            minchi = np.min(parchi)
+            logger.info("Chi = "+str(minchi))
+        # Get profile errors
+        if len(l2)>0:
+            if len(l3)==0:
+                l3, = np.where(np.char.array(plines)=='')
+                l3 = [l for l in l3 if l>l2[0]+2][0:1]
+            proflines = plines[l2[0]+1:l3[0]-1]
+            if verbose: logger.info(" ".join(proflines))
+            profs = parseprofs(proflines)
+            logger.info(str(len(profs))+" PSF stars used")
+        else:
+            logger.error("No DAOPHOT profile errors found in logfile")
+        # Check for not enough PSF stars error
+        l4 = grep(plines,"Not enough PSF stars",index=True)
+        if len(l4)>0:
+            logger.error("Not enough PSF stars")
+        # Check if it converged
         bad = grep(plines,'Failed to converge',index=True)
         results = grep(plines,'>> ',index=True)
         if len(bad)>0 and len(results)==0:
             logger.error("DAOPHOT PSF failed to converge")
-            return None,None,None
+        # Check if there was a singular matrix
+        l5 = grep(plines,'Singular matrix',index=True)
+        if len(l5)>0:
+            logger.error("Singular matrix")
 
     # Check that the output file exists
     if (os.path.exists(toutfile)) is True and (os.path.getsize(toutfile)!=0):
         # Move output file to the final filename
         os.rename(toutfile,outfile)
         os.rename(tneifile,neifile)
-        # Remove the temporary links
-        for f in [tfile,timfile,toptfile,tlistfile,tapfile]: os.remove(f)        
-
-        # Get info from the logfile
-        if os.path.exists(logfile):
-            plines = readlines(logfile)
-            # Get parameter errors
-            l1 = grep(plines,"Chi    Parameters",index=True)
-            l2 = grep(plines,"Profile errors",index=True)
-            l3 = grep(plines,"File with PSF stars and neighbors",index=True)
-            if len(l1)>0:
-                parlines = plines[l1[0]+1:l2[0]-1]
-                pararr, parchi = parsepars(parlines)
-                minchi = np.min(parchi)
-                logger.info("Chi = "+str(minchi))
-            # Get profile errors
-            if len(l2)>0:
-                proflines = plines[l2[0]+1:l3[0]-1]
-                if verbose: logger.info(" ".join(proflines))
-                profs = parseprofs(proflines)
-                logger.info(str(len(profs))+" PSF stars used")
-            else:
-                logger.error("No DAOPHOT profile errors found in logfile")
-                raise Exception("DAOPHOT problem")
+        success = True
     # Failure
     else:
         logger.error("Output file "+outfile+" NOT Found")
-        raise Exception("DAOPHOT output not found")
 
-    # Delete the script
-    os.remove(scriptfile)
+    # Remove the temporary links
+    todelfiles = [tfile,timfile,toptfile,tlistfile,tapfile,
+                  toutfile,tneifile,scriptfile]
+    for f in todelfiles:
+        if os.path.exists(f):
+            os.remove(f)
 
     # Return the parameter and profile error information
-    logger.info("Output file = "+outfile)
-    return pararr, parchi, profs
+    if os.path.exists(outfile):
+        logger.info("Output file = "+outfile)
+    return pararr,parchi,profs,success
 
 
 # Subtract neighbors of PSF stars
@@ -2671,19 +2681,11 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
         while (endflag==False):
             logger.info("Iter = "+str(niter))
             # Run DAOPSF
-            try:
-                pararr, parchi, profs = daopsf(imfile,wlistfile,apfile,logger=logger)
-                if pararr is not None:
-                    chi = np.min(parchi)
-                    mean_chi = np.mean(profs['SIG'])
-                    logger.info("mean chi = "+str(mean_chi))
-                    psfsuccess = True
-                else:
-                    psfsuccess = False
-            except:
-                logger.error("Failure in DAOPSF")
-                traceback.print_exc()
-                psfsuccess = False
+            pararr,parchi,profs,psfsuccess = daopsf(imfile,wlistfile,apfile,logger=logger)
+            if pararr is not None:
+                chi = np.min(parchi)
+                mean_chi = np.mean(profs['SIG'])
+                logger.info("mean chi = {:.3f}".format(mean_chi))
 
             # PSF failed, try searching all analytic types
             if psfsuccess==False:
@@ -2694,16 +2696,16 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
                     opttable[14] = 'AN = '+newanpsf
                     writelines(optfile,opttable,overwrite=True)                    
                     logger.info('Retrying DAOPHOT PSF with AN='+newanpsf)
-                    pararr, parchi, profs = daopsf(imfile,wlistfile,apfile,logger=logger)
+                    pararr,parchi,profs,psfsuccess = daopsf(imfile,wlistfile,apfile,logger=logger)
                     if pararr is not None:
                         chi = np.min(parchi)
                         mean_chi = np.mean(profs['SIG'])     
-                        logger.info("mean chi = "+str(mean_chi))
-                        psfsuccess = True
+                        logger.info("mean chi = {:.3f}".format(mean_chi))
 
             #if psfsuccess==False and os.path.basename(os.getcwd())=='c4d_141231_083025_ooi_z_v1.2':
             #    import pdb; pdb.set_trace()
             if psfsuccess==False:
+                #import pdb; pdb.set_trace()
                 npsfstars = numlines(wlistfile)-2
                 if npsfstars<3:
                     raise Exception('Not enough PSF stars')
@@ -2767,7 +2769,7 @@ def createpsf(imfile=None,apfile=None,listfile=None,psffile=None,doiter=True,max
                 os.rename(subfile,imfile) 
                 logger.info(imfile+" once again moved to temp_"+imfile+", "+subfile+" moved to "+imfile) 
                 try:
-                    spararr, sparchi, sprofs = daopsf(imfile,wlistfile,apfile,logger=logger)
+                    spararr,sparchi,sprofs,success = daopsf(imfile,wlistfile,apfile,logger=logger)
                     chi = np.min(sparchi)
 
                     subsigs, profsind, sprofsind = np.intersect1d(profs['ID'],sprofs['ID'],return_indices=True)
