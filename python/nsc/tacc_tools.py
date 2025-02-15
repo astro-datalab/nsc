@@ -422,7 +422,7 @@ def slurmsummary(skey,clobber=False):
     nrun = np.sum(info['exists'])
     print(nrun,'tasks were run')
     ndone = np.sum(info['done'])
-    print(ndone,'tasks finished')
+    print(ndone,'tasks finished successfully with meas.fits files')
     ntruncated = np.sum(info['jobtruncated'])
     print(ntruncated,'tasks truncated')
     print('Saving summary to',sumfile)
