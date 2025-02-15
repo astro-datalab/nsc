@@ -7,6 +7,7 @@ from astropy.io import fits
 import shutil
 import time
 from datetime import datetime
+import subprocess
 from . import utils
 
 def make_transfer_list(n=10000,checkprev=True):
@@ -335,3 +336,94 @@ def measure_status():
     #print(len(expdir),' exposures successfully completed measurement')
     #return expdir
 
+def slurmsummary(skey,clobber=False):
+    """ Get summary information for a slurm measure job """
+    slurmdir = '/scratch1/09970/dnidever/dnidever/slurm/measure'
+    sdir = slurmdir+'/'+skey
+    measdir = '/scratch1/09970/dnidever/nsc/instcal/v4/c4d/'
+    print(sdir)
+    if os.path.exists(sdir)==False:
+        raise Exception(sdir+' not found')
+    tasksfile = sdir+'/measure_tasks.fits'
+    if os.path.exists(tasksfile)==False:
+        raise FileNotFoundError(tasksfile)
+    tasks = Table.read(tasksfile)
+    ntasks = len(tasks)
+    print(ntasks,'tasks')
+    #logsfile = sdir+'/measure_logs.txt'
+    #if os.path.exists(logsfile)==False:
+    #    raise FileNotFoundError(logsfile)
+    #logfiles = utils.readlines(logsfile)
+    #print(len(logfiles),'tasks')
+    errfile = glob(sdir+'/measure-*.err')
+    if len(errfile)>0:
+        errfile = errfile[0]
+    errmtime = os.path.getmtime(errfile)
+    jobid = errfile.split('-')[-1][:-4].strip()
+    print('JobID =',jobid)
+    outfile = sdir+'/'+skey+'_'+jobid+'_summary.fits'
+    if os.path.exists(outfile) and clobber==False:
+        print(outfile,'already exists and clobber not set')
+        return
+    outfile = glob(sdir+'/measure-*.out')
+    if len(outfile)>0:
+        outfile = outfile[0]
+    outmtime = os.path.getmtime(outfile)
+    outlines = utils.readlines(outfile)
+    # Get "running" and "completed" lines
+    rlines = utils.grep(outlines,'running')
+    clines = utils.grep(outlines,'completed')
+    # Get information for each task
+    dt = [('logfile',str,200),('base',str,50),('exists',bool),
+          ('ctime',float),('mtime',float),('size',float),
+          ('jobstarted',bool),('jobtaskid',int),('jobcompleted',bool),('jobtruncated',bool),
+          ('jobelapsed',float),('slurmstart',float),('slurmend',float),('state',str,20),
+          ('measfile',str,200),('done',bool)]
+    info = np.zeros(ntasks,dtype=np.dtype(dt))
+    for i in range(ntasks):
+        info['logfile'][i] = tasks['outfile'][i]
+        info['base'][i] = tasks['name'][i]
+        info['exists'][i] = os.path.exists(tasks['outfile'][i])
+        if info['exists'][i]:
+            info['size'][i] = os.path.getsize(tasks['outfile'][i])
+        rline = utils.grep(rlines,' job '+str(i+1)+' ')
+        if len(rline)>0:
+            taskid = rline[0].split()[2]
+            info['jobstarted'][i] = True
+            info['jobtaskid'][i] = taskid
+            cline = utils.grep(clines,' Job '+taskid+' ')
+            if len(cline)>0:
+                info['jobcompleted'][i] = len(cline)>0
+                info['jobelapsed'][i] = cline[0].split()[-2]
+        if info['jobstarted'][i] and info['jobcompleted'][i]==False:
+            info['jobtruncated'][i] = True
+        if info['exists'][i] and (info['size'][i]>0):
+            info['ctime'][i] = os.path.getctime(tasks['outfile'][i])
+            info['mtime'][i] = os.path.getmtime(tasks['outfile'][i])
+            measfile = tasks['dir'][i]+'/'+tasks['name'][i]+'_meas.fits'
+            info['measfile'][i] = measfile
+            info['done'][i] = os.path.exists(measfile)
+    # Get slurm job related information
+    res = subprocess.run(['sacct','-j',jobid,'--format','JobID,JobName,Start,End,State'],capture_output=True)
+    out = res.stdout.decode()
+    lines = out.split('\n')
+    line = lines[2]
+    starttimestamp = line.split()[2]
+    endtimestamp = line.split()[3]
+    starttime = datetime.fromisoformat(starttimestamp).timestamp()
+    endtime =  datetime.fromisoformat(endtimestamp).timestamp()
+    state = line.split()[4]
+    info['slurmstart'] = starttime
+    info['slurmend'] = endtime
+    info['state'] = state
+    print(starttimestamp,endtimestamp,state)
+    # Check logfile mtime against the slurm job endtime
+    # to see if the tasks were 
+    nrun = np.sum(info['exists'])
+    print(nrun,'tasks were run')
+    ndone = np.sum(info['done'])
+    print(ndone,'tasks finished')
+    ntruncated = np.sum(info['jobtruncated'])
+    print(ntruncated,'tasks truncated')
+    print('Saving summary to',outfile)
+    Table(info).write(outfile,overwrite=True)
