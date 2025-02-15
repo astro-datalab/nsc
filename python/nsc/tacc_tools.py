@@ -361,9 +361,9 @@ def slurmsummary(skey,clobber=False):
     errmtime = os.path.getmtime(errfile)
     jobid = errfile.split('-')[-1][:-4].strip()
     print('JobID =',jobid)
-    outfile = sdir+'/'+skey+'_'+jobid+'_summary.fits'
-    if os.path.exists(outfile) and clobber==False:
-        print(outfile,'already exists and clobber not set')
+    sumfile = sdir+'/'+skey+'_'+jobid+'_summary.fits'
+    if os.path.exists(sumfile) and clobber==False:
+        print(sumfile,'already exists and clobber not set')
         return
     outfile = glob(sdir+'/measure-*.out')
     if len(outfile)>0:
@@ -425,5 +425,5 @@ def slurmsummary(skey,clobber=False):
     print(ndone,'tasks finished')
     ntruncated = np.sum(info['jobtruncated'])
     print(ntruncated,'tasks truncated')
-    print('Saving summary to',outfile)
-    Table(info).write(outfile,overwrite=True)
+    print('Saving summary to',sumfile)
+    Table(info).write(sumfile,overwrite=True)
