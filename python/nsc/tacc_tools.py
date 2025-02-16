@@ -375,23 +375,25 @@ def slurmsummary(skey,clobber=False):
     clines = utils.grep(outlines,'completed')
     # Get information for each task
     dt = [('logfile',str,200),('base',str,50),('exists',bool),
-          ('ctime',float),('mtime',float),('size',float),
+          ('ctime',float),('mtime',float),('size',float),('jobjobid',int),
           ('jobstarted',bool),('jobtaskid',int),('jobcompleted',bool),('jobtruncated',bool),
           ('jobelapsed',float),('slurmstart',float),('slurmend',float),('state',str,20),
           ('measfile',str,200),('done',bool)]
     info = np.zeros(ntasks,dtype=np.dtype(dt))
+    info['jobtaskid'] = -1
     for i in range(ntasks):
         info['logfile'][i] = tasks['outfile'][i]
         info['base'][i] = tasks['name'][i]
         info['exists'][i] = os.path.exists(tasks['outfile'][i])
         if info['exists'][i]:
             info['size'][i] = os.path.getsize(tasks['outfile'][i])
+        info['jobjobid'][i] = i+1
         rline = utils.grep(rlines,' job '+str(i+1)+' ')
         if len(rline)>0:
             taskid = rline[0].split()[2]
             info['jobstarted'][i] = True
             info['jobtaskid'][i] = taskid
-            cline = utils.grep(clines,' Job '+taskid+' ')
+            cline = utils.grep(clines,' Job '+str(i+1)+' ')
             if len(cline)>0:
                 info['jobcompleted'][i] = len(cline)>0
                 info['jobelapsed'][i] = cline[0].split()[-2]
