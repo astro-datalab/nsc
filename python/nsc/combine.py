@@ -422,10 +422,36 @@ def seqpms(obj):
     denom = (sumt2[twodet]/ndet[twodet]-mnt[twodet]**2)
     slpra[twodet] = (sumtra[twodet]/ndet[twodet]-mnra[twodet]*mnt[twodet]) / denom
     slpdec[twodet] = (sumtdec[twodet]/ndet[twodet]-mndec[twodet]*mnt[twodet]) / denom
-    
-    return mnt,mnra,mndec,slpra,slpdec
-    
-def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False):
+    # weighted mean and slope
+    # mnx = np.sum(wt*x)/totwt
+    # mny = np.sum(wt*y)/totwt
+    # mnxerr = np.sqrt( np.sum( ((x-mnx)**2)*wt)*n / ((n-1)*np.sum(wt))) / np.sqrt(n)
+    #        ~ stddev/sqrt(n)
+    #        = np.sqrt( np.sum(wt*(x**2-2*x*mnx+mnx**2))*n / ((n-1)*np.sum(wt))) / np.sqrt(n)
+    #        = np.sqrt( np.sum(wt*x**2)-2*mnx*np.sum(wt*x)+np.sum(wt*mnx**2) ) *
+    #                 sqrt(n/((n-1)*np.sum(wt))) / np.sqrt(n)
+    #        = np.sqrt( np.sum(wt*x**2)-2*mnx*np.sum(wt*x)+np.sum(wt)*mnx**2 ) *
+    #                 sqrt(1/((n-1)*np.sum(wt))
+    # wtx = (np.sum(wt*x*y)/totwt-mnx*mny)/(np.sum(wt*x**2)/totwt-mnx**2)
+    # wtxerr = 1.0/np.sqrt( np.sum(wt*x**2)-mnx**2 * np.sum(wt))
+    wmnt = obj['sumwt']/obj['sumw']
+    wmnra = obj['sumwra']/obj['sumw']
+    wmndec = obj['sumwdec']/obj['sumw']
+    denom = (obj['sumwt2']/obj['sumw']-wmnt**2)
+    wslpra = (obj['sumwtra']/obj['sumw']-wmnt*wmnra)/denom
+    wslpdec = (obj['sumwtdec']/obj['sumw']-wmnt*wmndec)/denom
+    wslpraerr = 1.0/np.sqrt( obj['sumwra2']-wmnra**2 * obj['sumw'])
+    wslpraerr = 1.0/np.sqrt( obj['sumwdec2']-wmndec**2 * obj['sumw'])
+    wmnraerr = (np.sqrt((obj['sumwra2']-2*wmnra*obj['sumwra']+obj['sumw']*wmnra**2) / 
+                        (np.sqrt(obj['ndet']-1)*obj['sumw'])))
+    wmndecerr = (np.sqrt((obj['sumwdec2']-2*wmndec*obj['sumwdec']+obj['sumw']*wmndec**2) / 
+                        (np.sqrt(obj['ndet']-1)*obj['sumw'])))
+
+    return (mnt,mnra,mndec,slpra,slpdec,
+            wmnt,wmnra,wmndec,wslpra,wslpdec,
+            wmnraerr,wmndecerr,wslpraerr,wslpdecerr)
+
+def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,minmeaspm=5):
     """
     Sequential clustering of measurements in exposures with proper motion.
     If you are rerunning with a previous object table and do NOT want to
@@ -442,8 +468,16 @@ def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False):
     # Create object catalog
     dtype_obj = np.dtype([('label',int),('ra',np.float64),('dec',np.float64),('ndet',int),
                           ('sumt',float),('sumt2',float),('sumra',float),('sumdec',float),
-                          ('sumtra',float),('sumtdec',float),('slpra',float),
-                          ('slpdec',float),('mnt',float)])
+                          ('sumtra',float),('sumtdec',float),('slpra',float),('slpdec',float),('mnt',float),
+                          ('sumw',float),('sumwt',float),('sumwt2',float),
+                          ('sumwra',float),('sumwdec',float),('sumwtra',float),('sumwtdec',float),
+                          ('sumwra2',float),('sumwdec2',float)])
+
+    # weighted slope
+    # mnx = np.sum(wt*x)/totwt
+    # mny = np.sum(wt*y)/totwt
+    # wtx = (np.sum(wt*x*y)/totwt-mnx*mny)/(np.sum(wt*x**2)/totwt-mnx**2)
+
     # Is there an input object catalog that we are starting with?
     if inpobj is not None:
         obj = inpobj.copy()
@@ -476,11 +510,25 @@ def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False):
             obj['sumt2'][ind1] = meas1['MJD']
             obj['sumra'][ind1] = meas1['RA']
             obj['sumdec'][ind1] = meas1['DEC']
+            obj['sumra'][ind1] = meas1['RA']
+            obj['sumdec'][ind1] = meas1['DEC']
             obj['sumtra'][ind1] = meas1['MJD']*meas1['RA']
             obj['sumtdec'][ind1] = meas1['MJD']*meas1['DEC']
             obj['slpra'][ind1] = 0.0
             obj['slpdec'][ind1] = 0.0
             obj['mnt'][ind1] = measmjd
+            # weighted values
+            wt = 1.0/meas1['RAERR']**2  # ra/dec uncertainty are the same
+            obj['sumw'][ind1] = wt
+            obj['sumwt'][ind1] = wt*meas1['MJD']
+            obj['sumwt2'][ind1] = wt*meas1['MJD']**2
+            obj['sumwra'][ind1] = wt*meas1['RA']
+            obj['sumwdec'][ind1] = wt*meas1['DEC']
+            obj['sumwra2'][ind1] = wt*meas1['RA']**2
+            obj['sumwdec2'][ind1] = wt*meas1['DEC']**2
+            obj['sumwtra'][ind1] = wt*meas1['MJD']*meas1['RA']
+            obj['sumwtdec'][ind1] = wt*meas1['MJD']*meas1['DEC']
+
             labels[indx] = ind1
             cnt += nmeas1
 
@@ -506,13 +554,29 @@ def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False):
                 obj['sumdec'][ind1] += meas1['DEC'][ind2]
                 obj['sumtra'][ind1] += meas1['MJD'][ind2]*meas1['RA'][ind2]
                 obj['sumtdec'][ind1] += meas1['MJD'][ind2]*meas1['DEC'][ind2]
+                # weighted values
+                wt = 1.0/meas1['RAERR'][ind2]**2  # ra/dec uncertainty are the same
+                obj['sumw'][ind1] += wt
+                obj['sumwt'][ind1] += wt*meas1['MJD'][ind2]
+                obj['sumwt2'][ind1] += wt*meas1['MJD'][ind2]**2
+                obj['sumwra'][ind1] += wt*meas1['RA'][ind2]
+                obj['sumwdec'][ind1] += wt*meas1['DEC'][ind2]
+                obj['sumwra2'][ind1] += wt*meas1['RA'][ind2]**2
+                obj['sumwdec2'][ind1] += wt*meas1['DEC'][ind2]**2
+                obj['sumwtra'][ind1] = wt*meas1['MJD'][ind2]*meas1['RA'][ind2]
+                obj['sumwtdec'][ind1] = wt*meas1['MJD'][ind2]*meas1['DEC'][ind2]
                 # Calculate mean coordinates and proper motions
                 if calcpm:
                     mnt,mnra,mndec,slpra,slpdec = seqpms(obj[ind1])
+                    pm = np.sqrt(slpra**2+slpdec**2)
+                    # Limit pm mesurements to good ones
+                    gd, = np.where((obj['ndet'][ind1]>minmeaspm) &
+                                   (pm/pmerr > 3))
+                    if len(gd)>0:
+                        obj['slpra'][ind1][gd] = slpra[gd]
+                        obj['slpdec'][ind1][gd] = slpdec[gd]
                     obj['ra'][ind1] = mnra
                     obj['dec'][ind1] = mndec
-                    obj['slpra'][ind1] = slpra
-                    obj['slpdec'][ind1] = slpdec
                     obj['mnt'][ind1] = mnt
                 labels[indx[ind2]] = ind1
                 if nmatch<nmeas1:
@@ -544,6 +608,17 @@ def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False):
                 obj['slpra'][ind1] = 0.0
                 obj['slpdec'][ind1] = 0.0
                 obj['mnt'][ind1] = measmjd
+                # weighted values
+                wt = 1.0/meas1['RAERR']**2  # ra/dec uncertainty are the same
+                obj['sumw'][ind1] = wt
+                obj['sumwt'][ind1] = wt*meas1['MJD']
+                obj['sumwt2'][ind1] = wt*meas1['MJD']**2
+                obj['sumwra'][ind1] = wt*meas1['RA']
+                obj['sumwdec'][ind1] = wt*meas1['DEC']
+                obj['sumwra2'][ind1] = wt*meas1['RA']**2
+                obj['sumwdec2'][ind1] = wt*meas1['DEC']**2
+                obj['sumwtra'][ind1] = wt*meas1['MJD']*meas1['RA']
+                obj['sumwtdec'][ind1] = wt*meas1['MJD']*meas1['DEC']
 
                 labels[indx] = ind1
 
