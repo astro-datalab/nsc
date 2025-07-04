@@ -3272,7 +3272,10 @@ def apcor(imfile=None,listfile=None,psffile=None,meta=None,optfile=None,alsoptfi
     totcat = daoread(base+".tot")
     # Match up with the stars we are deleting
     mid, ind1, ind2 = np.intersect1d(psfcat['ID'],totcat['ID'],return_indices=True)
-    apcorr = np.median(psfcat[ind1]['MAG']-totcat[ind2]['MAG'])
+    apcorr = np.nanmedian(psfcat[ind1]['MAG']-totcat[ind2]['MAG'])
+    if np.isfinite(apcorr)==False:
+        logger.info("apcorr is not finite. using 0.0")
+        apcorr = 0.0
 
     logger.info("aperture correction = %7.3f mag" % apcorr)
 
