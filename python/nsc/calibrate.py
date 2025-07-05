@@ -381,7 +381,9 @@ def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag'):
                               (meas1['fwhm_world']*3600 < 2*medfwhm) &
                           (ref1['bp'] > 0) & (ref1['bp'] < 50) &
                           (ref1['rp'] > 0) & (ref1['rp'] < 50) &                          
-                          (ref1[refmagcol] > 0) & (ref1[refmagcol] < 50))                              
+                          (ref1[refmagcol] > 0) & (ref1[refmagcol] < 50))
+        # Need to deal with "hockey-stick" effect, where the fainter stars are offset from the brighter ones
+        import pdb; pdb.set_trace()
         if len(gdmeas) > 0:
             ref2 = ref1[gdmeas] 
             mmags2 = mmags[gdmeas,:] 
@@ -750,9 +752,12 @@ def loadheader(headfile):
         for i in range(len(hdu)):
             head = hdu[i].header
             if i==0:
-                # the main header is blank
-                # use the next header which should have filter and other info
-                headdict['main'] = hdu[1].header
+                if headfile.endswith('.fits.fz'):
+                    headdict['main'] = hdu[0].header
+                else:
+                    # the main header is blank
+                    # use the next header which should have filter and other info
+                    headdict['main'] = hdu[1].header
             else:
                 ccdnum = head['CCDNUM']
                 headdict[ccdnum] = head
@@ -858,7 +863,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     
     # Model magnitude equation file
     if eqnfile is None:
-        eqnfile = dldir+'dnidever/nsc/instcal/'+version+'/config/modelmag_equations.txt' 
+        #eqnfile = dldir+'dnidever/nsc/instcal/'+version+'/config/modelmag_equations.txt' 
+        eqnfile = dldir+'instcal/'+version+'/config/modelmag_equations.txt' 
     logger.info('Using model magnitude equation file '+eqnfile)
     if os.path.exists(eqnfile) == False: 
         raise ValueError(eqnfile+' NOT FOUND')
@@ -937,8 +943,14 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
         else:
             headfile = os.path.join(expdir,base+'.hdr')
             if os.path.exists(headfile)==False:
-                headfile = os.path.join(dldir,'dnidever','nsc','instcal',version,
+                #headfile = os.path.join(dldir,'dnidever','nsc','instcal',version,
+                #                    'header',instrument,night,base+'.hdr')
+                headfile = os.path.join(dldir,'instcal',version,
                                     'header',instrument,night,base+'.hdr')
+        if os.path.exists(headfile)==False:
+            # use instcal files on tacc
+            #/home1/09970/dnidever/scratch1/nsc/instcal/v4/images/c4d/2020/20200130
+            headfile = os.path.dirname(expdir.replace(version,version+'/images'))+'/'+base+'.fits.fz'
         if os.path.exists(headfile)==False:
             raise ValueError(headfile+' not found')
         headdict = loadheader(headfile)

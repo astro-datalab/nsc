@@ -346,7 +346,8 @@ def slurmsummary(skey,clobber=False):
         raise Exception(sdir+' not found')
     tasksfile = sdir+'/measure_tasks.fits'
     if os.path.exists(tasksfile)==False:
-        raise FileNotFoundError(tasksfile)
+        print(tasksfile,'not found')
+        return
     tasks = Table.read(tasksfile)
     ntasks = len(tasks)
     print(ntasks,'tasks')
@@ -356,8 +357,10 @@ def slurmsummary(skey,clobber=False):
     #logfiles = utils.readlines(logsfile)
     #print(len(logfiles),'tasks')
     errfile = glob(sdir+'/measure-*.err')
-    if len(errfile)>0:
-        errfile = errfile[0]
+    if len(errfile)==0:
+        print('no slurm output error file found')
+        return
+    errfile = errfile[0]
     errmtime = os.path.getmtime(errfile)
     jobid = errfile.split('-')[-1][:-4].strip()
     print('JobID =',jobid)
@@ -366,8 +369,10 @@ def slurmsummary(skey,clobber=False):
         print(sumfile,'already exists and clobber not set')
         return
     outfile = glob(sdir+'/measure-*.out')
-    if len(outfile)>0:
-        outfile = outfile[0]
+    if len(outfile)==0:
+        print('no slurm output log file found')
+        return
+    outfile = outfile[0]
     outmtime = os.path.getmtime(outfile)
     outlines = utils.readlines(outfile)
     # Get "running" and "completed" lines
@@ -429,3 +434,54 @@ def slurmsummary(skey,clobber=False):
     print(ntruncated,'tasks truncated')
     print('Saving summary to',sumfile)
     Table(info).write(sumfile,overwrite=True)
+
+
+
+def cleanup():
+    """ cleanup files on scratch1 that were moved to corral """
+    scratchdir = '/scratch1/09970/dnidever/nsc/instcal/v4/c4d/'
+    corraldir = '/corral/projects/NOIRLab/nsc/instcal/v4/c4d/'
+    
+    nights = glob(scratchdir+'*/*')
+    nights = [f for f in nights if os.path.isdir(f)]
+    nights.sort()
+    print(len(nights),'nights')
+    for i in range(len(nights)):
+        print(i+1,nights[i])
+        dirs = glob(nights[i]+'/*')
+        dirs = [d for d in dirs if os.path.isdir(d)]
+        dirs.sort()
+        print('  ',len(dirs),'exposures')
+        for j in range(len(dirs)):
+            sdir = dirs[j]
+            year,night,exposure = sdir.split('/')[-3:]
+            cdir = os.path.join(corraldir,year,night,exposure)
+            if os.path.exists(cdir)==False:
+                print(cdir,'not found')
+                continue
+            files = glob(sdir+'/*')
+            files.sort()
+            print('  ',j+1,exposure,len(files))
+            if len(files)==0:
+                continue
+            # only delete files if this exposure is finished
+            if np.sum(len([f for f in files if f.find('meas.fits')>-1]))==0:
+                print('     no meas.fits file')
+                continue
+            for k in range(len(files)):
+                sfile = files[k]
+                cfile = os.path.join(cdir,os.path.basename(sfile))
+                issame = False
+                if os.path.exists(cfile)==False:
+                    continue
+                if os.path.getsize(sfile)!=os.path.getsize(cfile):
+                    continue
+                # check md5sum
+                smd5 = utils.md5sum(sfile)
+                cmd5 = utils.md5sum(cfile)
+                if smd5==cmd5:
+                    print('     deleting',os.path.basename(sfile))
+                    os.remove(sfile)
+
+            #import pdb; pdb.set_trace()
+    

@@ -110,7 +110,7 @@ def modelmag(tab,instfilt,dec,eqnfile):
     else:
         cols = np.char.array(modelmageqn_cols).upper()
 
-    ## Remove numbers and "COLOR"
+    ## Remove numbers and "COLOR" from the columns
     isnumeric = np.array([dln.isnumber(c) for c in cols])
     bd, = np.where(isnumeric | (cols.upper() == 'COLOR') | (cols == '??'))
     if len(bd)>0:
@@ -181,6 +181,7 @@ def modelmag(tab,instfilt,dec,eqnfile):
     ## Apply the color range
     if usecolor:
         goodmask &= ((color >= eqnstr1['colorlim'][0]) & (color <= eqnstr1['colorlim'][1]))
+
     ## Get the sources that pass all cuts
     gd, = np.where(goodmask==True)
     if len(gd)==0:
@@ -198,7 +199,7 @@ def modelmag(tab,instfilt,dec,eqnfile):
     magcmd = modelmageqn.upper()
     for i in range(len(modelmageqn_cols)):
         magcmd = magcmd.replace(modelmageqn_cols[i],"tab['"+modelmageqn_cols[i]+"'][gd]")
-    magcmd = magcmd.replace('COLOR','COLOR[gd]')
+    magcmd = magcmd.replace('COLOR','color[gd]')    # the color variables is "color" not "COLOR"
     modelmag_gd = eval(magcmd)
     modelmag = np.zeros(ntab,float)+99.99
     modelmag[gd] = modelmag_gd
@@ -286,7 +287,7 @@ def modelmag(tab,instfilt,dec,eqnfile):
     modelmagerrcmd = 'np.sqrt( '+ '+'.join('('+modelmageqn_terms+')**2') +' )'
     for i in range(len(modelmageqn_cols)):
         modelmagerrcmd = modelmagerrcmd.replace(modelmageqn_cols[i],"err['E_"+modelmageqn_cols[i].upper()+"'][gd]")
-    modelmagerrcmd = modelmagerrcmd.replace('COLOR','COLORERR[gd]')
+    modelmagerrcmd = modelmagerrcmd.replace('COLOR','colorerr[gd]')    # color error is "colorerr" not "COLORERR"
     modelmagerr_gd = eval(modelmagerrcmd)
     modelmagerr = np.zeros(ntab,float)+99.90
     modelmagerr[gd] = modelmagerr_gd

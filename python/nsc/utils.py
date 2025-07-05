@@ -40,6 +40,7 @@ import subprocess
 import warnings
 import traceback
 import shutil
+import hashlib
 
 # Ignore these warnings, it's a bug
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -80,7 +81,8 @@ def rootdirs():
         mssdir = '/net/mss1/'
         localdir = '/tmp/'
     elif host.find('tacc') > -1 or hostname.find('tac') > -1:
-        dldir = '/corral/projects/NOIRLab/nsc/catalogs/'
+        #dldir = '/corral/projects/NOIRLab/nsc/catalogs/'
+        dldir = '/corral/projects/NOIRLab/nsc/'
         mssdir = '/net/mss1/'
         localdir = '/tmp/'
     else:
@@ -2446,3 +2448,15 @@ def remove_indices(lst=None,index=None):
        if i not in index: newlst.append(lst[i])
     if type(lst) is np.ndarray: newlst = np.array(newlst)
     return newlst
+
+def md5sum(fname):
+    """ Compute md5sum of a file """
+    if os.path.exists(fname)==False:
+        raise FileNotFoundError(fname)
+    md5 = hashlib.md5()
+    # handle content in binary form
+    with open(fname, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b''):
+        #while chunk := f.read(4096):
+            md5.update(chunk)
+    return md5.hexdigest()

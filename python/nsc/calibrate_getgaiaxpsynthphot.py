@@ -479,7 +479,6 @@ def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag'):
     # Model Magnitudes
     #-----------------
     if kind=='modelmag':
-        
         # Get the good sources 
         gdmeas, = np.where((meas1['imaflags_iso'] == 0) & (~((meas1['flags'] & 8) > 0)) & (~((meas1['flags'] & 16) > 0)) &
                           (meas1['magpsf'] < 50) &  (meas1['magerr_auto'] < 0.05) & (meas1['class_star'] > 0.8) &
@@ -530,7 +529,7 @@ def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag'):
         # Need to deal with "hockey-stick" effect, where the fainter stars are offset from the brighter ones
         if len(gdmeas) > 0:
             ref2 = ref1[gdmeas] 
-            mmags2 = mmags[gdmeas,:] 
+            #mmags2 = mmags[gdmeas,:] 
             meas2 = meas1[gdmeas]
             # Matched structure
             mag2 = meas2['magpsf'] + 2.5*np.log10(exptime)   # correct for the exposure time
@@ -903,7 +902,9 @@ def loadheader(headfile):
                     # use the next header which should have filter and other info
                     headdict['main'] = hdu[1].header
             else:
-                ccdnum = head['CCDNUM']
+                ccdnum = head.get('CCDNUM')
+                if ccdnum is None:
+                    import pdb; pdb.set_trace()
                 headdict[ccdnum] = head
         hdu.close()
     # ASCII file
@@ -1082,9 +1083,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
 
     # v4+ use separate header file
     if version >= 'v4':
-        if measfile is not None:
-            headfile = os.path.join(expdir,base+'_header.fits')            
-        else:
+        headfile = os.path.join(expdir,base+'_header.fits')            
+        if os.path.exists(headfile)==False:
             headfile = os.path.join(expdir,base+'.hdr')
             if os.path.exists(headfile)==False:
                 #headfile = os.path.join(dldir,'dnidever','nsc','instcal',version,
@@ -1663,9 +1663,9 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     if len(mmags) == 1 and mmags[0] < -1000: 
         print('No good model mags')
         return
-    
+
     # Get the zero-points
-    mmexpinfo,mmchinfo,mmstr = getzpterm(meas1,ref1,mmags,expinfo.copy(),chinfo.copy(),kind='modelmag')
+    #mmexpinfo,mmchinfo,mmstr = getzpterm(meas1,ref1,mmags,expinfo.copy(),chinfo.copy(),kind='modelmag')
     gexpinfo,gchinfo,gmstr = getzpterm(meas1,ref1,mmags,expinfo.copy(),chinfo.copy(),kind='gaiaxpsynth')    
 
 

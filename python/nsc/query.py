@@ -282,6 +282,8 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
 
     if silent==False:
         logger.info('Querying %s: RA=%.5f DEC=%.5f Radius=%.3f' % (refname,cenra,cendec,radius))
+
+    import pdb; pdb.set_trace()
      
     # Loading previously loaded file 
     if os.path.exists(savefile): 
@@ -705,9 +707,10 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
         # DECam u-band
         if instfilt=='c4d-u':
             # Use GAIA, 2MASS and GALEX to calibrate
-            refcat += ['2MASS-PSC','II/312/ais']
+            #refcat += ['2MASS-PSC','II/312/ais','GSYNTH-PHOT']
+            refcat += ['2MASS-PSC','GSYNTH-PHOT']
             if cendec <= 0:
-                refcat += ['Skymapperdr4']
+                refcat += ['Skymapperdr4','GSYNTH-PHOT']
         # DECam g-band
         elif instfilt=='c4d-g':
             # Use PS1 if possible
@@ -756,9 +759,9 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
         elif instfilt=='c4d-VR':
             # Use PS1 if possible
             if cendec > -29:
-                refcat += ['2MASS-PSC','PS']
+                refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
             else:
-                refcat += ['2MASS-PSC','ATLAS']
+                refcat += ['2MASS-PSC','GSYNTH-PHOT','ATLAS']
         # Bok+90Prime g-band
         elif instfilt=='ksb-g':
             # Use PS1
