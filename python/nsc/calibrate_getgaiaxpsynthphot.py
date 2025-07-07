@@ -4,14 +4,14 @@ import os
 import time
 import numpy as np
 from glob import glob
-import healpy as hp
+#import healpy as hp
 from astropy.io import fits
 from astropy.table import Table,vstack,hstack
 from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 from dlnpyutils import utils as dln,coords
-from dustmaps.sfd import SFDQuery
+#from dustmaps.sfd import SFDQuery
 from scipy.optimize import curve_fit
 from scipy import stats
 import subprocess
@@ -120,53 +120,119 @@ def standardize(filt,makeplots=False):
     """ Find color and magnitude terms """
     # for gaia xp synth phot
 
-    tabfile = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/gaiaxpsynthphot/gaiaxpsynth_'+filt+'.fits'
-    tab = Table.read(tabfile)
+    #tabfile = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/gaiaxpsynthphot/gaiaxpsynth_'+filt+'.fits'
+    tabfile = '/Users/nidever/datalab/nsc/v4/calibrate/gaiaxpsynth_'+filt+'.fits'
+    origtab = Table.read(tabfile)
     ref = Table.read(tabfile.replace('.fits','_ref.fits'))
     expinfo = Table.read(tabfile.replace('.fits','_exposure.fits'))
 
     from scipy.stats import binned_statistic
 
-    # Color-dependence
+    errlim = 0.01
+    maglim = 17.6
+    maglowlim = 11.0
+    collim = 2.6
+    colmaglim = 16.0
     colorder = 1
+    magorder = 2
+    colrefpoint = 1.0
+    magrefpoint = 15.0
+    zptermlim = 0.4
     if filt=='u':
         colorder = 3
-    g, = np.where(tab['gmag']<16)
-    colbins = np.arange(0.3,2.6,0.1)
-    ybins,xedge,binnumber = binned_statistic(tab['col'][g],tab['dresid'][g],bins=colbins,statistic='median')
+        magorder = 3
+        maglowlim = 10.5
+        maglim = 17.0
+        collim = 1.7
+    elif filt=='g':
+        maglowlim = 12.0
+    elif filt=='i':
+        maglowlim = 13.0
+        magorder = 3
+    elif filt=='z':
+        maglim = 17.0
+    elif filt=='Y':
+        magorder = 3
+        #maglim = 15.5
+        colmaglim = 15.5
+    elif filt=='VR':
+        errlim = 0.2
+        maglowlim = 14.8
+        maglim = 18.0
+
+    # Use the more comprehensive "ref" catalog
+    tab = ref.copy()
+    tab['err'] = tab['errpsf']
+    tab['col'] = tab['bp']-tab['rp']
+    tab['model'] = tab['gsynth_'+filt.lower()+'mag']
+    tab['mag'] = 0.0
+    gd, = np.where((tab['magpsf'] < 50) & (tab['model']>0))
+    tab = tab[gd]
+        
+    # Remove the exposure time from the observed mags
+    expindex = dln.create_index(tab['expnum'])
+    zptermexp = np.zeros(len(expindex['value']),float)
+    zpterm = np.zeros(len(tab),float)
+    for i in range(len(expindex['value'])):
+        ind = expindex['index'][expindex['lo'][i]:expindex['hi'][i]+1]
+        nind = len(ind)
+        eind, = np.where(expinfo['expnum']==expindex['value'][i])
+        exptime = expinfo['exptime'][eind[0]]
+        tab['mag'][ind] = tab['magpsf'][ind] + 2.5*np.log10(exptime)
+        zpterm1 = np.nanmedian(tab['mag'][ind]-tab['model'][ind])
+        zpterm[ind] = zpterm1
+        zptermexp[i] = zpterm1
+    tab['resid'] = tab['mag']-tab['model']
+    medzpterm = np.nanmedian(zptermexp)
+    gd, = np.where(np.abs(zpterm-medzpterm) < 0.4)
+    tab = tab[gd]
+    tab['dresid'] = tab['resid']-np.nanmedian(tab['resid'])
+    
+    # Color-dependence
+    g, = np.where((tab['gmag']>=maglowlim) & (tab['gmag']<=colmaglim) & (tab['err']<errlim))
+    colbins = np.arange(0.0,3.5,0.1)
+    ybins,xedge,binnumber = binned_statistic(tab['col'][g],tab['dresid'][g],
+                                             bins=colbins,statistic='median')
     xbins = xedge[:-1]+(xedge[1]-xedge[0])*0.5
-    colcoef = np.polyfit(xbins,ybins,colorder)
+    gdb, = np.where(np.isfinite(ybins) & (xbins >= 0.3) & (xbins <= collim))
+    colcoef = np.polyfit(xbins[gdb],ybins[gdb],colorder)
     # array([-0.03046447,  0.03936253])
 
     # Magnitude-dependence
-    magorder = 2
     if filt=='u':
-        g, = np.where((tab['col']<1.1) & (np.abs(tab['dresid'])<0.5))
+        g2, = np.where((tab['col']<1.1) & (np.abs(tab['dresid'])<0.3) & (tab['err']<errlim))
     else:
-        g = np.arange(len(tab))
-    magbins = np.arange(11,17.7,0.2)
-    ybins2,xedge2,binnumber2 = binned_statistic(tab['mag'][g],tab['dresid'][g],bins=magbins,statistic=np.nanmedian)
+        g2, = np.where((tab['err']<errlim) & (np.abs(tab['dresid'])<0.5))
+    magbins = np.arange(maglowlim-0.5,17.8,0.2)
+    ybins2,xedge2,binnumber2 = binned_statistic(tab['gmag'][g2],tab['dresid'][g2],bins=magbins,statistic=np.nanmedian)
     xbins2 = xedge2[:-1]+(xedge2[1]-xedge2[0])*0.5
-    gd, = np.where(np.isfinite(ybins2))
-    magcoef = np.polyfit(xbins2[gd],ybins2[gd],magorder)
+    gdb, = np.where(np.isfinite(ybins2) & (xbins2 <= maglim))
+    magcoef = np.polyfit(xbins2[gdb],ybins2[gdb],magorder)
 
     # force the corrections to be zero at col=1.0 and gmag=13.0
     colcoef2 = colcoef.copy()
-    coloff = np.polyval(colcoef,1.0)
+    coloff = np.polyval(colcoef,colrefpoint)
     colcoef2[-1] -= coloff
     magcoef2 = magcoef.copy()
-    magoff = np.polyval(magcoef,13.0)
+    magoff = np.polyval(magcoef,magrefpoint)
     magcoef2[-1] -= magoff
     print('col coef = ',colcoef2)
     print('mag coef = ',magcoef2)
 
-
+    #import matplotlib.pyplot as plt
+    #from dlnpyutils import plotting as pl
+    #fig = plt.figure(1)
+    #pl.hist2d(ref['bp']-ref['rp'],ref['magpsf']-ref['gsynth_umag'],log=True)
+    
+    #import pdb; pdb.set_trace()
+    
     # Redetermine the offsets for each exposure
     #   with the color and magnitude dependence removed
     expindex = dln.create_index(tab['expnum'])
     dresid = tab['dresid'].copy()*0.0
     dresid2 = tab['dresid'].copy()*0.0
-    zpterm = np.zeros(len(expindex['value']),float)
+    zptermexp = np.zeros(len(expindex['value']),float)
+    zpterm = np.zeros(len(dresid),float)
     for i in range(len(expindex['value'])):
         ind = expindex['index'][expindex['lo'][i]:expindex['hi'][i]+1]
         nind = len(ind)
@@ -176,68 +242,126 @@ def standardize(filt,makeplots=False):
         resid1 -= np.polyval(colcoef2,col1)
         resid1 -= np.polyval(magcoef2,mag1)
         zpterm1 = np.nanmedian(resid1)
-        zpterm[i] = zpterm1
+        zptermexp[i] = zpterm1
+        zpterm[ind] = zpterm1
         resid1 -= zpterm1
         dresid[ind] = resid1
         dresid2[ind] = tab['resid'][ind].copy() - zpterm1
+    medzpterm = np.nanmedian(zptermexp)
+        
+    print('zpterm =',zptermexp)
+    print('median zpterm =',medzpterm)
 
+    #import pdb; pdb.set_trace()
 
     # --- Second iteration ---
-
+    
     # Color-dependence
-    g, = np.where(tab['gmag'] < 16)
+    g, = np.where((tab['gmag']>=maglowlim) & (tab['gmag']<=colmaglim) & (dresid2<0.4) &
+                  (tab['err']<errlim) & (np.abs(zpterm-medzpterm) < 0.5))
+    if filt=='u':
+        g, = np.where((tab['gmag']>=maglowlim) & (tab['gmag']<=15.5) & (dresid2<0.4) &
+                      (tab['err']<errlim) & (np.abs(zpterm-medzpterm) < 0.5))
     ybins,xedge,binnumber = binned_statistic(tab['col'][g],dresid2[g],bins=colbins,statistic='median')
     xbins = xedge[:-1]+(xedge[1]-xedge[0])*0.5
-    colcoef = np.polyfit(xbins,ybins,colorder)
+    gdb, = np.where(np.isfinite(ybins) & (xbins >= 0.3) & (xbins <= collim))
+    if filt=='u':
+        gdb, = np.where(np.isfinite(ybins) & (xbins >= 0.3) & (xbins <= collim))
+    colcoef = np.polyfit(xbins[gdb],ybins[gdb],colorder)
     # array([-0.03046447,  0.03936253])
 
     # Magnitude-dependence
     if filt=='u':
-        g, = np.where((tab['col']<1.1) & (np.abs(dresid2)<0.5))
+        g2, = np.where((tab['col']<1.1) & (np.abs(dresid2)<0.3) & (tab['err']<errlim) &
+                       (np.abs(zpterm-medzpterm) < zptermlim))
     else:
-        g = np.arange(len(tab))
-    magbins = np.arange(11,17.7,0.2)
-    ybins2,xedge2,binnumber2 = binned_statistic(tab['mag'][g],dresid2[g],bins=magbins,statistic=np.nanmedian)
+        g2, = np.where((tab['err']<errlim) & (np.abs(zpterm-medzpterm) < zptermlim) & (dresid2<0.3))
+    magbins = np.arange(maglowlim-0.5,17.8,0.2)
+    ybins2,xedge2,binnumber2 = binned_statistic(tab['gmag'][g2],dresid2[g2],bins=magbins,statistic=np.nanmedian)
     xbins2 = xedge2[:-1]+(xedge2[1]-xedge2[0])*0.5
-    gd, = np.where(np.isfinite(ybins2))
-    magcoef = np.polyfit(xbins2[gd],ybins2[gd],magorder)
+    gdb2, = np.where(np.isfinite(ybins2) & (xbins2 <= maglim))
+    magcoef = np.polyfit(xbins2[gdb2],ybins2[gdb2],magorder)
 
     # force the corrections to be zero at col=1.0 and gmag=13.0
     colcoef2 = colcoef.copy()
-    coloff = np.polyval(colcoef,1.0)
+    coloff = np.polyval(colcoef,colrefpoint)
     colcoef2[-1] -= coloff
     magcoef2 = magcoef.copy()
-    magoff = np.polyval(magcoef,13.0)
+    magoff = np.polyval(magcoef,magrefpoint)
     magcoef2[-1] -= magoff
 
     print('col coef = ',colcoef2)
     print('mag coef = ',magcoef2)
 
     print('copy to gaiasynth_standardize.txt file')
-    print('colcoef',colcoef2[::-1])
-    print('magcoef',magcoef2[::-1])
+    strcolcoef = '['
+    for c in colcoef2[::-1]:
+        strcolcoef += '{:.6g},'.format(c)
+    strcolcoef = strcolcoef[:-1]+']'
+    strmagcoef = '['
+    for c in magcoef2[::-1]:
+        strmagcoef += '{:.6g},'.format(c)
+    strmagcoef = strmagcoef[:-1]+']'
+    print('colcoef',strcolcoef)
+    print('magcoef',strmagcoef)
 
+    #import matplotlib.pyplot as plt
+    #plt.hist(zpterm,bins=50)
+    
+    #import pdb; pdb.set_trace()
 
     # Make plots
     if makeplots:
         from dlnpyutils import plotting as pl
         import matplotlib.pyplot as plt
+        from matplotlib.colors import LogNorm as LN
+        fig = plt.figure(1)
+        plt.close()
+        #plt.clf()
+        fig,ax = plt.subplots(1,2,figsize=(17,8),num=1)
 
-        o=pl.hist2d(tab['col'][g],dresid2[g],xr=[-0.5,3.0],yr=[-0.2,0.2],log=True,
-                    xtitle='BP-RP',ytitle='Residuals (mag)',title='Color Dependence')
-        plt.scatter(xbins,ybins,s=50,c='r')
-        plt.plot(colbins,np.polyval(colcoef,colbins),c='orange')
-        plt.savefig('gaiaxpsynth_standardize_color_'+filt+'.png',bbox_inches='tight')
+        vmin = 1
+        cbins = np.linspace(-0.5,3.4,101)
+        rbins = np.linspace(-0.2,0.2,101)
+        if filt=='u':
+            cbins = np.linspace(-0.5,2.5,101)
+            rbins = np.linspace(-0.2,0.4,101)
+        o = ax[0].hist2d(tab['col'][g],dresid2[g],bins=(cbins,rbins),norm=LN(vmin=vmin))
+        ax[0].set_xlabel('BP-RP')
+        ax[0].set_ylabel('Residuals (mag)')
+        ax[0].set_title('Color Dependence ('+filt+'-band)')
+        ax[0].scatter(xbins,ybins,s=50,c='orange')
+        ax[0].scatter(xbins[gdb],ybins[gdb],s=50,c='r')
+        ax[0].plot(colbins,np.polyval(colcoef,colbins),c='orange')
+        #o=pl.hist2d(tab['col'][g],dresid2[g],xr=[-0.5,3.0],yr=[-0.2,0.2],log=True,
+        #            xtitle='BP-RP',ytitle='Residuals (mag)',title='Color Dependence ('+filt+'-band)')
+        #plt.scatter(xbins,ybins,s=50,c='r')
+        #plt.plot(colbins,np.polyval(colcoef,colbins),c='orange')
+        #plt.savefig('gaiaxpsynth_standardize_color_'+filt+'.png',bbox_inches='tight')
 
-        o=pl.hist2d(tab['gmag'],dresid2,xr=[11,17.6],yr=[-0.2,0.2],log=True,
-                    xtitle='G',ytitle='Residuals (mag)',title='G Magnitude Dependence')
-        plt.scatter(xbins2,ybins2,s=50,c='r')
-        plt.plot(magbins,np.polyval(magcoef,magbins),c='orange')
-        plt.savefig('gaiaxpsynth_stanardize_gmag_'+filt+'.png',bbox_inches='tight')
+        mbins = np.linspace(maglowlim,17.6,101)
+        rbins = np.linspace(-0.2,0.2,101)
+        o = ax[1].hist2d(tab['gmag'][g2],dresid2[g2],bins=(mbins,rbins),norm=LN(vmin=vmin))
+        ax[1].set_xlabel('G')
+        ax[1].set_ylabel('Residuals (mag)')
+        ax[1].set_title('G Magnitude Dependence ('+filt+'-band)')
+        ax[1].scatter(xbins2,ybins2,s=50,c='orange')
+        ax[1].scatter(xbins2[gdb2],ybins2[gdb2],s=50,c='r')
+        ax[1].plot(magbins,np.polyval(magcoef,magbins),c='orange')
+        
+        #o=pl.hist2d(tab['gmag'],dresid2,xr=[11,17.6],yr=[-0.2,0.2],log=True,
+        #            xtitle='G',ytitle='Residuals (mag)',title='G Magnitude Dependence ('+filt+'-band)')
+        #plt.scatter(xbins2,ybins2,s=50,c='r')
+        #plt.plot(magbins,np.polyval(magcoef,magbins),c='orange')
+        plt.savefig('gaiaxpsynth_stanardize_'+filt+'.png',bbox_inches='tight')
 
     # Check absolute calibration
     syncol = 'gsynth_'+filt.lower()+'mag'
     refcol = 'ps_'+filt.lower()+'mag'
+    if filt == 'u':
+        refcol = 'sm_umag'
+    if filt == 'VR':
+        refcol = 'gmag'
     gdref, = np.where(np.isfinite(ref[syncol]) & np.isfinite(ref[refcol]) &
                       (ref[syncol]>0) & (ref['bp']-ref['rp'] > 0.3) & 
                       (ref['bp']-ref['rp'] < 2.6))
@@ -278,15 +402,31 @@ def standardize(filt,makeplots=False):
         #    goodind.append(ind)
 
     medzpterm = np.nanmedian(zptermexp)
-    goodind, = np.where(zpterm > (medzpterm-0.5))
+    if filt == 'u':
+        goodind1, = np.where((np.abs(zpterm-medzpterm) < 0.5) & (ref['errpsf'] < 0.01) &
+                             (ref['gmag'] >= 10.5) & (ref['gmag'] <= 16.0) &
+                             (ref['bp']-ref['rp'] >= 0.3 ) & (ref['bp']-ref['rp'] <= 1.1))
+    else:
+        goodind1, = np.where((np.abs(zpterm-medzpterm) < 0.5) & (ref['errpsf'] < 0.01) &
+                             (ref['gmag'] >= 11) & (ref['gmag'] <= 17.6) &
+                             (ref['bp']-ref['rp'] >= 0.3 ) & (ref['bp']-ref['rp'] <= 2.6))
     #goodind = np.hstack(goodind)
 
     # Now compared our calibrated photometry to the PS1 photometry
-    psresid = calibmag[goodind] - ref[refcol][goodind]
-    psoffset = np.nanmedian(psresid)
-    print('PS1 offset = {:.6f} mag'.format(psoffset))
+    magresid1 = calibmag[goodind1] - ref[refcol][goodind1]
+    magoffset1 = np.nanmedian(magresid1)
+    sigmagoffset1 = dln.mad(magresid1)
 
-    return colcoef2,magcoef2,psoffset
+    good2, = np.where(np.abs(magresid1-magoffset1) < 3*sigmagoffset1)
+    goodind = goodind1[good2]
+
+    magresid = calibmag[goodind] - ref[refcol][goodind]
+    magoffset = np.nanmedian(magresid)
+    sigmagoffset = dln.mad(magresid)
+    
+    print('absolute magnitude offset = {:.6f} +/- {:.6f} mag'.format(magoffset,sigmagoffset))
+    
+    return colcoef2,magcoef2,magoffset
 
 
 def concatenate(expdir,deletetruncated=False):
