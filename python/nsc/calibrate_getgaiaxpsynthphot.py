@@ -6,7 +6,7 @@ import numpy as np
 from glob import glob
 import healpy as hp
 from astropy.io import fits
-from astropy.table import Table,vstack
+from astropy.table import Table,vstack,hstack
 from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
@@ -19,7 +19,7 @@ import traceback
 import shutil
 from . import utils,query,modelmag
 
-def runexposures(filt):
+def runexposures(filt,clobber=False):
     files = dln.readlines('/corral/projects/NOIRLab/nsc/instcal/v4/c4d/allmeas_070425.txt')
     #files = dln.readlines('/corral/projects/NOIRLab/nsc/instcal/v4/c4d/allmeas_022025.txt')
     ffiles = [f for f in files if f.find('_'+filt+'_') > -1]
@@ -33,7 +33,7 @@ def runexposures(filt):
         base = os.path.basename(expdir)
         print(i+1,expdir)
         outfile = outdir+'/'+base+'_gaiaxpsynth.fits'
-        if os.path.exists(outfile):
+        if os.path.exists(outfile) and clobber==False:
             print(outfile,'already exists')
             continue
         try:
@@ -50,38 +50,105 @@ def combinecats(filt):
     outfiles = glob('/home1/09970/dnidever/scratch1/nsc/instcal/v4/gaiaxpsynthphot/*_'+filt+'_*_gaiaxpsynth.fits')
     print(len(outfiles),filt,'files')
     tab = []
+    ref = []
+    exptab = []
     for i in range(len(outfiles)):
-        exptab = Table.read(outfiles[i],1)
+        exptab1 = Table.read(outfiles[i],1)
         tab1 = Table.read(outfiles[i],3)
+        ref1 = Table.read(outfiles[i],4)
+        delcols = ['kron_radius','background','mag_aper','magerr_aper','isoarea_world',
+                   'a_world','b_world','theta_world','ellipticity','erra_world',
+                   'errb_world','errtheta_world','imaflags_iso','nimaflags_iso',
+                   'x_image','y_image','mag_iso','magerr_iso','isoarea_image',
+                   'x2_world','y2_world','xy_world','errx2_world','erry2_world',
+                   'errxy_world','threshold','ra_2','dec_2',
+                   'jmag','hmag','kmag','xpsf','ypsf',
+                   'atlas_gmag','e_atlas_gmag','atlas_gcontrib',
+                   'atlas_rmag','e_atlas_rmag','atlas_rcontrib',
+                   'atlas_imag','e_atlas_imag','atlas_icontrib',
+                   'atlas_zmag','e_atlas_zmag','atlas_zcontrib',
+                   'w1mag','e_w1mag','w2mag','e_w2mag',
+                   'gl_36mag','e_gl_36mag','gl_45mag','e_gl_45mag',
+                   'number','e_ejk','repeat',
+                   'e_gmag','e_bp','e_rp','qflg','flags','measid','filter','mjd',
+                   'ra_error','dec_error','pmra','pmdec','pmra_error','pmdec_error',
+                   'alpha_j2000','delta_j2000','ccdnum','ebv_sfd','ndet_iter',
+                   'rapsf','decpsf',
+                   'e_jmag','e_hmag','e_kmag','raerr','decerr','sky','iter',
+                   'e_gsynth_umag','e_gsynth_gmag','e_gsynth_rmag','e_gsynth_imag',
+                   'e_gsynth_zmag','e_gsynth_ymag','e_gsynth_vrmag']
+        for c in delcols:
+            if c in ref1.colnames:
+                del ref1[c]
+        # change all float64 to float32
+        for c in ref1.colnames:
+            if ref1[c].dtype.type == np.float64:
+                ref1[c] = ref1[c].astype(np.float32)
+        #del ref1[delcols]
+        #import pdb; pdb.set_trace()
+        ref1['expnum'] = exptab1['expnum'][0]
+        gd, = np.where((ref1['gmag']<17.7) & (ref1['errpsf']<0.05) &
+                       np.isfinite(ref1['magpsf']))
+        ref1 = ref1[gd]
         tab1['resid'] = tab1['mag']-tab1['model']
         tab1['dresid'] = tab1['resid']-np.nanmedian(tab1['resid'])
-        tab1['ra'] = exptab['ra'][0]
-        tab1['dec'] = exptab['dec'][0]
-        tab1['expnum'] = exptab['expnum'][0]
+        tab1['ra'] = exptab1['ra'][0]
+        tab1['dec'] = exptab1['dec'][0]
+        tab1['expnum'] = exptab1['expnum'][0]
+        print(i+1,outfiles[i],len(tab1),len(ref1))
+        exptab.append(exptab1)
         tab.append(tab1)
+        ref.append(ref1)
+    exptab = vstack(exptab)
     tab = vstack(tab)
+    ref = vstack(ref)
+    print(len(tab),len(ref))
+    #import pdb; pdb.set_trace()
     outfile = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/gaiaxpsynthphot/gaiaxpsynth_'+filt+'.fits'
+    exptab.write(outfile.replace('.fits','_exposure.fits'),overwrite=True)
     tab.write(outfile,overwrite=True)
+    ref.write(outfile.replace('.fits','_ref.fits'),overwrite=True)
+    #hdu = fits.HDUList()
+    #hdu.append(fits.table_to_hdu(tab))
+    #hdu.append(fits.table_to_hdu(ref))
+    #hdu.writeto(outfile,overwrite=True)
+    #hdu.close()
     print('Writing to',outfile)
-    return tab
+    return tab,ref
 
-def standardize(tab,makeplots=False):
+def standardize(filt,makeplots=False):
     """ Find color and magnitude terms """
     # for gaia xp synth phot
 
+    tabfile = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/gaiaxpsynthphot/gaiaxpsynth_'+filt+'.fits'
+    tab = Table.read(tabfile)
+    ref = Table.read(tabfile.replace('.fits','_ref.fits'))
+    expinfo = Table.read(tabfile.replace('.fits','_exposure.fits'))
+
     from scipy.stats import binned_statistic
+
+    # Color-dependence
+    colorder = 1
+    if filt=='u':
+        colorder = 3
     g, = np.where(tab['gmag']<16)
     colbins = np.arange(0.3,2.6,0.1)
     ybins,xedge,binnumber = binned_statistic(tab['col'][g],tab['dresid'][g],bins=colbins,statistic='median')
     xbins = xedge[:-1]+(xedge[1]-xedge[0])*0.5
-    colcoef = np.polyfit(xbins,ybins,1)
+    colcoef = np.polyfit(xbins,ybins,colorder)
     # array([-0.03046447,  0.03936253])
 
+    # Magnitude-dependence
+    magorder = 2
+    if filt=='u':
+        g, = np.where((tab['col']<1.1) & (np.abs(tab['dresid'])<0.5))
+    else:
+        g = np.arange(len(tab))
     magbins = np.arange(11,17.7,0.2)
-    ybins2,xedge2,binnumber2 = binned_statistic(tab['mag'],tab['dresid'],bins=magbins,statistic=np.nanmedian)
+    ybins2,xedge2,binnumber2 = binned_statistic(tab['mag'][g],tab['dresid'][g],bins=magbins,statistic=np.nanmedian)
     xbins2 = xedge2[:-1]+(xedge2[1]-xedge2[0])*0.5
     gd, = np.where(np.isfinite(ybins2))
-    magcoef = np.polyfit(xbins2[gd],ybins2[gd],2)
+    magcoef = np.polyfit(xbins2[gd],ybins2[gd],magorder)
 
     # force the corrections to be zero at col=1.0 and gmag=13.0
     colcoef2 = colcoef.copy()
@@ -115,18 +182,25 @@ def standardize(tab,makeplots=False):
         dresid2[ind] = tab['resid'][ind].copy() - zpterm1
 
 
-    # Second iteration
+    # --- Second iteration ---
+
+    # Color-dependence
     g, = np.where(tab['gmag'] < 16)
     ybins,xedge,binnumber = binned_statistic(tab['col'][g],dresid2[g],bins=colbins,statistic='median')
     xbins = xedge[:-1]+(xedge[1]-xedge[0])*0.5
-    colcoef = np.polyfit(xbins,ybins,1)
+    colcoef = np.polyfit(xbins,ybins,colorder)
     # array([-0.03046447,  0.03936253])
 
+    # Magnitude-dependence
+    if filt=='u':
+        g, = np.where((tab['col']<1.1) & (np.abs(dresid2)<0.5))
+    else:
+        g = np.arange(len(tab))
     magbins = np.arange(11,17.7,0.2)
-    ybins2,xedge2,binnumber2 = binned_statistic(tab['mag'],dresid2,bins=magbins,statistic=np.nanmedian)
+    ybins2,xedge2,binnumber2 = binned_statistic(tab['mag'][g],dresid2[g],bins=magbins,statistic=np.nanmedian)
     xbins2 = xedge2[:-1]+(xedge2[1]-xedge2[0])*0.5
     gd, = np.where(np.isfinite(ybins2))
-    magcoef = np.polyfit(xbins2[gd],ybins2[gd],2)
+    magcoef = np.polyfit(xbins2[gd],ybins2[gd],magorder)
 
     # force the corrections to be zero at col=1.0 and gmag=13.0
     colcoef2 = colcoef.copy()
@@ -161,7 +235,58 @@ def standardize(tab,makeplots=False):
         plt.plot(magbins,np.polyval(magcoef,magbins),c='orange')
         plt.savefig('gaiaxpsynth_stanardize_gmag_'+filt+'.png',bbox_inches='tight')
 
-    return colcoef2,magcoef2
+    # Check absolute calibration
+    syncol = 'gsynth_'+filt.lower()+'mag'
+    refcol = 'ps_'+filt.lower()+'mag'
+    gdref, = np.where(np.isfinite(ref[syncol]) & np.isfinite(ref[refcol]) &
+                      (ref[syncol]>0) & (ref['bp']-ref['rp'] > 0.3) & 
+                      (ref['bp']-ref['rp'] < 2.6))
+    # make regular arrays, not masked
+    if type(ref[refcol].data) == np.ma.core.MaskedArray:
+        ref[refcol] = ref[refcol].data.data
+    if type(ref[syncol].data) == np.ma.core.MaskedArray:
+        ref[syncol] = ref[syncol].data.data
+    ref = ref[gdref]
+    gsynmag = ref[syncol]
+    refmag = ref[refcol]
+    color = ref['bp']-ref['rp']
+    gmag = ref['gmag']
+    psfmag = ref['magpsf']
+    # apply the corrections to the gaia synth photometry
+    #gdgaia, = np.where((color > 0.3) & (color < 2.6))
+    gsynmag -= np.polyval(colcoef2,color)
+    gsynmag -= np.polyval(magcoef2,gmag)
+    #resid = psfmag-gsynmag
+    # measure the zpterm for each exposure
+    expindex = dln.create_index(ref['expnum'])
+    zptermexp = np.zeros(len(expindex['value']),float)
+    zpterm = np.zeros(len(gsynmag),float)
+    calibmag = np.zeros(len(gsynmag),float)   # calibrated psf photometry
+    goodind = []
+    for i in range(len(zptermexp)):
+        ind = expindex['index'][expindex['lo'][i]:expindex['hi'][i]+1]
+        nind = len(ind)
+        eind, = np.where(expinfo['expnum']==expindex['value'][i])
+        exptime = expinfo['exptime'][eind[0]]
+        mag2 = ref['magpsf'][ind] + 2.5*np.log10(exptime) 
+        model2 = gsynmag[ind]
+        diff = model2-mag2
+        zptermexp[i] = np.nanmedian(diff)
+        zpterm[ind] = zptermexp[i]
+        calibmag[ind] = mag2 + zpterm[i]
+        #if zpterm[i] > -0.5:
+        #    goodind.append(ind)
+
+    medzpterm = np.nanmedian(zptermexp)
+    goodind, = np.where(zpterm > (medzpterm-0.5))
+    #goodind = np.hstack(goodind)
+
+    # Now compared our calibrated photometry to the PS1 photometry
+    psresid = calibmag[goodind] - ref[refcol][goodind]
+    psoffset = np.nanmedian(psresid)
+    print('PS1 offset = {:.6f} mag'.format(psoffset))
+
+    return colcoef2,magcoef2,psoffset
 
 
 def concatenate(expdir,deletetruncated=False):
@@ -1678,6 +1803,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     hdu.append(fits.table_to_hdu(gexpinfo))
     hdu.append(fits.table_to_hdu(gchinfo))
     hdu.append(fits.table_to_hdu(gmstr))
+    hdu.append(fits.table_to_hdu(hstack((ref1,meas1))))
     outfile = outdir+'/'+base+'_gaiaxpsynth.fits'
     hdu.writeto(outfile,overwrite=True)
     hdu.close()
