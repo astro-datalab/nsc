@@ -4,20 +4,31 @@ import os
 import time
 import numpy as np
 from glob import glob
-#import healpy as hp
-from astropy.io import fits
+import healpy as hp
+from astropy.io import fits,ascii
 from astropy.table import Table,vstack,hstack
 from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 from dlnpyutils import utils as dln,coords
-#from dustmaps.sfd import SFDQuery
+from dustmaps.sfd import SFDQuery
 from scipy.optimize import curve_fit
 from scipy import stats
 import subprocess
 import traceback
 import shutil
 from . import utils,query,modelmag
+
+# Load the gaia synthetic photometry standardization table
+temp = ascii.read(utils.datadir()+'../config/gaiasynth_standardize.txt')
+GSYNCALTAB = {}
+for i in range(len(temp)):
+    instfilt = temp['INSTRUMENT'][i]+'-'+temp['BAND'][i]
+    tt = {'instrument':temp['INSTRUMENT'][i], 'band':temp['BAND'][i],
+          'decrange':eval(temp['DECRANGE'][i]), 'colorcoef':eval(temp['COLORCOEF'][i]),
+          'colrange':eval(temp['COLRANGE'][i]), 'magcoef':eval(temp['MAGCOEF'][i]),
+          'magrange':eval(temp['MAGRANGE'][i]), 'magoffset':float(temp['MAGOFFSET'][i])}
+    GSYNCALTAB[instfilt] = tt
 
 def runexposures(filt,clobber=False):
     files = dln.readlines('/corral/projects/NOIRLab/nsc/instcal/v4/c4d/allmeas_070425.txt')
@@ -120,8 +131,8 @@ def standardize(filt,makeplots=False):
     """ Find color and magnitude terms """
     # for gaia xp synth phot
 
-    #tabfile = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/gaiaxpsynthphot/gaiaxpsynth_'+filt+'.fits'
-    tabfile = '/Users/nidever/datalab/nsc/v4/calibrate/gaiaxpsynth_'+filt+'.fits'
+    tabfile = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/gaiaxpsynthphot/gaiaxpsynth_'+filt+'.fits'
+    #tabfile = '/Users/nidever/datalab/nsc/v4/calibrate/gaiaxpsynth_'+filt+'.fits'
     origtab = Table.read(tabfile)
     ref = Table.read(tabfile.replace('.fits','_ref.fits'))
     expinfo = Table.read(tabfile.replace('.fits','_exposure.fits'))
@@ -397,7 +408,7 @@ def standardize(filt,makeplots=False):
         diff = model2-mag2
         zptermexp[i] = np.nanmedian(diff)
         zpterm[ind] = zptermexp[i]
-        calibmag[ind] = mag2 + zpterm[i]
+        calibmag[ind] = mag2 # + zpterm[i]
         #if zpterm[i] > -0.5:
         #    goodind.append(ind)
 
@@ -739,7 +750,9 @@ def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag'):
 
     medfwhm = expinfo['fwhm'][0]
     exptime = expinfo['exptime'][0]
+    instrument = expinfo['instrument'][0]
     filt = expinfo['filter'][0]
+    instfilt = instrument+'-'+filt.lower()
     
     # Model Magnitudes
     #-----------------
@@ -791,20 +804,42 @@ def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag'):
                           (ref1['bp'] > 0) & (ref1['bp'] < 50) &
                           (ref1['rp'] > 0) & (ref1['rp'] < 50) &                          
                           (ref1[refmagcol] > 0) & (ref1[refmagcol] < 50))
-        # Need to deal with "hockey-stick" effect, where the fainter stars are offset from the brighter ones
-        if len(gdmeas) > 0:
-            ref2 = ref1[gdmeas] 
-            #mmags2 = mmags[gdmeas,:] 
-            meas2 = meas1[gdmeas]
-            # Matched structure
-            mag2 = meas2['magpsf'] + 2.5*np.log10(exptime)   # correct for the exposure time
-            mstr = {'col':ref2['bp']-ref2['rp'],'mag':mag2,'model':ref2[refmagcol],
-                    'err':ref2[referrcol],'ccdnum':meas2['ccdnum'],'gmag':ref2['gmag']}
-            # Measure the zero-point
-            expinfo,chinfo = fitzpterm(mstr,expinfo,chinfo)
-            expinfo['zptype'] = 2
-        else:
-            logger.info('No good reference sources')
+
+        if len(gdmeas)==0:
+            logger.error('No good reference sources')
+
+        ref2 = ref1[gdmeas]
+        meas2 = meas1[gdmeas]
+
+        # Deal with Gaia synthetic photometry color and magnitude effects and apply absolute calibration
+        gsyncal = GSYNCALTAB[instfilt]
+        print(gsyncal)
+        colcoef = gsyncal['colorcoef'][::-1]
+        colrange = gsyncal['colrange']
+        magcoef = gsyncal['magcoef'][::-1]
+        magrange = gsyncal['magrange']
+        magoffset = gsyncal['magoffset']
+        # Apply the corrections to the Gaia synthetic photometry
+        refmag = ref2[refmagcol]
+        bprp = ref2['bp']-ref2['rp']
+        gmag = ref2['gmag']
+        refmag -= np.polyval(colcoef,bprp)
+        refmag -= np.polyval(magcoef,gmag)
+        refmag += magoffset   # additive offset to the reference magnitudes
+        # Select sources within the color/mag calibration range
+        gd, = np.where((ref2['bp']-ref2['rp'] >= colrange[0]) & (ref2['bp']-ref2['rp'] <= colrange[1]) &
+                       (ref2['gmag'] >= magrange[0]) & (ref2['gmag'] <= magrange[1]))
+
+        # Matched structure
+        mag2 = meas2['magpsf'] + 2.5*np.log10(exptime)   # correct for the exposure time
+        mstr = {'col':bprp[gd],'mag':mag2[gd],'model':refmag[gd],
+                'err':ref2[referrcol][gd],'ccdnum':meas2['ccdnum'][gd],'gmag':gmag[gd]}
+        # Measure the zero-point
+        expinfo,chinfo = fitzpterm(mstr,expinfo,chinfo)
+        expinfo['zptype'] = 2
+
+        import pdb; pdb.set_trace()
+
 
     # Self-calibration
     #-----------------
