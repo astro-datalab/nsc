@@ -155,6 +155,9 @@ def standardize(filt,makeplots=False):
         maglowlim = 10.5
         maglim = 17.0
         collim = 1.7
+    elif filt=='r':
+        colorder = 2
+        maglowlim = 12.0
     elif filt=='g':
         maglowlim = 12.0
     elif filt=='i':
@@ -184,6 +187,7 @@ def standardize(filt,makeplots=False):
     expindex = dln.create_index(tab['expnum'])
     zptermexp = np.zeros(len(expindex['value']),float)
     zpterm = np.zeros(len(tab),float)
+    airmass = np.zeros(len(tab),float)
     for i in range(len(expindex['value'])):
         ind = expindex['index'][expindex['lo'][i]:expindex['hi'][i]+1]
         nind = len(ind)
@@ -193,9 +197,11 @@ def standardize(filt,makeplots=False):
         zpterm1 = np.nanmedian(tab['mag'][ind]-tab['model'][ind])
         zpterm[ind] = zpterm1
         zptermexp[i] = zpterm1
+        airmass[ind] = expinfo['airmass'][eind[0]]
     tab['resid'] = tab['mag']-tab['model']
     medzpterm = np.nanmedian(zptermexp)
-    gd, = np.where(np.abs(zpterm-medzpterm) < 0.4)
+    # also remove high airmass exposures
+    gd, = np.where((np.abs(zpterm-medzpterm) < 0.4) & (airmass < 1.5))
     tab = tab[gd]
     tab['dresid'] = tab['resid']-np.nanmedian(tab['resid'])
     
@@ -408,7 +414,7 @@ def standardize(filt,makeplots=False):
         diff = model2-mag2
         zptermexp[i] = np.nanmedian(diff)
         zpterm[ind] = zptermexp[i]
-        calibmag[ind] = mag2 + zpterm[i]  # apply zero-point
+        calibmag[ind] = mag2 + zptermexp[i]  # apply zero-point
         #if zpterm[i] > -0.5:
         #    goodind.append(ind)
 
