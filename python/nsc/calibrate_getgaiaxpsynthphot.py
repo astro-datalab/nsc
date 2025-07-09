@@ -131,8 +131,8 @@ def standardize(filt,makeplots=False):
     """ Find color and magnitude terms """
     # for gaia xp synth phot
 
-    tabfile = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/gaiaxpsynthphot/gaiaxpsynth_'+filt+'.fits'
-    #tabfile = '/Users/nidever/datalab/nsc/v4/calibrate/gaiaxpsynth_'+filt+'.fits'
+    #tabfile = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/gaiaxpsynthphot/gaiaxpsynth_'+filt+'.fits'
+    tabfile = '/Users/nidever/datalab/nsc/v4/calibrate/gaiaxpsynth_'+filt+'.fits'
     origtab = Table.read(tabfile)
     ref = Table.read(tabfile.replace('.fits','_ref.fits'))
     expinfo = Table.read(tabfile.replace('.fits','_exposure.fits'))
@@ -142,6 +142,7 @@ def standardize(filt,makeplots=False):
     errlim = 0.01
     maglim = 17.6
     maglowlim = 11.0
+    collowlim = 0.3
     collim = 2.6
     colmaglim = 16.0
     colorder = 1
@@ -150,27 +151,43 @@ def standardize(filt,makeplots=False):
     magrefpoint = 15.0
     zptermlim = 0.4
     if filt=='u':
-        colorder = 3
-        magorder = 3
+        collowlim = 0.3
+        collim = 1.8
+        colorder = 4
+        magorder = 4
         maglowlim = 10.5
-        maglim = 17.0
-        collim = 1.7
-    elif filt=='r':
-        colorder = 2
-        maglowlim = 12.0
+        maglim = 17.6
     elif filt=='g':
         maglowlim = 12.0
+        colorder = 4
+        magorder = 3
+        collowlim = 0.0
+        collim = 3.4
+    elif filt=='r':
+        colorder = 2
+        collowlim = 0.0
+        collim = 3.0
+        maglowlim = 13.0
     elif filt=='i':
+        collowlim = 0.1
+        collim = 3.0
         maglowlim = 13.0
         magorder = 3
     elif filt=='z':
+        colorder = 2
+        magorder = 2
+        collowlim = 0.1
+        collim = 2.8
         maglim = 17.0
     elif filt=='Y':
+        collim = 3.0
         magorder = 3
-        #maglim = 15.5
+        maglim = 17.0
         colmaglim = 15.5
     elif filt=='VR':
         errlim = 0.2
+        collim = 3.4
+        colorder = 2
         maglowlim = 14.8
         maglim = 18.0
 
@@ -211,7 +228,7 @@ def standardize(filt,makeplots=False):
     ybins,xedge,binnumber = binned_statistic(tab['col'][g],tab['dresid'][g],
                                              bins=colbins,statistic='median')
     xbins = xedge[:-1]+(xedge[1]-xedge[0])*0.5
-    gdb, = np.where(np.isfinite(ybins) & (xbins >= 0.3) & (xbins <= collim))
+    gdb, = np.where(np.isfinite(ybins) & (xbins >= collowlim) & (xbins <= collim))
     colcoef = np.polyfit(xbins[gdb],ybins[gdb],colorder)
     # array([-0.03046447,  0.03936253])
 
@@ -277,16 +294,15 @@ def standardize(filt,makeplots=False):
     g, = np.where((tab['gmag']>=maglowlim) & (tab['gmag']<=colmaglim) & (dresid2<0.4) &
                   (tab['err']<errlim) & (np.abs(zpterm-medzpterm) < 0.5))
     if filt=='u':
-        g, = np.where((tab['gmag']>=maglowlim) & (tab['gmag']<=15.5) & (dresid2<0.4) &
+        g, = np.where((tab['gmag']>=maglowlim) & (tab['gmag']<=15.5) & (dresid2<1.0) &
                       (tab['err']<errlim) & (np.abs(zpterm-medzpterm) < 0.5))
     ybins,xedge,binnumber = binned_statistic(tab['col'][g],dresid2[g],bins=colbins,statistic='median')
     xbins = xedge[:-1]+(xedge[1]-xedge[0])*0.5
-    gdb, = np.where(np.isfinite(ybins) & (xbins >= 0.3) & (xbins <= collim))
+    gdb, = np.where(np.isfinite(ybins) & (xbins >= collowlim) & (xbins <= collim))
     if filt=='u':
-        gdb, = np.where(np.isfinite(ybins) & (xbins >= 0.3) & (xbins <= collim))
+        gdb, = np.where(np.isfinite(ybins) & (xbins >= collowlim) & (xbins <= collim))
     colcoef = np.polyfit(xbins[gdb],ybins[gdb],colorder)
-    # array([-0.03046447,  0.03936253])
-
+    
     # Magnitude-dependence
     if filt=='u':
         g2, = np.where((tab['col']<1.1) & (np.abs(dresid2)<0.3) & (tab['err']<errlim) &
@@ -342,7 +358,7 @@ def standardize(filt,makeplots=False):
         rbins = np.linspace(-0.2,0.2,101)
         if filt=='u':
             cbins = np.linspace(-0.5,2.5,101)
-            rbins = np.linspace(-0.2,0.4,101)
+            rbins = np.linspace(-0.2,0.6,101)
         o = ax[0].hist2d(tab['col'][g],dresid2[g],bins=(cbins,rbins),norm=LN(vmin=vmin))
         ax[0].set_xlabel('BP-RP')
         ax[0].set_ylabel('Residuals (mag)')
@@ -437,7 +453,7 @@ def standardize(filt,makeplots=False):
     good2, = np.where(np.abs(magresid1-magoffset1) < 3*sigmagoffset1)
     goodind = goodind1[good2]
 
-    magresid = calibmag[goodind] - ref[refcol][goodind]
+    magresid = ref[refcol][goodind] - calibmag[goodind]
     magoffset = np.nanmedian(magresid)
     sigmagoffset = dln.mad(magresid)
     
