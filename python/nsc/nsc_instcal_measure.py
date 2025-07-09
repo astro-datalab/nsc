@@ -56,7 +56,7 @@ else:
 class Exposure:
 
     # Initialize Exposure object
-    def __init__(self,fluxfile,wtfile,maskfile,nscversion,host,delete=False):
+    def __init__(self,fluxfile,wtfile,maskfile,nscversion,host,delete=False,dochips=None):
         # Check that the files exist
         if os.path.exists(fluxfile) is False:
             print(fluxfile+" NOT found")
@@ -104,6 +104,12 @@ class Exposure:
         nhdu = len(hdulist)
         hdulist.close()
         self.nexten = nhdu
+
+        # Chips to process
+        self.allchips = np.arange(self.nexten)+1
+        if dochips is not None:
+            self.allchips = list(dochips)
+
         # Get night
         dateobs = head0.get("DATE-OBS")
         night = dateobs[0:4]+dateobs[5:7]+dateobs[8:10]
@@ -259,7 +265,8 @@ class Exposure:
         #----------------------------
         #for i in [int(sys.argv[6])]: #ktedit:createpsf_test,  only analyze 1 chip!
         #for i in [12]:
-        for i in range(1,self.nexten):
+        #for i in range(1,self.nexten):
+        for i in self.allchips:
             t0 = time.time()
             self.logger.info(" ")
             self.logger.info("=== Processing subimage "+str(i)+" ===")
@@ -973,13 +980,16 @@ class Chip:
 
             # For first iteration only, fit PSF 
             if self.sexiter==1:
-                self.daopickpsf()   
-                try:
-                    self.createpsf()
-                except:
-                    self.logger.info('Using sexpickpsf() to get PSF stars')
-                    self.sexpickpsf()
-                    self.createpsf()                    
+                #self.daopickpsf()
+                self.logger.info('Picking PSF stars with SExtractor information')
+                self.sexpickpsf()
+                self.createpsf()
+                #try:
+                #    self.createpsf()
+                #except:
+                #    self.logger.info('Using sexpickpsf() to get PSF stars')
+                #    self.sexpickpsf()
+                #    self.createpsf()                    
 
             # Combine SE cats, run ALLSTAR, combine ALLSTAR cats
             if self.sexiter>1: self.combine_cats(type="sexcat")           

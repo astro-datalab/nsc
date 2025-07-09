@@ -19,6 +19,17 @@ import traceback
 import shutil
 from . import utils,query,modelmag
 
+# Load the gaia synthetic photometry standardization table
+temp = ascii.read(utils.datadir()+'../config/gaiasynth_standardize.txt')
+GSYNCALTAB = {}
+for i in range(len(temp)):
+    instfilt = temp['INSTRUMENT'][i]+'-'+temp['BAND'][i]
+    tt = {'instrument':temp['INSTRUMENT'][i], 'band':temp['BAND'][i],
+          'decrange':eval(temp['DECRANGE'][i]), 'colorcoef':eval(temp['COLORCOEF'][i]),
+          'colrange':eval(temp['COLRANGE'][i]), 'magcoef':eval(temp['MAGCOEF'][i]),
+          'magrange':eval(temp['MAGRANGE'][i]), 'magoffset':float(temp['MAGOFFSET'][i])}
+    GSYNCALTAB[instfilt] = tt
+
 def concatenate(expdir,deletetruncated=False):
     """
     Combine multiple chip-level measurement files into a single multi-extension FITS file.
@@ -382,6 +393,12 @@ def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag'):
                           (ref1['bp'] > 0) & (ref1['bp'] < 50) &
                           (ref1['rp'] > 0) & (ref1['rp'] < 50) &                          
                           (ref1[refmagcol] > 0) & (ref1[refmagcol] < 50))
+
+        # Deal with Gaia synthetic photometry color and magnitude effects and apply absolute calibration
+        instfilt = instrument+'-'+filt.lower()
+        gsyncal = GSYNCALTAB[instfilt]
+
+
         # Need to deal with "hockey-stick" effect, where the fainter stars are offset from the brighter ones
         import pdb; pdb.set_trace()
         if len(gdmeas) > 0:

@@ -364,7 +364,7 @@ def standardize(filt,makeplots=False):
         #            xtitle='G',ytitle='Residuals (mag)',title='G Magnitude Dependence ('+filt+'-band)')
         #plt.scatter(xbins2,ybins2,s=50,c='r')
         #plt.plot(magbins,np.polyval(magcoef,magbins),c='orange')
-        plt.savefig('gaiaxpsynth_stanardize_'+filt+'.png',bbox_inches='tight')
+        plt.savefig('gaiaxpsynth_standardize_'+filt+'.png',bbox_inches='tight')
 
     # Check absolute calibration
     syncol = 'gsynth_'+filt.lower()+'mag'
@@ -408,7 +408,7 @@ def standardize(filt,makeplots=False):
         diff = model2-mag2
         zptermexp[i] = np.nanmedian(diff)
         zpterm[ind] = zptermexp[i]
-        calibmag[ind] = mag2 # + zpterm[i]
+        calibmag[ind] = mag2 + zpterm[i]  # apply zero-point
         #if zpterm[i] > -0.5:
         #    goodind.append(ind)
 
@@ -752,7 +752,7 @@ def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag'):
     exptime = expinfo['exptime'][0]
     instrument = expinfo['instrument'][0]
     filt = expinfo['filter'][0]
-    instfilt = instrument+'-'+filt.lower()
+    instfilt = instrument+'-'+filt
     
     # Model Magnitudes
     #-----------------
@@ -838,7 +838,25 @@ def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag'):
         expinfo,chinfo = fitzpterm(mstr,expinfo,chinfo)
         expinfo['zptype'] = 2
 
-        import pdb; pdb.set_trace()
+        # Check against PS1, Gaia or skymapper umag 
+        if filt == 'u':
+            refmagcol = 'sm_umag'
+        elif filt == 'VR':
+            refmagcol = 'gmag'
+        else:
+            refmagcol = 'ps_'+filt.lower()+'mag'
+        if refmagcol in ref2.colnames:
+            calibmag = mag2[gd] + expinfo['zpterm'][0]
+            refmag = ref2[refmagcol][gd]
+            gdref, = np.where((refmag > 0) & (refmag < 50) & np.isfinite(refmag))
+            if len(gdref) > 0:
+                meddiff = np.nanmedian(calibmag[gdref]-refmag[gdref])
+                sigmeddiff = dln.mad(calibmag[gdref]-refmag[gdref])
+                errmeddiff = sigmeddiff/np.sqrt(len(gdref))
+                print('deviation from PS1/Gaia/Skymapper = {:.5f} +/- {:.5f} mag'.format(meddiff,errmeddiff))
+        
+
+            import pdb; pdb.set_trace()
 
 
     # Self-calibration
@@ -1214,8 +1232,11 @@ def loadheader(headfile):
         begind = dln.grep(headlines,'^XTENSION',index=True)
         begind = lo+begind
         endind = dln.grep(headlines,'^END',index=True)
+        if len(endind) != len(begind):
+            endind = np.array(begind)[1:]-1
+            endind = np.concatenate((endind,[len(headlines)-1]))
         headdict = {}
-        # Loop over the extendions
+        # Loop over the extensions
         for i in range(len(begind)):
             lines = headlines[begind[i]:endind[i]+1]
             head = fits.Header.fromstring('\n'.join(lines),sep='\n')
@@ -1224,6 +1245,8 @@ def loadheader(headfile):
             else:
                 ccdum = head['CCDNUM']
                 headdict[ccdnum] = head
+            print(i)
+        import pdb; pdb.set_trace()
     return headdict
     
 def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
@@ -1391,6 +1414,13 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
                 #                    'header',instrument,night,base+'.hdr')
                 headfile = os.path.join(dldir,'instcal',version,
                                     'header',instrument,night,base+'.hdr')
+            if os.path.exists(headfile)==False:
+                # sometimes there's a different version, i.e. _d2 instead of _ls11
+                base2 = '_'.join(base.split('_')[:-1])
+                headfile = glob(os.path.join(dldir,'instcal',version,
+                                            'header',instrument,night,base2+'_*.hdr'))
+                if len(headfile)>0:
+                    headfile = headfile[0]
         if os.path.exists(headfile)==False:
             # use instcal files on tacc
             #/home1/09970/dnidever/scratch1/nsc/instcal/v4/images/c4d/2020/20200130
