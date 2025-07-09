@@ -5,7 +5,7 @@ import time
 import numpy as np
 from glob import glob
 import healpy as hp
-from astropy.io import fits
+from astropy.io import fits,ascii
 from astropy.table import Table
 from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
@@ -341,6 +341,8 @@ def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag'):
     medfwhm = expinfo['fwhm'][0]
     exptime = expinfo['exptime'][0]
     filt = expinfo['filter'][0]
+    instrument = expinfo['instrument'][0]
+    instfilt = instrument+'-'+filt
     
     # Model Magnitudes
     #-----------------
@@ -394,26 +396,55 @@ def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag'):
                           (ref1['rp'] > 0) & (ref1['rp'] < 50) &                          
                           (ref1[refmagcol] > 0) & (ref1[refmagcol] < 50))
 
+        if len(gdmeas)==0:
+            logger.error('No good reference sources')
+
+        ref2 = ref1[gdmeas]
+        meas2 = meas1[gdmeas]
+
         # Deal with Gaia synthetic photometry color and magnitude effects and apply absolute calibration
-        instfilt = instrument+'-'+filt.lower()
         gsyncal = GSYNCALTAB[instfilt]
+        print(gsyncal)
+        colcoef = gsyncal['colorcoef'][::-1]
+        colrange = gsyncal['colrange']
+        magcoef = gsyncal['magcoef'][::-1]
+        magrange = gsyncal['magrange']
+        magoffset = gsyncal['magoffset']
+        # Apply the corrections to the Gaia synthetic photometry
+        refmag = ref2[refmagcol]
+        bprp = ref2['bp']-ref2['rp']
+        gmag = ref2['gmag']
+        refmag -= np.polyval(colcoef,bprp)
+        refmag -= np.polyval(magcoef,gmag)
+        refmag += magoffset   # additive offset to the reference magnitudes
+        # Select sources within the color/mag calibration range
+        gd, = np.where((ref2['bp']-ref2['rp'] >= colrange[0]) & (ref2['bp']-ref2['rp'] <= colrange[1]) &
+                       (ref2['gmag'] >= magrange[0]) & (ref2['gmag'] <= magrange[1]))
 
+        # Matched structure
+        mag2 = meas2['magpsf'] + 2.5*np.log10(exptime)   # correct for the exposure time
+        mstr = {'col':bprp[gd],'mag':mag2[gd],'model':refmag[gd],
+                'err':ref2[referrcol][gd],'ccdnum':meas2['ccdnum'][gd],'gmag':gmag[gd]}
+        # Measure the zero-point
+        expinfo,chinfo = fitzpterm(mstr,expinfo,chinfo)
+        expinfo['zptype'] = 2
 
-        # Need to deal with "hockey-stick" effect, where the fainter stars are offset from the brighter ones
-        import pdb; pdb.set_trace()
-        if len(gdmeas) > 0:
-            ref2 = ref1[gdmeas] 
-            mmags2 = mmags[gdmeas,:] 
-            meas2 = meas1[gdmeas]
-            # Matched structure
-            mag2 = meas2['magpsf'] + 2.5*np.log10(exptime)   # correct for the exposure time
-            mstr = {'col':ref2['bp']-ref2['rp'],'mag':mag2,'model':ref2[refmagcol],
-                    'err':ref2[referrcol],'ccdnum':meas2['ccdnum']}
-            # Measure the zero-point
-            expinfo,chinfo = fitzpterm(mstr,expinfo,chinfo)
-            expinfo['zptype'] = 2
+        # Check against PS1, Gaia or skymapper umag
+        if filt == 'u':
+            refmagcol = 'sm_umag'
+        elif filt == 'VR':
+            refmagcol = 'gmag'
         else:
-            logger.info('No good reference sources')
+            refmagcol = 'ps_'+filt.lower()+'mag'
+        if refmagcol in ref2.colnames:
+            calibmag = mag2[gd] + expinfo['zpterm'][0]
+            refmag = ref2[refmagcol][gd]
+            gdref, = np.where((refmag > 0) & (refmag < 50) & np.isfinite(refmag))
+            if len(gdref) > 0:
+                meddiff = np.nanmedian(calibmag[gdref]-refmag[gdref])
+                sigmeddiff = dln.mad(calibmag[gdref]-refmag[gdref])
+                errmeddiff = sigmeddiff/np.sqrt(len(gdref))
+                print('deviation from PS1/Gaia/Skymapper = {:.5f} +/- {:.5f} mag'.format(meddiff,errmeddiff))
 
     # Self-calibration
     #-----------------
@@ -1538,7 +1569,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
         return
     
     # Get the zero-points
-    mmexpinfo,mmchinfo = getzpterm(meas1,ref1,mmags,expinfo.copy(),chinfo.copy(),kind='modelmag')
+    #mmexpinfo,mmchinfo = getzpterm(meas1,ref1,mmags,expinfo.copy(),chinfo.copy(),kind='modelmag')
     gexpinfo,gchinfo = getzpterm(meas1,ref1,mmags,expinfo.copy(),chinfo.copy(),kind='gaiaxpsynth')    
 
     print('Using Gaia for everything now')
@@ -1792,13 +1823,13 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
             mhdu.append(mhdu1)                    # add metadata for this chip
 
     # Write to file 
-    outfile = expdir+'/'+base+'_meas2.fits'
+    outfile = expdir+'/'+base+'_meas.fits'
     logger.info('Writing table to '+outfile)    
     hdu.writeto(outfile,overwrite=True)
     hdu.close()
                      
     # Meta-data file 
-    metafile = expdir+'/'+base+'_meta2.fits' 
+    metafile = expdir+'/'+base+'_meta.fits' 
     logger.info('Writing metadata to '+metafile)
     mhdu.writeto(metafile,overwrite=True)
     mhdu.close()
