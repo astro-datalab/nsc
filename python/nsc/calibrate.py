@@ -17,7 +17,13 @@ from scipy import stats
 import subprocess
 import traceback
 import shutil
+import warnings
 from . import utils,query,modelmag
+
+from astropy.wcs import FITSFixedWarning
+warnings.filterwarnings('ignore', category=FITSFixedWarning)
+from astropy.units import UnitsWarning
+warnings.filterwarnings('ignore', category=UnitsWarning)
 
 # Load the gaia synthetic photometry standardization table
 temp = ascii.read(utils.datadir()+'../config/gaiasynth_standardize.txt')
@@ -830,7 +836,7 @@ def loadheader(headfile):
     return headdict
     
 def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
-              saveref=False,ncpu=1,photmethod=None,logger=None):
+              saveref=False,photmethod=None,outdir=None,logger=None):
     """
     Perform photometry and astrometric calibration of an NSC exposure using
     external catalogs.
@@ -850,8 +856,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
          Default is False.
     saveref : bool, optional
        Save the reference catalog.  Default is False.
-    ncpu : int, optional
-       Number of cpus to use.  Default is 1.
+    outdir : str, boolean
+       Output directory.  Default is to use "expdir".
     logger : logging object
        A logging object used for logging information.
 
@@ -883,7 +889,11 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     base = os.path.basename(expdir) 
     if logger is None:
         logger = dln.basiclogger()
-    outfile = expdir+'/'+base+'_meta.fits' 
+    if outdir is None:
+        outdir = expdir
+    if os.path.exists(outdir)==False:
+        os.makedirs(outdir,exist_ok=True)
+    outfile = os.path.join(outdir,base+'_meta.fits')
     # get version number 
     lo = expdir.find('nsc/instcal/') 
     dum = expdir[lo+12:] 
@@ -969,6 +979,10 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     
     if instrument=='c4d' and (nchips<59 or logfiletest==False):
         print('problems with the files')
+        if nchips<59:
+            print('nchips<59')
+        if logfiletest==False:
+            print('no log file')
         return
     
     # Check that this isn't a problematic Mosaic3 exposure 
@@ -1563,11 +1577,12 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     meas1 = meas[gdmeas[ind2]]
     # Use Gaia XP synthetic photometry
     # Get the model magnitudes 
-    mmags = modelmag.modelmag(ref1,instfilt,cendec,eqnfile) 
-    if len(mmags) == 1 and mmags[0] < -1000: 
-        print('No good model mags')
-        return
-    
+    #mmags = modelmag.modelmag(ref1,instfilt,cendec,eqnfile) 
+    #if len(mmags) == 1 and mmags[0] < -1000: 
+    #    print('No good model mags')
+    #    return
+    mmags = None
+
     # Get the zero-points
     #mmexpinfo,mmchinfo = getzpterm(meas1,ref1,mmags,expinfo.copy(),chinfo.copy(),kind='modelmag')
     gexpinfo,gchinfo = getzpterm(meas1,ref1,mmags,expinfo.copy(),chinfo.copy(),kind='gaiaxpsynth')    
@@ -1823,13 +1838,13 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
             mhdu.append(mhdu1)                    # add metadata for this chip
 
     # Write to file 
-    outfile = expdir+'/'+base+'_meas.fits'
+    outfile = os.path.join(outdir,base+'_meas.fits')
     logger.info('Writing table to '+outfile)    
     hdu.writeto(outfile,overwrite=True)
     hdu.close()
                      
     # Meta-data file 
-    metafile = expdir+'/'+base+'_meta.fits' 
+    metafile = os.path.join(outdir,base+'_meta.fits')
     logger.info('Writing metadata to '+metafile)
     mhdu.writeto(metafile,overwrite=True)
     mhdu.close()
@@ -1881,7 +1896,7 @@ def calibrate_healpix(pix,version,nside=64,redo=False):
     hplist = Table.read(listfile)
 
     # Get the exposures for this healpix
-    print('Calibrating InstCal SExtractor catalogs for Healpix pixel = '+str(pix))
+    print('Calibrating InstCal catalogs for Healpix pixel = '+str(pix))
     ind1,ind2 = dln.match(hplist['pix'],pix)
     nind = len(ind1)
     if nind==0:
