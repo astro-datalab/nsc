@@ -603,9 +603,12 @@ if __name__ == "__main__":
         #out = slrm.nsclauncher(tasks,stage,nodes=nodes,cpus=ppn,version=version,partition=partition,
         #                       host=host,walltime=walltime,slurmdir=slurmdir,logdir=logdir,
         #                       verbose=True)
+        precommands = None
+	if host=='tacc':
+            precommands = ['module load python3/3.9.2']
         out = slurm.submit(tasks,label,nodes=nodes,cpus=ppn,partition=partition,
                            shared=False,walltime=walltime,slurmroot=slurmroot,stagger=True,
-                           verbose=True)
+                           precommands=precommands,verbose=True)
     elif stage=='download':
         key,jobid = slurm.submit(tasks,label,nodes=1,cpus=1,partition=partition,
                                  walltime=walltime,slurmroot=slurmroot)
