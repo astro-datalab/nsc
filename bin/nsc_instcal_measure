@@ -33,6 +33,7 @@ if __name__ == "__main__":
     parser.add_argument('--delete',action='store_true', help='Delete downloaded exposures at end')
     parser.add_argument('--nowait',action='store_true', help='Do not wait for files to be downloaded')
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
+    parser.add_argument('--chips',type=str,nargs=1,default="None",help='Chips to run')
     args = parser.parse_args()
 
     # Inputs                                                                                                  
@@ -55,6 +56,10 @@ if __name__ == "__main__":
     print("redo =",redo)
     print("delete =",delete)
     print("nowait =",nowait)
+    chips = None
+    if args.chips != 'None':
+        chips = args.chips[0].split(',')
+        chips = [int(c) for c in chips]
     
     # Get NSC directories
     basedir, tmpdir = utils.getnscdirs(version,host)
@@ -177,7 +182,8 @@ if __name__ == "__main__":
     t0 = time.time()
 
     # Create the Exposure object
-    exp = Exposure(fluxfile,wtfile,maskfile,nscversion=version,host=host,delete=delete)
+    exp = Exposure(fluxfile,wtfile,maskfile,nscversion=version,
+                   host=host,delete=delete,dochips=chips)
 
     # Check if the output files already exist
     if redo==False and os.path.exists(exp.outdir):

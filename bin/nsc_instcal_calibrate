@@ -15,7 +15,8 @@ import logging
 import socket
 from datetime import datetime
 from argparse import ArgumentParser
-from nsc import utils,calibrate_tacc
+#from nsc import utils,calibrate_tacc
+from nsc import utils,calibrate
 
 if __name__ == "__main__":
 
@@ -24,11 +25,11 @@ if __name__ == "__main__":
     parser = ArgumentParser(description='Calibrate one NSC InstCal image')
     parser.add_argument('expdir', type=str, nargs=1,default="None",help='Exposure directory if calibrating by exposure')
     #parser.add_argument('inpref', type=str, nargs=1,help='Input reference')
-    parser.add_argument("refcatfile",type=str,nargs=1,default="None",help="Reference catalog if available")
+    parser.add_argument('version', type=str, nargs=1, help='NSC version')
+    #parser.add_argument("refcatfile",type=str,nargs=1,default="None",help="Reference catalog if available")
     parser.add_argument('--pix', type=str, nargs=1, default="-9",help='HEALPix index if calibrating by pix')
     parser.add_argument('--nside', type=str, nargs=1, default="-9",help='HEALPix NSIDE (ring ordering, please!)')
     parser.add_argument('--eqnfile', type=str, nargs=1, help='Modelmag equations filename')
-    parser.add_argument('version', type=str, nargs=1, help='NSC version')
     parser.add_argument('--host',type=str,nargs=1,default="None",help='hostname, default "None", other options supported are "tacc"')
     parser.add_argument('--stagger',type=int, nargs=1, default=60, help='Stagger time')
     parser.add_argument('--redo', action='store_true', help='Redo this image')
@@ -40,10 +41,19 @@ if __name__ == "__main__":
     t0 = time.time()
 
     # Inputs
-    expdir = args.expdir[0]                # exposure directory path
-    pix = int(args.pix[0])                 # index of HEALPix to calibrate
-    nside = int(args.nside[0])             # HEALPix NSIDE (ring ordering)
-    eqnfile = args.eqnfile[0]              # file with modelmag equations
+    if isinstance(args.expdir,list):
+        expdir = args.expdir[0]            # exposure directory path
+    else:
+        expdir = args.expdir
+    if isinstance(args.pix,list):
+        pix = int(args.pix[0])             # index of HEALPix to calibrate
+    else:
+        pix = int(args.pix)
+    if isinstance(args.nside,list):
+        nside = int(args.nside[0])         # HEALPix NSIDE (ring ordering)
+    else:
+        nside = int(args.nside)
+    #eqnfile = args.eqnfile[0]              # file with modelmag equations
     version = args.version[0]              # processing version "v#"
     host = args.host[0]                    # server host
     if isinstance(args.stagger,list):
@@ -55,30 +65,32 @@ if __name__ == "__main__":
     saveref = args.saveref                  # save reference catalog
     ncpu = args.ncpu                        # number of cpus
 
+    if expdir!='None':
+        kind = "exposure"
 
-    if expdir=="None" and pix!=-9: 
+    if expdir == "None" and pix != -9: 
         print("Calibrating healpix, not yet supported on TACC")
         print("pix = ",pix)
         print("NSIDE = ",nside)
-        type="exposure"
-    if pix==-9 and expdir!="None": 
+        kind = "healpix"
+    if pix == -9 and expdir != "None": 
         print("Calibrating single exposure")
         print("expdir =",expdir)
-        type="healpix"
-    else: print("no expdir or pix selected! uh oh!")
+        kind = "exposure"
+    else:
+        print("no expdir or pix selected! uh oh!")
+        sys.exit()
 
     print("version =",version)
     print("host =",host)
     print("stagger =",stagger)
     print("redo =",redo)
-    print("eqnfile =",eqnfile)
+    #print("eqnfile =",eqnfile)
     print("ncpu =",ncpu)
 
     # File names
-    if type(expdir) is list:
-        expdir = expdir[0]
-    if type(eqnfile) is list:
-        eqnfile = eqnfile[0]
+    #if type(eqnfile) is list:
+    #    eqnfile = eqnfile[0]
 
     # Calibrate catalogs for one exposure
     #dldir,mssdir,localdir = utils.rootdirs()
@@ -120,12 +132,15 @@ if __name__ == "__main__":
     ##logger.addHandler(consoleHandler)
     ##logger.setLevel(logging.NOTSET)
 
-
-    if type=="exposure": 
+    if kind=="exposure": 
         print("Calibrating Exposure "+str(expdir))
-        calibrate_tacc.calibrate(expdir,inpref=None,refcatfile=refcatfile,logfilename=None,eqnfile=eqnfile,redo=redo,selfcal=selfcal,saveref=saveref,ncpu=ncpu,logger=None,gsynthphot=False,psf=False)
+        calibrate.calibrate(expdir,inpref=None,redo=redo,selfcal=selfcal,
+                            saveref=saveref,logger=None)
         #calibrate(expdir,eqnfile=eqnfile,redo=redo,selfcal=selfcal,saveref=saveref,ncpu=ncpu)
-    elif type=="healpix": 
+    elif kind=="healpix": 
         print("Calibrating HEALPix "+str(pix))
         print("nside = "+str(nside))
-        calibrate_tacc.calibrate_healpix(pix,version,nside=32,maxexp=10,logtime="000",gsynth=True,psf=True,redo=redo,logger=None)
+        calibrate.calibrate_healpix(pix,version,nside=32,maxexp=10,logtime="000",gsynth=True,psf=True,redo=redo,logger=None)
+
+
+    print("Total time = "+str(time.time()-t0)+" seconds")

@@ -1,9 +1,14 @@
 #!/bin/csh
-set running=`squeue --me | grep small | grep measure | wc -l`
+set running=`squeue --me | grep small | grep calibrate | wc -l`
 if ( $running > 5 ) then
-  echo "6 small measure jobs running already.  Will try again when it drops below 6"
+  echo "6 small calibrate jobs running already.  Will try again when it drops below 6"
   exit
 endif
+#set running=`squeue --me | grep small | grep measure | wc -l`
+#if ( $running > 5 ) then
+#  echo "6 small measure jobs running already.  Will try again when it drops below 6"
+#  exit
+#endif
 
 setenv PATH "/work2/09970/dnidever/anaconda3/bin:$HOME/bin:$PATH"
 module load TACC
@@ -11,4 +16,6 @@ module load cfitsio/4.2.0
 module list
 which python
 
-/home1/09970/dnidever/projects/nsc/bin/nscjobs measure /scratch1/09970/dnidever/nsc/instcal/v4/lists/decam_instcal_list_exptime10sec_corrupted_fwhm2_20250108_left.fits.gz v4 --host tacc --maxtasks 3000 --partition small
+/home1/09970/dnidever/projects/nsc/bin/nscjobs calibrate /corral/projects/NOIRLab/nsc/instcal/v4/c4d/allmeas_expdir.txt v4 --host tacc --maxtasks 10000 --partition small 
+
+#/home1/09970/dnidever/projects/nsc/bin/nscjobs calibrate /scratch1/09970/dnidever/nsc/instcal/v4/lists/decam_instcal_list_exptime10sec_corrupted_fwhm2_20250220_left.fits.gz v4 --host tacc --maxtasks 325 --partition small 

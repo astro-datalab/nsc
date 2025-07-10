@@ -20,7 +20,8 @@ from argparse import ArgumentParser
 from dlnpyutils import utils as dln,slurm
 from nsc import utils
 from nsc.nsc_instcal_measure import Exposure
-from nsc import slurm as slrm
+from nsc import slurm as slrm,utils
+
 
 
 def taccifyname(filename):
@@ -135,13 +136,14 @@ if __name__ == "__main__":
         inputdata = Table.read(inputfile)
     else:
         print('Loading',inputfile,' ASCII file')
-        inputdata = dln.readlines(inputfile)
+        inputdata = utils.readlines(inputfile)
     print(len(inputdata),'inputs')
 
     # Make sure the filename columns are long enough
-    inputdata['fluxfile'] = inputdata['fluxfile'].astype((str,150))
-    inputdata['wtfile'] = inputdata['wtfile'].astype((str,150))
-    inputdata['maskfile'] = inputdata['maskfile'].astype((str,150))
+    if 'fluxfile' in inputdata:
+        inputdata['fluxfile'] = inputdata['fluxfile'].astype((str,150))
+        inputdata['wtfile'] = inputdata['wtfile'].astype((str,150))
+        inputdata['maskfile'] = inputdata['maskfile'].astype((str,150))
 
     # Processes per node
     if ppn is None:
@@ -214,9 +216,9 @@ if __name__ == "__main__":
                 os.chdir(os.path.dirname(imlistfile))
                 ret = subprocess.call('lfind fits.fz > allimages.lst',shell=True)
                 os.chdir(curdir)
-                nlines = dln.numlines(imlistfile)
+                nlines = utils.numlines(imlistfile)
                 print(nlines,' files in image list')
-            imlines = dln.readlines(basedir+'images/allimages.lst')
+            imlines = utils.readlines(basedir+'images/allimages.lst')
             imlines = [basedir+'images/'+f[1:] for f in imlines]  # make absolute
             imlines = np.array(imlines)
             imbase = np.array([os.path.basename(f) for f in imlines])
@@ -410,7 +412,13 @@ if __name__ == "__main__":
         for i in range(len(inputdata)):
             # "exposure" is the full path to the exposure output directory
             exposure = inputdata['EXPOSURE'][i]
-            outdir = os.path.dirname(exposure)
+            if exposure.endswith('/'):
+                exposure = exposure[:-1]
+            #outdir = os.path.dirname(exposure)
+            #outdir = exposure
+            # Use /scratch1 for calibration output for now
+            # /home1/09970/dnidever/scratch1/nsc/instcal/v4/c4d/2018/20180502/c4d_180502_092858_ooi_g_v1
+            outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/' + '/'.join(exposure.split('/')[-5:])
             base = os.path.basename(exposure)
             print('{:} {:}'.format(i+1,base))
             cmd = script+' '+exposure+' '+version
@@ -419,7 +427,7 @@ if __name__ == "__main__":
             # Check output filename
             # we keep the meas.fits filename
             # need to check the table columns in the header
-            measfile = os.path.join(outdir,base+'_meas.fits')
+            measfile = os.path.join(exposure,base+'_meas.fits')
             if os.path.exists(measfile)==False:
                 print('meas file',measfile,'NOT FOUND. Skipping')
                 continue
@@ -437,8 +445,9 @@ if __name__ == "__main__":
             
 
             logfile = os.path.join(outdir,base+'_calib.log')
-            outfile = measfile
-            if os.path.exists(outfile) and redo==False:
+            outfile = os.path.join(outdir,base+'_meas.fits')
+            metafile = os.path.join(outdir,base+'_meta.fits')
+            if (os.path.exists(outfile) and os.path.exists(metafile)) and redo==False:
                 print(outfile,' ALREADY EXISTS.  Skipping')
                 continue
             # Put information in the tasks table
@@ -585,7 +594,7 @@ if __name__ == "__main__":
         slurmroot = os.path.join(os.path.expanduser('~'),'slurm')
         if os.path.exists(slurmroot)==False:
             os.makedirs(slurmroot)
-            
+
     # For measurement on Tempest we'll use our own job manager/launcher per mode
     if stage.lower()[:4]=='meas' and host.lower().startswith('tempest'):
         slurmdir = os.path.join(os.path.expanduser('~'),'slurm')
@@ -617,7 +626,7 @@ if __name__ == "__main__":
                                             notification=True,stagger=True,precommands=precommands,
                                             postcommands=postcommands,slurmroot=slurmroot,verbose=True)
         # Write list of output directories
-        dln.writelines(os.path.join(slurmdir,label+'_outdir.lst'),tasks['dir'].data.astype(str))
+        utils.writelines(os.path.join(slurmdir,label+'_outdir.lst'),tasks['dir'].data.astype(str))
         # Write task list to lists/ 
         tasks.write(os.path.join(basedir,'lists',label+'_'+key+'_tasks.fits'))
     
