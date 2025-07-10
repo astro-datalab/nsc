@@ -604,7 +604,7 @@ if __name__ == "__main__":
         #                       host=host,walltime=walltime,slurmdir=slurmdir,logdir=logdir,
         #                       verbose=True)
         precommands = None
-	if host=='tacc':
+        if host=='tacc':
             precommands = ['module load python3/3.9.2']
         out = slurm.submit(tasks,label,nodes=nodes,cpus=ppn,partition=partition,
                            shared=False,walltime=walltime,slurmroot=slurmroot,stagger=True,
@@ -622,7 +622,8 @@ if __name__ == "__main__":
             precommands += ['export LAUNCHER_PPN='+str(nparallel)]
             postcommands = None
         else:
-            precommands = ['/usr/bin/rm -fR /tmp/dnidever/nsc/v4/*']
+            precommands = ['module load python3/3.9.2']
+            precommands += ['/usr/bin/rm -fR /tmp/dnidever/nsc/v4/*']
             postcommands = ['/usr/bin/rm -fR /tmp/dnidever/nsc/v4/*']
         slurmdir,key,jobid = slurm.launcher(tasks,label,nodes=nodes,nparallel=nparallel,
                                             account=account,partition=partition,walltime=walltime,

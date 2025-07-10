@@ -7,6 +7,7 @@ endif
 
 #setenv PATH "/work2/09979/kfas/anaconda3/bin:$HOME/bin:$PATH"
 module load TACC
+module load python3/3.9.2
 module load cfitsio/4.2.0
 module list
 which python
