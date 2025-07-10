@@ -1265,7 +1265,7 @@ def loadheader(headfile):
             if i==0:
                 headdict['main'] = head
             else:
-                ccdum = head['CCDNUM']
+                ccdnum = head['CCDNUM']
                 headdict[ccdnum] = head
             print(i)
         import pdb; pdb.set_trace()

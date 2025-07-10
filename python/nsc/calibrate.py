@@ -823,6 +823,9 @@ def loadheader(headfile):
         begind = dln.grep(headlines,'^XTENSION',index=True)
         begind = lo+begind
         endind = dln.grep(headlines,'^END',index=True)
+        if len(endind) != len(begind):
+            endind = np.array(begind)[1:]-1
+            endind = np.concatenate((endind,[len(headlines)-1]))
         headdict = {}
         # Loop over the extendions
         for i in range(len(begind)):
@@ -831,7 +834,7 @@ def loadheader(headfile):
             if i==0:
                 headdict['main'] = head
             else:
-                ccdum = head['CCDNUM']
+                ccdnum = head['CCDNUM']
                 headdict[ccdnum] = head
     return headdict
     
@@ -1000,9 +1003,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
 
     # v4+ use separate header file
     if version >= 'v4':
-        if measfile is not None:
-            headfile = os.path.join(expdir,base+'_header.fits')            
-        else:
+        headfile = os.path.join(expdir,base+'_header.fits')            
+        if os.path.exists(headfile)==False:
             headfile = os.path.join(expdir,base+'.hdr')
             if os.path.exists(headfile)==False:
                 #headfile = os.path.join(dldir,'dnidever','nsc','instcal',version,
