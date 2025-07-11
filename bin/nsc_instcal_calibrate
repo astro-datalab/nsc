@@ -132,10 +132,13 @@ if __name__ == "__main__":
     ##logger.addHandler(consoleHandler)
     ##logger.setLevel(logging.NOTSET)
 
+    # Put output files in /scratch1 for now
+    outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/' + '/'.join(expdir.split('/')[-5:])
+
     if kind=="exposure": 
         print("Calibrating Exposure "+str(expdir))
         calibrate.calibrate(expdir,inpref=None,redo=redo,selfcal=selfcal,
-                            saveref=saveref,logger=None)
+                            saveref=saveref,outdir=outdir,logger=None)
         #calibrate(expdir,eqnfile=eqnfile,redo=redo,selfcal=selfcal,saveref=saveref,ncpu=ncpu)
     elif kind=="healpix": 
         print("Calibrating HEALPix "+str(pix))
