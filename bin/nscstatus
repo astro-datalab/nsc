@@ -57,7 +57,7 @@ if __name__ == "__main__":
     calibdir = '/home1/09970/dnidever/scratch1/nsc/instcal/v4'
     cmd = 'find '+basedir+'/c4d | grep meta.fits | wc -l'
     res3 = subprocess.run(cmd,capture_output=True,shell=True)
-    out3 = res2.stdout
+    out3 = res3.stdout
     if isinstance(out3,bytes):
         out3 = out3.decode()
     out3 = out3.split('\n')
