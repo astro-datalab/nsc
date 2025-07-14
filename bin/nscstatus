@@ -43,8 +43,9 @@ if __name__ == "__main__":
         out1.pop(-1)
     njobs = len(out1)-1
 
-    # Number of meas.fits files
-    cmd = 'find '+basedir+'/c4d | grep meas.fits | wc -l'
+    # Number of measurement meas.fits files
+    measdir = '/corral/projects/NOIRLab/nsc/instcal/v4'
+    cmd = 'find '+measdir+'/c4d | grep meas.fits | wc -l'
     res2 = subprocess.run(cmd,capture_output=True,shell=True)
     out2 = res2.stdout
     if isinstance(out2,bytes):
@@ -52,14 +53,24 @@ if __name__ == "__main__":
     out2 = out2.split('\n')
     nmeasfiles = out2[0]
 
-    # Number of image files
-    cmd = 'find '+basedir+'/images | grep fits.fz | wc -l'
+    # Number of calibration meta.fits files
+    calibdir = '/home1/09970/dnidever/scratch1/nsc/instcal/v4'
+    cmd = 'find '+basedir+'/c4d | grep meta.fits | wc -l'
     res3 = subprocess.run(cmd,capture_output=True,shell=True)
-    out3 = res3.stdout
+    out3 = res2.stdout
     if isinstance(out3,bytes):
         out3 = out3.decode()
     out3 = out3.split('\n')
-    nimagefiles = out3[0]
+    nmetafiles = out3[0]
+
+    # Number of image files
+    cmd = 'find '+basedir+'/images | grep fits.fz | wc -l'
+    res4 = subprocess.run(cmd,capture_output=True,shell=True)
+    out4 = res4.stdout
+    if isinstance(out4,bytes):
+        out4 = out4.decode()
+    out4 = out4.split('\n')
+    nimagefiles = out4[0]
     nexpfiles = int(nimagefiles)//3
 
     message = """\
@@ -75,6 +86,7 @@ if __name__ == "__main__":
     message += 'Slurm jobs: '+str(njobs)+'<br>\n'
     # Number of meas.fits files
     message += 'meas.fits files: '+str(nmeasfiles)+'<br>\n'
+    message += 'calib meta.fits files: '+str(nmetafiles)+'<br>\n'
     # Number of image files and exp image files
     message += 'image files: '+str(nimagefiles)+'<br>\n'
     message += 'image exposures: '+str(nexpfiles)+'<br>\n'

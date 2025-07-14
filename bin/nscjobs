@@ -400,7 +400,7 @@ if __name__ == "__main__":
             _,ui = np.unique(prevtasks['name'],return_index=True)
             prevtasks = prevtasks[ui]
             # Remove any previously submitted exposures
-            inpexposure = np.char.array(inputdata['EXPOSURE']).astype(str)
+            inpexposure = np.char.array([os.path.basename(f) for f in inputdata['EXPOSURE']]).astype(str)
             _,ind1,ind2 = np.intersect1d(prevtasks['name'],inpexposure,return_indices=True)
             if len(ind1)>0:
                 print(len(ind1),' previously submitted exposures to remove')
