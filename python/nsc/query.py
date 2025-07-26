@@ -141,6 +141,13 @@ def local_query(cenra,cendec,radius,refcat,server,nside=32,silent=False,logger=N
         ref['_4.5mag'].name = '_4_5mag'
         ref['e_4.5mag'].name = 'e_4_5mag'
 
+    # Fix mag names for SAGE
+    if refname=='sage':
+        ref['__3.6_'].name = '__3_6_'
+        ref['e__3.6_'].name = 'e__3_6_'
+        ref['__4.5_'].name = '__4_5_'
+        ref['e__4.5_'].name = 'e__4_5_'
+
     # Fix masked columns for GSYNTH-PHOT
     if refname=="gsynth-phot":
         for colname in ref.colnames:
