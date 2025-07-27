@@ -5,6 +5,7 @@ from dlnpyutils import utils as dln,coords
 from astropy.table import Table,vstack
 from astropy.io import fits
 import healpy as hp
+import matplotlib
 from . import utils
 
 def coverage(pix,version='v4',clobber=False):
@@ -14,22 +15,26 @@ def coverage(pix,version='v4',clobber=False):
 
     # Combine all of the data
     dldir,mssdir,localdir = utils.nscrootdirs()
-    dir = '/net/dl2/dnidever/nsc/instcal/'+version+'/'
+    #rootdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/'
+    rootdir = '/corral/projects/NOIRLab/nsc/instcal/'+version+'/'
     nside = 128
     nside2 = 4096
-    radeg = 180.0d0 / !dpi
 
     # Does the coverage map already exist
-    covfile = dir+'combine/coverage/'+strtrim(long(pix)/1000,2)+'/'+strtrim(pix,2)+'_coverage.fits'
+    covfile = rootdir+'combine/coverage/'+str(int(pix)//1000)+'/'+str(pix)+'_coverage.fits'
     if os.path.exists(covfile) and clobber==False:
         print(covfile,' EXISTS and clobber==False')
         return
 
     # Get healpix boundary coordinates
-    PIX2VEC_RING,nside,pix,vec,vertex
-    vertex = transpose(reform(vertex))  # [1,3,4] -> [4,3]
-    VEC2ANG,vec,hcendec,hcenra,/astro
-    VEC2ANG,vertex,hdec,hra,/astro
+    vec = hp.pix2vec(nside,pix,nest=False)
+    vecbound = hp.boundaries(nside,pix,step=100,nest=False)
+    hcenra,hcendec = hp.vec2ang(vec,lonlat=True)
+    hra, hdec = hp.vec2ang(np.transpose(vecbound),lonlat=True)
+    #PIX2VEC_RING,nside,pix,vec,vertex
+    #vertex = transpose(reform(vertex))  # [1,3,4] -> [4,3]
+    #VEC2ANG,vec,hcendec,hcenra,/astro
+    #VEC2ANG,vertex,hdec,hra,/astro
 
     # Rotate to tangent plane
     hlon,hlat = coords.rotsphcen(hra,hdec,hcenra,hcendec,gnomic=True)
@@ -38,19 +43,22 @@ def coverage(pix,version='v4',clobber=False):
 
     # Get the pixel numbers for nside=4096 healpix that are within
     # this larger pixel
-    QUERY_POLYGON,nside2,vertex,listpix,nlistpix
+    listpix = hp.query_polygon(nside2,vertex,inclusive=True,nest=False)
+    #QUERY_POLYGON,nside2,vertex,listpix,nlistpix
 
     # Check that they belong inside this healpix
-    PIX2ANG_RING,nside2,listpix,listtheta,listphi
-    ANG2PIX_RING,nside,listtheta,listphi,listpix1
+    listra,listdec = hp.pix2ang(nsid2,listpix,nest=False,lonlat=True)
+    hlistpix1 = p.ang2pix(nside,listra,listdec,lonlat=True)
+    #PIX2ANG_RING,nside2,listpix,listtheta,listphi
+    #ANG2PIX_RING,nside,listtheta,listphi,listpix1
     bdpix, = np.where(listpix1 != pix)
 
     step = 100
     v = hp.pix2vec(nside,pix)
     radius = hp.nside2resol(nside)
     pix2 = hp.query_disc(nside2,v,radius=2*radius)
-    theta,phi = hp.pix2ang(nside2,pix2)
-    pix1 = hp.ang2pix(nside,theta,phi)
+    ra,dec = hp.pix2ang(nside2,pix2,lonlat=True)
+    pix1 = hp.ang2pix(nside,ra,dec,lonlat=True)
     gd = (pix1 == pix)
     pix = pix2[gd]
     nlistpix = len(listpix)
@@ -65,13 +73,14 @@ def coverage(pix,version='v4',clobber=False):
           ('ycoverage',float),('ynexp',int),('ydepth',float),('vrcoverage',float),('vrnexp',int),('vrdepth',float)]
     covtab = np.zeros(nlistpix,dtype=np.dtype(dt))
     covtab['pix'] = listpix
-    PIX2ANG_RING,nside2,covtab.pix,theta,phi
-    covtab['ra'] = phi*radeg
-    covtab['dec'] = 90-theta*radeg
+    ra,dec = np.pix2ang(nsid2,covtab['pix'],nest=False,lonlat=True)
+    #PIX2ANG_RING,nside2,covtab.pix,theta,phi
+    covtab['ra'] = ra
+    covtab['dec'] = dec
     covtags = covtab.dtype.names
 
     # Does the combined object file exist?
-    objfile = dir+'combine/'+str(int(pix)//1000)+'/'+str(pix)+'.fits.gz'
+    objfile = rootdir+'combine/'+str(int(pix)//1000)+'/'+str(pix)+'.fits.gz'
     if os.path.exists(objfile)==False:
         print(objfile,' NOT FOUND')
         goto,SAVEFILE
@@ -202,8 +211,9 @@ def coverage(pix,version='v4',clobber=False):
 
         # Get healpix boundary coordinates
         vec1 = hp.pix2vec(nside2,listpix[i],nest=False)
+        vecbound1 = np.boundaries(nside2,listpix[i],step=100,nest=False)
         hcenra1,hcendec1 = hp.vec2ang(vec1,lonlat=True)
-        hra1,hdec1 = hp.vec2ang(vertex1,lonlat=True)
+        hra1,hdec1 = hp.vec2ang(np.transpose(vecbound1),lonlat=True)
         #PIX2VEC_RING,nside2,listpix[i],vec1,vertex1
         #vertex1 = transpose(reform(vertex1))  # [1,3,4] -> [4,3]
         #VEC2ANG,vec1,hcendec1,hcenra1,/astro
@@ -244,18 +254,22 @@ def coverage(pix,version='v4',clobber=False):
 
             # Now loop over each chip
             alloverlap = 0
+            xx,yy = np.meshgrid(np.arange(nx),np.arange(ny))
             for c in range(nfiltind):
                 j = filtind[c]
                 lon1,lat1 = coords.rotsphcen(chstr['vra'][j],chstr['vdec'][j],hcenra1,hcendec1,gnomic=True)
                 # Check if they overlap
-                overlap = DOPOLYGONSOVERLAP(hlon1,hlat1,lon1,lat1)
+                overlap = coords.doPolygonsOverlap(hlon1,hlat1,lon1,lat1)
+                #overlap = DOPOLYGONSOVERLAP(hlon1,hlat1,lon1,lat1)
                 if overlap == 1:
                     # Get the chip overlap image
                     # Transform to pixel-based tangent plane system
                     vx = (lon1-lon0)/dx
                     vy = (lat1-lat0)/dx
                     # Pixels in the chip
-                    cin = POLYFILLV(vx,vy,nx,ny)
+                    cout,cin = dln.roi_cut(vx,vy,xx.ravel(),yy.ravel())
+                    #cin = matplotlib.path.Path.contains_points(vx,vy,nx,ny)
+                    #cin = POLYFILLV(vx,vy,nx,ny)
                     cmask = np.zeros((ny,nx),int)
                     if len(cin) > 1 or cin[0] != -1:
                         cmask[cin] = 1  # some good overlap
@@ -288,5 +302,5 @@ def coverage(pix,version='v4',clobber=False):
             
     # Save the coverage map
     print('Writing coverage information to ',covfile)
-    if os.makedirs(os.path.dirname(covfile),exist_ok=True)
+    os.makedirs(os.path.dirname(covfile),exist_ok=True)
     covtab.write(covfile,overwrite=True)
