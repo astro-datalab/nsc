@@ -166,13 +166,14 @@ def makelist():
 
     _,ind1,ind2 = np.intersect1d(tab['base'],gdfinalbase,return_indices=True)
     dt = [('base',str,50),('expdir',str,300),('ra',float),('dec',float),
-          ('filter',str,10),('exptime',float),('npix',int)]
+          ('instrument',str,3),('filter',str,10),('exptime',float),('pix',int)]
     out = np.zeros(len(gdfinalleft),dtype=np.dtype(dt))
     out['base'] = gdfinalbase
     out['expdir'] = gdfinalleft
     out['ra'][ind2] = tab['ra'][ind1]
     out['dec'][ind2] = tab['dec'][ind1]
     out['exptime'][ind2] = tab['exposure'][ind1]
+    out['instrument'] = 'c4d'
     for i in range(len(gdfinalleft)):
         out['filter'][i] = out['base'][i].split('_')[-2]
         if out['exptime'][i]==0 or out['ra'][i]<0:
@@ -236,11 +237,11 @@ def makelist():
 
         print(i+1,out['base'][i])
 
-    out['npix'] = hp.ang2pix(128,out['ra'],out['dec'],nest=False,lonlat=True)
+    out['pix'] = hp.ang2pix(32,out['ra'],out['dec'],nest=False,lonlat=True)
 
     # there are some short exposures
     gd, = np.where(out['exptime']>=10)
     # 36334 of 38001
-    Table(out).write('healpix_list_exptime10sec_left_073025.fits',overwrite=True)
+    Table(out).write('nsc_calibrate_healpix_list_exptime10sec_left_073025.fits',overwrite=True)
 
     import pdb; pdb.set_trace()
