@@ -1204,10 +1204,10 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
             cenra += 360 
         # use chip VRA to get RA range 
         vra = chinfo['vra'][gdchip]
-        bdra, = np.where(vra > 180) 
+        bdra = np.where(vra > 180) 
         if len(bdra) > 0: 
             vra[bdra] -= 360 
-        bdra2, = np.where(vra < -180) 
+        bdra2 = np.where(vra < -180) 
         if len(bdra2) > 0: 
             vra[bdra2] += 360 
         rarange = dln.valrange(vra)*np.cos(np.deg2rad(cendec))
@@ -1366,12 +1366,16 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
                               (inpref['dec'] >= np.nanmin(meas[deccol])-0.01) & 
                               (inpref['dec'] <= np.nanmax(meas[deccol])+0.01))
         else: 
-            ra = meas[racol]
+            ra = meas[racol].copy()
             bdra, = np.where(ra > 180) 
             if len(bdra) > 0 : 
-                ra[bdra]-=360 
-            gdref, = np.where((inpref['ra'] <= np.nanmax(ra)-0.01) & 
-                              (inpref['ra'] >= np.nanmin(ra+360)-0.01) &
+                ra[bdra]-=360
+            refra = inpref['ra'].copy()
+            bdrefra, = np.where(refra > 180)
+            if len(bdrefra) > 0:
+                refra[bdrefra] -= 360
+            gdref, = np.where((refra >= np.nanmin(ra)-0.01) &
+                              (refra <= np.nanmax(ra)+0.01) & 
                               (inpref['dec'] >= np.nanmin(meas[deccol])-0.01) & 
                               (inpref['dec'] <= np.nanmax(meas[deccol])+0.01))
         ref = inpref[gdref] 
