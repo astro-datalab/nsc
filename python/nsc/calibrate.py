@@ -1238,19 +1238,24 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     loglines = dln.readlines(expdir+'/'+base+'.log')
     #ind = dln.grep(loglines,'Step #2: Copying InstCal images from mass store archive',index=True)
     ind = dln.grep(loglines,'Copying InstCal images',index=True)
-    fline = loglines[ind[0]+1] 
-    lo = fline.find('/archive')
-    # make sure the mss1 directory is correct for this server 
-    fluxfile = mssdir+str(fline[lo+1:]) 
-    wline = loglines[ind[0]+2] 
-    lo = wline.find('/archive') 
-    wtfile = mssdir+str(wline[lo+1:]) 
-    mline = loglines[ind[0]+3] 
-    lo = mline.find('/archive') 
-    maskfile = mssdir+str(mline[lo+1:])
+    if len(ind)>0:
+        fline = loglines[ind[0]+1] 
+        lo = fline.find('/archive')
+        # make sure the mss1 directory is correct for this server 
+        fluxfile = mssdir+str(fline[lo+1:]) 
+        wline = loglines[ind[0]+2] 
+        lo = wline.find('/archive') 
+        wtfile = mssdir+str(wline[lo+1:]) 
+        mline = loglines[ind[0]+3] 
+        lo = mline.find('/archive') 
+        maskfile = mssdir+str(mline[lo+1:])
+    else:
+        fluxfile = None
+        wtfile = None
+        maskfile = None
 
     # Load the meta-data from the original header
-    if headdict is None:
+    if headdict is None and fluxfile is not None:
         head = fits.getheader(fluxfile,0)
     else:
         head = headdict['main']
@@ -1356,19 +1361,19 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     else: 
         logger.info('Reference catalogs input')
         if rawrap == False: 
-            gdref, = np.where((inpref['ra'] >= np.min(meas[racol])-0.01) & 
-                              (inpref['ra'] <= np.max(meas[racol])+0.01) &
-                              (inpref['dec'] >= np.min(meas[deccol])-0.01) & 
-                              (inpref['dec'] <= np.max(meas[deccol])+0.01))
+            gdref, = np.where((inpref['ra'] >= np.nanmin(meas[racol])-0.01) & 
+                              (inpref['ra'] <= np.nanmax(meas[racol])+0.01) &
+                              (inpref['dec'] >= np.nanmin(meas[deccol])-0.01) & 
+                              (inpref['dec'] <= np.nanmax(meas[deccol])+0.01))
         else: 
             ra = meas[racol]
             bdra, = np.where(ra > 180) 
             if len(bdra) > 0 : 
                 ra[bdra]-=360 
-            gdref, = np.where((inpref['ra'] <= np.max(ra)-0.01) & 
-                              (inpref['ra'] >= np.min(ra+360)-0.01) &
-                              (inpref['dec'] >= np.min(meas[deccol])-0.01) & 
-                              (inpref['dec'] <= np.max(meas[deccol])+0.01))
+            gdref, = np.where((inpref['ra'] <= np.nanmax(ra)-0.01) & 
+                              (inpref['ra'] >= np.nanmin(ra+360)-0.01) &
+                              (inpref['dec'] >= np.nanmin(meas[deccol])-0.01) & 
+                              (inpref['dec'] <= np.nanmax(meas[deccol])+0.01))
         ref = inpref[gdref] 
         logger.info(str(len(gdref))+' reference stars in our region')
 
@@ -1968,7 +1973,10 @@ def calibrate_healpix(pix,version,nside=64,redo=False):
         expdir = hplist1['expdir'][i]
         #lo = expdir.find('/d1')
         #expdir = dldir + expdir[lo+5:]
-        calibrate(expdir,ref,redo=redo)
+        try:
+            calibrate(expdir,ref,redo=redo)
+        except:
+            traceback.print_exc()
 
     print('')
     print('Total time = %.2f sec' % (time.time()-t00))

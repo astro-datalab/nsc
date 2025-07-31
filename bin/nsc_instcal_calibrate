@@ -13,6 +13,7 @@ import subprocess
 import glob
 import logging
 import socket
+import traceback
 from datetime import datetime
 from argparse import ArgumentParser
 #from nsc import utils,calibrate_tacc
@@ -69,11 +70,11 @@ if __name__ == "__main__":
         kind = "exposure"
 
     if expdir == "None" and pix != -9: 
-        print("Calibrating healpix, not yet supported on TACC")
+        print("Calibrating healpix")
         print("pix = ",pix)
         print("NSIDE = ",nside)
         kind = "healpix"
-    if pix == -9 and expdir != "None": 
+    elif pix == -9 and expdir != "None": 
         print("Calibrating single exposure")
         print("expdir =",expdir)
         kind = "exposure"
@@ -96,8 +97,9 @@ if __name__ == "__main__":
     #dldir,mssdir,localdir = utils.rootdirs()
      
     # Make sure the directory exists 
-    if os.path.exists(expdir) == False:
-        raise ValueError(expdir+' NOT FOUND')
+    if kind=='exposure':
+        if os.path.exists(expdir) == False:
+            raise ValueError(expdir+' NOT FOUND')
      
     t00 = time.time() 
      
@@ -143,7 +145,8 @@ if __name__ == "__main__":
     elif kind=="healpix": 
         print("Calibrating HEALPix "+str(pix))
         print("nside = "+str(nside))
-        calibrate.calibrate_healpix(pix,version,nside=32,maxexp=10,logtime="000",gsynth=True,psf=True,redo=redo,logger=None)
+        calibrate.calibrate_healpix(pix,version,nside=32,redo=redo)
+        #calibrate.calibrate_healpix(pix,version,nside=32,maxexp=10,logtime="000",gsynth=True,psf=True,redo=redo,logger=None)
 
 
     print("Total time = "+str(time.time()-t0)+" seconds")
