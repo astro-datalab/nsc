@@ -55,6 +55,7 @@ if __name__ == "__main__":
     parser.add_argument('--nodes',type=int,nargs=1,default=0,help='Number of nodes')
     parser.add_argument('--ppn',type=int,nargs=1,default=0,help='Processes per node')
     parser.add_argument('--stagger',type=int,nargs=1,default=60,help='Stagger time')
+    parser.add_argument('--healpix',action='store_true',help='Do calibration in healpix mode')
     parser.add_argument('--delete',action='store_true',help='Delete image files at end')
     parser.add_argument('--nowait',action='store_true',help='Do not wait for files to be downloaded')
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
@@ -93,6 +94,7 @@ if __name__ == "__main__":
         stagger = args.stagger[0]
     else:
         stagger = args.stagger
+    healpix = args.healpix
     delete = args.delete
     nowait = args.nowait
     redo = args.redo                         # if called, redo = True
@@ -121,6 +123,7 @@ if __name__ == "__main__":
     if ppn is not None:
         print('ppn =',ppn)
     print('stagger =',stagger)
+    print('healpix =',healpix)
     print('delete =',delete)
     print('nowait =',nowait)
     print('redo =',redo)
@@ -150,6 +153,8 @@ if __name__ == "__main__":
         ppn = 64
         if host=='tacc':
             ppn = 28
+            if stage=='calibrate' and healpix:
+                ppn = 10
 
     # Get NSC directories                                                                                     
     basedir, tmpdir = utils.getnscdirs(version,host)
@@ -378,97 +383,138 @@ if __name__ == "__main__":
     elif stage=='calib' or stage=='calibrate':
         script = 'nsc_instcal_calibrate'
         label = 'calib'
-        if isinstance(inputdata,Table)==False:
-            inputlist = inputdata.copy()
-            inputdata = Table(np.zeros(len(inputlist),dtype=np.dtype([('EXPOSURE',str,1000)])))
-            inputdata['EXPOSURE'] = inputlist
 
-        # Check previously submitted tasks lists
-        print('Checking previously submitted tasks lists')
-        tasklist = glob(os.path.join(basedir,'lists',label+'_*_tasks.fits'))
-        prevtasks = None
-        for tf in tasklist:
-            print('Loading ',tf)
-            ptasks = Table.read(tf)
-            if prevtasks is None:
-                prevtasks = ptasks
-            else:
-                prevtasks = vstack((prevtasks,ptasks))
-        # Some previous lists
-        if prevtasks is not None:
-            # Get unique exposures
-            _,ui = np.unique(prevtasks['name'],return_index=True)
-            prevtasks = prevtasks[ui]
-            # Remove any previously submitted exposures
-            inpexposure = np.char.array([os.path.basename(f) for f in inputdata['EXPOSURE']]).astype(str)
-            _,ind1,ind2 = np.intersect1d(prevtasks['name'],inpexposure,return_indices=True)
-            if len(ind1)>0:
-                print(len(ind1),' previously submitted exposures to remove')
-                inputdata.remove_rows(ind2)
+        # Individual exposures
+        if healpix == False:
+            if isinstance(inputdata,Table)==False:
+                inputlist = inputdata.copy()
+                inputdata = Table(np.zeros(len(inputlist),dtype=np.dtype([('EXPOSURE',str,1000)])))
+                inputdata['EXPOSURE'] = inputlist
 
-        # Loop over input data and populate the tasks list
-        tasks = Table(np.zeros(np.minimum(len(inputdata),maxtasks),dtype=np.dtype(dt)))
-        cnt = 0
-        for i in range(len(inputdata)):
-            # "exposure" is the full path to the exposure output directory
-            exposure = inputdata['EXPOSURE'][i]
-            if exposure.endswith('/'):
-                exposure = exposure[:-1]
-            #outdir = os.path.dirname(exposure)
-            #outdir = exposure
-            # Use /scratch1 for calibration output for now
-            # /home1/09970/dnidever/scratch1/nsc/instcal/v4/c4d/2018/20180502/c4d_180502_092858_ooi_g_v1
-            outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/' + '/'.join(exposure.split('/')[-5:])
-            base = os.path.basename(exposure)
-            print('{:} {:}'.format(i+1,base))
-            cmd = script+' '+exposure+' '+version
-            if host:
-                cmd += ' --host '+host
-            # Check output filename
-            # we keep the meas.fits filename
-            # need to check the table columns in the header
-            measfile = os.path.join(exposure,base+'_meas.fits')
-            if os.path.exists(measfile)==False:
-                print('meas file',measfile,'NOT FOUND. Skipping')
-                continue
-            # Check that the meta file exists
-            #metafile = os.path.join(outdir,base+'_meta.fits')
-            #if os.path.exists(metafile) and 
-            head = fits.getheader(measfile,1)
-            # CHECK FOR THE NEEDED CALIBRATION COLUMNS
-            # and check for the meta file
+            # Check previously submitted tasks lists
+            print('Checking previously submitted tasks lists')
+            tasklist = glob(os.path.join(basedir,'lists',label+'_*_tasks.fits'))
+            prevtasks = None
+            for tf in tasklist:
+                print('Loading ',tf)
+                ptasks = Table.read(tf)
+                if prevtasks is None:
+                    prevtasks = ptasks
+                else:
+                    prevtasks = vstack((prevtasks,ptasks))
+            # Some previous lists
+            if prevtasks is not None:
+                # Get unique exposures
+                _,ui = np.unique(prevtasks['name'],return_index=True)
+                prevtasks = prevtasks[ui]
+                # Remove any previously submitted exposures
+                inpexposure = np.char.array([os.path.basename(f) for f in inputdata['EXPOSURE']]).astype(str)
+                _,ind1,ind2 = np.intersect1d(prevtasks['name'],inpexposure,return_indices=True)
+                if len(ind1)>0:
+                    print(len(ind1),' previously submitted exposures to remove')
+                    inputdata.remove_rows(ind2)
 
-            # Requirements for "being done"
-            # 1) meta file exists
-            # 2) meas file exists
-            # 3) meas file has calibration columns
+            # Loop over input data and populate the tasks list
+            tasks = Table(np.zeros(np.minimum(len(inputdata),maxtasks),dtype=np.dtype(dt)))
+            cnt = 0
+            for i in range(len(inputdata)):
+                # "exposure" is the full path to the exposure output directory
+                exposure = inputdata['EXPOSURE'][i]
+                if exposure.endswith('/'):
+                    exposure = exposure[:-1]
+                #outdir = os.path.dirname(exposure)
+                #outdir = exposure
+                # Use /scratch1 for calibration output for now
+                # /home1/09970/dnidever/scratch1/nsc/instcal/v4/c4d/2018/20180502/c4d_180502_092858_ooi_g_v1
+                outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/' + '/'.join(exposure.split('/')[-5:])
+                base = os.path.basename(exposure)
+                print('{:} {:}'.format(i+1,base))
+                cmd = script+' '+exposure+' '+version
+                if host:
+                    cmd += ' --host '+host
+                # Check output filename
+                # we keep the meas.fits filename
+                # need to check the table columns in the header
+                measfile = os.path.join(exposure,base+'_meas.fits')
+                if os.path.exists(measfile)==False:
+                    print('meas file',measfile,'NOT FOUND. Skipping')
+                    continue
+                # Check that the meta file exists
+                #metafile = os.path.join(outdir,base+'_meta.fits')
+                #if os.path.exists(metafile) and 
+                head = fits.getheader(measfile,1)
+                # CHECK FOR THE NEEDED CALIBRATION COLUMNS
+                # and check for the meta file
+
+                # Requirements for "being done"
+                # 1) meta file exists
+                # 2) meas file exists
+                # 3) meas file has calibration columns
             
 
-            logfile = os.path.join(outdir,base+'_calib.log')
-            outfile = os.path.join(outdir,base+'_meas.fits')
-            metafile = os.path.join(outdir,base+'_meta.fits')
-            if (os.path.exists(outfile) and os.path.exists(metafile)) and redo==False:
-                print(outfile,' ALREADY EXISTS.  Skipping')
-                continue
-            # Put information in the tasks table
-            tasks['cmd'][cnt] = cmd
-            tasks['name'][cnt] = base
-            tasks['output'][cnt] = outfile
-            tasks['outfile'][cnt] = logfile 
-            tasks['errfile'][cnt] = logfile.replace('.log','.err')
-            tasks['dir'][cnt] = outdir
-            cnt += 1
-            if cnt>=maxtasks:
-                print('Reached maxtasks ',maxtasks)
-                break
-        tasks = tasks[:cnt]  # trim
+                logfile = os.path.join(outdir,base+'_calib.log')
+                outfile = os.path.join(outdir,base+'_meas.fits')
+                metafile = os.path.join(outdir,base+'_meta.fits')
+                if (os.path.exists(outfile) and os.path.exists(metafile)) and redo==False:
+                    print(outfile,' ALREADY EXISTS.  Skipping')
+                    continue
+                # Put information in the tasks table
+                tasks['cmd'][cnt] = cmd
+                tasks['name'][cnt] = base
+                tasks['output'][cnt] = outfile
+                tasks['outfile'][cnt] = logfile 
+                tasks['errfile'][cnt] = logfile.replace('.log','.err')
+                tasks['dir'][cnt] = outdir
+                cnt += 1
+                if cnt>=maxtasks:
+                    print('Reached maxtasks ',maxtasks)
+                    break
+            tasks = tasks[:cnt]  # trim
 
-        # Calculate nodes need
-        # calibration is pretty fast, maybe 1 min. per exposure
-        ntasks = np.minimum(len(tasks),maxtasks)
-        if nodes is None:
-            total_time_hour = ntasks / 60.0
-            nodes = int(np.ceil(total_time_hour/ppn/48))
+            # Calculate nodes need
+            # calibration is pretty fast, maybe 1 min. per exposure
+            ntasks = np.minimum(len(tasks),maxtasks)
+            if nodes is None:
+                total_time_hour = ntasks / 60.0
+                nodes = int(np.ceil(total_time_hour/ppn/48))
+
+        # Use healpix
+        else:
+            label = 'calibhlp'
+            upix = np.unique(inputdata['pix'])
+
+            # Loop over input data and populate the tasks list
+            tasks = Table(np.zeros(np.minimum(len(inputdata),maxtasks),dtype=np.dtype(dt)))
+            outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/'+version+'/logs/'
+            cnt = 0
+            for i in range(len(upix)):
+                pix = upix[i]
+                print('{:} {:}'.format(i+1,pix))
+                cmd = '{:s} None {:s} --pix {:d} --nside {:d}'.format(script,version,pix,32)
+                if host:
+                    cmd += ' --host '+host
+                logfile = os.path.join(outdir,str(pix)+'_calib.log')
+                outfile = os.path.join(outdir,str(pix)+'_meas.fits')
+                # Put information in the tasks table
+                tasks['cmd'][cnt] = cmd
+                tasks['name'][cnt] = str(pix)
+                tasks['output'][cnt] = outfile
+                tasks['outfile'][cnt] = logfile 
+                tasks['errfile'][cnt] = logfile.replace('.log','.err')
+                tasks['dir'][cnt] = outdir
+                cnt += 1
+                if cnt>=maxtasks:
+                    print('Reached maxtasks ',maxtasks)
+                    break
+            tasks = tasks[:cnt]  # trim
+
+            # Calculate nodes need
+            # calibration is pretty fast, maybe 1 min. per exposure
+            ntasks = np.minimum(len(tasks),maxtasks)
+            if nodes is None:
+                total_time_hour = ntasks / 60.0
+                nodes = int(np.ceil(total_time_hour/ppn/48))
+
 
     ##############################################################################
     # Combine
@@ -568,7 +614,7 @@ if __name__ == "__main__":
         if partition=='development':
             if int(nodes)>40:
                 print('development node limit is 40')
-                nodes = 40
+                nodes = 2
         elif partition=='normal':
             if int(nodes)<3:
                 print('normal needs at least 3 nodes')

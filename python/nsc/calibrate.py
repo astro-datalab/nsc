@@ -1286,7 +1286,9 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
         hd1 = dum['field_header_card']
         exptime = hd1['exptime']
     dateobs = head['date-obs']
-    airmass = head['airmass']
+    airmass = head.get('airmass')
+    if airmass is None:
+        airmass = 1/np.cos(np.deg2rad(head['ZD']))
     t = Time(dateobs, format='fits')
     mjd = t.mjd
     #mjd = date2jd(dateobs,/mjd) 
@@ -1368,7 +1370,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
                               (inpref['dec'] >= np.min(meas[deccol])-0.01) & 
                               (inpref['dec'] <= np.max(meas[deccol])+0.01))
         ref = inpref[gdref] 
-        logger.info(str(ngdref)+' reference stars in our region')
+        logger.info(str(len(gdref))+' reference stars in our region')
 
     # Step 3. Astrometric calibration 
     #---------------------------------- 
@@ -1891,9 +1893,9 @@ def calibrate_healpix(pix,version,nside=64,redo=False):
     """
 
     # Main NOAO DECam source catalog
-    lsdir,mssdir,localdir = utils.rootdirs()
-    fdir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
-    tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
+    dldir,mssdir,localdir = utils.rootdirs()
+    fdir = os.path.join(dldir,'instcal',version)
+    tmpdir = os.path.join(localdir,'instcal',version,'tmp')
     if os.path.exists(fdir)==False:
         os.makedirs(fdir+'logs/')
     if os.path.exists(tmpdir)==False:
@@ -1902,7 +1904,8 @@ def calibrate_healpix(pix,version,nside=64,redo=False):
     t00 = time.time()
 
     # Load the list of exposures
-    listfile = fdir+'/lists/nsc_calibrate_healpix_list.fits'
+    #listfile = fdir+'/lists/nsc_calibrate_healpix_list.fits'
+    listfile = '/scratch1/09970/dnidever/nsc/instcal/v4/lists/nsc_calibrate_healpix_list_exptime10sec_left_073025.fits'
     if os.path.exists(listfile)==False:
         print(listfile,' NOT FOUND')
         return
@@ -1910,8 +1913,8 @@ def calibrate_healpix(pix,version,nside=64,redo=False):
 
     # Get the exposures for this healpix
     print('Calibrating InstCal catalogs for Healpix pixel = '+str(pix))
-    ind1,ind2 = dln.match(hplist['pix'],pix)
-    nind = len(ind1)
+    ind, = np.where(hplist['pix']==pix)
+    nind = len(ind)
     if nind==0:
         print('No exposures')
         return
@@ -1928,19 +1931,20 @@ def calibrate_healpix(pix,version,nside=64,redo=False):
     cencoo = SkyCoord(ra=cenra,dec=cendec,unit='deg')
     glon = cencoo.galactic.l.degree
     glat = cencoo.galactic.b.degree
-    print('L = %.6f' % glon)
-    print('B = %.6f' % glat)
+    print('l = %.6f' % glon)
+    print('b = %.6f' % glat)
 
     # List of instrument-filters
-    filters = np.char.array(hplist1['instrument']).strip()+'-'+np.char.array([f.strip()[0:2] for f in hplist1['filter']]).strip()
+    filters = [str(h['instrument'])+'-'+str(h['filter']) for h in hplist1]
+    #filters = np.char.array(hplist1['instrument']).strip()+'-'+np.char.array([f.strip()[0:2] for f in hplist1['filter']]).strip()
     filters = np.unique(filters)
 
     # Get required radius
     #  DECam      needs 1.1 deg
     #  Mosaic3    needs 0.43 deg
     #  Bok90prime needs 0.75 deg
-    nc4d = np.sum(np.char.array(hplist1['instrument']).find('c4d') > -1)
-    nksb = np.sum(np.char.array(hplist1['instrument']).find('ksb') > -1)
+    nc4d = np.sum(np.char.array(hplist1['instrument'].astype(str)).find('c4d') > -1)
+    nksb = np.sum(np.char.array(hplist1['instrument'].astype(str)).find('ksb') > -1)
     minradius = 0.43
     if nksb>0:
         minradius = np.maximum(minradius, 0.75)
@@ -1954,7 +1958,7 @@ def calibrate_healpix(pix,version,nside=64,redo=False):
 
     # Get all of the reference data that we need
     print('')
-    ref = getrefdata(filters,cenra,cendec,radius)
+    ref = query.getrefdata(filters,cenra,cendec,radius)
 
     # Loop over the exposures
     for i in range(nind):
@@ -1962,8 +1966,8 @@ def calibrate_healpix(pix,version,nside=64,redo=False):
         print('---- EXPOSURE '+str(i+1)+' OF '+str(nind)+' ----')
         print('')
         expdir = hplist1['expdir'][i]
-        lo = expdir.find('/d1')
-        expdir = dldir + expdir[lo+5:]
+        #lo = expdir.find('/d1')
+        #expdir = dldir + expdir[lo+5:]
         calibrate(expdir,ref,redo=redo)
 
     print('')
