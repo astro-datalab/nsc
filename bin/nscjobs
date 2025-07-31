@@ -143,7 +143,7 @@ if __name__ == "__main__":
     print(len(inputdata),'inputs')
 
     # Make sure the filename columns are long enough
-    if 'fluxfile' in inputdata:
+    if 'fluxfile' in inputdata.colnames:
         inputdata['fluxfile'] = inputdata['fluxfile'].astype((str,150))
         inputdata['wtfile'] = inputdata['wtfile'].astype((str,150))
         inputdata['maskfile'] = inputdata['maskfile'].astype((str,150))
