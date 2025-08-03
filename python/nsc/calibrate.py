@@ -309,7 +309,7 @@ def recreatemeas(calfile,metafile,outfile):
     ohdu.writeto(outfile,overwrite=True)
     ohdu.close()
 
-def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag'):
+def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag',logger=None):
     """
     Obtain the photometric zero-point using matched observed and
     reference catalogs and a specific method.
@@ -349,6 +349,9 @@ def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag'):
     filt = expinfo['filter'][0]
     instrument = expinfo['instrument'][0]
     instfilt = instrument+'-'+filt
+
+    if logger is None:
+        logger = dln.basiclogger()
     
     # Model Magnitudes
     #-----------------
@@ -1418,7 +1421,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
         gaiadist1 = allgaiadist[chind2] 
         gmatch, = np.where((gaiaind1 > -1) & (gaiadist1 <= 0.5))   # get sources with Gaia matches 
         if len(gmatch) == 0: 
-            gmatch, = np.where(gaiaind1 > -1 and gaiadist1 <= 1.0) 
+            gmatch, = np.where((gaiaind1 > -1) & (gaiadist1 <= 1.0))
         if len(gmatch) < 5: 
             logger.info('Not enough Gaia matches')
             # Add threshold to astrometric errors 
@@ -1609,7 +1612,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
 
     # Get the zero-points
     #mmexpinfo,mmchinfo = getzpterm(meas1,ref1,mmags,expinfo.copy(),chinfo.copy(),kind='modelmag')
-    gexpinfo,gchinfo = getzpterm(meas1,ref1,mmags,expinfo.copy(),chinfo.copy(),kind='gaiaxpsynth')    
+    gexpinfo,gchinfo = getzpterm(meas1,ref1,mmags,expinfo.copy(),chinfo.copy(),kind='gaiaxpsynth',logger=logger)    
 
     print('Using Gaia for everything now')
     expinfo = gexpinfo.copy()
@@ -1977,8 +1980,10 @@ def calibrate_healpix(pix,version,nside=64,redo=False):
         expdir = hplist1['expdir'][i]
         #lo = expdir.find('/d1')
         #expdir = dldir + expdir[lo+5:]
+        # Put output files in /scratch1 for now
+        outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/' + '/'.join(expdir.split('/')[-5:])
         try:
-            calibrate(expdir,ref,redo=redo)
+            calibrate(expdir,ref,redo=redo,outdir=outdir)
         except:
             traceback.print_exc()
 
