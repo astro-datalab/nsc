@@ -1234,9 +1234,9 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
          
     # Measure median seeing FWHM 
     gdmeas, = np.where((meas['mag_auto'] < 50) & (meas['magerr_auto'] < 0.05) & (meas['class_star'] > 0.8))
-    medfwhm = np.median(meas['fwhm_world'][gdmeas]*3600.) 
+    medfwhm = np.nanmedian(meas['fwhm_world'][gdmeas]*3600.) 
     logger.info('FWHM = %.2f arcsec' % medfwhm)
-         
+
     # Load the logfile and get absolute flux filename
     loglines = dln.readlines(expdir+'/'+base+'.log')
     #ind = dln.grep(loglines,'Step #2: Copying InstCal images from mass store archive',index=True)
@@ -1483,9 +1483,13 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
             err = np.sqrt(gaia2['e_ra_icrs']**2 + meas2['raerr']**2) 
         if err is None:
             err = meas2['raerr']
-        lonmed = np.median(londiff) 
+        lonmed = np.nanmedian(londiff) 
         lonsig = np.maximum(dln.mad(londiff), 1e-5)  # 0.036" 
         gdlon, = np.where(np.abs(londiff-lonmed) < 3.0*lonsig)# remove outliers 
+        if len(gdlon) < 10:
+            gdlon, = np.where(np.abs(londiff-lonmed) < 4.0*lonsig)# remove outliers 
+        if len(gdlon) < 10:
+            gdlon, = np.where(np.abs(londiff-lonmed) < 5.0*lonsig)# remove outliers 
         if len(gdlon) > 5:   # use constant if not enough stars 
             npars = 4 
         else: 
@@ -1516,9 +1520,13 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
             err = np.sqrt(gaia2['e_de_icrs']**2 + meas2['decerr']**2) 
         if err is None: 
             err = meas2['decerr']
-        latmed = np.median(latdiff) 
+        latmed = np.nanmedian(latdiff) 
         latsig = np.maximum(dln.mad(latdiff), 1e-5)   # 0.036" 
         gdlat, = np.where(np.abs(latdiff-latmed) < 3.0*latsig)  # remove outliers 
+        if len(gdlat) < 10:
+            gdlat, = np.where(np.abs(latdiff-latmed) < 4.0*latsig)  # remove outliers 
+        if len(gdlat) < 10:
+            gdlat, = np.where(np.abs(latdiff-latmed) < 5.0*latsig)  # remove outliers 
         if len(gdlat) > 5:     # use constant if not enough stars 
             npars = 4 
         else: 
@@ -1583,6 +1591,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     #expinfo['gaianmatch'] = median(chinfo['gaianmatch']) 
     expinfo['ngaiamatch'] = np.sum(chinfo['ngaiamatch']) 
     expinfo['ngoodgaiamatch'] = np.sum(chinfo['ngoodgaiamatch']) 
+
     
     # Step 4. Photometric calibration 
     #-------------------------------- 
