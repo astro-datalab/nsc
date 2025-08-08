@@ -429,6 +429,21 @@ def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag',logger=None):
         # Select sources within the color/mag calibration range
         gd, = np.where((ref2['bp']-ref2['rp'] >= colrange[0]) & (ref2['bp']-ref2['rp'] <= colrange[1]) &
                        (ref2['gmag'] >= magrange[0]) & (ref2['gmag'] <= magrange[1]))
+        # Not enough points, extend mag range by 0.2 mag
+        if len(gd) < 10:
+            logger.info('less than 10 points to measure zeropoint.  Extending faint mag limit by 0.2 mag')
+            gd, = np.where((ref2['bp']-ref2['rp'] >= colrange[0]) & (ref2['bp']-ref2['rp'] <= colrange[1]) &
+                           (ref2['gmag'] >= magrange[0]) & (ref2['gmag'] <= (magrange[1]+0.2)))
+        # Not enough points, extend mag range by 0.4 mag
+        if len(gd) < 10:
+            logger.info('less than 10 points to measure zeropoint.  Extending faint mag limit by 0.4 mag')
+            gd, = np.where((ref2['bp']-ref2['rp'] >= colrange[0]) & (ref2['bp']-ref2['rp'] <= colrange[1]) &
+                           (ref2['gmag'] >= magrange[0]) & (ref2['gmag'] <= (magrange[1]+0.4)))
+        # Not enough points, extend mag range by 0.6 mag
+        if len(gd) < 10:
+            logger.info('less than 10 points to measure zeropoint.  Extending faint mag limit by 0.6 mag')
+            gd, = np.where((ref2['bp']-ref2['rp'] >= colrange[0]) & (ref2['bp']-ref2['rp'] <= colrange[1]) &
+                           (ref2['gmag'] >= magrange[0]) & (ref2['gmag'] <= (magrange[1]+0.6)))
 
         # Matched structure
         mag2 = meas2['magpsf'] + 2.5*np.log10(exptime)   # correct for the exposure time
@@ -480,6 +495,7 @@ def fitzpterm(mstr,expinfo,chinfo):
     x = np.zeros(n,float)
     zpterm,zptermerr1 = dln.wtmean(diff[gd],err[gd],error=True)
     zptermerr = dln.bootstrap(diff[gd],dln.wtmean,args=err[gd],indexargs=True)
+
     # Save in exposure table
     expinfo['zpterm'] = zpterm 
     expinfo['zptermerr'] = zptermerr 
