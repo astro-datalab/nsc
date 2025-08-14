@@ -247,6 +247,95 @@ def calibrate(version='v4'):
 
     import pdb; pdb.set_trace()
 
+def calibratedirs(expdirs,outfile,version='v4'):
+    """ Make a calibrate summary file for a subset of exposures """
+
+    dldir,mssdir,localdir = utils.rootdirs()
+    basedir = os.path.join(dldir,'instcal/',version)
+
+    t0 = time.time()
+
+    print('Gathering summary data for',len(expdirs),'exposures')
+
+    # Load the exposure and chip meta files
+    calbasedir = '/home1/09970/dnidever/scratch1/nsc/instcal/v4'
+    expdata = []
+    chipdata = []
+    for i in range(len(expdirs)):
+        dir1 = expdirs[i]
+        arr = dir1.split('/')
+        base = arr[-1]
+        night = arr[-2]
+        year = arr[-3]
+        instrument = arr[-4]
+
+        measfile = os.path.join(calbasedir,instrument,year,night,base,base+'_meas.fits')
+        metafile = os.path.join(calbasedir,instrument,year,night,base,base+'_meta.fits')
+        if os.path.exists(metafile):
+            hdu = fits.open(metafile)
+            exptab1 = Table(hdu[1].data)
+            # fix names
+            for c in ['file','maskfile','wtfile']:
+                ffile = exptab1[c][0]
+                if ffile.find('INFO')>-1:
+                    exptab1[c] = ffile[ffile.find(']')+1:].strip()
+            exptab1['measfile'] = measfile
+            chiptab1 = []
+            for j in range(len(hdu)-2):
+                chiptab1.append(Table(hdu[j+2].data))
+            chiptab1 = vstack(chiptab1)
+            hdu.close()
+            chiptab1['file'] = exptab1['file'][0]
+            chiptab1['wtfile'] = exptab1['wtfile'][0]
+            chiptab1['maskfile'] = exptab1['maskfile'][0]
+            chiptab1['measfile'] = measfile
+            chiptab1['base'] = base
+            expdata.append(exptab1)
+            chipdata.append(chiptab1)
+            print(i+1,base,len(chiptab1),exptab1['nsources'][0])
+        else:
+            print(i+1,base,'no meta file')
+
+    # Save
+    print('Writing to',outfile)
+    exptab = vstack(expdata)
+    for c in ['file','wtfile','maskfile','base']:
+        exptab[c] = np.array([f.strip() for f in exptab[c]])
+    chiptab = vstack(chipdata)
+    for c in ['expdir','filename','measfile']:
+        chiptab[c] = np.array([f.strip() for f in chiptab[c]])
+    ohdu = fits.HDUList()
+    ohdu.append(fits.table_to_hdu(exptab))
+    ohdu.append(fits.table_to_hdu(chiptab))
+    ohdu.writeto(outfile,overwrite=True)
+    ohdu.close()
+
+def calibratechunkscombine():
+    """ Combine the chunks of calibration summary information """
+    basedir = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/summary/calibrate'
+    files = glob(basedir+'/calibrate_summary*.fits')
+    files.sort()
+    print('found',len(files),'calibration chunk summary files')
+    expdata = []
+    chipdata = []
+    for i in range(len(files)):
+        print(i+1,files[i])
+        hdu = fits.open(files[i])
+        expdata.append(Table(hdu[1].data))
+        chipdata.append(Table(hdu[1].data))
+        hdu.close()
+
+    # Write to final output file
+    exptab = vstack(expdata)
+    chiptab = vstack(chipdata)
+    outfile = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/lists/nsc_calibrate_summary.fits'
+    print('Writing summary results to',outfile)
+    ohdu = fits.HDUList()
+    ohdu.append(fits.table_to_hdu(exptab))
+    ohdu.append(fits.table_to_hdu(chiptab))
+    ohdu.writeto(outfile,overwrite=True)
+    ohdu.close()
+
 def combine():
     """ Make the nsc_combine_summary.fits summary file """
     pass
