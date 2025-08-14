@@ -7,7 +7,9 @@ from astropy.time import Time
 from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
 from dlnpyutils import utils as dln,coords
+import healpy as hp
 import time
+import traceback
 from . import utils
 
 def measure(version='v4',nosources=False,quick=False):
@@ -271,7 +273,11 @@ def calibratedirs(expdirs,outfile,version='v4'):
 
         measfile = os.path.join(calbasedir,instrument,year,night,base,base+'_meas.fits')
         metafile = os.path.join(calbasedir,instrument,year,night,base,base+'_meta.fits')
-        if os.path.exists(metafile):
+        if os.path.exists(metafile)==False:
+            print(i+1,base,'no meta file')
+            continue
+        
+        try:
             hdu = fits.open(metafile)
             exptab1 = Table(hdu[1].data)
             # fix names
@@ -293,8 +299,8 @@ def calibratedirs(expdirs,outfile,version='v4'):
             expdata.append(exptab1)
             chipdata.append(chiptab1)
             print(i+1,base,len(chiptab1),exptab1['nsources'][0])
-        else:
-            print(i+1,base,'no meta file')
+        except:
+            traceback.print_exc()
 
     # Save
     print('Writing to',outfile)
@@ -315,24 +321,35 @@ def calibratechunkscombine():
     basedir = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/summary/calibrate'
     files = glob(basedir+'/calibrate_summary*.fits')
     files.sort()
+    num = [int(os.path.basename(f)[17:-5]) for f in files]
+    si = np.argsort(num)
+    files = np.array(files)[si]
     print('found',len(files),'calibration chunk summary files')
     expdata = []
     chipdata = []
     for i in range(len(files)):
         print(i+1,files[i])
         hdu = fits.open(files[i])
+        chtab = Table(hdu[2].data)
+        chtab.write(files[i].replace('.fits','_chip.csv'),format='csv')
         expdata.append(Table(hdu[1].data))
-        chipdata.append(Table(hdu[1].data))
+        #chipdata.append(Table(hdu[2].data))
         hdu.close()
 
     # Write to final output file
     exptab = vstack(expdata)
-    chiptab = vstack(chipdata)
+    #chiptab = vstack(chipdata)
+
+    # Add healpix to each table
+    nside = 128
+    exptab['pix128'] = hp.ang2pix(nside,exptab['ra'],exptab['dec'],lonlat=True)
+    #chiptab['pix128'] = hp.ang2pix(nside,chiptab['ra'],chiptab['dec'],lonlat=True)
+
     outfile = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/lists/nsc_calibrate_summary.fits'
     print('Writing summary results to',outfile)
     ohdu = fits.HDUList()
     ohdu.append(fits.table_to_hdu(exptab))
-    ohdu.append(fits.table_to_hdu(chiptab))
+    #ohdu.append(fits.table_to_hdu(chiptab))
     ohdu.writeto(outfile,overwrite=True)
     ohdu.close()
 
