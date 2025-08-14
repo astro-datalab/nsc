@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import numpy as np
+import warnings
+from astropy.io import fits
+from astropy.utils.exceptions import AstropyWarning
+from astropy.table import Table,vstack
+import time
+import shutil
+import re
+import subprocess
+from glob import glob
+from datetime import datetime
+import logging
+import socket
+from datetime import datetime
+from argparse import ArgumentParser
+from dlnpyutils import utils as dln,slurm
+from nsc import utils
+from nsc.nsc_instcal_measure import Exposure
+from nsc import slurm as slrm,utils
+
+
+
+def taccifyname(filename):
+    """ Modify mss filenames for tacc"""
+    imagedir = '/scratch1/09970/dnidever/nsc/instcal/v4/images'
+    if filename[:9]=='/net/mss1':
+        base = os.path.basename(filename)
+        if base[:3]=='c4d':
+            instrument = base[:3] 
+            night = '20'+base[4:10]
+        else:
+            instrument = 'c4d'   # assume all decam for now
+            head = fits.getheader(filename,0)
+            dateobs = head['DATE-OBS']
+            night = dateobs[:4]+dateobs[5:7]+dateobs[8:10]
+        newfilename = os.path.join(imagedir,instrument,night[:4],night,base)
+    else:
+        newfilename = filename
+    return newfilename        
+
+if __name__ == "__main__":
+    # Run lots of NSC jobs
+    parser = ArgumentParser(description='Run NSC jobs')
+    parser.add_argument('stage', type=str, nargs=1, help='Stage (download, measure, calibrate or combine)')
+    parser.add_argument('version', type=str, nargs=1, help='NSC version')
+    parser.add_argument('--host',type=str,nargs=1,default="None",help='hostname, default "None", other options supported are "cca","tempest_katie","tempest_group","gp09/7","tacc"')
+    parser.add_argument('--partition',type=str,nargs=1,default='',help='what TACC partition to use')
+    parser.add_argument('--walltime',type=str,nargs=1,default='2-00:00:00',help='Slurm job runtime')
+    parser.add_argument('--maxtasks',type=int,nargs=1,default=20000,help='Maximum number of tasks to run')
+    parser.add_argument('--nodes',type=int,nargs=1,default=0,help='Number of nodes')
+    parser.add_argument('--ppn',type=int,nargs=1,default=0,help='Processes per node')
+    parser.add_argument('--stagger',type=int,nargs=1,default=60,help='Stagger time')
+    parser.add_argument('--healpix',action='store_true',help='Do calibration in healpix mode')
+    parser.add_argument('--nowait',action='store_true',help='Do not wait for files to be downloaded')
+    parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
+    args = parser.parse_args()
+
+    # Inputs                                        
+    stage = args.stage[0].lower()
+    version = args.version[0]                # NSC version, like "v4", default "None"
+    if version=="None": version = None
+    host = str(args.host[0])                 # hostname of server, default "None"                  
+    if host=="None": host = None
+    if isinstance(args.partition,list):
+        partition = args.partition[0]
+    else:
+        partition = args.partition
+    if isinstance(args.walltime,list):
+        walltime = args.walltime[0]
+    else:
+        walltime = args.walltime
+    if isinstance(args.maxtasks,list):       # maximum number of tasks to run from input list
+        maxtasks = args.maxtasks[0]
+    else:
+        maxtasks = args.maxtasks
+    if isinstance(args.nodes,list):
+        nodes = args.nodes[0]
+    else:
+        nodes = args.nodes
+    if nodes==0: nodes=None
+    if isinstance(args.ppn,list):
+        ppn = args.ppn[0]
+    else:
+        ppn = args.ppn
+    if ppn==0: ppn=None
+    if isinstance(args.stagger,list):
+        stagger = args.stagger[0]
+    else:
+        stagger = args.stagger
+    healpix = args.healpix
+    nowait = args.nowait
+    redo = args.redo                         # if called, redo = True
+
+    # Default partitions
+    if partition=='':
+        if host=='tacc':
+            partition = 'small'
+        elif host.lower()[:7]=='tempest':
+            partition = 'priority'
+    # Account
+    if host=='tacc':
+        account = None
+    elif host.lower()[:7]=='tempest':
+        account = 'priority-davidnidever'
+
+    dldir,mssdir,localdir = utils.rootdirs()
+    basedir = os.path.join(dldir,'instcal/',version)
+    c4d_expdirs = utils.readlines(basedir+'/c4d/allmeas_expdir.txt')
+    expdirs = c4d_expdirs
+    nexpdirs = len(expdirs)
+    print(nexpdirs,'exposure directories')
+
+    outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/summary/calibrate/'
+
+    # Break up into 500 expdir chunks
+    nchunks = nexpdirs//500 + 1
+    print(nchunks,'chunks')
+
+    # Loop over input data and populate the tasks list
+    script = '/home1/09970/dnidever/projects/nsc/bin/nscsummarycalibratechunk'
+    dt = [('cmd',str,1000),('name',str,100),('output',str,300),
+          ('outfile',str,300),('errfile',str,300),('dir',str,300)] 
+    tasks = Table(np.zeros(nchunks,dtype=np.dtype(dt)))
+    cnt = 0
+    for i in range(nchunks):
+        print('{:}'.format(i+1))
+        # create the chunk list file
+        explist = expdirs[i*500:(i+1)*500]
+        chunklistfile = outdir+'calibrate_summary_list'+str(i+1)+'.lst'
+        utils.writelines(chunklistfile,explist)
+        cmd = script+' '+chunklistfile
+        # Check output filename
+        outfile = os.path.join(outdir,'calibrate_summary'+str(i+1)+'.fits')
+        logfile = os.path.join(outdir,'calibrate_summary_list'+str(i+1)+'.log')
+        if os.path.exists(outfile) and redo==False:
+            print(outfile,' ALREADY EXISTS.  Skipping')
+            continue
+        # Skip information in the tasks table
+        tasks['cmd'][cnt] = cmd
+        tasks['name'][cnt] = 'calibrate_summary'+str(i+1)
+        tasks['output'][cnt] = outfile
+        tasks['outfile'][cnt] = logfile 
+        tasks['errfile'][cnt] = logfile.replace('.log','.err')
+        tasks['dir'][cnt] = outdir
+        cnt += 1
+        if cnt>=maxtasks:
+            print('Reached maxtasks ',maxtasks)
+            break
+    tasks = tasks[:cnt]
+    nodes = 2
+
+    print(len(tasks),' tasks to run')
+
+    if len(tasks)==0:
+        print('No tasks to run')
+        sys.exit()
+    
+    # TACC settings
+    if host=='tacc':
+        # Nodes to request
+        print(nodes,'nodes requested')
+        # Get walltime based on partition
+        wtimedict = {'normal':'47:59:00','small':'47:59:00','development':'01:59:59'}
+        walltime = wtimedict[partition]
+        # nodes:
+        # development 1-40
+        # normal      3-512
+        # small       2
+        if partition=='development':
+            if int(nodes)>40:
+                print('development node limit is 40')
+                nodes = 2
+        elif partition=='normal':
+            if int(nodes)<3:
+                print('normal needs at least 3 nodes')
+                nodes = 3
+            if int(nodes)>512:
+                print('normal node limit is 512')
+                nodes = 512
+        elif partition=='small':
+            if int(nodes) != 2:
+                print('small must be 2 nodes')
+                nodes = 2
+
+    if ppn is None:
+        ppn = 50
+
+    nparallel = nodes*ppn
+
+    label = 'nscsum'+stage
+
+    print('Slurm Parameters:')
+    print('ntasks =',len(tasks))
+    print('partition =',partition)
+    print('nodes =',nodes)
+    print('label =',label)
+    print('walltime =',walltime)
+    slurmroot = os.environ.get('SCRATCH')
+    if slurmroot is None:
+        slurmroot = os.path.join(os.path.expanduser('~'),'slurm')
+        if os.path.exists(slurmroot)==False:
+            os.makedirs(slurmroot)
+
+    precommands = None
+    postcommands = None
+    slurmdir,key,jobid = slurm.launcher(tasks,label,nodes=nodes,nparallel=nparallel,
+                                        account=account,partition=partition,walltime=walltime,
+                                        notification=True,stagger=True,precommands=precommands,
+                                        postcommands=postcommands,slurmroot=slurmroot,verbose=True)
+    # Write list of output directories
+    utils.writelines(os.path.join(slurmdir,label+'_outdir.lst'),tasks['dir'].data.astype(str))
+    # Write task list to lists/ 
+    tasks.write(os.path.join(basedir,'lists',label+'_'+key+'_tasks.fits'))
