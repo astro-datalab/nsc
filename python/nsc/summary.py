@@ -7,7 +7,7 @@ from astropy.time import Time
 from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
 from dlnpyutils import utils as dln,coords
-#import healpy as hp
+import healpy as hp
 import time
 import traceback
 import subprocess
@@ -320,9 +320,9 @@ def calibratedirs(expdirs,outfile,version='v4'):
 def calibratechunkscombine():
     """ Combine the chunks of calibration summary information """
     basedir = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/summary/calibrate'
-    files = glob(basedir+'/calibrate_summary*.fits.gz')
+    files = glob(basedir+'/calibrate_summary*.fits')
     files.sort()
-    num = [int(os.path.basename(f)[17:-8]) for f in files]
+    num = [int(os.path.basename(f)[17:-5]) for f in files]
     si = np.argsort(num)
     files = np.array(files)[si]
     print('found',len(files),'calibration chunk summary files')
@@ -331,28 +331,53 @@ def calibratechunkscombine():
     for i in range(len(files)):
         print(i+1,files[i])
         hdu = fits.open(files[i])
-        #chtab = Table(hdu[2].data)
+        # exposure table
+        exptab = Table(hdu[1].data)
+        # Trim down the sizes
+        for c in ['file','wtfile','maskfile','dateobs','instrument','base','filter','wcscal','measfile']:
+            exptab[c] = np.array([f for f in exptab[c]])
+        for c in ['exptime','airmass','fwhm','rarms','decrms','ebv','zpterm','zptermerr',
+                  'zptermsig','zpspatialvar_rms','zpspatialvar_range','depth95','depth10sig']:
+            exptab[c] = exptab[c].astype(np.float32)
+        for c in ['zptype','zpspatialvar_nccd']:
+            exptab[c] = exptab[c].astype(np.int16)
+        expdata.append(exptab)
+        # chip table
+        chtab = Table(hdu[2].data)
+        chtab['instrument'] = np.array([f.astype(str) for f in chtab['instrument']])
+        del chtab[['expdir','file','wtfile','maskfile','filename','nmeas']]
+        for c in ['rarms','rastderr','decrms','decstderr','zpterm','zptermerr','depth95','depth10sig']:
+            chtab[c] = chtab[c].astype(np.float32)
+        for c in ['ccdnum','zptype']:
+            chtab[c] = chtab[c].astype(np.int16)
         #chtab.write(files[i].replace('.fits','_chip.csv'),format='csv')
-        expdata.append(Table(hdu[1].data))
-        chipdata.append(Table(hdu[2].data))
+        chipdata.append(chtab)
         hdu.close()
 
     # Write to final output file
     exptab = vstack(expdata)
+    del expdata
     chiptab = vstack(chipdata)
+    del chipdata
 
     # Add healpix to each table
     nside = 128
-    #exptab['pix128'] = hp.ang2pix(nside,exptab['ra'],exptab['dec'],lonlat=True)
-    #chiptab['pix128'] = hp.ang2pix(nside,chiptab['ra'],chiptab['dec'],lonlat=True)
+    exptab['pix128'] = hp.ang2pix(nside,exptab['ra'],exptab['dec'],lonlat=True)
+    chiptab['pix128'] = hp.ang2pix(nside,chiptab['cenra'],chiptab['cendec'],lonlat=True)
 
-    outfile = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/lists/nsc_calibrate_summary.fits'
-    print('Writing summary results to',outfile)
-    ohdu = fits.HDUList()
-    ohdu.append(fits.table_to_hdu(exptab))
-    ohdu.append(fits.table_to_hdu(chiptab))
-    ohdu.writeto(outfile,overwrite=True)
-    ohdu.close()
+    #np.save('/home1/09970/dnidever/scratch1/nsc/instcal/v4/lists/nsc_calibrate_summary_chips.fits',chiptab)
+    chiptab.write('/home1/09970/dnidever/scratch1/nsc/instcal/v4/lists/nsc_calibrate_summary_chips.fits')
+    exptab.write('/home1/09970/dnidever/scratch1/nsc/instcal/v4/lists/nsc_calibrate_summary_exp.fits')
+
+    #outfile = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/lists/nsc_calibrate_summary.fits'
+    #print('Writing summary results to',outfile)
+    #ohdu = fits.HDUList()
+    #ohdu.append(fits.table_to_hdu(exptab))
+    #ohdu.append(fits.table_to_hdu(chiptab))
+    #ohdu.writeto(outfile,overwrite=True)
+    #ohdu.close()
+
+    import pdb; pdb.set_trace()
 
 def combine():
     """ Make the nsc_combine_summary.fits summary file """
@@ -427,10 +452,10 @@ def combinehealpix():
     #if nstr ne n_elements(brklo) then stop,'number of exposures in STR and CHSTR do not match'
     tab['chipindx'] = brklo
     tab['nchips'] = nchexp
-    # Getting number of good chip WCS for each exposures                                                                         
+    # Getting number of good chip WCS for each exposures
     for i in range(len(tab)):
         tab['ngoodchipwcs'][i] = np.sum(chtab['ngaiamatch'][brklo[i]:brkhi[i]] > 0)
-    # Fixing absolute paths of flux filename                                                                                     
+    # Fixing absolute paths of flux filename
     filename = tab['file']
     filename = [f.replace('/net/mss1/','/') for f in filename]
     filename = [f.replace('/mss1/','/') for f in filename]
@@ -740,7 +765,7 @@ def combinehealpix():
         #healtab = healtab[idx]
         #q = healtab.pix
         #lo = where(q ne shift(q,1),nlo)
-        ##hi = where(q ne shift(q,-1))                                                                                              
+        ##hi = where(q ne shift(q,-1))
         #hi = [lo[1:nlo-1]-1,nhealtab-1]
         #nexp = hi-lo+1
         #index = replicate({pix:0L,lo:0L,hi:0L,nexp:0L},nupix)
@@ -754,7 +779,7 @@ def combinehealpix():
         healtab['file'] = [f.replace('/net/dl1/','/dl1/') for f in healtab['file']]
         
         # Replace /net/dl1/ with /dl1/ so it will work on all machines
-        healtab['file'] = [f.replace('/net/dl1/','/dl1/') for f in repstr(healtab['file']]
+        healtab['file'] = [f.replace('/net/dl1/','/dl1/') for f in healtab['file']]
         
         # Write the full list plus an index
         print('Writing list to ',listfile)
