@@ -502,24 +502,24 @@ def combinehealpix():
     zptab['thresh'] = 0.5
     zptab['instrument'][:6] = 'c4d'
     zptab['filter'][:6] = ['u','g','r','i','z','Y','VR']
-    zptab['amcoef'][0] = [-1.60273, -0.375253]   # c4d-u                                                                            
-    zptab['amcoef'][1] = [0.277124, -0.198037]   # c4d-g                                                                            
-    zptab['amcoef'][2] = [0.516382, -0.115443]   # c4d-r  changed a bit, fine                                                       
-    zptab['amcoef'][3] = [0.380338, -0.067439]   # c4d-i                                                                            
-    zptab['amcoef'][4] = [0.074517, -0.067031]   # c4d-z                                                                            
-    zptab['amcoef'][5] = [-1.07800, -0.060014]   # c4d-Y                                                                            
-    zptab['amcoef'][6] = [1.111859, -0.083630]   # c4d-VR                                                                           
-    # Mosiac3 z-band                                                                                                             
+    zptab['amcoef'][0] = [-1.60273, -0.375253]   # c4d-u
+    zptab['amcoef'][1] = [0.277124, -0.198037]   # c4d-g
+    zptab['amcoef'][2] = [0.516382, -0.115443]   # c4d-r  changed a bit, fine
+    zptab['amcoef'][3] = [0.380338, -0.067439]   # c4d-i
+    zptab['amcoef'][4] = [0.074517, -0.067031]   # c4d-z
+    zptab['amcoef'][5] = [-1.07800, -0.060014]   # c4d-Y
+    zptab['amcoef'][6] = [1.111859, -0.083630]   # c4d-VR
+    # Mosiac3 z-band
     zptab['instrument'][7] = 'k4m'
     zptab['filter'][7] = 'z'
-    zptab['amcoef'][7] = [2.232800, -0.73573]   # k4m-z                                                                             
-    # Bok 90Prime, g and r                                                                                                       
+    zptab['amcoef'][7] = [2.232800, -0.73573]   # k4m-z
+    # Bok 90Prime, g and r
     zptab['instrument'][8] = 'ksb'
     zptab['filter'][8] = 'g'
-    zptab['amcoef'][8] = [1.055275, -0.30629]   # ksb-g                                                                             
+    zptab['amcoef'][8] = [1.055275, -0.30629]   # ksb-g
     zptab['instrument'][9] = 'ksb'
     zptab['filter'][9] = 'r'
-    zptab['amcoef'][9] = [0.836968, -0.19646]   # ksb-r                                                                             
+    zptab['amcoef'][9] = [0.836968, -0.19646]   # ksb-r
     nzptab = len(zptab)
 
     # APPLY QA CUTS IN ZEROPOINT AND SEEING
@@ -531,9 +531,9 @@ def combinehealpix():
         #zpthresh = [2.0,2.0,2.0,2.0,2.0,2.0,2.0]
         #zpthresh = [0.5,0.5,0.5,0.5,0.5,0.5,0.5]
         badzpmask = bytarr(n_elements(str)) + 1
-
         for i in range(nzptab):
-            ind, = np.where((tab['instrument'] == zptab['instrument'][i]) & (tab['filter'] == zptab['filter'][i]) & (tab['success']==True))
+            ind, = np.where((tab['instrument'] == zptab['instrument'][i]) &
+                            (tab['filter'] == zptab['filter'][i]) & (tab['success']==True))
             print(zptab['instrument'][i],'-',zptab['filter'][i],' ',len(ind),' exposures')
             if len(ind) > 0:
                 tab1 = tab[ind]
@@ -572,10 +572,13 @@ def combinehealpix():
                 coef = robust_poly_fitq(am[gg],zpterm[gg],1)
                 print(zptab['instrument'][i]+'-'+zptab['filter'][i],' ',coef)
                 # Trim out bad exposures to determine the correlations and make figures
-                gg, = np.where((np.abs(zpterm-zpf) < np.maximum(3.5*sig0,0.2)) & (tab1['airmass'] < 2.0) & (tab1['fwhm'] < 2.0) & (tab1['rarms'] < 0.15) &
-                               (tab1['decrms'] < 0.15) & (tab1['success']==True) & (tab1['wcscal']=='Successful') & (tab1['zptermerr'] < 0.05) &
+                gg, = np.where((np.abs(zpterm-zpf) < np.maximum(3.5*sig0,0.2)) &
+                               (tab1['airmass'] < 2.0) & (tab1['fwhm'] < 2.0) & (tab1['rarms'] < 0.15) &
+                               (tab1['decrms'] < 0.15) & (tab1['success']==True) &
+                               (tab1['wcscal']=='Successful') & (tab1['zptermerr'] < 0.05) &
                                (tab1['zptermsig'] < 0.08) &
-                               ((tab1['instrument'] != 'c4d') | (tab1['zpspatialvar_nccd']<=5) | ((tab1['instrument']=='c4d') & (tab1['zpspatialvar_nccd']>5) & (tab1['zpspatialvar_rms']<0.1))) &
+                               ((tab1['instrument'] != 'c4d') | (tab1['zpspatialvar_nccd']<=5) |
+                                ((tab1['instrument']=='c4d') & (tab1['zpspatialvar_nccd']>5) & (tab1['zpspatialvar_rms']<0.1))) &
                                (np.abs(glat) > 10) & (tab1['nrefmatch'] > 100) & (tab1['exptime'] >= 30))
                 ## I removed WCSCAL check because there are ~38k exposures with
                 ## WCSCAL=Failed but my DECRMS and RARMS is small.
@@ -593,14 +596,21 @@ def combinehealpix():
                 invvar = 1.0/tab1['zptermerr'][gg]**2
                 nord = 3
                 bkspace = 200 #20
-                sset1 = bspline_iterfit(xx,yy,invvar=invvar,nord=nord,bkspace=bkspace,yfit=yfit1)
-                sig1 = mad(yy-yfit1)
-                gd = where(yy-yfit1 > -3*sig1,ngd)
+                knots = np.arange(np.min(xx),np.max(xx),bkspace)
+                spl = dln.bspline(xx,yy,invvar,knots=knots,nord=nord)
+                yfit1 = spl(xx)
+                sig1 = dln.mad(yy-yfit1)
+                gd, = np.where((yy-yfit1) > -3*sig1)
+                #sset1 = bspline_iterfit(xx,yy,invvar=invvar,nord=nord,bkspace=bkspace,yfit=yfit1)
+                #sig1 = mad(yy-yfit1)
+                #gd = where(yy-yfit1 > -3*sig1,ngd)
                 # refit
-                sset = bspline_iterfit(xx[gd],yy[gd],invvar=invvar[gd],nord=nord,bkspace=bkspace)
-                yfit = bspline_valu(xx,sset)
-                allzpfit = bspline_valu(tab1['mjd']-mjd0,sset)
-            
+                #sset = bspline_iterfit(xx[gd],yy[gd],invvar=invvar[gd],nord=nord,bkspace=bkspace)
+                #yfit = bspline_valu(xx,sset)
+                #allzpfit = bspline_valu(tab1['mjd']-mjd0,sset)
+                spl2 = dln.bspline(xx[gd],yy[gd],invvar[gd],knots=knots,nord=nord)
+                allzpfit = spl2(tab1['mjd']-mjd0)
+
                 # Remove temporal variations to get residual values
                 relzpterm -= allzpfit
 
