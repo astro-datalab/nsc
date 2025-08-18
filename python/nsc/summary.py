@@ -642,7 +642,7 @@ def combinehealpix(version='v4',nocuts=False):
                 basever = np.array([b.split('_')[-1] for b in exptab1['base']])
                 gdes, = np.where((basever=='d1') | (basever=='d2') | (basever=='d3'))
                 #gdes, = np.where(plver3=='DES')
-                if ngdes > 0:
+                if len(gdes) > 0:
                     print('Offsetting ',len(gdes),' DES exposure zero-points')
                     zpterm[gdes] -= 1.611
 
@@ -682,11 +682,11 @@ def combinehealpix(version='v4',nocuts=False):
                 ## I removed WCSCAL check because there are ~38k exposures with
                 ## WCSCAL=Failed but my DECRMS and RARMS is small.
                 ## and exptab1.wcscal eq 'Successful'
-                print(ngg)
+                print(len(gg))
 
                 # Zpterm with airmass dependence removed
                 relzpterm = zpterm + 25   # 25 to get "absolute" zpterm
-                relzpterm -= zptab['zmcoef'][i][1]*(am-1)
+                relzpterm -= zptab['amcoef'][i][1]*(am-1)
 
                 # Fit temporal variation in zpterm
                 mjd0 = 56200
@@ -695,8 +695,11 @@ def combinehealpix(version='v4',nocuts=False):
                 invvar = 1.0/exptab1['zptermerr'][gg]**2
                 nord = 3
                 bkspace = 200 #20
-                knots = np.arange(np.min(xx),np.max(xx),bkspace)
-                spl = dln.bspline(xx,yy,invvar,knots=knots,nord=nord)
+                knots = np.arange(np.min(xx)+0.5*bkspace,np.max(xx),bkspace)
+                import pdb; pdb.set_trace()
+                wt = 1.0/exptab1['zptermerr'][gg]
+                wt /= np.nansum(wt)
+                spl = dln.bspline(xx,yy,w=wt,knots=knots,nord=nord)
                 yfit1 = spl(xx)
                 sig1 = dln.mad(yy-yfit1)
                 gd, = np.where((yy-yfit1) > -3*sig1)
@@ -707,7 +710,7 @@ def combinehealpix(version='v4',nocuts=False):
                 #sset = bspline_iterfit(xx[gd],yy[gd],invvar=invvar[gd],nord=nord,bkspace=bkspace)
                 #yfit = bspline_valu(xx,sset)
                 #allzpfit = bspline_valu(exptab1['mjd']-mjd0,sset)
-                spl2 = dln.bspline(xx[gd],yy[gd],invvar[gd],knots=knots,nord=nord)
+                spl2 = dln.bspline(xx[gd],yy[gd],w=wt[gd],knots=knots,nord=nord)
                 allzpfit = spl2(exptab1['mjd']-mjd0)
 
                 # Remove temporal variations to get residual values
@@ -729,20 +732,22 @@ def combinehealpix(version='v4',nocuts=False):
                     badzpmask[ind[gdind]] = 0
 
         # Get bad DECaLS and SMASH exposures
+        datadir = utils.datadir()
+        obslogdir = os.path.abspath(datadir+'../../../obslog/v3/')
         badexp = np.zeros(len(exptab),bool)
-        smashexpnum = dln.readlines('/home/dnidever/projects/noaosourcecatalog/obslog/'+version+'/smash_badexposures.txt')
+        smashexpnum = dln.readlines(obslogdir+'/smash_badexposures.txt')
         smashexpnum = [int(e) for e in smashexpnum]
         _,ind1,ind2 = np.intersect1d(exptab['expnum'],smashexpnum,return_indices=True)
         if len(ind1) > 0:
             badexp[ind1] = True
             badexp[ind1] = (badexp[ind1] & (exptab['instrument'][ind1] == 'c4d'))   # make sure they are DECam exposures
-        decalsexpnum = dln.readlines('/home/dnidever/projects/noaosourcecatalog/obslog/'+version+'/decals_bad_expid.txt')
+        decalsexpnum = dln.readlines(obslogdir+'/decals_bad_expid.txt')
         decalsexpnum = [int(e) for e in decalsexpnum]
         _,ind1,ind2 = np.intersect1d(exptab['expnum'],decalsexpnum,return_indices=True)
         if len(ind1) > 0:
             badexp[ind1] = True
             badexp[ind1] = (badexp[ind1] & (exptab['instrument'][ind1].instrument == 'c4d'))   # make sure they are DECam exposures
-        mzlsexpnum = dln.readlines('/home/dnidever/projects/noaosourcecatalog/obslog/'+version+'/mzls_bad_expid.txt')
+        mzlsexpnum = dln.readlines(obslogdir+'/mzls_bad_expid.txt')
         mzlsexpnum = [int(e) for e in mzlsexpnum]
         _,ind1,ind2 = np.intersect1d(exptab['expnum'],mzlsexpnum,return_indices=True)
         if len(ind1) > 0:
@@ -757,6 +762,11 @@ def combinehealpix(version='v4',nocuts=False):
         glon = coo.galactic.l.degree
         glat = coo.galactic.b.degree
         zpspvarthresh = (np.abs(glat) > 10)*0.15 + (np.abs(glat) <= 10)*0.55
+
+
+
+        import pdb; pdb.set_trace()
+
 
         # Final QA cuts
         #  Many of the short u-band exposures have weird ZPTERMs, not sure why
