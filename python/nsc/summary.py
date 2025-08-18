@@ -384,10 +384,9 @@ def combine():
     pass
 
 
-def combinehealpix():
+def combinehealpix(version='v4',nocuts=False):
     """ Apply QA cuts and make healpix file """
     # from nsc_instcal_combine_qacuts.pro
-
 
     # Combine all of the data
     dldir,mssdir,localdir = utils.rootdirs()
@@ -400,108 +399,201 @@ def combinehealpix():
     if os.path.exists(plotsdir)==False:
         os.makedirs(plotsdir)
     nside = 128
-    time = time.time()
+    t0 = time.time()
 
-    # Restore the calibration summary file                                                                                       
-    temp = Table.read(basedir+'lists/nsc_calibrate_summary.fits.gz',1)
+    # Load the full exposure list
+    decamlist1 = Table.read(os.path.join(basedir,'lists','decam_instcal_list.fits.gz'))
+    for c in decamlist1.colnames: decamlist1[c].name=c.lower()
+    decamlist1['base'] = [os.path.basename(f).replace('.fits.fz','').strip() for f in decamlist1['fluxfile']]
+    decamlist1['plver'] = decamlist1['plver'].astype(str)
+    decamlist2 = Table.read(os.path.join(basedir,'lists','decam_instcal_list_v3.fits.gz'))
+    for c in decamlist2.colnames: decamlist2[c].name=c.lower()
+    decamlist2['base'] = [os.path.basename(f).replace('.fits.fz','').strip() for f in decamlist2['fluxfile']]
+    decamlist2['plver'] = decamlist2['plver'].astype(str)
+    decamlist3 = Table.read(os.path.join(basedir,'lists','decam_instcal_list_20240727.fits.gz'))
+    decamlist3['base'] = np.array([str(b).strip() for b in decamlist3['base']])
+    decamlist3['plver'] = decamlist3['plver'].astype(str)
+
+
+    # Restore the calibration summary file
+    exptab = Table.read(os.path.join(basedir,'lists','nsc_calibrate_summary_exp.fits'))
     #schema = temp[0]
     #struct_assign,{dum:''},schema
     #schema = create_struct(schema,'chipindx',-1,'NGOODCHIPWCS',0,'wcscal','')
     #str = replicate(schema,n_elements(temp))
     #struct_assign,temp,tab,/nozero
-    tab = temp.copy()
-    tab['chipindex'] = -1
-    tab['ngoodchipwcs'] = 0
-    tab['wcscal'] = 50*' '
-    tab['expdir'] = np.array([str(e) for e in tab['expdir']])
-    tab['instrument'] = np.array([str(e) for e in tab['instrument']])
-    tab['metafile'] = np.array([str(e) for e in tab['metafile']])
-    tab['file'] = np.array([str(f) for f in tab['file']])
-    tab['base'] = np.array([str(f) for f in tab['base']])
-    tab['filter'] = np.array([str(f) for f in tab['filter']])
-    # Add WCSCAL and TELSTAT information
-    coords = Table.read(basedir+'lists/allcoords.fits.gz',1)
-    coords['file'] = np.array([str(f) for f in coords['file']])
-    coords['wcscal'] = np.array([str(f) for f in coords['wcscal']])
-    coords['telstat'] = np.array([str(f) for f in coords['telstat']])
-    fluxfile = tab['file']
-    g, = np.where(fluxfile[:4] == '/net')
-    if ng > 0:
-        fluxfile[g] = fluxfile[g][4:]
-    _,ind1,ind2 = np.intersect1d(fluxfile,coords['file'],return_indices=True)
-    ## v3, 490617 out of 490623 matches, only 6 did not match                                                                    
-    tab['wcscal'][ind1] = coords['wcscal'][ind2]    # Failed (37712), Poor (0), Successful (452905)                                    
-    # Only want exposures with successful SE processing                                                                          
-    gd, = np.where(tab['success']==True)
-    print(len(gd),' successful exposures')
-    tab = tab[gd]
-    si = np.argsort(tab['expdir'])
-    tab = tab[si]
-    chtab = Table.read(basedir+'lists/nsc_calibrate_summary.fits.gz',2)
-    chtab['expdir'] = strtrim(chtab['expdir'],2)
-    chtab['instrument'] = strtrim(chtab['instrument'],2)
-    nchtab = len(chtab)
-    # Get indices for CHSTR
-    chindex = dln.create_index(chtab['expdir'])
-    #siexp = sort(chtab[]expdir)
-    #chstr = chstr[siexp]
-    #expdir = chtab[]expdir
-    #brklo = where(expdir ne shift(expdir,1),nbrk)
-    #brkhi = [brklo[1:nbrk-1]-1,n_elements(expdir)-1]
-    #nchexp = brkhi-brklo+1
-    #if nstr ne n_elements(brklo) then stop,'number of exposures in STR and CHSTR do not match'
-    tab['chipindx'] = brklo
-    tab['nchips'] = nchexp
-    # Getting number of good chip WCS for each exposures
-    for i in range(len(tab)):
-        tab['ngoodchipwcs'][i] = np.sum(chtab['ngaiamatch'][brklo[i]:brkhi[i]] > 0)
-    # Fixing absolute paths of flux filename
-    filename = tab['file']
-    filename = [f.replace('/net/mss1/','/') for f in filename]
-    filename = [f.replace('/mss1/','/') for f in filename]
-    #g1, = np.where(stregex(filename,'/net/mss1/',/boolean) == True)
-    #if len(g1) > 0:
-    #    filename[g1] = strmid(filename[g1],10)
-    #g2, = np.where(stregex(filename,'/mss1/',/boolean) == True)
-    #if len(g2) > 0:
-    #    filename[g2] = strmid(filename[g2],6)
-    # Fixing very negative RAs
-    print('FIXING NEGATIVE RAs in TAB and CHTAB')
-    bdra, = np.where(chtab['cenra'] < 0)
-    _,uibd = np.unique(chtab['expdir'][bdra],return_index=True)
-    #MATCH,tab['expdir'],chstr[bdra[uibd]].expdir,ind1,ind2,/sort,count=nmatch
-    _,ind1,ind2 = np.intersect1d(tab['expdir'],chtab['expdir'][bdra[uibd]],return_indices=True)
-    nmatch = len(ind1)
-    for i in range(nmatch):
-        _,ind3,ind4 = np.intersect1d(chtab['expdir'][bdra],tab['expdir'][ind1[i]],return_indices=True)
-        #MATCH,chstr[bdra].expdir,str[ind1[i]].expdir,ind3,ind4,/sort
-        # Fix TAB RA
-        chra = chtab['cenra'][bdra[ind3]]
-        bd1, = np.where(chra < -180)
-        if len(bd1) > 0:
-            chra[bd1] += 360
-        cenra = np.mean([np.min(chra),np.max(chra)])
-        if cenra < 0:
-            cenra += 360
-        tab['ra'][ind1[i]] = cenra
-        # Fix CHSTR CENRA
-        bd2, = np.where(chra < 0)
-        if len(bd2) > 0:
-            chra[bd2] += 360
-        chtab['CENRA'][bdra[ind3]] = chra
-        # Fix CHSTR VRA
-        vra = chtab['vra'][bdra[ind3]]
-        bd3, = np.where(vra < 0)
-        if len(bd3) > 0:
-            vra[bd3] += 360
-        chstr[bdra[ind3]].vra = vra
+    #tab = temp.copy()
+    exptab['chipindex'] = -1
+    exptab['ngoodchipwcs'] = 0
+    #exptab['wcscal'] = 50*' '
+    #exptab['expdir'] = np.array([str(e) for e in exptab['expdir']])
+    exptab['instrument'] = np.array([str(e) for e in exptab['instrument']])
+    #exptab['metafile'] = np.array([str(e) for e in exptab['metafile']])
+    exptab['file'] = np.array([str(f) for f in exptab['file']])
+    exptab['base'] = np.array([str(f) for f in exptab['base']])
+    exptab['filter'] = np.array([str(f) for f in exptab['filter']])
+    exptab['plver'] = 50*' '
 
-    # Zero-point structure                                                                                                       
+    # Getting PLVER from the decam_instcal_list catalogs
+    _,ind1,ind2 = np.intersect1d(exptab['base'],decamlist1['base'],return_indices=True)
+    exptab['plver'][ind1] = decamlist1['plver'][ind2]
+    _,ind1,ind2 = np.intersect1d(exptab['base'],decamlist2['base'],return_indices=True)
+    exptab['plver'][ind1] = decamlist2['plver'][ind2]
+    _,ind1,ind2 = np.intersect1d(exptab['base'],decamlist3['base'],return_indices=True)
+    exptab['plver'][ind1] = decamlist3['plver'][ind2]
+    # about 7000 rows are still missing plver values
+    # tu
+    base2 = np.array([b[:2] for b in exptab['base']])
+    bb, = np.where((base2=='tu') & (exptab['plver']==50*' '))
+    # 1157
+    exptab['plver'][bb] = 'V3.1.0'
+    bb, = np.where(exptab['plver']==50*' ')
+    # v1
+    basever = np.array([b.split('_')[-1] for b in exptab['base']])
+    bb, = np.where((basever=='v1') & (exptab['plver']==50*' '))
+    # V4.1 to V5.5
+    # MT1, V4.8
+    bb, = np.where((basever=='MT1') & (exptab['plver']==50*' '))    
+    exptab['plver'][bb] = 'V4.8'
+
+    # 1891
+
+    # Deal with duplicate versions for exposures
+    _,ui = np.unique(exptab['expnum'],return_index=True)
+    expindex = dln.create_index(exptab['expnum'])
+
+    #(Pdb) np.sum(expindex['num']>1)
+    #46841
+    dupind, = np.where(expindex['num']>1)
+    keepind = []
+    missingplver = 0
+    for i in range(len(expindex['value'])):
+        ind = expindex['index'][expindex['lo'][i]:expindex['hi'][i]+1]
+        nind = len(ind)
+        if nind==1:
+            keepind.append(ind[0])
+        else:
+            plver = exptab['plver'][ind]
+            problem = np.sum(plver==50*' ')
+            if problem > 0:
+                # v# and v#
+                basever = np.array([b.split('_')[-1] for b in exptab['base'][ind]])
+                basever1 = np.array([b[:1] for b in basever])
+                if np.sum(basever1=='v')==len(ind):
+                    si = np.argsort(basever)[::-1]
+                    keepind.append(ind[si[0]])
+                    continue
+                # if one is lsXX, use it
+                basever2 = np.array([b[:2] for b in basever])
+                if np.sum(basever2=='ls')>0:
+                    bestind, = np.where(basever2=='ls')
+                    if len(bestind)>1:
+                        print('multiple ls versions')
+                        import pdb; pdb.set_trace()
+                    keepind.append(ind[bestind[0]])
+                    continue
+                # Pick the version with the lowest RARMS
+                si = np.argsort(exptab['rarms'][ind])
+                keepind.append(ind[si[0]])
+                continue
+
+                #print('missing plver')
+                #print(missingplver+1,exptab['base'][ind])
+                #missingplver += 1
+                #import pdb; pdb.set_trace()
+            else:
+                si = np.argsort(plver)[::-1]
+            keepind.append(ind[si[0]])
+
+
+    # 572204 unique exposures
+    exptab = exptab[keepind]
+
+
+    # Add WCSCAL and TELSTAT information
+    #coords = Table.read(basedir+'lists/allcoords.fits.gz',1)
+    #coords['file'] = np.array([str(f) for f in coords['file']])
+    #coords['wcscal'] = np.array([str(f) for f in coords['wcscal']])
+    #coords['telstat'] = np.array([str(f) for f in coords['telstat']])
+    #fluxfile = tab['file']
+    #g, = np.where(fluxfile[:4] == '/net')
+    #if ng > 0:
+    #    fluxfile[g] = fluxfile[g][4:]
+    #_,ind1,ind2 = np.intersect1d(fluxfile,coords['file'],return_indices=True)
+    ## v3, 490617 out of 490623 matches, only 6 did not match
+    #tab['wcscal'][ind1] = coords['wcscal'][ind2]    # Failed (37712), Poor (0), Successful (452905)
+
+    ## Only want exposures with successful SE processing
+    #gd, = np.where(exptab['success']==True)
+    #print(len(gd),' successful exposures')
+    #exptab = exptab[gd]
+    #si = np.argsort(exptab['expdir'])
+    #exptab = exptab[si]
+    #chtab = Table.read(basedir+'lists/nsc_calibrate_summary.fits.gz',2)
+    #chtab['expdir'] = strtrim(chtab['expdir'],2)
+    #chtab['instrument'] = strtrim(chtab['instrument'],2)
+    #nchtab = len(chtab)
+    ## Get indices for CHSTR
+    #chindex = dln.create_index(chtab['expdir'])
+    ##siexp = sort(chtab[]expdir)
+    ##chstr = chstr[siexp]
+    ##expdir = chtab[]expdir
+    ##brklo = where(expdir ne shift(expdir,1),nbrk)
+    ##brkhi = [brklo[1:nbrk-1]-1,n_elements(expdir)-1]
+    ##nchexp = brkhi-brklo+1
+    ##if nstr ne n_elements(brklo) then stop,'number of exposures in STR and CHSTR do not match'
+    #exptab['chipindx'] = brklo
+    #exptab['nchips'] = nchexp
+    ## Getting number of good chip WCS for each exposures
+    #for i in range(len(exptab)):
+    #    exptab['ngoodchipwcs'][i] = np.sum(chtab['ngaiamatch'][brklo[i]:brkhi[i]] > 0)
+    ## Fixing absolute paths of flux filename
+    #filename = exptab['file']
+    #filename = [f.replace('/net/mss1/','/') for f in filename]
+    #filename = [f.replace('/mss1/','/') for f in filename]
+    ##g1, = np.where(stregex(filename,'/net/mss1/',/boolean) == True)
+    ##if len(g1) > 0:
+    ##    filename[g1] = strmid(filename[g1],10)
+    ##g2, = np.where(stregex(filename,'/mss1/',/boolean) == True)
+    ##if len(g2) > 0:
+    ##    filename[g2] = strmid(filename[g2],6)
+    ## Fixing very negative RAs
+    #print('FIXING NEGATIVE RAs in EXPTAB and CHTAB')
+    #bdra, = np.where(chtab['cenra'] < 0)
+    #_,uibd = np.unique(chtab['expdir'][bdra],return_index=True)
+    ##MATCH,exptab['expdir'],chstr[bdra[uibd]].expdir,ind1,ind2,/sort,count=nmatch
+    #_,ind1,ind2 = np.intersect1d(exptab['expdir'],chtab['expdir'][bdra[uibd]],return_indices=True)
+    #nmatch = len(ind1)
+    #for i in range(nmatch):
+    #    _,ind3,ind4 = np.intersect1d(chtab['expdir'][bdra],exptab['expdir'][ind1[i]],return_indices=True)
+    #    #MATCH,chstr[bdra].expdir,str[ind1[i]].expdir,ind3,ind4,/sort
+    #    # Fix TAB RA
+    #    chra = chtab['cenra'][bdra[ind3]]
+    #    bd1, = np.where(chra < -180)
+    #    if len(bd1) > 0:
+    #        chra[bd1] += 360
+    #    cenra = np.mean([np.min(chra),np.max(chra)])
+    #    if cenra < 0:
+    #        cenra += 360
+    #    exptab['ra'][ind1[i]] = cenra
+    #    # Fix CHSTR CENRA
+    #    bd2, = np.where(chra < 0)
+    #    if len(bd2) > 0:
+    #        chra[bd2] += 360
+    #    chtab['CENRA'][bdra[ind3]] = chra
+    #    # Fix CHSTR VRA
+    #    vra = chtab['vra'][bdra[ind3]]
+    #    bd3, = np.where(vra < 0)
+    #    if len(bd3) > 0:
+    #        vra[bd3] += 360
+    #    chstr[bdra[ind3]].vra = vra
+
+    # Zero-point structure
     dtyp = [('instrument',str,3),('filter',str,2),('amcoef',float,2),('thresh',float)]
     zptab = np.zeros(10,dtype=np.dtype(dtyp))
     zptab['thresh'] = 0.5
-    zptab['instrument'][:6] = 'c4d'
-    zptab['filter'][:6] = ['u','g','r','i','z','Y','VR']
+    zptab['instrument'][:7] = 'c4d'
+    zptab['filter'][:7] = ['u','g','r','i','z','Y','VR']
     zptab['amcoef'][0] = [-1.60273, -0.375253]   # c4d-u
     zptab['amcoef'][1] = [0.277124, -0.198037]   # c4d-g
     zptab['amcoef'][2] = [0.516382, -0.115443]   # c4d-r  changed a bit, fine
@@ -530,21 +622,26 @@ def combinehealpix():
         #nfilters = n_elements(filters)
         #zpthresh = [2.0,2.0,2.0,2.0,2.0,2.0,2.0]
         #zpthresh = [0.5,0.5,0.5,0.5,0.5,0.5,0.5]
-        badzpmask = bytarr(n_elements(str)) + 1
+        badzpmask = np.ones(len(exptab),bool)
         for i in range(nzptab):
-            ind, = np.where((tab['instrument'] == zptab['instrument'][i]) &
-                            (tab['filter'] == zptab['filter'][i]) & (tab['success']==True))
+            ind, = np.where((exptab['instrument'] == zptab['instrument'][i]) &
+                            (exptab['filter'] == zptab['filter'][i]))
             print(zptab['instrument'][i],'-',zptab['filter'][i],' ',len(ind),' exposures')
+
             if len(ind) > 0:
-                tab1 = tab[ind]
+                exptab1 = exptab[ind]
                 ## Fix Infinity/NAN values
-                zpterm = tab1['zpterm']
+                zpterm = exptab1['zpterm']
                 bdzp, = np.where(np.isfinite(zpterm) == 0)  # fix Infinity/NAN
                 if len(bdzp)>0:
                     zpterm[bdzp] = 999999.9
+
                 ## Correct "DES" zeropoints,  DES exposures are in electrons and
                 ## CP are in ADU, so there's an offset of 2.5*log(gain)=2.5*log(4.41)=1.611
-                gdes, = np.where(tab1['plver'][:3]=='DES')
+                plver3 = np.array([p[:3] for p in exptab1['plver']])
+                basever = np.array([b.split('_')[-1] for b in exptab1['base']])
+                gdes, = np.where((basever=='d1') | (basever=='d2') | (basever=='d3'))
+                #gdes, = np.where(plver3=='DES')
                 if ngdes > 0:
                     print('Offsetting ',len(gdes),' DES exposure zero-points')
                     zpterm[gdes] -= 1.611
@@ -553,36 +650,38 @@ def combinehealpix():
                 ##   this is because the image units are counts/sec.
                 if zptab['instrument'][i] == 'k4m' or zptab['instrument'][i] == 'ksb':
                     print('REMOVING EXPTIME-DEPENDENCE IN K4M/KSB ZEROPOINTS!!!')
-                    zpterm += 2.5*alog10(tab1['exptime'])
-                am = tab1['airmass']
-                mjd = tab1['mjd']
+                    zpterm += 2.5*alog10(exptab1['exptime'])
+                am = exptab1['airmass']
+                mjd = exptab1['mjd']
                 bdam, = np.where(am < 0.9)
                 if len(bdam) > 0:
                     am[bdam] = np.median(am)
-                coo = SkyCoord(tab1['ra'],tab1['dec'],unit='degree',frame='icrs')
+                coo = SkyCoord(exptab1['ra'],exptab1['dec'],unit='degree',frame='icrs')
                 glon = coo.galactic.l.degree
-                glat = coo.galactic.b.egree
+                glat = coo.galactic.b.degree
 
                 # Measure airmass dependence
-                gg0, = np.where((n.abs(zpterm) < 50) & (am < 2.0))
-                coef0 = robust_poly_fitq(am[gg0],zpterm[gg0],1)
+                gg0, = np.where((np.abs(zpterm) < 50) & (am < 2.0))
+                coef0 = np.polyfit(am[gg0],zpterm[gg0],1)
+                #coef0 = robust_poly_fitq(am[gg0],zpterm[gg0],1)
                 zpf = np.polyval(coef0,am)
                 sig0 = dln.mad(zpterm[gg0]-zpf[gg0])
                 gg, = np.where(np.abs(zpterm-zpf) < np.maximum(3.5*sig0,0.2))
-                coef = robust_poly_fitq(am[gg],zpterm[gg],1)
+                coef = np.polyfit(am[gg],zpterm[gg],1)
+                #coef = robust_poly_fitq(am[gg],zpterm[gg],1)
                 print(zptab['instrument'][i]+'-'+zptab['filter'][i],' ',coef)
                 # Trim out bad exposures to determine the correlations and make figures
                 gg, = np.where((np.abs(zpterm-zpf) < np.maximum(3.5*sig0,0.2)) &
-                               (tab1['airmass'] < 2.0) & (tab1['fwhm'] < 2.0) & (tab1['rarms'] < 0.15) &
-                               (tab1['decrms'] < 0.15) & (tab1['success']==True) &
-                               (tab1['wcscal']=='Successful') & (tab1['zptermerr'] < 0.05) &
-                               (tab1['zptermsig'] < 0.08) &
-                               ((tab1['instrument'] != 'c4d') | (tab1['zpspatialvar_nccd']<=5) |
-                                ((tab1['instrument']=='c4d') & (tab1['zpspatialvar_nccd']>5) & (tab1['zpspatialvar_rms']<0.1))) &
-                               (np.abs(glat) > 10) & (tab1['nrefmatch'] > 100) & (tab1['exptime'] >= 30))
+                               (exptab1['airmass'] < 2.0) & (exptab1['fwhm'] < 2.0) & (exptab1['rarms'] < 0.15) &
+                               (exptab1['decrms'] < 0.15) &
+                               (exptab1['wcscal']=='Successful') & (exptab1['zptermerr'] < 0.05) &
+                               (exptab1['zptermsig'] < 0.08) &
+                               ((exptab1['instrument'] != 'c4d') | (exptab1['zpspatialvar_nccd']<=5) |
+                                ((exptab1['instrument']=='c4d') & (exptab1['zpspatialvar_nccd']>5) & (exptab1['zpspatialvar_rms']<0.1))) &
+                               (np.abs(glat) > 10) & (exptab1['nrefmatch'] > 100) & (exptab1['exptime'] >= 30))
                 ## I removed WCSCAL check because there are ~38k exposures with
                 ## WCSCAL=Failed but my DECRMS and RARMS is small.
-                ## and tab1.wcscal eq 'Successful'
+                ## and exptab1.wcscal eq 'Successful'
                 print(ngg)
 
                 # Zpterm with airmass dependence removed
@@ -591,9 +690,9 @@ def combinehealpix():
 
                 # Fit temporal variation in zpterm
                 mjd0 = 56200
-                xx = tab1['mjd'][gg]-mjd0
+                xx = exptab1['mjd'][gg]-mjd0
                 yy = relzpterm[gg]
-                invvar = 1.0/tab1['zptermerr'][gg]**2
+                invvar = 1.0/exptab1['zptermerr'][gg]**2
                 nord = 3
                 bkspace = 200 #20
                 knots = np.arange(np.min(xx),np.max(xx),bkspace)
@@ -607,9 +706,9 @@ def combinehealpix():
                 # refit
                 #sset = bspline_iterfit(xx[gd],yy[gd],invvar=invvar[gd],nord=nord,bkspace=bkspace)
                 #yfit = bspline_valu(xx,sset)
-                #allzpfit = bspline_valu(tab1['mjd']-mjd0,sset)
+                #allzpfit = bspline_valu(exptab1['mjd']-mjd0,sset)
                 spl2 = dln.bspline(xx[gd],yy[gd],invvar[gd],knots=knots,nord=nord)
-                allzpfit = spl2(tab1['mjd']-mjd0)
+                allzpfit = spl2(exptab1['mjd']-mjd0)
 
                 # Remove temporal variations to get residual values
                 relzpterm -= allzpfit
@@ -630,31 +729,31 @@ def combinehealpix():
                     badzpmask[ind[gdind]] = 0
 
         # Get bad DECaLS and SMASH exposures
-        badexp = np.zeros(len(tab),bool)
+        badexp = np.zeros(len(exptab),bool)
         smashexpnum = dln.readlines('/home/dnidever/projects/noaosourcecatalog/obslog/'+version+'/smash_badexposures.txt')
         smashexpnum = [int(e) for e in smashexpnum]
-        _,ind1,ind2 = np.intersect1d(tab['expnum'],smashexpnum,return_indices=True)
+        _,ind1,ind2 = np.intersect1d(exptab['expnum'],smashexpnum,return_indices=True)
         if len(ind1) > 0:
             badexp[ind1] = True
-            badexp[ind1] = (badexp[ind1] & (tab['instrument'][ind1] == 'c4d'))   # make sure they are DECam exposures
+            badexp[ind1] = (badexp[ind1] & (exptab['instrument'][ind1] == 'c4d'))   # make sure they are DECam exposures
         decalsexpnum = dln.readlines('/home/dnidever/projects/noaosourcecatalog/obslog/'+version+'/decals_bad_expid.txt')
         decalsexpnum = [int(e) for e in decalsexpnum]
-        _,ind1,ind2 = np.intersect1d(tab['expnum'],decalsexpnum,return_indices=True)
+        _,ind1,ind2 = np.intersect1d(exptab['expnum'],decalsexpnum,return_indices=True)
         if len(ind1) > 0:
             badexp[ind1] = True
-            badexp[ind1] = (badexp[ind1] & (tab['instrument'][ind1].instrument == 'c4d'))   # make sure they are DECam exposures
+            badexp[ind1] = (badexp[ind1] & (exptab['instrument'][ind1].instrument == 'c4d'))   # make sure they are DECam exposures
         mzlsexpnum = dln.readlines('/home/dnidever/projects/noaosourcecatalog/obslog/'+version+'/mzls_bad_expid.txt')
         mzlsexpnum = [int(e) for e in mzlsexpnum]
-        _,ind1,ind2 = np.intersect1d(tab['expnum'],mzlsexpnum,return_indices=True)
+        _,ind1,ind2 = np.intersect1d(exptab['expnum'],mzlsexpnum,return_indices=True)
         if len(ind1) > 0:
             badexp[ind1] = True
-            badexp[ind1] = (badexp[ind1] & (tab['instrument'][ind1] == 'k4m'))   # make sure they are Mosaic3 exposures
+            badexp[ind1] = (badexp[ind1] & (exptab['instrument'][ind1] == 'k4m'))   # make sure they are Mosaic3 exposures
 
         ## Zero-point spatial variability threshold
         ##  varies with galactic latitude
         ##  |b|>10   0.15
         ##  |b|<=10  0.55
-        coo = SkyCoord(tab['ra'],tab['dec'],unit='degree',frame='icrs')
+        coo = SkyCoord(exptab['ra'],exptab['dec'],unit='degree',frame='icrs')
         glon = coo.galactic.l.degree
         glat = coo.galactic.b.degree
         zpspvarthresh = (np.abs(glat) > 10)*0.15 + (np.abs(glat) <= 10)*0.55
@@ -662,27 +761,27 @@ def combinehealpix():
         # Final QA cuts
         #  Many of the short u-band exposures have weird ZPTERMs, not sure why
         #  There are a few exposures with BAD WCS, RA>360!
-        bdexp, = np.where((tab['success'] == False) |                          # SE failure
-                          (tab['fwhm'] > fwhmthresh) |                         # bad seeing
-                          (tab['ra'] > 360) |                                  # bad WCS/coords
-                          (tab['rarms'] > 0.15) | (tab['decrms'] > 0.15) |     # bad WCS
+        bdexp, = np.where((exptab['success'] == False) |                          # SE failure
+                          (exptab['fwhm'] > fwhmthresh) |                         # bad seeing
+                          (exptab['ra'] > 360) |                                  # bad WCS/coords
+                          (exptab['rarms'] > 0.15) | (exptab['decrms'] > 0.15) |     # bad WCS
                           (badzpmask == True) |                                # bad ZPTERM
-                          (tab['zptermerr'] > 0.05) |                          # bad ZPTERMERR
-                          (tab['nrefmatch'] < 5) |                             # few phot ref match
+                          (exptab['zptermerr'] > 0.05) |                          # bad ZPTERMERR
+                          (exptab['nrefmatch'] < 5) |                             # few phot ref match
                           (badexp == 1) |                                      # bad SMASH/LS exposure
-                          ((tab['instrument'] == 'c4d') & (tab['zpspatialvar_nccd'] > 5) & (tab['zpspatialvar_rms'] > zpspvarthresh)))  # bad spatial zpterm
-                          ##tab[]wcscal ne 'Successful' or $                    ##CP WCS failure   TOO MANY FAILED
-                          #tab[]ngoodchipwcs lt tab[]nchips or $                # not all chips astrom calibrated
+                          ((exptab['instrument'] == 'c4d') & (exptab['zpspatialvar_nccd'] > 5) & (exptab['zpspatialvar_rms'] > zpspvarthresh)))  # bad spatial zpterm
+                          ##exptab[]wcscal ne 'Successful' or $                    ##CP WCS failure   TOO MANY FAILED
+                          #exptab[]ngoodchipwcs lt exptab[]nchips or $                # not all chips astrom calibrated
         # rarms/decrms, nrefmatch
         print('QA cuts remove ',len(bdexp),' exposures')
 
         # Remove
         torem = np.zeros(len(chtab),bool)
         for i in range(len(bdexp)):
-            torem[tab['chipindx'][bdexp[i]]:tab['chipindx'][bdexp[i]]+tab['nchips'][bdexp[i]]] = True
+            torem[exptab['chipindx'][bdexp[i]]:exptab['chipindx'][bdexp[i]]+exptab['nchips'][bdexp[i]]] = True
         bdchtab, = np.where(torem == True)
         chtab = np.delete(chtab,bdchtab)
-        tab = np.delete(tab,bdexp)
+        exptab = np.delete(exptab,bdexp)
         # Get new CHIPINDEX values
         #   make two arrays of old and new indices to transfer
         #   the new index values into an array with the size of
@@ -692,9 +791,9 @@ def combinehealpix():
         trimnewindex = lindgen(n_elements(trimoldindex))  # new index of trimmed array
         newindex = lonarr(nchstr)-1
         newindex[trimoldindex] = trimnewindex             # new index in original array
-        newchipindex = newindex[tab['chipindx']]
-        tab['chipindx'] = newchipindex
-        nstr = len(tab)
+        newchipindex = newindex[exptab['chipindx']]
+        exptab['chipindx'] = newchipindex
+        nstr = len(exptab)
     else:
         print('SKIPPING QA CUTS')
 
@@ -712,18 +811,18 @@ def combinehealpix():
         for i in range(ntab):
             if i % 1e3 == 0:
                 print(i)
-            vec = hp.ang2vec(nside,tab['ra'][i],tab['dec'][i],lonlat=True)
+            vec = hp.ang2vec(nside,exptab['ra'][i],exptab['dec'][i],lonlat=True)
             listpix = hp.query_disc(nside,vec,radius,inclusive=True,nest=False)
             nlistpix = len(listpix)
-            #theta = (90-tab['dec'][i])/radeg
-            #phi = tab['ra'][i]/radeg
+            #theta = (90-exptab['dec'][i])/radeg
+            #phi = exptab['ra'][i]/radeg
             #ANG2VEC,theta,phi,vec
             #QUERY_DISC,nside,vec,radius,listpix,nlistpix,/deg,/inclusive
 
             # Use the chip corners to figure out which ones actually overlap
-            chtab1 = chtab[tab['chipindx'][i]:tab['chipindx'][i]+tab['nchips'][i]]
+            chtab1 = chtab[exptab['chipindx'][i]:exptab['chipindx'][i]+exptab['nchips'][i]]
             #  rotate to tangent plane so it can handle RA=0/360 and poles properly
-            vlon,vlat = coords.rotsphcen(chtab1['vra'],chtab1['vdec'],tab['ra'][i],tab['dec'][i],gnomic=True)
+            vlon,vlat = coords.rotsphcen(chtab1['vra'],chtab1['vdec'],exptab['ra'][i],exptab['dec'][i],gnomic=True)
             #  loop over healpix
             overlap = np.zeros(len(listpix),bool)
             for j in range(len(listpix)):
@@ -732,9 +831,9 @@ def combinehealpix():
                 #PIX2VEC_RING,nside,listpix[j],vec,vertex
                 #vertex = transpose(reform(vertex))  # [1,3,4] -> [4,3]                                                                 
                 #VEC2ANG,vertex,hdec,hra,/astro
-                hlon,hlat = coords.rotsphcen(hra,hdec,tab['ra'][i],tab['dec'][i],gnomic=True)
+                hlon,hlat = coords.rotsphcen(hra,hdec,exptab['ra'][i],exptab['dec'][i],gnomic=True)
                 #  loop over chips
-                for k in range(tab['nchips'][i]):
+                for k in range(exptab['nchips'][i]):
                     overlap[j] >= coords.doPolygonsOverlap(hlon,hlat,vlon[:,k],vlat[:,k])
             # Only keep the healpix with real overlaps
             gdlistpix, = np.where(overlap==True)
@@ -754,8 +853,8 @@ def combinehealpix():
                 del old
 
             # Add to the structure
-            healtab['file'][cnt:cnt+nlistpix] = tab['expdir'][i]+'/'+tab['base'][i]+'_cat.fits'
-            healtab['base'][cnt:cnt+nlistpix] = tab['base'][i].base
+            healtab['file'][cnt:cnt+nlistpix] = exptab['expdir'][i]+'/'+exptab['base'][i]+'_cat.fits'
+            healtab['base'][cnt:cnt+nlistpix] = exptab['base'][i].base
             healtab['pix'][cnt:cnt+nlistpix] = listpix
             cnt += nlistpix
 
