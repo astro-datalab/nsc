@@ -7,10 +7,14 @@ from astropy.time import Time
 from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
 from dlnpyutils import utils as dln,coords
-import healpy as hp
+from scipy.stats import binned_statistic
+#import healpy as hp
 import time
 import traceback
 import subprocess
+import matplotlib.pyplot as plt
+import matplotlib
+from matplotlib.colors import LogNorm as LN
 from . import utils
 
 def measure(version='v4',nosources=False,quick=False):
@@ -381,10 +385,22 @@ def calibratechunkscombine():
 
 def combine():
     """ Make the nsc_combine_summary.fits summary file """
-    pass
+    # Combine all of the data
+    dldir,mssdir,localdir = utils.rootdirs()
+    basedir = os.path.join(dldir,'instcal/',version)
+    #host = first_el(strsplit(longhost,'.',/extract))
+    #basedir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
+    if os.path.exists(localdir+'dnidever/nsc/instcal/'+version+'/')==False:
+        os.makedirs(localdir+'dnidever/nsc/instcal/'+version+'/')
+    plotsdir = basedir+'plots/'
+    if os.path.exists(plotsdir)==False:
+        os.makedirs(plotsdir)
+    t0 = time.time()
+
+    import pdb; pdb.set_trace()
 
 
-def combinehealpix(version='v4',nocuts=False):
+def combine_qacuts(version='v4'):
     """ Apply QA cuts and make healpix file """
     # from nsc_instcal_combine_qacuts.pro
 
@@ -401,6 +417,8 @@ def combinehealpix(version='v4',nocuts=False):
     nside = 128
     t0 = time.time()
 
+    #basedir = '/Users/nidever/datalab/nsc/v4/'
+    
     # Load the full exposure list
     decamlist1 = Table.read(os.path.join(basedir,'lists','decam_instcal_list.fits.gz'))
     for c in decamlist1.colnames: decamlist1[c].name=c.lower()
@@ -509,7 +527,11 @@ def combinehealpix(version='v4',nocuts=False):
     # 572204 unique exposures
     exptab = exptab[keepind]
 
-
+    # Add galactic coordinates
+    coo = SkyCoord(exptab['ra'],exptab['dec'],unit='degree',frame='icrs')
+    exptab['glon'] = coo.galactic.l.degree
+    exptab['glat'] = coo.galactic.b.degree
+    
     # Add WCSCAL and TELSTAT information
     #coords = Table.read(basedir+'lists/allcoords.fits.gz',1)
     #coords['file'] = np.array([str(f) for f in coords['file']])
@@ -594,13 +616,20 @@ def combinehealpix(version='v4',nocuts=False):
     zptab['thresh'] = 0.5
     zptab['instrument'][:7] = 'c4d'
     zptab['filter'][:7] = ['u','g','r','i','z','Y','VR']
-    zptab['amcoef'][0] = [-1.60273, -0.375253]   # c4d-u
-    zptab['amcoef'][1] = [0.277124, -0.198037]   # c4d-g
-    zptab['amcoef'][2] = [0.516382, -0.115443]   # c4d-r  changed a bit, fine
-    zptab['amcoef'][3] = [0.380338, -0.067439]   # c4d-i
-    zptab['amcoef'][4] = [0.074517, -0.067031]   # c4d-z
-    zptab['amcoef'][5] = [-1.07800, -0.060014]   # c4d-Y
-    zptab['amcoef'][6] = [1.111859, -0.083630]   # c4d-VR
+    #zptab['amcoef'][0] = [-1.60273, -0.375253]   # c4d-u
+    #zptab['amcoef'][1] = [0.277124, -0.198037]   # c4d-g
+    #zptab['amcoef'][2] = [0.516382, -0.115443]   # c4d-r  changed a bit, fine
+    #zptab['amcoef'][3] = [0.380338, -0.067439]   # c4d-i
+    #zptab['amcoef'][4] = [0.074517, -0.067031]   # c4d-z
+    #zptab['amcoef'][5] = [-1.07800, -0.060014]   # c4d-Y
+    #zptab['amcoef'][6] = [1.111859, -0.083630]   # c4d-VR
+    zptab['amcoef'][0] = [-1.34558, -0.449928]   # c4d-u
+    zptab['amcoef'][1] = [0.324919, -0.192905]   # c4d-g
+    zptab['amcoef'][2] = [0.514610, -0.106299]   # c4d-r  changed a bit, fine
+    zptab['amcoef'][3] = [0.401896, -0.066105]   # c4d-i
+    zptab['amcoef'][4] = [0.120886, -0.061114]   # c4d-z
+    zptab['amcoef'][5] = [-1.03403, -0.043717]   # c4d-Y
+    zptab['amcoef'][6] = [1.179283, -0.113482]   # c4d-VR
     # Mosiac3 z-band
     zptab['instrument'][7] = 'k4m'
     zptab['filter'][7] = 'z'
@@ -615,197 +644,279 @@ def combinehealpix(version='v4',nocuts=False):
     nzptab = len(zptab)
 
     # APPLY QA CUTS IN ZEROPOINT AND SEEING
-    if nocuts==False:
-        print('APPLYING QA CUTS')
-        fwhmthresh = 2.0  # arcsec, v2
-        #filters = ['u','g','r','i','z','Y','VR']
-        #nfilters = n_elements(filters)
-        #zpthresh = [2.0,2.0,2.0,2.0,2.0,2.0,2.0]
-        #zpthresh = [0.5,0.5,0.5,0.5,0.5,0.5,0.5]
-        badzpmask = np.ones(len(exptab),bool)
-        for i in range(nzptab):
-            ind, = np.where((exptab['instrument'] == zptab['instrument'][i]) &
-                            (exptab['filter'] == zptab['filter'][i]))
-            print(zptab['instrument'][i],'-',zptab['filter'][i],' ',len(ind),' exposures')
+    print('APPLYING QA CUTS')
+    fwhmthresh = 2.0  # arcsec, v2
+    #filters = ['u','g','r','i','z','Y','VR']
+    #nfilters = n_elements(filters)
+    #zpthresh = [2.0,2.0,2.0,2.0,2.0,2.0,2.0]
+    #zpthresh = [0.5,0.5,0.5,0.5,0.5,0.5,0.5]
+    badzpmask = np.ones(len(exptab),bool)
+    exptab['bad'] = False
+    exptab['badzpterm'] = False
+    exptab['zpterm_corr'] = np.nan
+    for i in range(nzptab):
+        ind, = np.where((exptab['instrument'] == zptab['instrument'][i]) &
+                        (exptab['filter'] == zptab['filter'][i]))
+        print(' ')
+        print('{:s}  {:d} exposures'.format(zptab['instrument'][i]+'-'+zptab['filter'][i],len(ind)))
 
-            if len(ind) > 0:
-                exptab1 = exptab[ind]
-                ## Fix Infinity/NAN values
-                zpterm = exptab1['zpterm']
-                bdzp, = np.where(np.isfinite(zpterm) == 0)  # fix Infinity/NAN
-                if len(bdzp)>0:
-                    zpterm[bdzp] = 999999.9
+        if len(ind)==0:
+            print('No exposures for',zptab['instrument'][i]+'-'+zptab['filter'][i])
+            continue
 
-                ## Correct "DES" zeropoints,  DES exposures are in electrons and
-                ## CP are in ADU, so there's an offset of 2.5*log(gain)=2.5*log(4.41)=1.611
-                plver3 = np.array([p[:3] for p in exptab1['plver']])
-                basever = np.array([b.split('_')[-1] for b in exptab1['base']])
-                gdes, = np.where((basever=='d1') | (basever=='d2') | (basever=='d3'))
-                #gdes, = np.where(plver3=='DES')
-                if len(gdes) > 0:
-                    print('Offsetting ',len(gdes),' DES exposure zero-points')
-                    zpterm[gdes] -= 1.611
+        exptab1 = exptab[ind]
+        ## Fix Infinity/NAN values
+        zpterm = exptab1['zpterm']
+        bdzp, = np.where(np.isfinite(zpterm) == 0)  # fix Infinity/NAN
+        if len(bdzp)>0:
+            zpterm[bdzp] = 999999.9
 
-                ## CORRECT K4M/KSB for exptime-dependence in the zero-points
-                ##   this is because the image units are counts/sec.
-                if zptab['instrument'][i] == 'k4m' or zptab['instrument'][i] == 'ksb':
-                    print('REMOVING EXPTIME-DEPENDENCE IN K4M/KSB ZEROPOINTS!!!')
-                    zpterm += 2.5*alog10(exptab1['exptime'])
-                am = exptab1['airmass']
-                mjd = exptab1['mjd']
-                bdam, = np.where(am < 0.9)
-                if len(bdam) > 0:
-                    am[bdam] = np.median(am)
-                coo = SkyCoord(exptab1['ra'],exptab1['dec'],unit='degree',frame='icrs')
-                glon = coo.galactic.l.degree
-                glat = coo.galactic.b.degree
+        ## Correct "DES" zeropoints,  DES exposures are in electrons and
+        ## CP are in ADU, so there's an offset of 2.5*log(gain)=2.5*log(4.41)=1.611
+        plver3 = np.array([p[:3] for p in exptab1['plver']])
+        basever = np.array([b.split('_')[-1] for b in exptab1['base']])
+        gdes, = np.where((basever=='d1') | (basever=='d2') | (basever=='d3'))
+        #gdes, = np.where(plver3=='DES')
+        if len(gdes) > 0:
+            print('  Offsetting',len(gdes),'DES exposure zero-points')
+            zpterm[gdes] -= 1.611
 
-                # Measure airmass dependence
-                gg0, = np.where((np.abs(zpterm) < 50) & (am < 2.0))
-                coef0 = np.polyfit(am[gg0],zpterm[gg0],1)
-                #coef0 = robust_poly_fitq(am[gg0],zpterm[gg0],1)
-                zpf = np.polyval(coef0,am)
-                sig0 = dln.mad(zpterm[gg0]-zpf[gg0])
-                gg, = np.where(np.abs(zpterm-zpf) < np.maximum(3.5*sig0,0.2))
-                coef = np.polyfit(am[gg],zpterm[gg],1)
-                #coef = robust_poly_fitq(am[gg],zpterm[gg],1)
-                print(zptab['instrument'][i]+'-'+zptab['filter'][i],' ',coef)
-                # Trim out bad exposures to determine the correlations and make figures
-                gg, = np.where((np.abs(zpterm-zpf) < np.maximum(3.5*sig0,0.2)) &
-                               (exptab1['airmass'] < 2.0) & (exptab1['fwhm'] < 2.0) & (exptab1['rarms'] < 0.15) &
-                               (exptab1['decrms'] < 0.15) &
-                               (exptab1['wcscal']=='Successful') & (exptab1['zptermerr'] < 0.05) &
-                               (exptab1['zptermsig'] < 0.08) &
-                               ((exptab1['instrument'] != 'c4d') | (exptab1['zpspatialvar_nccd']<=5) |
-                                ((exptab1['instrument']=='c4d') & (exptab1['zpspatialvar_nccd']>5) & (exptab1['zpspatialvar_rms']<0.1))) &
-                               (np.abs(glat) > 10) & (exptab1['nrefmatch'] > 100) & (exptab1['exptime'] >= 30))
-                ## I removed WCSCAL check because there are ~38k exposures with
-                ## WCSCAL=Failed but my DECRMS and RARMS is small.
-                ## and exptab1.wcscal eq 'Successful'
-                print(len(gg))
-
-                # Zpterm with airmass dependence removed
-                relzpterm = zpterm + 25   # 25 to get "absolute" zpterm
-                relzpterm -= zptab['amcoef'][i][1]*(am-1)
-
-                # Fit temporal variation in zpterm
-                mjd0 = 56200
-                xx = exptab1['mjd'][gg]-mjd0
-                yy = relzpterm[gg]
-                invvar = 1.0/exptab1['zptermerr'][gg]**2
-                nord = 3
-                bkspace = 200 #20
-                knots = np.arange(np.min(xx)+0.5*bkspace,np.max(xx),bkspace)
-                import pdb; pdb.set_trace()
-                wt = 1.0/exptab1['zptermerr'][gg]
-                wt /= np.nansum(wt)
-                spl = dln.bspline(xx,yy,w=wt,knots=knots,nord=nord)
-                yfit1 = spl(xx)
-                sig1 = dln.mad(yy-yfit1)
-                gd, = np.where((yy-yfit1) > -3*sig1)
-                #sset1 = bspline_iterfit(xx,yy,invvar=invvar,nord=nord,bkspace=bkspace,yfit=yfit1)
-                #sig1 = mad(yy-yfit1)
-                #gd = where(yy-yfit1 > -3*sig1,ngd)
-                # refit
-                #sset = bspline_iterfit(xx[gd],yy[gd],invvar=invvar[gd],nord=nord,bkspace=bkspace)
-                #yfit = bspline_valu(xx,sset)
-                #allzpfit = bspline_valu(exptab1['mjd']-mjd0,sset)
-                spl2 = dln.bspline(xx[gd],yy[gd],w=wt[gd],knots=knots,nord=nord)
-                allzpfit = spl2(exptab1['mjd']-mjd0)
-
-                # Remove temporal variations to get residual values
-                relzpterm -= allzpfit
-
-
-                # Find the GOOD exposures
-                #------------------------
-                # We are using ADDITIVE zpterm
-                #  calmag = instmag + zpterm
-                # if there are clouds then instmag is larger/fainter
-                #  and zpterm is smaller (more negative)
-                #bdind = where(str[ind].zpterm-medzp lt -zpthresh[i],nbdind)
-                goodmask = ((relzpterm >= -zptab['thresh'][i]) & (relzpterm <= zptab['thresh'][i]))
-                gdind, = np.where(goodmask)
-                bdind, = np.where(~goodmask)
-                print('  ',len(bdind),'exposures with ZPTERM below the threshold')
-                if len(gdind) > 0:
-                    badzpmask[ind[gdind]] = 0
-
-        # Get bad DECaLS and SMASH exposures
-        datadir = utils.datadir()
-        obslogdir = os.path.abspath(datadir+'../../../obslog/v3/')
-        badexp = np.zeros(len(exptab),bool)
-        smashexpnum = dln.readlines(obslogdir+'/smash_badexposures.txt')
-        smashexpnum = [int(e) for e in smashexpnum]
-        _,ind1,ind2 = np.intersect1d(exptab['expnum'],smashexpnum,return_indices=True)
-        if len(ind1) > 0:
-            badexp[ind1] = True
-            badexp[ind1] = (badexp[ind1] & (exptab['instrument'][ind1] == 'c4d'))   # make sure they are DECam exposures
-        decalsexpnum = dln.readlines(obslogdir+'/decals_bad_expid.txt')
-        decalsexpnum = [int(e) for e in decalsexpnum]
-        _,ind1,ind2 = np.intersect1d(exptab['expnum'],decalsexpnum,return_indices=True)
-        if len(ind1) > 0:
-            badexp[ind1] = True
-            badexp[ind1] = (badexp[ind1] & (exptab['instrument'][ind1].instrument == 'c4d'))   # make sure they are DECam exposures
-        mzlsexpnum = dln.readlines(obslogdir+'/mzls_bad_expid.txt')
-        mzlsexpnum = [int(e) for e in mzlsexpnum]
-        _,ind1,ind2 = np.intersect1d(exptab['expnum'],mzlsexpnum,return_indices=True)
-        if len(ind1) > 0:
-            badexp[ind1] = True
-            badexp[ind1] = (badexp[ind1] & (exptab['instrument'][ind1] == 'k4m'))   # make sure they are Mosaic3 exposures
-
-        ## Zero-point spatial variability threshold
-        ##  varies with galactic latitude
-        ##  |b|>10   0.15
-        ##  |b|<=10  0.55
-        coo = SkyCoord(exptab['ra'],exptab['dec'],unit='degree',frame='icrs')
+        ## CORRECT K4M/KSB for exptime-dependence in the zero-points
+        ##   this is because the image units are counts/sec.
+        if zptab['instrument'][i] == 'k4m' or zptab['instrument'][i] == 'ksb':
+            print('REMOVING EXPTIME-DEPENDENCE IN K4M/KSB ZEROPOINTS!!!')
+            zpterm += 2.5*alog10(exptab1['exptime'])
+        am = exptab1['airmass']
+        mjd = exptab1['mjd']
+        bdam, = np.where(am < 0.9)
+        if len(bdam) > 0:
+            am[bdam] = np.median(am)
+        coo = SkyCoord(exptab1['ra'],exptab1['dec'],unit='degree',frame='icrs')
         glon = coo.galactic.l.degree
         glat = coo.galactic.b.degree
-        zpspvarthresh = (np.abs(glat) > 10)*0.15 + (np.abs(glat) <= 10)*0.55
+
+        # Measure airmass dependence
+        gg0, = np.where((np.abs(zpterm) < 50) & (am < 2.0))
+        ambins = np.arange(1.0,2.5,0.2)
+        res1,bin_edges,binnumber = binned_statistic(am[gg0],zpterm[gg0],bins=ambins,statistic=np.nanmedian)
+        xbins = bin_edges+0.5*(bin_edges[1]-bin_edges[0])
+        gdbins, = np.where(np.isfinite(res1))
+        coef0 = np.polyfit(xbins[gdbins],res1[gdbins],1)
+        zpf = np.polyval(coef0,am)
+        sig0 = dln.mad(zpterm[gg0]-zpf[gg0])
+        # outlier rejection
+        gg, = np.where(np.abs(zpterm-zpf) < np.maximum(3.5*sig0,0.2))
+        res2,bin_edges,binnumber = binned_statistic(am[gg],zpterm[gg],bins=ambins,statistic=np.nanmedian)
+        xbins = bin_edges+0.5*(bin_edges[1]-bin_edges[0])
+        gdbins, = np.where(np.isfinite(res2))
+        coef = np.polyfit(xbins[gdbins],res2[gdbins],1)
+        zpf = np.polyval(coef,am)
+        delta_zpterm = zpterm-zpf
+        #coef0 = np.polyfit(am[gg0],zpterm[gg0],1)
+        ##coef0 = robust_poly_fitq(am[gg0],zpterm[gg0],1)
+        #zpf = np.polyval(coef0,am)
+        #sig0 = dln.mad(zpterm[gg0]-zpf[gg0])
+        #gg, = np.where(np.abs(zpterm-zpf) < np.maximum(3.5*sig0,0.2))
+        #coef = np.polyfit(am[gg],zpterm[gg],1)
+        ##coef = robust_poly_fitq(am[gg],zpterm[gg],1)
+        print(' ',zptab['instrument'][i]+'-'+zptab['filter'][i],'airmass term:',coef)
+
+        # Save figure of airmass dependence
+        backend = matplotlib.rcParams['backend']
+        matplotlib.use('Agg')
+        plt.figure(1,figsize=(10,8))
+        plt.clf()
+        plt.hist2d(am[gg],zpterm[gg],norm=LN(),bins=50,cmap='Greys')
+        plt.scatter(xbins[gdbins],res2[gdbins],s=50,marker='+',c='r')
+        #plt.scatter(am[gg],zpterm[gg],s=20)
+        plt.plot([0.9,np.max(am[gg])],np.polyval(coef,[0.9,np.max(am[gg])]),c='r')
+        plt.xlabel('Airmass',fontsize=16)
+        plt.ylabel('Relative '+zptab['filter'][i]+' zeropoint (mag)',fontsize=16)
+        plt.title(zptab['filter'][i]+' zeropoint airmass dependence',fontsize=18)
+        txt = '{:s} zpterm = {:.3f} * AM + {:.3f}'.format(zptab['filter'][i],coef[1],coef[0])
+        plt.annotate(txt,xy=[0.9,0.9],xycoords='axes fraction',ha='right',c='r',fontsize=15)
+        plt.savefig(plotsdir+'/'+zptab['filter'][i]+'_zpterm_airmass.png',bbox_inches='tight')
+        plt.close()
+        print('  Saving to',zptab['filter'][i]+'_zpterm_airmass.png')
+        matplotlib.use(backend)
+                
+                
+        # Trim out bad exposures to determine the correlations and make figures
+        gg, = np.where((np.abs(delta_zpterm) < np.maximum(3.5*sig0,0.2)) &
+                       (exptab1['airmass'] < 2.0) & (exptab1['fwhm'] < 2.0) & (exptab1['rarms'] < 0.15) &
+                       (exptab1['decrms'] < 0.15) &
+                       (exptab1['wcscal']=='Successful') & (exptab1['zptermerr'] < 0.05) &
+                       (exptab1['zptermsig'] < 0.08) &
+                       ((exptab1['instrument'] != 'c4d') | (exptab1['zpspatialvar_nccd']<=5) |
+                        ((exptab1['instrument']=='c4d') & (exptab1['zpspatialvar_nccd']>5) & (exptab1['zpspatialvar_rms']<0.1))) &
+                       (np.abs(glat) > 10) & (exptab1['nrefmatch'] > 100) & (exptab1['exptime'] >= 30))
+        ## I removed WCSCAL check because there are ~38k exposures with
+        ## WCSCAL=Failed but my DECRMS and RARMS is small.
+        ## and exptab1.wcscal eq 'Successful'
+        print('  {:d} exposures used for temporal analysis'.format(len(gg)))
+
+        # Zpterm with airmass dependence removed
+        relzpterm = zpterm + 25   # 25 to get "absolute" zpterm
+        relzpterm -= zptab['amcoef'][i][1]*(am-1)
+
+        # Fit temporal variation in zpterm
+        mjd0 = 56200
+        xx = exptab1['mjd'][gg]-mjd0
+        yy = relzpterm[gg]
+        invvar = 1.0/exptab1['zptermerr'][gg]**2
+        nord = 3
+        bkspace = 200 #20
+        knots = np.arange(np.min(xx)+0.5*bkspace,np.max(xx),bkspace)
+        wt = 1.0/exptab1['zptermerr'][gg]
+        wt /= np.nansum(wt)
+        spl = dln.bspline(xx,yy,w=wt,knots=knots,nord=nord)
+        yfit1 = spl(xx)
+        sig1 = dln.mad(yy-yfit1)
+        gd, = np.where((yy-yfit1) > -3*sig1)
+        #sset1 = bspline_iterfit(xx,yy,invvar=invvar,nord=nord,bkspace=bkspace,yfit=yfit1)
+        #sig1 = mad(yy-yfit1)
+        #gd = where(yy-yfit1 > -3*sig1,ngd)
+        # refit
+        #sset = bspline_iterfit(xx[gd],yy[gd],invvar=invvar[gd],nord=nord,bkspace=bkspace)
+        #yfit = bspline_valu(xx,sset)
+        #allzpfit = bspline_valu(exptab1['mjd']-mjd0,sset)
+        spl2 = dln.bspline(xx[gd],yy[gd],w=wt[gd],knots=knots,nord=nord)
+        allzpfit = spl2(exptab1['mjd']-mjd0)
+        lowoutofrange, = np.where(exptab1['mjd']-mjd0 < np.min(xx[gd]))
+        if len(lowoutofrange)>0:
+            allzpfit[lowoutofrange] = spl2(np.min(xx[gd]))
+        hioutofrange, = np.where(exptab1['mjd']-mjd0 > np.max(xx[gd]))
+        if len(hioutofrange)>0:
+            allzpfit[hioutofrange] = spl2(np.max(xx[gd]))
+                
+        # Save figure of temporal dependence
+        backend = matplotlib.rcParams['backend']
+        matplotlib.use('Agg')
+        plt.figure(1,figsize=(10,8))
+        plt.hist2d(xx,yy,bins=100,norm=LN(),cmap='Greys')
+        #plt.scatter(xx,yy,s=20,c='k')
+        plt.scatter(xx[gd],yy[gd],s=2,c='blue')
+        plt.scatter(xx,spl2(xx),s=2,c='r')
+        allmjd = np.arange(0,np.max(exptab1['mjd']-mjd0))
+        allfit = spl2(allmjd)
+        plt.plot(allmjd,allfit,c='r')
+        plt.xlabel('MJD-MJD0',fontsize=16)
+        plt.ylabel(zptab['filter'][i]+' zero-point magnitude',fontsize=16)
+        plt.title(zptab['filter'][i]+' temporal dependence',fontsize=18)
+        #plt.annotate(txt,xy=[0.9,0.9],xycoords='axes fraction',ha='right',c='r',fontsize=15)
+        plt.savefig(plotsdir+'/'+zptab['filter'][i]+'_zpterm_mjd.png',bbox_inches='tight')
+        print('  Saving to',zptab['filter'][i]+'_zpterm_mjd.png')
+        matplotlib.use(backend)
+
+                
+        # Remove temporal variations to get residual values
+        relzpterm -= allzpfit
+        exptab1['zpterm_corr'] = relzpterm
+        exptab['zpterm_corr'][ind] = relzpterm
+
+        # Find the GOOD exposures
+        #------------------------
+        # We are using ADDITIVE zpterm
+        #  calmag = instmag + zpterm
+        # if there are clouds then instmag is larger/fainter
+        #  and zpterm is smaller (more negative)
+        #bdind = where(str[ind].zpterm-medzp lt -zpthresh[i],nbdind)
+        goodmask = ((relzpterm >= -zptab['thresh'][i]) & (relzpterm <= zptab['thresh'][i]))
+        gdind, = np.where(goodmask)
+        bdind, = np.where(~goodmask)
+        print('  {:d} exposures with ZPTERM below the threshold ({:.1f}%)'.format(len(bdind),len(bdind)/len(ind)*100))
+        if len(gdind) > 0:
+            badzpmask[ind[gdind]] = 0
+            exptab['bad'][ind[bdind]] = True
 
 
+    #return exptab
+    
+    #import pdb; pdb.set_trace()
+                    
+    # Get bad DECaLS and SMASH exposures
+    datadir = utils.datadir()
+    obslogdir = os.path.abspath(datadir+'../../../obslog/v3/')
+    badexp = np.zeros(len(exptab),bool)
+    smashlines = dln.readlines(obslogdir+'/smash_badexposures.txt',comment='#',noblank=True)
+    smashexpnum = [int(l.split()[0]) for l in smashlines]
+    _,ind1,ind2 = np.intersect1d(exptab['expnum'],smashexpnum,return_indices=True)
+    if len(ind1) > 0:
+        badexp[ind1] = True
+        badexp[ind1] = (badexp[ind1] & (exptab['instrument'][ind1] == 'c4d'))   # make sure they are DECam exposures
+    decalslines = dln.readlines(obslogdir+'/decals_bad_expid.txt',comment='#',noblank=True)
+    decalsexpnum = [int(l.split()[0]) for l in decalslines]
+    _,ind1,ind2 = np.intersect1d(exptab['expnum'],decalsexpnum,return_indices=True)
+    if len(ind1) > 0:
+        badexp[ind1] = True
+        badexp[ind1] = (badexp[ind1] & (exptab['instrument'][ind1] == 'c4d'))   # make sure they are DECam exposures
+    mzlslines = dln.readlines(obslogdir+'/mzls_bad_expid.txt',comment='#',noblank=True)
+    mzlsexpnum = [int(l.split()[0]) for l in mzlslines]
+    _,ind1,ind2 = np.intersect1d(exptab['expnum'],mzlsexpnum,return_indices=True)
+    if len(ind1) > 0:
+        badexp[ind1] = True
+        badexp[ind1] = (badexp[ind1] & (exptab['instrument'][ind1] == 'k4m'))   # make sure they are Mosaic3 exposures
 
-        import pdb; pdb.set_trace()
+    ## Zero-point spatial variability threshold
+    ##  varies with galactic latitude
+    ##  |b|>10   0.15
+    ##  |b|<=10  0.55
+    zpspvarthresh = (np.abs(exptab['glat']) > 10)*0.15 + (np.abs(exptab['glat']) <= 10)*0.55
 
 
-        # Final QA cuts
-        #  Many of the short u-band exposures have weird ZPTERMs, not sure why
-        #  There are a few exposures with BAD WCS, RA>360!
-        bdexp, = np.where((exptab['success'] == False) |                          # SE failure
-                          (exptab['fwhm'] > fwhmthresh) |                         # bad seeing
-                          (exptab['ra'] > 360) |                                  # bad WCS/coords
-                          (exptab['rarms'] > 0.15) | (exptab['decrms'] > 0.15) |     # bad WCS
-                          (badzpmask == True) |                                # bad ZPTERM
-                          (exptab['zptermerr'] > 0.05) |                          # bad ZPTERMERR
-                          (exptab['nrefmatch'] < 5) |                             # few phot ref match
-                          (badexp == 1) |                                      # bad SMASH/LS exposure
-                          ((exptab['instrument'] == 'c4d') & (exptab['zpspatialvar_nccd'] > 5) & (exptab['zpspatialvar_rms'] > zpspvarthresh)))  # bad spatial zpterm
-                          ##exptab[]wcscal ne 'Successful' or $                    ##CP WCS failure   TOO MANY FAILED
+    # Final QA cuts
+    #  Many of the short u-band exposures have weird ZPTERMs, not sure why
+    #  There are a few exposures with BAD WCS, RA>360!
+    bdexp, = np.where((exptab['fwhm'] > fwhmthresh) |                         # bad seeing
+                      (exptab['ra'] > 360) |                                  # bad WCS/coords
+                      (exptab['rarms'] > 0.15) | (exptab['decrms'] > 0.15) |     # bad WCS
+                      (badzpmask == True) |                                # bad ZPTERM
+                      (exptab['zptermerr'] > 0.05) |                          # bad ZPTERMERR
+                      (exptab['nrefmatch'] < 5) |                             # few phot ref match
+                      (badexp == 1) |                                      # bad SMASH/LS exposure
+                      ((exptab['instrument'] == 'c4d') & (exptab['zpspatialvar_nccd'] > 5) &
+                       (exptab['zpspatialvar_rms'] > zpspvarthresh)))  # bad spatial zpterm
+                      ##exptab[]wcscal ne 'Successful' or $                    ##CP WCS failure   TOO MANY FAILED
                           #exptab[]ngoodchipwcs lt exptab[]nchips or $                # not all chips astrom calibrated
         # rarms/decrms, nrefmatch
-        print('QA cuts remove ',len(bdexp),' exposures')
+    print('QA cuts remove ',len(bdexp),' exposures')    
+    exptab = np.delete(exptab,bdexp)
+    exptab = Table(exptab)
+    
+    # Save the final exposures list
+    outfile = os.path.join(basedir,'lists','nsc_instcal_combine_exposurs.fits')
+    print('Writing final list of exposures to',outfile)
+    exptab.write(outfile,overwrite=True)
+    
+    import pdb; pdb.set_trace()
+    
 
-        # Remove
-        torem = np.zeros(len(chtab),bool)
-        for i in range(len(bdexp)):
-            torem[exptab['chipindx'][bdexp[i]]:exptab['chipindx'][bdexp[i]]+exptab['nchips'][bdexp[i]]] = True
-        bdchtab, = np.where(torem == True)
-        chtab = np.delete(chtab,bdchtab)
-        exptab = np.delete(exptab,bdexp)
-        # Get new CHIPINDEX values
-        #   make two arrays of old and new indices to transfer
-        #   the new index values into an array with the size of
-        #   the old CHSTR
-        trimoldindex = lindgen(nchstr)                    # index into original array, but "bad" ones removed/trimed
-        remove,bdchstr,trimoldindex
-        trimnewindex = lindgen(n_elements(trimoldindex))  # new index of trimmed array
-        newindex = lonarr(nchstr)-1
-        newindex[trimoldindex] = trimnewindex             # new index in original array
-        newchipindex = newindex[exptab['chipindx']]
-        exptab['chipindx'] = newchipindex
-        nstr = len(exptab)
-    else:
-        print('SKIPPING QA CUTS')
+def combinehealpix(version='v4',nocuts=False):
+    """ Make the healpix exposure and chip lists for the final list of exposures """
+
+    dldir,mssdir,localdir = utils.rootdirs()
+    basedir = os.path.join(dldir,'instcal/',version)
+    if os.path.exists(localdir+'dnidever/nsc/instcal/'+version+'/')==False:
+        os.makedirs(localdir+'dnidever/nsc/instcal/'+version+'/')
+    plotsdir = basedir+'plots/'
+    if os.path.exists(plotsdir)==False:
+        os.makedirs(plotsdir)
+    nside = 128
+    t0 = time.time()
+
+    # Load the final list of exposures
+    expfile = os.path.join(basedir,'lists','nsc_instcal_combine_exposures.fits')
+    if os.path.exists(expfile)==False:
+        print(expfile,'not found.  Make sure to run summary.combine_qacuts() first')
+        return
+    exptab = Table.read(expfile)
+
+    # Load the chips calibration summary file
+    chipfile = os.path.join(basedir,'lists','nsc_calibrate_summary_chips.fits')
+    print('Loading the chips calibration summary file:',chipfile)
+    chtab = Table.read(chipfile)
+
+    import pdb; pdb.set_trace()
 
 
     # CREATE LIST OF HEALPIX AND OVERLAPPING EXPOSURES
