@@ -7,32 +7,67 @@ from dlnpyutils import utils as dln
 import time
 import sqlite3
 
-def writecat2db(cat,dbfile):
+#def writecat2db(cat,dbfile,tablename):
+#    """ Write a catalog to the database """
+#    ncat = dln.size(cat)
+#    sqlite3.register_adapter(np.int16, int)
+#    sqlite3.register_adapter(np.int64, int)
+#    sqlite3.register_adapter(np.float64, float)
+#    sqlite3.register_adapter(np.float32, float)
+#    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+#    #db = sqlite3.connect('test.db')
+#    #db.text_factory = lambda x: str(x, 'latin1')
+#    #db.row_factory = sqlite3.Row
+#    c = db.cursor()
+#    # Create the table
+#    #   the primary key ROWID is automatically generated
+#    if len(c.execute('SELECT name from sqlite_master where type= "table" and name="meas"').fetchall()) < 1:
+#        c.execute('''CREATE TABLE meas(measid TEXT, objlabel INTEGER, exposure TEXT, ccdnum INTEGER, filter TEXT, mjd REAL,
+#                     ra REAL, raerr REAL, dec REAL, decerr REAL, mag_auto REAL, magerr_auto REAL, asemi REAL, asemierr REAL,
+#                     bsemi REAL, bsemierr REAL, theta REAL, thetaerr REAL, fwhm REAL, flags INTEGER, class_star REAL)''')
+#    data = list(zip(cat['measid'],np.zeros(ncat,int)-1,cat['exposure'],cat['ccdnum'],cat['filter'],cat['mjd'],cat['ra'],
+#                    cat['raerr'],cat['dec'],cat['decerr'],cat['mag_auto'],cat['magerr_auto'],cat['asemi'],cat['asemierr']3,
+#                    cat['bsemi'],cat['bsemierr'],cat['theta'],cat['thetaerr'],cat['fwhm'],cat['flags'],cat['class_star']))
+#    c.executemany('''INSERT INTO meas(measid,objlabel,exposure,ccdnum,filter,mjd,ra,raerr,dec,decerr,mag_auto,magerr_auto,
+#                     asemi,asemierr,bsemi,bsemierr,theta,thetaerr,fwhm,flags,class_star)
+#                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', data)
+#    db.commit()
+#    db.close()
+
+
+def writecat(cat,dbfile,table='meas'):
     """ Write a catalog to the database """
     ncat = dln.size(cat)
+    sqlite3.register_adapter(np.int8, int)
     sqlite3.register_adapter(np.int16, int)
+    sqlite3.register_adapter(np.int32, int)
     sqlite3.register_adapter(np.int64, int)
-    sqlite3.register_adapter(np.float64, float)
+    sqlite3.register_adapter(np.float16, float)
     sqlite3.register_adapter(np.float32, float)
+    sqlite3.register_adapter(np.float64, float)
     db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    #db = sqlite3.connect('test.db')
-    #db.text_factory = lambda x: str(x, 'latin1')
-    #db.row_factory = sqlite3.Row
     c = db.cursor()
+
+    # Convert numpy data types to sqlite3 data types
+    d2d = {"S":"TEXT", "i":"INTEGER", "f":"REAL"}
+
+    # Get the column names
+    cnames = cat.dtype.names
+    cdict = dict(cat.dtype.fields)
     # Create the table
     #   the primary key ROWID is automatically generated
-    if len(c.execute('SELECT name from sqlite_master where type= "table" and name="meas"').fetchall()) < 1:
-        c.execute('''CREATE TABLE meas(measid TEXT, objlabel INTEGER, exposure TEXT, ccdnum INTEGER, filter TEXT, mjd REAL,
-                     ra REAL, raerr REAL, dec REAL, decerr REAL, mag_auto REAL, magerr_auto REAL, asemi REAL, asemierr REAL,
-                     bsemi REAL, bsemierr REAL, theta REAL, thetaerr REAL, fwhm REAL, flags INTEGER, class_star REAL)''')
-    data = list(zip(cat['measid'],np.zeros(ncat,int)-1,cat['exposure'],cat['ccdnum'],cat['filter'],cat['mjd'],cat['ra'],
-                    cat['raerr'],cat['dec'],cat['decerr'],cat['mag_auto'],cat['magerr_auto'],cat['asemi'],cat['asemierr'],
-                    cat['bsemi'],cat['bsemierr'],cat['theta'],cat['thetaerr'],cat['fwhm'],cat['flags'],cat['class_star']))
-    c.executemany('''INSERT INTO meas(measid,objlabel,exposure,ccdnum,filter,mjd,ra,raerr,dec,decerr,mag_auto,magerr_auto,
-                     asemi,asemierr,bsemi,bsemierr,theta,thetaerr,fwhm,flags,class_star)
-                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', data)
+    if len(c.execute('SELECT name from sqlite_master where type= "table" and name="'+table+'"').fetchall()) < 1:
+        columns = cnames[0].lower()+' '+d2d[cdict[cnames[0]][0].kind]
+        for n in cnames[1:]: columns+=', '+n.lower()+' '+d2d[cdict[n][0].kind]
+        c.execute('CREATE TABLE '+table+'('+columns+')')
+    # Insert statement
+    columns = []
+    for n in cnames: columns.append(n.lower())
+    qmarks = np.repeat('?',dln.size(cnames))
+    c.executemany('INSERT INTO '+table+'('+','.join(columns)+') VALUES('+','.join(qmarks)+')', list(cat))
     db.commit()
     db.close()
+
 
 def getdbcoords(dbfile):
     """ Get the coordinates and ROWID from the database """
@@ -54,7 +89,7 @@ def getdbcoords(dbfile):
 
     return cat
 
-def createindexdb(dbfile,col='measid',table='meas',unique=True):
+def createindex(dbfile,col='measid',table='meas',unique=True,verbose=False):
     """ Index a column in the database """
     t0 = time.time()
     db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
@@ -75,7 +110,8 @@ def createindexdb(dbfile,col='measid',table='meas',unique=True):
         c.execute('CREATE INDEX '+index_name+' ON '+table+'('+col+')')
     data = c.fetchall()
     db.close()
-    print('indexing done after '+str(time.time()-t0)+' sec')
+    if verbose:
+        print('indexing done after '+str(time.time()-t0)+' sec')
 
 def insertobjlabelsdb(rowid,labels,dbfile):
     """ Insert objectlabel values into the database """

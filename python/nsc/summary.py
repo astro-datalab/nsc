@@ -8,14 +8,15 @@ from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
 from dlnpyutils import utils as dln,coords
 from scipy.stats import binned_statistic
-#import healpy as hp
+import healpy as hp
 import time
 import traceback
 import subprocess
-import matplotlib.pyplot as plt
 import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm as LN
-from . import utils
+from . import utils,db
 
 def measure(version='v4',nosources=False,quick=False):
     """ Make the nsc_measure_summary.fits summary file """
@@ -382,23 +383,6 @@ def calibratechunkscombine():
     #ohdu.close()
 
     import pdb; pdb.set_trace()
-
-def combine():
-    """ Make the nsc_combine_summary.fits summary file """
-    # Combine all of the data
-    dldir,mssdir,localdir = utils.rootdirs()
-    basedir = os.path.join(dldir,'instcal/',version)
-    #host = first_el(strsplit(longhost,'.',/extract))
-    #basedir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
-    if os.path.exists(localdir+'dnidever/nsc/instcal/'+version+'/')==False:
-        os.makedirs(localdir+'dnidever/nsc/instcal/'+version+'/')
-    plotsdir = basedir+'plots/'
-    if os.path.exists(plotsdir)==False:
-        os.makedirs(plotsdir)
-    t0 = time.time()
-
-    import pdb; pdb.set_trace()
-
 
 def combine_qacuts(version='v4'):
     """ Apply QA cuts and make healpix file """
@@ -828,11 +812,6 @@ def combine_qacuts(version='v4'):
         if len(gdind) > 0:
             badzpmask[ind[gdind]] = 0
             exptab['bad'][ind[bdind]] = True
-
-
-    #return exptab
-    
-    #import pdb; pdb.set_trace()
                     
     # Get bad DECaLS and SMASH exposures
     datadir = utils.datadir()
@@ -884,7 +863,7 @@ def combine_qacuts(version='v4'):
     exptab = Table(exptab)
     
     # Save the final exposures list
-    outfile = os.path.join(basedir,'lists','nsc_instcal_combine_exposurs.fits')
+    outfile = os.path.join(basedir,'lists','nsc_instcal_combine_exposures.fits')
     print('Writing final list of exposures to',outfile)
     exptab.write(outfile,overwrite=True)
     
@@ -911,130 +890,64 @@ def combinehealpix(version='v4',nocuts=False):
         return
     exptab = Table.read(expfile)
 
-    # Load the chips calibration summary file
-    chipfile = os.path.join(basedir,'lists','nsc_calibrate_summary_chips.fits')
-    print('Loading the chips calibration summary file:',chipfile)
-    chtab = Table.read(chipfile)
+    # Go through the calibration summary files
+    localdir = '/home1/09970/dnidever/scratch1/nsc/instcal/'
+    calibfiles = glob(os.path.join(localdir,version,'summary','calibrate','calibrate_summary*.fits'))
+    calibfiles.sort()
+    print(len(calibfiles),' calibration files')
+
+    dbfile = os.path.join(basedir,'lists','nsc_instcal_combine_healpix_list.db')
+    if os.path.exists(dbfile):
+        os.remove(dbfile)
+
+    for i in range(len(calibfiles)):
+        ctab = Table.read(calibfiles[i],2)
+        index = dln.create_index(ctab['base'])
+        _,ind1,ind2 = np.intersect1d(index['value'],exptab['base'],return_indices=True)
+        print('{:d} {:<25s} {:>8d} {:>8d}'.format(i+1,os.path.basename(calibfiles[i]),
+                                                  len(ind1),len(index['value'])))
+        # build index array of chips to keep
+        keepind = []
+        for j in range(len(ind1)):
+            ind = index['index'][index['lo'][ind1[j]]:index['hi'][ind1[j]]+1]
+            keepind.append(ind)
+        keepind = np.hstack(keepind)
+        chipinfo = ctab[keepind]
+        chipinfo = chipinfo[['instrument','measfile','base','ccdnum','nsources',
+                             'cenra','cendec','zpterm','depth95']]
+        chipinfo['pix'] = hp.ang2pix(nside,chipinfo['cenra'],chipinfo['cendec'],lonlat=True)
+        # Now write this to the database
+        db.writecat(chipinfo,dbfile,'hlist')
+        
+    # Indexing the pix column
+    print('Creating index on pix column')
+    db.createindex(dbfile,col='pix',table='hlist',unique=False,verbose=True)
 
     import pdb; pdb.set_trace()
 
 
-    # CREATE LIST OF HEALPIX AND OVERLAPPING EXPOSURES
-    # Which healpix pixels have data
-    listfile = basedir+'lists/nsc_instcal_combine_healpix_list.fits'
-    if os.path.exists(listfile)==False or redo:
-        print('Finding the Healpix pixels with data')
-        radius = 1.1
-        dtyp = [('file',str,200),('base',str,50),('pix',int)]
-        healtab = np.zeros(1000000,dtype=np.dtype(dtyp))
-        nhealtab = len(healtab)
-        cnt = 0
-        for i in range(ntab):
-            if i % 1e3 == 0:
-                print(i)
-            vec = hp.ang2vec(nside,exptab['ra'][i],exptab['dec'][i],lonlat=True)
-            listpix = hp.query_disc(nside,vec,radius,inclusive=True,nest=False)
-            nlistpix = len(listpix)
-            #theta = (90-exptab['dec'][i])/radeg
-            #phi = exptab['ra'][i]/radeg
-            #ANG2VEC,theta,phi,vec
-            #QUERY_DISC,nside,vec,radius,listpix,nlistpix,/deg,/inclusive
-
-            # Use the chip corners to figure out which ones actually overlap
-            chtab1 = chtab[exptab['chipindx'][i]:exptab['chipindx'][i]+exptab['nchips'][i]]
-            #  rotate to tangent plane so it can handle RA=0/360 and poles properly
-            vlon,vlat = coords.rotsphcen(chtab1['vra'],chtab1['vdec'],exptab['ra'][i],exptab['dec'][i],gnomic=True)
-            #  loop over healpix
-            overlap = np.zeros(len(listpix),bool)
-            for j in range(len(listpix)):
-                vec,vertex = hp.pix2vec(nside,listpix[j],nest=False)
-                hra,hdec = hp.vec2ang(vertex,lonlat=True)
-                #PIX2VEC_RING,nside,listpix[j],vec,vertex
-                #vertex = transpose(reform(vertex))  # [1,3,4] -> [4,3]                                                                 
-                #VEC2ANG,vertex,hdec,hra,/astro
-                hlon,hlat = coords.rotsphcen(hra,hdec,exptab['ra'][i],exptab['dec'][i],gnomic=True)
-                #  loop over chips
-                for k in range(exptab['nchips'][i]):
-                    overlap[j] >= coords.doPolygonsOverlap(hlon,hlat,vlon[:,k],vlat[:,k])
-            # Only keep the healpix with real overlaps
-            gdlistpix, = np.where(overlap==True)
-            if len(gdlistpix) > 0:
-                listpix = listpix[gdlistpix]
-                nlistpix = len(gdlistpix)
-            else:
-                listpix = []
-                nlistpix = 0
-
-            # Add new elements to array
-            if cnt+len(listpix) > nhealtab:
-                old = healtab.copy()
-                healtab = np.zeros(nhealtab+10000,dtype=np.dtype(dtyp))
-                healtab[0:nhealtab] = old
-                nhealtab += 1e4
-                del old
-
-            # Add to the structure
-            healtab['file'][cnt:cnt+nlistpix] = exptab['expdir'][i]+'/'+exptab['base'][i]+'_cat.fits'
-            healtab['base'][cnt:cnt+nlistpix] = exptab['base'][i].base
-            healtab['pix'][cnt:cnt+nlistpix] = listpix
-            cnt += nlistpix
-
-        # Trim extra elements
-        healtab = healtab[:cnt]
-        nhealtab = len(healtab)
-
-        # Get uniq pixels
-        _,ui = np.unique(healtab['pix'],return_index=True)
-        upix = healtab['pix'][ui]
-        nupix = n_elements(upix)
-        print(nupix,'Healpix pixels have overlapping data')
-
-        # Get start/stop indices for each pixel
-        hindex = dln.create_index(healtab['pix'])
-        #idx = sort(healtab.pix)
-        #healtab = healtab[idx]
-        #q = healtab.pix
-        #lo = where(q ne shift(q,1),nlo)
-        ##hi = where(q ne shift(q,-1))
-        #hi = [lo[1:nlo-1]-1,nhealtab-1]
-        #nexp = hi-lo+1
-        #index = replicate({pix:0L,lo:0L,hi:0L,nexp:0L},nupix)
-        #index.pix = upix
-        #index.lo = lo
-        #index.hi = hi
-        #index.nexp = nexp
-        npix = len(index['value'])
-        
-        # Replace /net/dl1/ with /dl1/ so it will work on all machines
-        healtab['file'] = [f.replace('/net/dl1/','/dl1/') for f in healtab['file']]
-        
-        # Replace /net/dl1/ with /dl1/ so it will work on all machines
-        healtab['file'] = [f.replace('/net/dl1/','/dl1/') for f in healtab['file']]
-        
-        # Write the full list plus an index
-        print('Writing list to ',listfile)
-        hdu = fits.HDUList()
-        hdu.append(fits.table_to_hdu(healtab))
-        hdu[1].header['nside'] = nside
-        hdu.append(fits.table_to_hdu(index))
-        hdu.writeto(listfile,overwrite=True)
-        hdu.close()
-        if os.path.exists(listfile+'.gz'):
-            os.remove(listfile+'.gz')
-        out = subprocess.call(['gzip',listfile],noshell=True)
-        #MWRFITS,healtab,listfile,/create
-        ## Add NSIDE to header
-        #hd0 = headfits(listfile,exten=0)
-        #sxaddpar,hd0,'nside',nside
-        #modfits,listfile,0,hd0,exten_no=0
-        #MWRFITS,index,listfile,/silent
-        #if file_test(listfile+'.gz') eq 1 then file_delete,listfile+'.gz',/allow
-        #spawn,['gzip',listfile],/noshell
-            
-    else:
-        print(listfile,' EXISTS and redo NOT set')
-
+    #dbfile='/net/dl2/dnidever/nsc/instcal/v3/lists/nsc_instcal_combine_healpix_list.db'
+    #dbutils.writecat(healstr,dbfile,'hlist')
+    #dbutils.createindex(dbfile,col='pix',table='hlist',unique=False,verbose=True)
+    #out=dbutils.query(dbfile,'hlist',where='PIX=65368')
 
     print('dt = {:.1f} sec.'.format(time.time()-t0))
 
+
+
+def combine():
+    """ Make the nsc_combine_summary.fits summary file """
+    # Combine all of the data
+    dldir,mssdir,localdir = utils.rootdirs()
+    basedir = os.path.join(dldir,'instcal/',version)
+    #host = first_el(strsplit(longhost,'.',/extract))
+    #basedir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
+    if os.path.exists(localdir+'dnidever/nsc/instcal/'+version+'/')==False:
+        os.makedirs(localdir+'dnidever/nsc/instcal/'+version+'/')
+    plotsdir = basedir+'plots/'
+    if os.path.exists(plotsdir)==False:
+        os.makedirs(plotsdir)
+    t0 = time.time()
+
+    import pdb; pdb.set_trace()
 
