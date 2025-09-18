@@ -2243,8 +2243,8 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
     ind1,ind2 = dln.match(allmeta['base'],uexposure)
     nmatch = len(ind1)
     sumstr = Table(allmeta[ind1])
-    col_nobj = Column(name='nobjects', dtype=np.int, length=len(sumstr))
-    col_healpix = Column(name='healpix', dtype=np.int, length=len(sumstr))
+    col_nobj = Column(name='nobjects', dtype=int, length=len(sumstr))
+    col_healpix = Column(name='healpix', dtype=int, length=len(sumstr))
     sumstr.add_columns([col_nobj, col_healpix])
     sumstr['nobjects'] = 0
     sumstr['healpix'] = parentpix   # use PARENTPIX
