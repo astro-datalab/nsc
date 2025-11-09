@@ -812,6 +812,50 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
      
     return expinfo,chinfo
 
+def getheadfile(expdir):
+    """ Get the header filename """
+    dldir,mssdir,localdir = utils.rootdirs()
+
+    # get version number 
+    base = os.path.basename(expdir)
+    lo = expdir.find('nsc/instcal/') 
+    dum = expdir[lo+12:]
+    version = dum.split('/')[0]
+    instrument = dum.split('/')[1]
+    night = expdir.split('/')[-2]
+
+    if version < 'v4':
+        return ''
+
+    # v4+ use separate header file
+    headfile = os.path.join(expdir,base+'_header.fits')            
+    if os.path.exists(headfile)==False:
+        headfile = os.path.join(expdir,base+'.hdr')
+        if os.path.exists(headfile)==False:
+            #headfile = os.path.join(dldir,'dnidever','nsc','instcal',version,
+            #                    'header',instrument,night,base+'.hdr')
+            headfile = os.path.join(dldir,'instcal',version,
+                                    'header',instrument,night,base+'.hdr')
+    if os.path.exists(headfile)==False:
+        # use instcal files on tacc
+        #/home1/09970/dnidever/scratch1/nsc/instcal/v4/images/c4d/2020/20200130
+        headfile = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/images/'
+        headfile += '/'.join(expdir.split('/')[-4:])+'.fits.fz'
+        #headfile = os.path.dirname(expdir.replace(version,version+'/images'))+'/'+base+'.fits.fz'
+    if os.path.exists(headfile)==False:
+        # sometimes there's a different version, i.e. _d2 instead of _ls11
+        base2 = '_'.join(base.split('_')[:-1])
+        headfile = glob(os.path.join(dldir,'instcal',version,
+                                     'header',instrument,night,base2+'_*.hdr'))
+        if len(headfile)>0:
+            headfile = headfile[0]
+        else:
+            headfile = ''
+    if os.path.exists(headfile)==False:
+        raise ValueError(headfile+' not found')
+
+    return headfile
+
 def loadheader(headfile):
     """
     Load header file
