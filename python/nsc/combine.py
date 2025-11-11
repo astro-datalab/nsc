@@ -1000,6 +1000,204 @@ def hybridcluster(meas):
     print(str(len(obj))+' final objects')
     
     return labels, obj
+
+def calibmeas(meas1,chmeta1,meta,version='v4',verbose=False):
+    """ Apply astrometric and photometric calibrations to raw measurement data """
+    
+    nmeas1 = len(meas1)
+    mdt = [('measid',(str,100)),('objectid',(str,100)),('exposure',(str,50)),
+           ('ccdnum',np.int8),('filter',(str,50)),('mjd',float),('x',np.float32),('y',np.float32),
+           ('ra',float),('raerr',np.float32),('dec',float),('decerr',np.float32),('mag_auto',np.float32),
+           ('magerr_auto',np.float32),('mag_aper1',np.float32),('magerr_aper1',np.float32),('mag_aper2',np.float32),
+           ('magerr_aper2',np.float32),('mag_aper4',np.float32),('magerr_aper4',np.float32),
+           ('mag_aper6',np.float32),('magerr_aper6',np.float32),('mag_aper8',np.float32),
+           ('magerr_aper8',np.float32),('mag_iso',np.float32),('magerr_iso',np.float32),
+           ('kron_radius',np.float32),('background',np.float32),('threshold',np.float32),('isoarea_image',np.float32),
+           ('isoarea_world',np.float32),('x2_world',np.float32),('y2_world',np.float32),('xy_world',np.float32),
+           ('asemi',np.float32),('asemierr',np.float32),('bsemi',np.float32),('bsemierr',np.float32),
+           ('theta',np.float32),('thetaerr',np.float32),('ellipticity',np.float32),
+           ('errx2_world',np.float32),('erry2_world',np.float32),('errxy_world',np.float32),
+           ('fwhm',np.float32),('flags',np.int16),('imaflags_iso',np.int32),('nimaflags_iso',np.int32),
+           ('class_star',np.float32),
+           ('ndet_iter',int),('repeat',int),('xpsf',float),('ypsf',float),('magpsf',float),
+           ('errpsf',float),('skypsf',float),('iter',int),('chi',float),('sharp',float),
+           ('rapsf',float),('decpsf',float),('ebv',np.float32),('haspsf',bool),('snr',np.float32),
+           ('badflag',int)]
+    final = np.zeros(nmeas1,dtype=np.dtype(mdt))
+    final = Table(final)
+    # Add units
+    for c in ['ra','dec','rapsf','decpsf','theta','thetaerr']:
+        final[c].unit = 'degree'
+    for c in ['raerr','decerr','fwhm','asemi','asemierr','bsemi','bsemierr','kron_radius']:
+        final[c].unit = 'arcsec'
+    for c in ['mag_auto','magerr_auto','mag_aper1','magerr_aper1','mag_aper2','magerr_aper2',
+              'mag_aper4','magerr_aper4','mag_aper6','magerr_aper6','mag_aper8','magerr_aper8',
+              'mag_iso','magerr_iso','magpsf','errpsf','ebv']:
+        final[c].unit = 'magnitude'
+    for c in ['x','y','xpsf','ypsf']:
+        final[c].unit = 'pixel'
+    for c in ['background','skypsf']:
+        final[c].unit = 'ADU'
+    final['mjd'].unit = 'day'
+    # Copy over all columns in common
+    for n in final.colnames:
+        if n in meas1.colnames:
+            final[n][:] = meas1[n]
+    # Special handling of some columns
+    final['exposure'][:] = meta['base'][0]
+    final['x'][:] = meas1['x_image']
+    final['y'][:] = meas1['y_image']
+    # Calibrate the photometry
+    #  only calibrate good photometric measurements
+    zpoff = 2.5*np.log10(meta['exptime'][0]) + chmeta1['zpterm'][0]
+    for c in ['mag_auto','mag_aper1','mag_aper2','mag_aper4','mag_aper6','mag_aper8','magpsf']:
+        if c[:8]=='mag_aper':
+            indx = {'1':0,'2':1,'4':2,'6':3,'8':4}[c[-1]]
+            mag = meas1['mag_aper'][:,indx]
+        else:
+            mag = meas1[c]
+        gdmag = ((mag < 50) & np.isfinite(mag))
+        final[c][:] = np.nan   # bad by default
+        final[c][gdmag] = mag[gdmag]+zpoff
+    final['magerr_auto'][:] = meas1['magerr_auto']
+    final['magerr_aper1'][:] = meas1['magerr_aper'][:,0] 
+    final['magerr_aper2'][:] = meas1['magerr_aper'][:,1] 
+    final['magerr_aper4'][:] = meas1['magerr_aper'][:,2]
+    final['magerr_aper6'][:] = meas1['magerr_aper'][:,3] 
+    final['magerr_aper8'][:] = meas1['magerr_aper'][:,4]
+    final['asemi'][:] = meas1['a_world'] * 3600.         # convert to arcsec 
+    final['asemierr'][:] = meas1['erra_world'] * 3600.   # convert to arcsec 
+    final['bsemi'][:] = meas1['b_world'] * 3600.         # convert to arcsec 
+    final['bsemierr'][:] = meas1['errb_world'] * 3600.   # convert to arcsec 
+    final['theta'][:] = 90-meas1['theta_world']          # make CCW E of N 
+    final['thetaerr'][:] = meas1['errtheta_world'] 
+    final['fwhm'][:] = meas1['fwhm_world'] * 3600.       # convert to arcsec 
+    final['skypsf'][:] = meas1['sky']
+    final['haspsf'][:] = meas1['magpsf'] < 50
+    final['snr'][:] = 1.087/meas1['magerr_auto']
+
+    # measid, objectid, ccdnum, filter, mjd
+    
+    # Set some catalog values
+    filt = meta['filter'][0]
+    mjd = meta['mjd'][0]
+    instrument = meta['instrument'][0]
+    expnum = meta['expnum'][0]
+    ccdnum = chmeta1['ccdnum'][0]
+    final['ccdnum'] = ccdnum
+    final['filter'] = filt
+    final['mjd'] = mjd 
+    final['measid'] = instrument+'.'+str(expnum)+'.'+np.char.array(final['ccdnum'].astype(str))+'.'+np.char.array(meas1['number'].astype(str))
+    
+    if version < 'v4':
+        racol = 'alpha_j2000'
+        deccol = 'delta_j2000'
+        xcol = 'x_image'
+        ycol = 'y_image'
+    else:
+        racol = 'rapsf'
+        deccol = 'decpsf'
+        xcol = 'xpsf'
+        ycol = 'ypsf'
+        
+    meas1['ccdnum'] = chmeta1['ccdnum'][0]
+        
+    # Apply QA cuts 
+    #---------------- 
+    badflag = np.zeros(len(meas1),int)
+
+    # Mask bad chip data 
+    # Half of chip 31 for MJD>56660 
+    #  c4d_131123_025436_ooi_r_v2 with MJD=56619 has problems too 
+    #  if the background b/w the left and right half is large then BAD
+    lft31, = np.where((meas1[xcol] < 1024) & (meas1['ccdnum'] == 31))
+    rt31, = np.where((meas1[xcol] >= 1024) & (meas1['ccdnum'] == 31))
+    if len(lft31) > 10 and len(rt31) > 10: 
+        lftback = np.median(meas1['background'][lft31]) 
+        rtback = np.median(meas1['background'][rt31]) 
+        mnback = 0.5*(lftback+rtback) 
+        sigback = dln.mad(meas1['background']) 
+        if np.abs(lftback-rtback) > (np.sqrt(mnback)>sigback): 
+            jump31 = True
+        else: 
+            jump31 = False
+        #logger.info('  Big jump in CCDNUM 31 background levels' 
+    else:
+        jump31 = False 
+    if meta['mjd'] > 56600 or jump31 == 1: 
+        badchip31 = True 
+        # Remove bad measurements 
+        # X: 1-1024 okay 
+        # X: 1025-2049 bad 
+        # use 1000 as the boundary since sometimes there's a sharp drop 
+        # at the boundary that causes problem sources with SExtractor 
+        bdind, = np.where((meas1[xcol] > 1000) & (meas1['ccdnum'] == 31))
+        ngdind = len(meas1)-len(bdind)
+        if len(bdind) > 0:  # some bad ones found
+            if verbose: print('  '+str(len(bdind))+' bad chip 31 measurements')
+            badflag[bdind] += 1
+        else:
+            badchip31 = False  # chip 31 
+                         
+    # Mask sourcds with bad quality mask flag (IMAFLAGS_ISO) 
+    bdmeas, = np.where(meas1['imaflags_iso'] > 0)
+    if len(bdmeas) > 0: 
+        if verbose: print('  '+str(len(bdmeas))+' sources with bad CP flags.')
+        badflag[bdmeas] += 2 
+            
+    # Mask sources with bad SE FLAGS 
+    #   this masks problematic truncatd sources near chip edges 
+    bdseflags, = np.where( ((meas1['flags'] & 8) > 0) |   # object truncated 
+                           ((meas1['flags'] & 16) > 0))   # aperture truncate 
+    if len(bdseflags) > 0: 
+        if verbose: print('  '+str(len(bdseflags))+' truncated sources')
+        badflag[bdseflags] += 4
+            
+    # Mask low-S/N sources 
+    #  snr = 1.087/err 
+    snrcut = 5.0 
+    bdsnr, = np.where(1.087/meas1['magerr_auto'] < snrcut) 
+    if len(bdsnr) > 0: 
+        if verbose: print('  '+str(len(bdsnr))+' sources with S/N<'+str(snrcut))
+        badflag[bdsnr] += 8
+    
+    final['badflag'][:] = badflag
+    # Other columns we are keeping in case we need to recreate the original measurement file
+    # already copied over in for loop above
+
+    # Calibrate coordinates
+    racoef = chmeta1['racoef'][0]
+    deccoef = chmeta1['deccoef'][0]
+    rarms = chmeta1['rarms'][0]
+    decrms = chmeta1['decrms'][0]
+    lon,lat = coords.rotsphcen(meas1['alpha_j2000'],meas1['delta_j2000'],
+                               chmeta1['cenra'][0],chmeta1['cendec'][0],gnomic=True)
+    lon2 = lon + utils.func_poly2d(lon,lat,*racoef)
+    lat2 = lat + utils.func_poly2d(lon,lat,*deccoef) 
+    ra2,dec2 = coords.rotsphcen(lon2,lat2,chmeta1['cenra'][0],chmeta1['cendec'][0],reverse=True,gnomic=True)
+    final['ra'] = ra2 
+    final['dec'] = dec2
+    if version >= 'v4':
+        gdmeas, = np.where(np.isfinite(meas1['rapsf']) & np.isfinite(meas1['decpsf']))
+        lon,lat = coords.rotsphcen(meas1['rapsf'][gdmeas],meas1['decpsf'][gdmeas],
+                                   chmeta1['cenra'][0],chmeta1['cendec'][0],gnomic=True)
+        lon2 = lon + utils.func_poly2d(lon,lat,*racoef)
+        lat2 = lat + utils.func_poly2d(lon,lat,*deccoef) 
+        ra2,dec2 = coords.rotsphcen(lon2,lat2,chmeta1['cenra'][0],chmeta1['cendec'][0],reverse=True,gnomic=True)
+        final['rapsf'][gdmeas] = ra2 
+        final['decpsf'][gdmeas] = dec2
+        
+    # Add to astrometric errors 
+    final['raerr'] = np.sqrt(final['raerr']**2 + rarms**2) 
+    final['decerr'] = np.sqrt(final['decerr']**2 + decrms**2) 
+
+    # Get reddening
+    coo = SkyCoord(ra=final['ra'],dec=final['dec'],unit='deg')
+    sfd = SFDQuery()
+    ebv = sfd(coo)                
+    final['ebv'] = ebv 
+    
+    return final
     
 
 def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
@@ -1019,22 +1217,6 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                            ('zptermsig',float),('refmatch',int)])
 
     # All columns in MEAS catalogs (32)
-    #dtype_cat = np.dtype([('MEASID',str,200),('OBJECTID',str,200),('EXPOSURE',str,200),('CCDNUM',int),('FILTER',str,10),
-    #                      ('MJD',float),('X',float),('Y',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
-    #                      ('MAG_AUTO',float),('MAGERR_AUTO',float),('MAG_APER1',float),('MAGERR_APER1',float),('MAG_APER2',float),
-    #                      ('MAGERR_APER2',float),('MAG_APER4',float),('MAGERR_APER4',float),('MAG_APER8',float),('MAGERR_APER8',float),
-    #                      ('KRON_RADIUS',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),('THETA',float),
-    #                      ('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
-    # All the columns that we need (20)
-    #dtype_cat = np.dtype([('MEASID',str,30),('EXPOSURE',str,40),('CCDNUM',int),('FILTER',str,3),
-    #                      ('MJD',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
-    #                      ('MAG_AUTO',float),('MAGERR_AUTO',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),
-    #                      ('THETA',float),('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
-    #dtype_cat = np.dtype([('MEASID',str,30),('EXPOSURE',str,40),('CCDNUM',np.int8),('FILTER',str,3),
-    #                      ('MJD',float),('RA',float),('RAERR',np.float16),('DEC',float),('DECERR',np.float16),
-    #                      ('MAG_AUTO',np.float16),('MAGERR_AUTO',np.float16),('ASEMI',np.float16),('ASEMIERR',np.float16),
-    #                      ('BSEMI',np.float16),('BSEMIERR',np.float16),('THETA',np.float16),('THETAERR',np.float16),
-    #                      ('FWHM',np.float16),('FLAGS',np.int16),('CLASS_STAR',np.float16)])
     dtype_meas = np.dtype([('measid',str,30),('objectid',str,50),('exposure',str,40),('ccdnum',np.int8),('filter',str,3),
                            ('mjd',float),('ra',float),('raerr',np.float32),('dec',float),('decerr',np.float32),
                            ('mag_auto',np.float32),('magerr_auto',np.float32),('asemi',np.float32),('asemierr',np.float32),
@@ -1042,12 +1224,12 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                            ('fwhm',np.float32),('flags',np.int16),('class_star',np.float32),('magpsf',np.float32),
                            ('errpsf',np.float32),('skypsf',np.float32),('chi',np.float32),('sharp',np.float32),
                            ('rapsf',np.float64),('decpsf',np.float64),('haspsf',bool),('snr',np.float32),('badflag',bool)])
-
+    
     #  Loop over exposures
     meas = None
     nmeas = 0
     allmeta = None
-    cmeascount = 0
+    meascount = 0
     metafile = np.atleast_1d(metafile)
     for m,mfile in enumerate(metafile):
         expmeascount = 0
@@ -1092,9 +1274,10 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
             print(measfile,'NOT FOUND')
             import pdb; pdb.set_trace()
         hdu = fits.open(measfile)
+        expmeta = meta[0]
 
-        #import pdb; pdb.set_trace()
-
+        version = mfile.split('/')[-6]
+        
         # Loop over the chip files
         for j in range(len(chmeta)):
             # Check that this chip was astrometrically calibrated
@@ -1104,7 +1287,7 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
             if (chmeta['ngaiamatch'][j] == 0) | (np.max(np.abs(chmeta['racoef'][j]))>1) | (np.max(np.abs(chmeta['deccoef'][j]))>1):
                 if verbose: print('This chip was not astrometrically calibrated or has astrometric issues')
                 astokay = False
-
+                
             # Check that this overlaps the healpix region
             inside = True
             if buffdict is not None:
@@ -1126,10 +1309,17 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
             if (inside is True) and (astokay is True):
                 # Load the chip-level catalog
                 #meas1 = fits.getdata(chfile,1)
-                meas1 = hdu[j+1].data
+                meas1 = Table(hdu[j+1].data)
+                for c in meas1.colnames: meas1[c].name = c.lower()
                 nmeas1 = len(meas1)
+                chmeta1 = chmeta[j]
                 #print('  chip '+str(chmeta[j]['ccdnum'])+'  '+str(nmeas1)+' sources')
-
+                
+                # Calibrate the data, if necessary
+                if 'measid' not in meas1.colnames:
+                    print('calibrating chip '+str(chmeta1['ccdnum'][0]))
+                    meas1 = calibmeas(meas1,chmeta1,meta,version=version,verbose=False)
+                    
                 # Fix negative FWHM values
                 #  use A_WORLD and B_WORLD which are never negative
                 bd,nbd = dln.where(meas1['fwhm']<0.1)
@@ -1166,7 +1356,7 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                         meas1 = None
                         nmeas1 = 0
                     #if verbose: print('  '+str(nmatch)+' sources are inside this pixel')
-
+                    
                 # Combine the catalogs
                 if nmeas1 > 0:
                     # Keep it all in memory
@@ -1183,7 +1373,7 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                             nmeas = len(meas)
 
                         # Add it to the main MEAS measalog
-                        for n in dtype_meas.names: meas[n][meascount:meascount+nmeas1] = meas1[n.upper()]
+                        for c in dtype_meas.names: meas[c][meascount:meascount+nmeas1] = meas1[c]
                     # Use the database
                     else:
                         writecat2db(meas1,dbfile)
@@ -1192,6 +1382,7 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
 
                     meascount += nmeas1
                     expmeascount += nmeas1
+
 
         # Add metadata to ALLMETA, only if some measurements overlap
         if expmeascount>0:
@@ -1202,7 +1393,7 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
         # Total measurements for this exposure
         print('  '+str(expmeascount)+' measurements')
         print(str(meascount)+' measurements total so far')
-
+        
     #print('all exposures loaded. trimming now')
     if (meas is not None) & (meascount<nmeas): meas=meas[0:meascount]   # delete excess elements
     if meas is None: meas=np.array([])         # empty meas
@@ -1465,9 +1656,10 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
         print('Only nside=>128 supported')
         sys.exit()
 
-    print('*** KLUDGE: Forcing output to /scratch1 ***')
+    #print('*** KLUDGE: Forcing output to /scratch1 ***')
     #outdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combine/'
-    outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/combine/'
+    #outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/combine/'
+    outdir = '/home/group/davidnidever/nsc/instcal/v4/combine/'
     if os.path.exists(outdir) is False: os.mkdir(outdir)
 
     # nside>128
@@ -1500,7 +1692,8 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
     # Use the healpix list, nside=128
     #listfile = localdir+'dnidever/nsc/instcal/'+version+'/nsc_instcal_combine_healpix_list.db'
     #listfile = '/home1/09970/dnidever/scratch1/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
-    listfile = '/corral/projects/NOIRLab/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
+    #listfile = '/corral/projects/NOIRLab/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
+    listfile = '/home/group/davidnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
     if os.path.exists(listfile) is False:
         print(listfile+" NOT FOUND")
         sys.exit()
@@ -1545,6 +1738,10 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
                 hlist1 = Table(hlist1)
                 hlist = vstack([hlist,hlist1])
 
+    # Fix filenames for tempest
+    hlist['measfile'] = [f.replace('/home1/09970/dnidever/scratch1/','/home/group/davidnidever/')+'.gz' for f in hlist['measfile']]
+
+    
     # Rename to be consistent with the FITS file
     hlist['measfile'].name = 'FILE'
     hlist['base'].name = 'BASE'
@@ -1615,6 +1812,7 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
     # Estimate number of measurements in pixel
     #metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
     metafiles = [m.replace('_meas','_meta').strip() for m in hlist['FILE']]
+    metafiles = [m.replace('.fits.gz','.fits') for m in metafiles]
     metatab = checkboundaryoverlap(metafiles,buffdict,verbose=True)  # verbose=False
     nmeasperarea = np.zeros(dln.size(metatab),int)
     areadict = {'c4d':3.0, 'k4m':0.3, 'ksb':1.0}  # total area
@@ -1796,6 +1994,9 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
     nmeas = meascount
     print(str(nmeas))
 
+
+    #import pdb; pdb.set_trace()
+    
     # No measurements
     if nmeas==0:
         print('No measurements for this healpix')
