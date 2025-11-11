@@ -405,24 +405,25 @@ def seqpms(obj):
     """
 
     ndet = obj['ndet']
-    sumra = obj['sumra']
-    sumdec = obj['sumdec']
+    sumx = obj['sumx']
+    sumy = obj['sumy']
     sumt = obj['sumt']
     sumt2 = obj['sumt2']
-    sumtra = obj['sumtra']
-    sumtdec = obj['sumtdec']
+    sumtx = obj['sumtx']
+    sumty = obj['sumty']
     
     # Calculate mean coordinates
-    mnra = sumra/ndet
-    mndec = sumdec/ndet
+    mnx = sumx/ndet
+    mny = sumy/ndet
     mnt = sumt/ndet
     # Calculate proper motions
-    slpra = np.zeros(nmatch,float)
-    slpdec = np.zeros(nmatch,float)
+    nobj = len(obj)
+    slpx = np.zeros(nobj,float)
+    slpy = np.zeros(nobj,float)
     twodet = (ndet > 1)
     denom = (sumt2[twodet]/ndet[twodet]-mnt[twodet]**2)
-    slpra[twodet] = (sumtra[twodet]/ndet[twodet]-mnra[twodet]*mnt[twodet]) / denom
-    slpdec[twodet] = (sumtdec[twodet]/ndet[twodet]-mndec[twodet]*mnt[twodet]) / denom
+    slpx[twodet] = (sumtx[twodet]/ndet[twodet]-mnx[twodet]*mnt[twodet]) / denom
+    slpy[twodet] = (sumty[twodet]/ndet[twodet]-mny[twodet]*mnt[twodet]) / denom
     # weighted mean and slope
     # mnx = np.sum(wt*x)/totwt
     # mny = np.sum(wt*y)/totwt
@@ -435,22 +436,26 @@ def seqpms(obj):
     #                 sqrt(1/((n-1)*np.sum(wt))
     # wtx = (np.sum(wt*x*y)/totwt-mnx*mny)/(np.sum(wt*x**2)/totwt-mnx**2)
     # wtxerr = 1.0/np.sqrt( np.sum(wt*x**2)-mnx**2 * np.sum(wt))
-    wmnt = obj['sumwt']/obj['sumw']
-    wmnra = obj['sumwra']/obj['sumw']
-    wmndec = obj['sumwdec']/obj['sumw']
-    denom = (obj['sumwt2']/obj['sumw']-wmnt**2)
-    wslpra = (obj['sumwtra']/obj['sumw']-wmnt*wmnra)/denom
-    wslpdec = (obj['sumwtdec']/obj['sumw']-wmnt*wmndec)/denom
-    wslpraerr = 1.0/np.sqrt( obj['sumwra2']-wmnra**2 * obj['sumw'])
-    wslpraerr = 1.0/np.sqrt( obj['sumwdec2']-wmndec**2 * obj['sumw'])
-    wmnraerr = (np.sqrt((obj['sumwra2']-2*wmnra*obj['sumwra']+obj['sumw']*wmnra**2) / 
-                        (np.sqrt(obj['ndet']-1)*obj['sumw'])))
-    wmndecerr = (np.sqrt((obj['sumwdec2']-2*wmndec*obj['sumwdec']+obj['sumw']*wmndec**2) / 
-                        (np.sqrt(obj['ndet']-1)*obj['sumw'])))
 
-    return (mnt,mnra,mndec,slpra,slpdec,
-            wmnt,wmnra,wmndec,wslpra,wslpdec,
-            wmnraerr,wmndecerr,wslpraerr,wslpdecerr)
+    wmnt = obj['sumwt']/obj['sumw']
+    wmnx = obj['sumwx']/obj['sumw']
+    wmny = obj['sumwy']/obj['sumw']
+    denom = (obj['sumwt2']/obj['sumw']-wmnt**2)
+    bd = (denom == 0.0)
+    denom[bd] = 1
+    wslpx = np.zeros(nobj,float)
+    wslpy = np.zeros(nobj,float)
+    wslpx[twodet] = (obj['sumwtx'][twodet]/obj['sumw'][twodet]-wmnt[twodet]*wmnx[twodet])/denom[twodet]
+    wslpy[twodet] = (obj['sumwty'][twodet]/obj['sumw'][twodet]-wmnt[twodet]*wmny[twodet])/denom[twodet]
+
+    # uncertainty in weighted mean
+    wmnxerr = 1/np.sqrt(obj['sumw'])  # same for yerr
+    # uncertainty in weighted slope
+    wslpxerr = 1.0/np.sqrt( obj['sumwt2']-wmnt**2 * obj['sumw'])
+    
+    return (mnt,mnx,mny,slpx,slpy,
+            wmnt,wmnx,wmny,wslpx,wslpy,
+            wmnxerr,wslpxerr)
 
 def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,minmeaspm=5):
     """
@@ -459,20 +464,25 @@ def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,mi
     to recalculate the proper motions (as we go), then set calcpm=False
     """
 
+    mjd0 = 55000  # use this as the mjd reference so times stay small
+    
     nmeas = len(meas)
     labels = np.zeros(nmeas)-1   # object label (also its index) for all the measurements
 
     # Create exposures index
     index = dln.create_index(meas['exposure'])
     nexp = len(index['value'])
-
+    print('seqclusterpm: {:d} exposures'.format(nexp))
+    
     # Create object catalog
-    dtype_obj = np.dtype([('label',int),('ra',np.float64),('dec',np.float64),('ndet',int),
-                          ('sumt',float),('sumt2',float),('sumra',float),('sumdec',float),
-                          ('sumtra',float),('sumtdec',float),('slpra',float),('slpdec',float),('mnt',float),
+    dtype_obj = np.dtype([('label',int),('x',np.float64),('y',np.float64),('ndet',int),
+                          ('mint',float),('maxt',float),('dt',float),('sumt',float),('sumt2',float),
+                          ('sumx',float),('sumy',float),
+                          ('sumtx',float),('sumty',float),('slpx',float),('slpy',float),('mnt',float),
                           ('sumw',float),('sumwt',float),('sumwt2',float),
-                          ('sumwra',float),('sumwdec',float),('sumwtra',float),('sumwtdec',float),
-                          ('sumwra2',float),('sumwdec2',float)])
+                          ('sumwx',float),('sumwy',float),('sumwtx',float),('sumwty',float),
+                          ('sumwx2',float),('sumwy2',float),('slperr',float),
+                          ('ra',float),('dec',float),('mjd',float),('pmra',float),('pmdec',float),('pmerr',float)])
 
     # weighted slope
     # mnx = np.sum(wt*x)/totwt
@@ -488,49 +498,86 @@ def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,mi
         cnt = 0
     nobj = len(obj)
 
+    racol = 'ra'
+    deccol = 'dec'
+    measra = meas[racol]
+    measdec = meas[deccol]
+    cootype = np.ones(nmeas,int)
+    if 'rapsf' in meas.dtype.names:
+        racol = 'rapsf'
+        deccol = 'decpsf'
+        gdpsf, = np.where(np.isfinite(meas[racol]) & np.isfinite(meas[deccol]))
+        if len(gdpsf)>0:
+            measra[gdpsf] = meas[racol][gdpsf]
+            measdec[gdpsf] = meas[deccol][gdpsf]
+            cootype[gdpsf] = 2
+
+    # Use gnomic projection
+    cenra = np.median(measra)
+    cendec = np.median(measdec)
+    if np.max(measra)-np.min(measra) > 180:
+        temp = measra.copy()
+        temp[temp > 180] -= 360
+        cenra = np.median(temp)
+        if cenra<0:
+            cenra += 360
+    x,y = coords.rotsphcen(measra,measdec,cenra,cendec,gnomic=True)
+    x *= 3600
+    y *= 3600
+    # convert to arcsec
+    xerr = meas['raerr'].astype(float)  # already in arcsec
+    
     # Loop over exposures
     for i in range(nexp):
         #print(str(i)+' '+index['value'][i])
         indx = index['index'][index['lo'][i]:index['hi'][i]+1]
         meas1 = meas[indx]
+        print('{:d} {:s} {:d}'.format(i+1,index['value'][i],len(meas1)))
+        #measra1 = measra[indx]
+        #measdec1 = measdec[indx]
+        x1 = x[indx]
+        y1 = y[indx]
+        xerr1 = xerr[indx]
         nmeas1 = len(meas1)
-        measmjd = meas1['mjd'][0]
+        measmjd1 = meas1['mjd'][0]
+        t1 = measmjd1-mjd0
         if dln.size(dcr)>1:
             dcr1 = dcr[indx]
         else:
             dcr1 = dcr
-        
+            
         # First exposure
         if cnt==0:
-            ind1 = np.arange(nmeas1)
-            obj['label'][ind1] = ind1
-            obj['ra'][ind1] = meas1['ra']
-            obj['dec'][ind1] = meas1['dec']
-            obj['ndet'][ind1] = 1
-            obj['sumt'][ind1] = meas1['mjd']
-            obj['sumt2'][ind1] = meas1['mjd']
-            obj['sumra'][ind1] = meas1['ra']
-            obj['sumdec'][ind1] = meas1['dec']
-            obj['sumra'][ind1] = meas1['ra']
-            obj['sumdec'][ind1] = meas1['dec']
-            obj['sumtra'][ind1] = meas1['mjd']*meas1['ra']
-            obj['sumtdec'][ind1] = meas1['mjd']*meas1['dec']
-            obj['slpra'][ind1] = 0.0
-            obj['slpdec'][ind1] = 0.0
-            obj['mnt'][ind1] = measmjd
+            oind = np.arange(nmeas1)
+            obj['label'][oind] = oind
+            obj['x'][oind] = x1
+            obj['y'][oind] = y1
+            obj['ndet'][oind] = 1
+            obj['mint'][oind] = t1
+            obj['maxt'][oind] = t1
+            obj['dt'][oind] = 0.0
+            obj['sumt'][oind] = t1
+            obj['sumt2'][oind] = t1**2
+            obj['sumx'][oind] = x1
+            obj['sumy'][oind] = y1
+            obj['sumtx'][oind] = t1*x1
+            obj['sumty'][oind] = t1*y1
+            obj['slpx'][oind] = 0.0
+            obj['slpy'][oind] = 0.0
+            obj['mnt'][oind] = t1
             # weighted values
-            wt = 1.0/meas1['raerr']**2  # ra/dec uncertainty are the same
-            obj['sumw'][ind1] = wt
-            obj['sumwt'][ind1] = wt*meas1['mjd']
-            obj['sumwt2'][ind1] = wt*meas1['mjd']**2
-            obj['sumwra'][ind1] = wt*meas1['ra']
-            obj['sumwdec'][ind1] = wt*meas1['dec']
-            obj['sumwra2'][ind1] = wt*meas1['ra']**2
-            obj['sumwdec2'][ind1] = wt*meas1['dec']**2
-            obj['sumwtra'][ind1] = wt*meas1['mjd']*meas1['ra']
-            obj['sumwtdec'][ind1] = wt*meas1['mjd']*meas1['dec']
+            wt = 1.0/xerr1**2
+            obj['sumw'][oind] = wt
+            obj['sumwt'][oind] = wt*t1
+            obj['sumwt2'][oind] = wt*t1**2
+            obj['sumwx'][oind] = wt*x1
+            obj['sumwy'][oind] = wt*y1
+            obj['sumwx2'][oind] = wt*x1**2
+            obj['sumwy2'][oind] = wt*y1**2
+            obj['sumwtx'][oind] = wt*t1*x1
+            obj['sumwty'][oind] = wt*t1*y1
 
-            labels[indx] = ind1
+            labels[indx] = oind
             cnt += nmeas1
 
         # Second and up, or object catalog input
@@ -538,53 +585,71 @@ def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,mi
             # Predict current coordinates with linear fit
             # this is helpful if there is a big temporal gap between
             # two exposures
-            predra = obj['ra'][:cnt] + obj['slpra'][:cnt]*(measmjd-obj['mnt'][:cnt])
-            preddec = obj['dec'][:cnt] + obj['slpdec'][:cnt]*(measmjd-obj['mnt'][:cnt])
-
-            ind2,ind1,dist = coords.xmatch(meas1['ra'],meas1['dec'],predra,
-                                           preddec,dcr1,unique=True)
-            #ind2,ind1,dist = coords.xmatch(meas1['RA'],meas1['DEC'],obj[:cnt]['ra'],
-            #                               obj[:cnt]['dec'],dcr1,unique=True)
-            nmatch = dln.size(ind1)
+            predx = obj['x'][:cnt] + obj['slpx'][:cnt]*(t1-obj['mnt'][:cnt])
+            predy = obj['y'][:cnt] + obj['slpy'][:cnt]*(t1-obj['mnt'][:cnt])
+            
+            mind,oind,dist = coords.xmatch(x1,y1,predx,
+                                           predy,dcr1,sphere=False,unique=True)
+            #ind2,ind1,dist = coords.xmatch(meas1['X'],meas1['Y'],obj[:cnt]['x'],
+            #                               obj[:cnt]['y'],dcr1,unique=True)
+            nmatch = dln.size(oind)
+            print('  {:d} objects, {:d} matches'.format(cnt,nmatch))
             #  Some matches, add data to existing records for these measurements
             if nmatch>0:
-                obj['ndet'][ind1] += 1
-                obj['sumt'][ind1] += meas1['mjd'][ind2]
-                obj['sumt2'][ind1] += meas1['mjd'][ind2]
-                obj['sumra'][ind1] += meas1['ra'][ind2]
-                obj['sumdec'][ind1] += meas1['dec'][ind2]
-                obj['sumtra'][ind1] += meas1['mjd'][ind2]*meas1['ra'][ind2]
-                obj['sumtdec'][ind1] += meas1['mjd'][ind2]*meas1['dec'][ind2]
+                obj['ndet'][oind] += 1
+                obj['mint'][oind] = np.minimum(obj['mint'][oind],t1)
+                obj['maxt'][oind] = np.maximum(obj['maxt'][oind],t1)
+                obj['dt'][oind] = obj['maxt'][oind]-obj['mint'][oind]
+                obj['sumt'][oind] += t1
+                obj['sumt2'][oind] += t1**2
+                obj['sumx'][oind] += x1[mind]
+                obj['sumy'][oind] += y1[mind]
+                obj['sumtx'][oind] += t1*x1[mind]
+                obj['sumty'][oind] += t1*y1[mind]
                 # weighted values
-                wt = 1.0/meas1['RAERR'][ind2]**2  # ra/dec uncertainty are the same
-                obj['sumw'][ind1] += wt
-                obj['sumwt'][ind1] += wt*meas1['mjd'][ind2]
-                obj['sumwt2'][ind1] += wt*meas1['mjd'][ind2]**2
-                obj['sumwra'][ind1] += wt*meas1['ra'][ind2]
-                obj['sumwdec'][ind1] += wt*meas1['dec'][ind2]
-                obj['sumwra2'][ind1] += wt*meas1['ra'][ind2]**2
-                obj['sumwdec2'][ind1] += wt*meas1['dec'][ind2]**2
-                obj['sumwtra'][ind1] = wt*meas1['mjd'][ind2]*meas1['ra'][ind2]
-                obj['sumwtdec'][ind1] = wt*meas1['mjd'][ind2]*meas1['dec'][ind2]
+                wt = 1.0/xerr1[mind]**2
+                obj['sumw'][oind] += wt
+                obj['sumwt'][oind] += wt*t1
+                obj['sumwt2'][oind] += wt*t1**2
+                obj['sumwx'][oind] += wt*x1[mind]
+                obj['sumwy'][oind] += wt*y1[mind]
+                obj['sumwx2'][oind] += wt*x1[mind]**2
+                obj['sumwy2'][oind] += wt*y1[mind]**2
+                obj['sumwtx'][oind] += wt*t1*x1[mind]
+                obj['sumwty'][oind] += wt*t1*y1[mind]
                 # Calculate mean coordinates and proper motions
                 if calcpm:
-                    mnt,mnra,mndec,slpra,slpdec = seqpms(obj[ind1])
-                    pm = np.sqrt(slpra**2+slpdec**2)
+                    pmout = seqpms(obj[oind])
+                    (mnt,mnx,mny,slpx,slpy,
+                     wmnt,wmnx,wmny,wslpx,wslpy,
+                     wmnxerr,wslpxerr) = pmout
+                    #mnt,mnx,mny,slpx,slpy = seqpms(obj[oind])
+                    pm = np.sqrt(slpx**2+slpy**2)
+                    pmerr = np.sqrt(2)*wslpxerr
                     # Limit pm mesurements to good ones
-                    gd, = np.where((obj['ndet'][ind1]>minmeaspm) &
-                                   (pm/pmerr > 3))
+                    # and longer baselines
+                    dtthresh = 10    # days
+                    gd, = np.where((obj['ndet'][oind]>minmeaspm) &
+                                   (pm/pmerr > 3) & (obj['dt'][oind] > dtthresh))
+                    print('  {:d} objects have good pms'.format(len(gd)))
                     if len(gd)>0:
-                        obj['slpra'][ind1][gd] = slpra[gd]
-                        obj['slpdec'][ind1][gd] = slpdec[gd]
-                    obj['ra'][ind1] = mnra
-                    obj['dec'][ind1] = mndec
-                    obj['mnt'][ind1] = mnt
-                labels[indx[ind2]] = ind1
+                        obj['slpx'][oind][gd] = slpx[gd]
+                        obj['slpy'][oind][gd] = slpy[gd]
+                        obj['slperr'][oind][gd] = pmerr[gd]
+                    obj['x'][oind] = mnx
+                    obj['y'][oind] = mny
+                    obj['mnt'][oind] = mnt
+
+
+                labels[indx[mind]] = oind
                 if nmatch<nmeas1:
                     indx0 = indx.copy()
-                    indx = np.delete(indx,ind2)
-                    meas1 = np.delete(meas1,ind2)
+                    indx = np.delete(indx,mind)
+                    meas1 = np.delete(meas1,mind)
                     nmeas1 = dln.size(meas1)
+                    x1 = np.delete(x1,mind)
+                    y1 = np.delete(y1,mind)
+                    xerr1 = np.delete(xerr1,mind)
                 else:
                     meas1 = np.array([])
                     nmeas1 = 0
@@ -595,33 +660,36 @@ def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,mi
                 if (cnt+nmeas1)>nobj:
                     obj = add_elements(obj)
                     nobj = len(obj)
-                ind1 = np.arange(nmeas1)+cnt
-                obj['label'][ind1] = ind1
-                obj['ra'][ind1] = meas1['ra']
-                obj['dec'][ind1] = meas1['dec']
-                obj['sumt'][ind1] = meas1['mjd']
-                obj['sumt2'][ind1] = meas1['mjd']
-                obj['sumra'][ind1] = meas1['ra']
-                obj['sumdec'][ind1] = meas1['dec']
-                obj['sumtra'][ind1] = meas1['mjd']*meas1['ra']
-                obj['sumtdec'][ind1] = meas1['mjd']*meas1['dec']
-                obj['ndet'][ind1] = 1
-                obj['slpra'][ind1] = 0.0
-                obj['slpdec'][ind1] = 0.0
-                obj['mnt'][ind1] = measmjd
+                oind = np.arange(nmeas1)+cnt
+                obj['label'][oind] = oind
+                obj['mint'][oind] = t1
+                obj['maxt'][oind] = t1
+                obj['dt'][oind] = 0.0
+                obj['x'][oind] = x1
+                obj['y'][oind] = y1
+                obj['sumt'][oind] = t1
+                obj['sumt2'][oind] = t1
+                obj['sumx'][oind] = x1
+                obj['sumy'][oind] = y1
+                obj['sumtx'][oind] = t1*x1
+                obj['sumty'][oind] = t1*y1
+                obj['ndet'][oind] = 1
+                obj['slpx'][oind] = 0.0
+                obj['slpy'][oind] = 0.0
+                obj['mnt'][oind] = t1
                 # weighted values
-                wt = 1.0/meas1['raerr']**2  # ra/dec uncertainty are the same
-                obj['sumw'][ind1] = wt
-                obj['sumwt'][ind1] = wt*meas1['mjd']
-                obj['sumwt2'][ind1] = wt*meas1['mjd']**2
-                obj['sumwra'][ind1] = wt*meas1['ra']
-                obj['sumwdec'][ind1] = wt*meas1['dec']
-                obj['sumwra2'][ind1] = wt*meas1['ra']**2
-                obj['sumwdec2'][ind1] = wt*meas1['dec']**2
-                obj['sumwtra'][ind1] = wt*meas1['mjd']*meas1['ra']
-                obj['sumwtdec'][ind1] = wt*meas1['mjd']*meas1['dec']
+                wt = 1.0/xerr1**2
+                obj['sumw'][oind] = wt
+                obj['sumwt'][oind] = wt*t1
+                obj['sumwt2'][oind] = wt*t1**2
+                obj['sumwx'][oind] = wt*x1
+                obj['sumwy'][oind] = wt*y1
+                obj['sumwx2'][oind] = wt*x1**2
+                obj['sumwy2'][oind] = wt*y1**2
+                obj['sumwtx'][oind] = wt*t1*x1
+                obj['sumwty'][oind] = wt*t1*y1
 
-                labels[indx] = ind1
+                labels[indx] = oind
 
                 cnt += nmeas1
     # Trim off the excess elements
@@ -635,6 +703,17 @@ def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,mi
     # Maybe iterate
     # -measure mean ra/dec for each object and go through the process again
 
+
+    # Now get ra/dec values
+    mnra,mndec = coords.rotsphcen(obj['x']/3600,obj['y']/3600,cenra,cendec,gnomic=True,reverse=True)
+    obj['ra'] = mnra
+    obj['dec'] = mndec
+    obj['mjd'] = obj['mnt']+mjd0
+    # IS THIS RIGHT???
+    obj['pmra'] = obj['slpx']
+    obj['pmdec'] = obj['slpy']
+    obj['pmerr'] = obj['slperr']
+    
     return labels, obj
 
 def meancoords(meas,labels):
@@ -1995,7 +2074,12 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
     print(str(nmeas))
 
 
-    #import pdb; pdb.set_trace()
+    labels,obj = seqclusterpm(meas)
+    #  seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,minmeaspm=5)
+
+    import pdb; pdb.set_trace()
+
+
     
     # No measurements
     if nmeas==0:
