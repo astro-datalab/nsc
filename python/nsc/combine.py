@@ -2139,13 +2139,15 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
     if kind=='hybrid':
         # Spatially cluster the measurements with DBSCAN
         #   this might also resort MEAS
+        print('Using HYBRID clustering')
         objtab, meas = clusterdata(meas,nmeas,dbfile=dbfile)
         nobj = dln.size(objtab)
         meascumcount = np.cumsum(objtab['nmeas'])
         print(str(nobj)+' unique objects clustered')
 
     # SEQCLUSTERPM
-    elif kind=='seqclusterpm':        
+    elif kind=='seqclusterpm':
+        print('Using SEQCLUSTERPM clustering')
         ## Spatially cluster the measurements with proper motion clustering
         objlabels,initobj = seqclusterpm(meas,calcpm=False)
         nobj = dln.size(initobj)

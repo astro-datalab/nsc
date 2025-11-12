@@ -143,7 +143,7 @@ if __name__ == "__main__":
     print(len(inputdata),'inputs')
 
     # Make sure the filename columns are long enough
-    if 'fluxfile' in inputdata.colnames:
+    if hasattr(inputdata,'colnames') and 'fluxfile' in inputdata.colnames:
         inputdata['fluxfile'] = inputdata['fluxfile'].astype((str,150))
         inputdata['wtfile'] = inputdata['wtfile'].astype((str,150))
         inputdata['maskfile'] = inputdata['maskfile'].astype((str,150))
@@ -521,34 +521,37 @@ if __name__ == "__main__":
     #========
     elif stage=='combine':
         script = 'nsc_instcal_combine'
+        if host=='tempest':
+            script = '/home/x51j468/projects/nsc/bin/nsc_instcal_combine'
         label = 'combine'
         if isinstance(inputdata,Table)==False:
             inputlist = inputdata.copy()
             inputdata = Table(np.zeros(len(inputlist),dtype=np.dtype([('HEALPIX',str,1000)])))
-            inputdata['HEALPILX'] = inputlist
+            inputdata['HEALPIX'] = inputlist
 
         # Check previously submitted tasks lists
-        print('Checking previously submitted tasks lists')
-        tasklist = glob(os.path.join(basedir,'lists',label+'_*_tasks.fits'))
-        prevtasks = None
-        for tf in tasklist:
-            print('Loading ',tf)
-            ptasks = Table.read(tf)
-            if prevtasks is None:
-                prevtasks = ptasks
-            else:
-                prevtasks = vstack((prevtasks,ptasks))
-        # Some previous lists
-        if prevtasks is not None:
-            # Get unique exposures
-            _,ui = np.unique(prevtasks['name'],return_index=True)
-            prevtasks = prevtasks[ui]
-            # Remove any previously submitted exposures
-            inphealpixpix = inputdata['HEALPIX']
-            _,ind1,ind2 = np.intersect1d(prevtasks['name'],inphealpix,return_indices=True)
-            if len(ind1)>0:
-                print(len(ind1),' previously submitted exposures to remove')
-                inputdata.remove_rows(ind2)
+        if redo==False:
+            print('Checking previously submitted tasks lists')
+            tasklist = glob(os.path.join(basedir,'lists',label+'_*_tasks.fits'))
+            prevtasks = None
+            for tf in tasklist:
+                print('Loading ',tf)
+                ptasks = Table.read(tf)
+                if prevtasks is None:
+                    prevtasks = ptasks
+                else:
+                    prevtasks = vstack((prevtasks,ptasks))
+            # Some previous lists
+            if prevtasks is not None:
+                # Get unique exposures
+                _,ui = np.unique(prevtasks['name'],return_index=True)
+                prevtasks = prevtasks[ui]
+                # Remove any previously submitted exposures
+                inphealpixpix = inputdata['HEALPIX']
+                _,ind1,ind2 = np.intersect1d(prevtasks['name'],inputdata['HEALPIX'],return_indices=True)
+                if len(ind1)>0:
+                    print(len(ind1),' previously submitted exposures to remove')
+                    inputdata.remove_rows(ind2)
 
         # Loop over input data and populate the tasks list
         tasks = Table(np.zeros(np.minimum(len(inputdata),maxtasks),dtype=np.dtype(dt)))
@@ -557,18 +560,18 @@ if __name__ == "__main__":
             healpix = inputdata['HEALPIX'][i]
             print('{:} {:}'.format(i+1,healpix))
             cmd = script+' '+healpix+' '+version
-            if host:
-                cmd += ' --host '+host
+            if redo:
+                cmd += ' --redo'
             # Check output filename
-            outdir = os.path.join(basedir,'combine',str(int(healpix)//1000,),str(healpix))
-            logfile = os.path.join(outdir,str(healpix)+'.log')
+            outdir = os.path.join(basedir,'combine',str(int(healpix)//1000))
+            logfile = os.path.join(outdir,str(healpix)+'.'+logtime+'.log')
             outfile = os.path.join(outdir,str(healpix)+'.fits.gz')
             if os.path.exists(outfile) and redo==False:
                 print(outfile,' ALREADY EXISTS.  Skipping')
                 continue
             # Skip information in the tasks table
             tasks['cmd'][cnt] = cmd
-            tasks['name'][cnt] = base
+            tasks['name'][cnt] = healpix
             tasks['output'][cnt] = outfile
             tasks['outfile'][cnt] = logfile 
             tasks['errfile'][cnt] = logfile.replace('.log','.err')
@@ -578,7 +581,7 @@ if __name__ == "__main__":
                 print('Reached maxtasks ',maxtasks)
                 break
         tasks = tasks[:cnt]  # trim
-
+        
         # Calculate nodes need
         # how much per healpix??
         ntasks = np.minimum(len(tasks),maxtasks)
@@ -642,7 +645,7 @@ if __name__ == "__main__":
             os.makedirs(slurmroot)
 
     # For measurement on Tempest we'll use our own job manager/launcher per mode
-    if stage.lower()[:4]=='meas' and host.lower().startswith('tempest'):
+    if (stage.lower()[:4]=='meas' or stage.lower()=='combine') and host.lower().startswith('tempest'):
         slurmdir = os.path.join(os.path.expanduser('~'),'slurm')
         #print('Using nsc_launcher')
         logdir = os.path.join(tmpdir,'logs')
@@ -665,7 +668,9 @@ if __name__ == "__main__":
             #export LAUNCHER_JOB_FILE=/home/x51j468/test_cmds.lst
             #export LAUNCHER_PPN=10
             precommands = ['export LAUNCHER_DIR=/home/x51j468/projects/launcher']
-            precommands += ['export LAUNCHER_PPN='+str(nparallel)]
+            #precommands += ['export LAUNCHER_PPN='+str(nparallel)]
+            precommands += ['export LAUNCHER_NPROCS='+str(nparallel)]
+            precommands += ['export LAUNCHER_PPN='+str(int(nparallel/nodes))]
             postcommands = None
         else:
             precommands = ['module load python3/3.9.2']
