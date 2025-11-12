@@ -24,6 +24,9 @@ import gc
 import psutil
 from . import utils
 
+import warnings
+warnings.filterwarnings("ignore", message="invalid value encountered in cast", category=RuntimeWarning)
+
 def writecat2db(cat,dbfile):
     """ Write a catalog to the database """
     ncat = dln.size(cat)
@@ -498,6 +501,11 @@ def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,mi
         cnt = 0
     nobj = len(obj)
 
+    # matching radius
+    #err = np.sqrt(meas['raerr']**2+meas['decerr']**2)
+    #eps = np.maximum(3*np.median(err),0.3)
+    #dcr = np.maximum(3*err,eps)
+    
     racol = 'ra'
     deccol = 'dec'
     measra = meas[racol]
@@ -585,13 +593,39 @@ def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,mi
             # Predict current coordinates with linear fit
             # this is helpful if there is a big temporal gap between
             # two exposures
-            predx = obj['x'][:cnt] + obj['slpx'][:cnt]*(t1-obj['mnt'][:cnt])
-            predy = obj['y'][:cnt] + obj['slpy'][:cnt]*(t1-obj['mnt'][:cnt])
-            
+            predx = obj['x'][:cnt]
+            predy = obj['y'][:cnt]
+            if calcpm:
+                pm = np.sqrt(obj['slpx'][:cnt]**2+obj['slpy'][:cnt]**2)
+                pmerr = np.sqrt(2)*obj['slperr'][:cnt]
+                # Limit pm mesurements to good ones
+                # and longer baselines
+                dtthresh = 10    # days
+                gd, = np.where((obj['ndet'][:cnt]>minmeaspm) &
+                                   (pm/pmerr > 3) & (obj['dt'][:cnt] > dtthresh))
+                if len(gd)>0:
+                    deltat = (t1-obj['mnt'][:cnt])
+                    predx[gd] += obj['slpx'][:cnt][gd]*deltat[gd]
+                    predy[gd] += obj['slpy'][:cnt][gd]*deltat[gd]
+
+                    maxslpx = np.max(np.abs(obj['slpx'][:cnt][gd]))
+                    maxslpy = np.max(np.abs(obj['slpy'][:cnt][gd]))
+                    maxslp = np.max([maxslpx,maxslpy])
+                    xshift = obj['slpx'][:cnt][gd]*deltat[gd]
+                    maxxshift = np.max(np.abs(xshift))
+                    yshift = obj['slpy'][:cnt][gd]*deltat[gd]
+                    maxyshift = np.max(np.abs(yshift))
+                    maxshift = np.max([maxxshift,maxyshift])
+                    print('  max slp = {:.5f} arcsec/day'.format(maxslp))
+                    print('  max pm shift = {:.5f} arcsec'.format(maxshift))
+                    #if maxshift > 50:
+                    #    import pdb; pdb.set_trace()
+                    
+                #import pdb; pdb.set_trace()
+
+                    
             mind,oind,dist = coords.xmatch(x1,y1,predx,
                                            predy,dcr1,sphere=False,unique=True)
-            #ind2,ind1,dist = coords.xmatch(meas1['X'],meas1['Y'],obj[:cnt]['x'],
-            #                               obj[:cnt]['y'],dcr1,unique=True)
             nmatch = dln.size(oind)
             print('  {:d} objects, {:d} matches'.format(cnt,nmatch))
             #  Some matches, add data to existing records for these measurements
@@ -618,12 +652,15 @@ def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,mi
                 obj['sumwtx'][oind] += wt*t1*x1[mind]
                 obj['sumwty'][oind] += wt*t1*y1[mind]
                 # Calculate mean coordinates and proper motions
+                pmout = seqpms(obj[oind])
+                (mnt,mnx,mny,slpx,slpy,wmnt,wmnx,wmny,wslpx,wslpy,wmnxerr,wslpxerr) = pmout
+                obj['x'][oind] = mnx
+                obj['y'][oind] = mny
+                obj['mnt'][oind] = mnt
                 if calcpm:
-                    pmout = seqpms(obj[oind])
-                    (mnt,mnx,mny,slpx,slpy,
-                     wmnt,wmnx,wmny,wslpx,wslpy,
-                     wmnxerr,wslpxerr) = pmout
-                    #mnt,mnx,mny,slpx,slpy = seqpms(obj[oind])
+                    obj['slpx'][oind] = slpx
+                    obj['slpy'][oind] = slpy
+                    obj['slperr'][oind] = wslpxerr
                     pm = np.sqrt(slpx**2+slpy**2)
                     pmerr = np.sqrt(2)*wslpxerr
                     # Limit pm mesurements to good ones
@@ -635,11 +672,7 @@ def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,mi
                     if len(gd)>0:
                         obj['slpx'][oind][gd] = slpx[gd]
                         obj['slpy'][oind][gd] = slpy[gd]
-                        obj['slperr'][oind][gd] = pmerr[gd]
-                    obj['x'][oind] = mnx
-                    obj['y'][oind] = mny
-                    obj['mnt'][oind] = mnt
-
+                        obj['slperr'][oind][gd] = wslpxerr[gd]
 
                 labels[indx[mind]] = oind
                 if nmatch<nmeas1:
@@ -710,9 +743,11 @@ def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,mi
     obj['dec'] = mndec
     obj['mjd'] = obj['mnt']+mjd0
     # IS THIS RIGHT???
-    obj['pmra'] = obj['slpx']
-    obj['pmdec'] = obj['slpy']
-    obj['pmerr'] = obj['slperr']
+    # slpx/y are in arcsec/day
+    # convert to mas/year
+    obj['pmra'] = obj['slpx'] * (1e3/365.2425)
+    obj['pmdec'] = obj['slpy'] * (1e3/365.2425)
+    obj['pmerr'] = obj['slperr'] * (1e3/365.2425)
     
     return labels, obj
 
@@ -1641,10 +1676,12 @@ def breakup_idtab(dbfile):
 
     t00 = time.time()
 
-    outdir = '/data0/dnidever/nsc/instcal/v3/idtab/'
+    #outdir = '/data0/dnidever/nsc/instcal/v3/idtab/'
+    outdir = '/home/group/davidnidever/nsc/instcal/v4/idtab/'
 
     # Load the exposures table
-    expcat = fits.getdata('/net/dl2/dnidever/nsc/instcal/v3/lists/nsc_v3_exposure_table.fits.gz',1)
+    #expcat = fits.getdata('/net/dl2/dnidever/nsc/instcal/v3/lists/nsc_v3_exposure_table.fits.gz',1)
+    expcat = fits.getdata('/home/group/davidnidever/nsc/instcal/v4/lists/nsc_instcal_combine_exposures.fits',1)
 
     # Make sure it's a list
     if type(dbfile) is str: dbfile=[dbfile]
@@ -1671,7 +1708,8 @@ def breakup_idtab(dbfile):
             exposure = np.array(exposure)
             eindex = dln.create_index(exposure)
             # Match exposures to exposure catalog
-            ind1,ind2 = dln.match(expcat['EXPOSURE'],eindex['value'])
+            #ind1,ind2 = dln.match(expcat['EXPOSURE'],eindex['value'])
+            ind1,ind2 = dln.match(expcat['base'],eindex['value'])
             # Loop over exposures and write output files
             nexp = len(eindex['value'])
             print('  '+str(nexp)+' exposures')
@@ -1686,8 +1724,10 @@ def breakup_idtab(dbfile):
                 cat = np.zeros(len(ind),dtype=df)
                 cat['measid'] = measid[ind]
                 cat['objectid'] = objectid[ind]
-                instcode = expcat['INSTRUMENT'][ind1[k]]
-                dateobs = expcat['DATEOBS'][ind1[k]]
+                #instcode = expcat['INSTRUMENT'][ind1[k]]
+                #dateobs = expcat['DATEOBS'][ind1[k]]
+                instcode = expcat['instrument'][ind1[k]]
+                dateobs = expcat['dateobs'][ind1[k]]
                 night = dateobs[0:4]+dateobs[5:7]+dateobs[8:10]
                 if os.path.exists(outdir+instcode+'/'+night+'/'+eindex['value'][k]) is False:
                     # Sometimes this crashes because another process is making the directory at the same time
@@ -1707,7 +1747,8 @@ def breakup_idtab(dbfile):
 
 
 # Combine data for one NSC healpix region
-def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdir=None,nmulti=None):
+def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,multilevel=True,
+            outdir=None,nmulti=None):
 
     t0 = time.time()
     hostname = socket.gethostname()
@@ -2073,14 +2114,6 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
     nmeas = meascount
     print(str(nmeas))
 
-
-    labels,obj = seqclusterpm(meas)
-    #  seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,minmeaspm=5)
-
-    import pdb; pdb.set_trace()
-
-
-    
     # No measurements
     if nmeas==0:
         print('No measurements for this healpix')
@@ -2093,12 +2126,53 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
         ret = subprocess.call(['gzip',outfile])    # compress final catalog
         sys.exit()
 
-    # Spatially cluster the measurements with DBSCAN
-    #   this might also resort MEAS
-    objtab, meas = clusterdata(meas,nmeas,dbfile=dbfile)
-    nobj = dln.size(objtab)
-    meascumcount = np.cumsum(objtab['nmeas'])
-    print(str(nobj)+' unique objects clustered')
+    # CLUSTERING
+    # Hybrid method (DR2)
+    if kind=='hybrid':
+        # Spatially cluster the measurements with DBSCAN
+        #   this might also resort MEAS
+        objtab, meas = clusterdata(meas,nmeas,dbfile=dbfile)
+        nobj = dln.size(objtab)
+        meascumcount = np.cumsum(objtab['nmeas'])
+        print(str(nobj)+' unique objects clustered')
+
+    # SEQCLUSTERPM
+    elif kind=='seqclusterpm':
+        
+        ## Spatially cluster the measurements with proper motion clustering
+        objlabels,initobj = seqclusterpm(meas,calcpm=False)
+        nobj = dln.size(initobj)
+        meascumcount = np.cumsum(initobj['ndet'])
+        #  seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,minmeaspm=5)
+        #print(str(nobj)+' unique objects clustered')
+    
+        # Create objtab and sort measurements
+        labelindex = dln.create_index(objlabels)   # create index
+        nobj = len(labelindex['value'])
+        print(str(nmeas)+' measurements for '+str(nobj)+' objects')
+        # Make structure
+        objtab = np.zeros(nobj,dtype=np.dtype([('objlabel',int),('nmeas',int),('lo',int),('hi',int)]))
+        objtab['objlabel'] = labelindex['value']
+        objtab['nmeas'] = labelindex['num']
+        nobjtab = len(objtab)
+        # Insert object label into database
+        #if dbfile is not None:
+        #    insertobjlabelsdb(meas['rowid'],objlabels,dbfile)
+        # Resort MEAS, and use index LO/HI
+        meas = meas[labelindex['index']]
+        objtab['lo'] = labelindex['lo']
+        objtab['hi'] = labelindex['hi']
+
+    else:
+        print(kind,'not supported')
+        return
+        
+    
+    #import pdb; pdb.set_trace()
+
+
+        
+
 
     # Initialize the OBJ structured array
     obj = np.zeros(nobj,dtype=dtype_obj)
@@ -2240,20 +2314,35 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
             idtab_count = 0
             idtab_grpcount = 0
 
+
+        racol = 'ra'
+        deccol = 'dec'
+        measra1 = meas1[racol]
+        measdec1 = meas1[deccol]
+        cootype = np.ones(len(meas1),int)
+        if 'rapsf' in meas1.dtype.names:
+            racol = 'rapsf'
+            deccol = 'decpsf'
+            gdpsf, = np.where(np.isfinite(meas1[racol]) & np.isfinite(meas1[deccol]))
+            if len(gdpsf)>0:
+                measra1[gdpsf] = meas1[racol][gdpsf]
+                measdec1[gdpsf] = meas1[deccol][gdpsf]
+                cootype[gdpsf] = 2
+            
         # Computing quantities
         # Mean RA/DEC, RAERR/DECERR
         if nmeas1>1:
             wt_ra = 1.0/meas1['raerr']**2
             wt_dec = 1.0/meas1['decerr']**2
-            obj['ra'][i] = np.sum(meas1['ra']*wt_ra)/np.sum(wt_ra)
+            obj['ra'][i] = np.sum(measra1*wt_ra)/np.sum(wt_ra)
             obj['raerr'][i] = np.sqrt(1.0/np.sum(wt_ra))
-            obj['dec'][i] = np.sum(meas1['dec']*wt_dec)/np.sum(wt_dec)
+            obj['dec'][i] = np.sum(measdec1*wt_dec)/np.sum(wt_dec)
             obj['decerr'][i] = np.sqrt(1.0/np.sum(wt_dec))
             obj['mjd'][i] = np.mean(meas1['mjd'])
             obj['deltamjd'][i] = np.max(meas1['mjd'])-np.min(meas1['mjd'])
         else:
-            obj['ra'][i] = meas1['ra']
-            obj['dec'][i] = meas1['dec']
+            obj['ra'][i] = measra1
+            obj['dec'][i] = measdec1
             obj['raerr'][i] = meas1['raerr']
             obj['decerr'][i] = meas1['decerr']
             obj['mjd'][i] = meas1['mjd']
@@ -2266,7 +2355,7 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
         # Mean proper motion and errors
         if nmeas1>1:
             raerr = np.array(meas1['raerr']*1e3,np.float64)    # milli arcsec
-            ra = np.array(meas1['ra'],np.float64)
+            ra = np.array(measra1,np.float64)
             ra -= np.mean(ra)
             ra *= 3600*1e3 * np.cos(obj['dec'][i]/radeg)     # convert to true angle, milli arcsec
             t = meas1['mjd'].copy()
@@ -2278,7 +2367,7 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
             obj['pmraerr'][i] = pmraerr           # mas/yr
 
             decerr = np.array(meas1['decerr']*1e3,np.float64)   # milli arcsec
-            dec = np.array(meas1['dec'],np.float64)
+            dec = np.array(measdec1,np.float64)
             dec -= np.mean(dec)
             dec *= 3600*1e3                         # convert to milli arcsec
             # Calculate robust slope
