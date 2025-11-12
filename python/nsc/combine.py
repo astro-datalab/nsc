@@ -1253,7 +1253,7 @@ def calibmeas(meas1,chmeta1,meta,version='v4',verbose=False):
         else:
             badchip31 = False  # chip 31 
                          
-    # Mask sourcds with bad quality mask flag (IMAFLAGS_ISO) 
+    # Mask sources with bad quality mask flag (IMAFLAGS_ISO) 
     bdmeas, = np.where(meas1['imaflags_iso'] > 0)
     if len(bdmeas) > 0: 
         if verbose: print('  '+str(len(bdmeas))+' sources with bad CP flags.')
@@ -2113,7 +2113,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
     meas, meascount, allmeta = loadmeas(metafiles,buffdict,dbfile=dbfile)
     nmeas = meascount
     print(str(nmeas))
-
+    
     # No measurements
     if nmeas==0:
         print('No measurements for this healpix')
@@ -2126,7 +2126,15 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
         ret = subprocess.call(['gzip',outfile])    # compress final catalog
         sys.exit()
 
-    # CLUSTERING
+    # Removing bad measurements
+    bd, = np.where(meas['badflag'] != 0)
+    if len(bd)>0:
+        print('Removing {:d} bad measurements'.format(len(bd)))
+        meas = np.delete(meas,bd)
+        meascount = len(meas)
+
+        
+    # ===== CLUSTERING ======
     # Hybrid method (DR2)
     if kind=='hybrid':
         # Spatially cluster the measurements with DBSCAN
@@ -2137,8 +2145,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
         print(str(nobj)+' unique objects clustered')
 
     # SEQCLUSTERPM
-    elif kind=='seqclusterpm':
-        
+    elif kind=='seqclusterpm':        
         ## Spatially cluster the measurements with proper motion clustering
         objlabels,initobj = seqclusterpm(meas,calcpm=False)
         nobj = dln.size(initobj)
