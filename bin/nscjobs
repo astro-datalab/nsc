@@ -17,7 +17,7 @@ import logging
 import socket
 from datetime import datetime
 from argparse import ArgumentParser
-from dlnpyutils import utils as dln,slurm
+from dlnpyutils import utils as dln,slurm,job_daemon as jd
 from nsc import utils
 from nsc.nsc_instcal_measure import Exposure
 from nsc import slurm as slrm,utils
@@ -525,6 +525,8 @@ if __name__ == "__main__":
         script = 'nsc_instcal_combine'
         if host=='tempest':
             script = '/home/x51j468/projects/nsc/bin/nsc_instcal_combine'
+        elif host=='noirlab':
+            script = '/home/dnidever/projects/nsc/bin/nsc_instcal_combine'
         label = 'combine'
         if isinstance(inputdata,Table)==False:
             inputlist = inputdata.copy()
@@ -566,6 +568,8 @@ if __name__ == "__main__":
                 cmd += ' --redo'
             # Check output filename
             outdir = os.path.join(basedir,'combine',str(int(healpix)//1000))
+            if os.path.exists(outdir)==False:
+                os.makedirs(outdir)
             logfile = os.path.join(outdir,str(healpix)+'.'+logtime+'.log')
             outfile = os.path.join(outdir,str(healpix)+'.fits.gz')
             if os.path.exists(outfile) and redo==False:
@@ -663,6 +667,10 @@ if __name__ == "__main__":
     elif stage=='download':
         key,jobid = slurm.submit(tasks,label,nodes=1,cpus=1,partition=partition,
                                  walltime=walltime,slurmroot=slurmroot)
+    # noirlab
+    elif host=='noirlab':
+        jobs = jd.job_daemon(tasks['cmd'],tasks['dir'],tasks['name'],nmulti=ppn,
+                             prefix=stage,hyperthread=True,idle=False,staggertime=20)
     else:
         if host[:7]=='tempest':
             #export LAUNCHER_DIR=/home/x51j468/projects/launcher

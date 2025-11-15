@@ -65,7 +65,7 @@ def rootdirs():
         #dldir = '/dl1/users/'
         dldir = '/net/dl2/'
         mssdir = '/mss1/'
-        localdir = '/d0/'
+        localdir = '/data0/'
     elif host.find('gp09') > -1 or host.find('gp08') > -1 or host.find('gp07') > -1 or \
          host.find('gp06') > -1 or host.find('gp05') > -1:
         #dldir = '/net/dl1/users/'
@@ -2066,9 +2066,11 @@ def getnscdirs(version=None,host=None):
         host = hostname.split('.')[0].strip()
     print("host = ",host)
     # on gp07 use
-    if (host == "gp09") | (host == "gp08") | (host == "gp07") | (host == "gp06") | (host == "gp05"): 
-        basedir = os.path.join("/net/dl2/kfas/nsc/instcal/",verdir)
-        tpmroot = os.path.join(basedir,"tmp")
+    if ((host == "gp09") | (host == "gp08") | (host == "gp07") | (host == "gp06") | 
+        (host == "gp05") | (host == "hulk") | (host == "thing") | (host == "noirlab")):
+        #basedir = os.path.join("/net/dl2/kfas/nsc/instcal/",verdir)
+        basedir = os.path.join("/net/dl2/dnidever/nsc/instcal/",verdir)
+        tmproot = os.path.join(basedir,"tmp")
     # on tempest use
     elif host=="tempest_katie":
         basedir = os.path.join("/home/x25h971/nsc/instcal/",verdir)
