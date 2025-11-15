@@ -2484,7 +2484,8 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
         obj['fwhm'][i] = np.mean(meas1['fwhm'])
         obj['class_star'][i] = np.mean(meas1['class_star'])
         obj['flags'][i] = np.bitwise_or.reduce(meas1['flags'])  # OR combine
-
+        # add average chi and sharp
+        
 
     v = psutil.virtual_memory()
     process = psutil.Process(os.getpid())

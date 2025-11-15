@@ -110,7 +110,9 @@ if __name__ == "__main__":
         account = None
     elif host.lower()[:7]=='tempest':
         account = 'priority-davidnidever'
-
+        if partition=='unsafe':
+            account = None
+        
     print('Input Parameters:')
     print('-----------------')
     print('stage =',stage,)
@@ -656,8 +658,8 @@ if __name__ == "__main__":
         if host=='tacc':
             precommands = ['module load python3/3.9.2']
         out = slurm.submit(tasks,label,nodes=nodes,cpus=ppn,partition=partition,
-                           shared=False,walltime=walltime,slurmroot=slurmroot,stagger=True,
-                           precommands=precommands,verbose=True)
+                           account=account,shared=False,walltime=walltime,slurmroot=slurmroot,
+                           stagger=True,precommands=precommands,verbose=True)
     elif stage=='download':
         key,jobid = slurm.submit(tasks,label,nodes=1,cpus=1,partition=partition,
                                  walltime=walltime,slurmroot=slurmroot)
