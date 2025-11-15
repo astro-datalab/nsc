@@ -34,25 +34,33 @@ def writecat2db(cat,dbfile):
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
     #db = sqlite3.connect('test.db')
     #db.text_factory = lambda x: str(x, 'latin1')
     #db.row_factory = sqlite3.Row
-    c = db.cursor()
+    c = sdb.cursor()
     # Create the table
     #   the primary key ROWID is automatically generated
     if len(c.execute('SELECT name from sqlite_master where type= "table" and name="meas"').fetchall()) < 1:
         c.execute('''CREATE TABLE meas(measid TEXT, objlabel INTEGER, exposure TEXT, ccdnum INTEGER, filter TEXT, mjd REAL,
                      ra REAL, raerr REAL, dec REAL, decerr REAL, mag_auto REAL, magerr_auto REAL, asemi REAL, asemierr REAL,
-                     bsemi REAL, bsemierr REAL, theta REAL, thetaerr REAL, fwhm REAL, flags INTEGER, class_star REAL)''')
+                     bsemi REAL, bsemierr REAL, theta REAL, thetaerr REAL, fwhm REAL, flags INTEGER, class_star REAL,
+                     ndet_iter REAL, repeat REAL, xpsf REAL, ypsf REAL, magpsf REAL, errpsf REAL, skypsf REAL, iter REAL, 
+                     chi REAL, sharp REAL, rapsf REAL, decpsf REAL, ebv REAL, haspsf BOOL, snr REAL, badflag INTEGER)''')
+
     data = list(zip(cat['measid'],np.zeros(ncat,int)-1,cat['exposure'],cat['ccdnum'],cat['filter'],cat['mjd'],cat['ra'],
                     cat['raerr'],cat['dec'],cat['decerr'],cat['mag_auto'],cat['magerr_auto'],cat['asemi'],cat['asemierr'],
-                    cat['bsemi'],cat['bsemierr'],cat['theta'],cat['thetaerr'],cat['fwhm'],cat['flags'],cat['class_star']))
+                    cat['bsemi'],cat['bsemierr'],cat['theta'],cat['thetaerr'],cat['fwhm'],cat['flags'],cat['class_star'],
+                    cat['ndet_iter'],cat['repeat'],cat['xpsf'],cat['ypsf'],cat['magpsf'],cat['errpsf'],cat['skypsf'],
+                    cat['iter'],cat['chi'],cat['sharp'],cat['rapsf'],cat['decpsf'],cat['ebv'],cat['haspsf'],
+                    cat['snr'],cat['badflag']))
+
     c.executemany('''INSERT INTO meas(measid,objlabel,exposure,ccdnum,filter,mjd,ra,raerr,dec,decerr,mag_auto,magerr_auto,
-                     asemi,asemierr,bsemi,bsemierr,theta,thetaerr,fwhm,flags,class_star)
-                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', data)
-    db.commit()
-    db.close()
+                     asemi,asemierr,bsemi,bsemierr,theta,thetaerr,fwhm,flags,class_star,ndet_iter,repeat,xpsf,ypsf,magpsf,
+                     errpsf,skypsf,iter,chi,sharp,rapsf,decpsf,ebv,haspsf,snr,badflag)
+                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', data)
+    sdb.commit()
+    sdb.close()
 
 def getdbcoords(dbfile):
     """ Get the coordinates and ROWID from the database """
@@ -60,8 +68,8 @@ def getdbcoords(dbfile):
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    c = db.cursor()
+    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = sdb.cursor()
     c.execute('''SELECT rowid,ra,dec FROM meas''')
     data = c.fetchall()
     db.close()
@@ -77,8 +85,8 @@ def getdbcoords(dbfile):
 def createindexdb(dbfile,col='measid',table='meas',unique=True):
     """ Index a column in the database """
     t0 = time.time()
-    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    c = db.cursor()
+    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = sdb.cursor()
     index_name = 'idx_'+col+'_'+table
     # Check if the index exists first
     c.execute('select name from sqlite_master')
@@ -105,12 +113,12 @@ def insertobjlabelsdb(rowid,labels,dbfile):
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    c = db.cursor()
+    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = sdb.cursor()
     data = list(zip(labels,rowid))
     c.executemany('''UPDATE meas SET objlabel=? WHERE rowid=?''', data) 
-    db.commit() 
-    db.close()
+    sdb.commit() 
+    sdb.close()
     print('inserting done after '+str(time.time()-t0)+' sec')
 
 def updatecoldb(selcolname,selcoldata,updcolname,updcoldata,table,dbfile):
@@ -121,12 +129,12 @@ def updatecoldb(selcolname,selcoldata,updcolname,updcoldata,table,dbfile):
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    c = db.cursor()
+    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = sdb.cursor()
     data = list(zip(updcoldata,selcoldata))
     c.executemany('''UPDATE '''+table+''' SET '''+updcolname+'''=? WHERE '''+selcolname+'''=?''', data) 
-    db.commit() 
-    db.close()
+    sdb.commit() 
+    sdb.close()
     print('updating done after '+str(time.time()-t0)+' sec')    
 
 def deleterowsdb(colname,coldata,table,dbfile):
@@ -137,12 +145,12 @@ def deleterowsdb(colname,coldata,table,dbfile):
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    c = db.cursor()
+    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = sdb.cursor()
     data = list(zip(coldata))
     c.executemany('''DELETE from '''+table+''' WHERE '''+colname+'''=?''', data) 
-    db.commit() 
-    db.close()
+    sdb.commit() 
+    sdb.close()
     print('deleting done after '+str(time.time()-t0)+' sec')
 
     
@@ -153,8 +161,8 @@ def writeidtab2db(cat,dbfile):
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    c = db.cursor()
+    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = sdb.cursor()
     # Create the table
     #   the primary key ROWID is automatically generated
     if len(c.execute('SELECT name from sqlite_master where type= "table" and name="idtab"').fetchall()) < 1:
@@ -162,8 +170,8 @@ def writeidtab2db(cat,dbfile):
     data = list(zip(cat['measid'],cat['exposure'],cat['objectid'],cat['objectindex']))
     c.executemany('''INSERT INTO idtab(measid,exposure,objectid,objectindex)
                      VALUES(?,?,?,?)''', data)
-    db.commit() 
-    db.close()
+    sdb.commit() 
+    sdb.close()
     #print('inserting done after '+str(time.time()-t0)+' sec')
 
 def readidtabdb(dbfile):
@@ -182,13 +190,13 @@ def querydb(dbfile,table='meas',cols='rowid,*',where=None):
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    cur = db.cursor()
+    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    cur = sdb.cursor()
     cmd = 'SELECT '+cols+' FROM '+table
     if where is not None: cmd += ' WHERE '+where
     cur.execute(cmd)
     data = cur.fetchall()
-    db.close()
+    sdb.close()
 
     # Return results
     return data
@@ -199,11 +207,11 @@ def executedb(dbfile,cmd):
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    cur = db.cursor()
+    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    cur = sdb.cursor()
     cur.execute(cmd)
     data = cur.fetchall()
-    db.close()
+    sdb.close()
     return data    
 
 def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=None,verbose=False):
@@ -213,8 +221,8 @@ def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=Non
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    cur = db.cursor()
+    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    cur = sdb.cursor()
     cmd = 'SELECT '+cols+' FROM '+table
     # OBJLABEL constraints
     if objlabel is not None:
@@ -245,7 +253,7 @@ def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=Non
     #print('CMD = '+cmd)
     cur.execute(cmd)
     data = cur.fetchall()
-    db.close()
+    sdb.close()
 
     # No results
     if len(data)==0:
@@ -270,11 +278,11 @@ def getradecrangedb(dbfile):
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    c = db.cursor()
+    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = sdb.cursor()
     c.execute('''SELECT MIN(ra),MAX(ra),MIN(dec),MAX(dec) FROM meas''')
     data = c.fetchall()
-    db.close()
+    sdb.close()
 
     return data[0]
 
@@ -460,7 +468,7 @@ def seqpms(obj):
             wmnt,wmnx,wmny,wslpx,wslpy,
             wmnxerr,wslpxerr)
 
-def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,minmeaspm=5):
+def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,minmeaspm=5,dbfile=None):
     """
     Sequential clustering of measurements in exposures with proper motion.
     If you are rerunning with a previous object table and do NOT want to
@@ -468,6 +476,9 @@ def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,mi
     """
 
     mjd0 = 55000  # use this as the mjd reference so times stay small
+
+    if dbfile is not None:
+        meas = getdatadb(dbfile,verbose=True)
     
     nmeas = len(meas)
     labels = np.zeros(nmeas)-1   # object label (also its index) for all the measurements
@@ -1497,7 +1508,6 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                     meascount += nmeas1
                     expmeascount += nmeas1
 
-
         # Add metadata to ALLMETA, only if some measurements overlap
         if expmeascount>0:
             if allmeta is None:
@@ -2110,7 +2120,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
 
     # Decide whether to load everything into RAM or use temporary database
     usedb = False
-    if totmeasest>500000: usedb=True
+    #if totmeasest>500000: usedb=True
     dbfile = None
     if usedb:
         dbfile = tmproot+outbase+'_combine.db'
@@ -2145,12 +2155,23 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
         sys.exit()
 
     # Removing bad measurements
-    bd, = np.where(meas['badflag'] != 0)
-    if len(bd)>0:
-        print('Removing {:d} bad measurements'.format(len(bd)))
-        meas = np.delete(meas,bd)
-        meascount = len(meas)
-
+    if dbfile is None:
+        bd, = np.where(meas['badflag'] != 0)
+        if len(bd)>0:
+            print('Removing {:d} bad measurements'.format(len(bd)))
+            meas = np.delete(meas,bd)
+            meascount = len(meas)
+    else:
+        # Delete bad measurements from the temporary database
+        sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+        c = sdb.cursor()
+        c.execute('SELECT count(*) from meas where badflag>0')
+        d = c.fetchall()
+        nbd = d[0][0]
+        print('Removing {:d} bad measurements'.format(nbd))
+        c.execute('''DELETE from meas WHERE badflag > 0''')
+        sdb.commit() 
+        sdb.close()
         
     # ===== CLUSTERING ======
     # Hybrid method (DR2)
@@ -2167,7 +2188,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
     elif kind=='seqclusterpm':
         print('Using SEQCLUSTERPM clustering')
         ## Spatially cluster the measurements with proper motion clustering
-        objlabels,initobj = seqclusterpm(meas,calcpm=False)
+        objlabels,initobj = seqclusterpm(meas,calcpm=False,dbfile=dbfile)
         nobj = dln.size(initobj)
         meascumcount = np.cumsum(initobj['ndet'])
         #  seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,minmeaspm=5)
