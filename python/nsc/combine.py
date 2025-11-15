@@ -22,6 +22,10 @@ from scipy.interpolate import interp1d
 import sqlite3
 import gc
 import psutil
+from . import utils
+
+import warnings
+warnings.filterwarnings("ignore", message="invalid value encountered in cast", category=RuntimeWarning)
 
 def writecat2db(cat,dbfile):
     """ Write a catalog to the database """
@@ -142,8 +146,8 @@ def deleterowsdb(colname,coldata,table,dbfile):
     print('deleting done after '+str(time.time()-t0)+' sec')
 
     
-def writeidstr2db(cat,dbfile):
-    """ Insert IDSTR database values """
+def writeidtab2db(cat,dbfile):
+    """ Insert IDTAB database values """
     t0 = time.time()
     sqlite3.register_adapter(np.int16, int)
     sqlite3.register_adapter(np.int64, int)
@@ -153,21 +157,21 @@ def writeidstr2db(cat,dbfile):
     c = db.cursor()
     # Create the table
     #   the primary key ROWID is automatically generated
-    if len(c.execute('SELECT name from sqlite_master where type= "table" and name="idstr"').fetchall()) < 1:
-        c.execute('''CREATE TABLE idstr(measid TEXT, exposure TEXT, objectid TEXT, objectindex INTEGER)''')
+    if len(c.execute('SELECT name from sqlite_master where type= "table" and name="idtab"').fetchall()) < 1:
+        c.execute('''CREATE TABLE idtab(measid TEXT, exposure TEXT, objectid TEXT, objectindex INTEGER)''')
     data = list(zip(cat['measid'],cat['exposure'],cat['objectid'],cat['objectindex']))
-    c.executemany('''INSERT INTO idstr(measid,exposure,objectid,objectindex)
+    c.executemany('''INSERT INTO idtab(measid,exposure,objectid,objectindex)
                      VALUES(?,?,?,?)''', data)
     db.commit() 
     db.close()
     #print('inserting done after '+str(time.time()-t0)+' sec')
 
-def readidstrdb(dbfile):
-    """ Get data from IDSTR database"""
-    data = querydb(dbfile,table='idstr',cols='*')
+def readidtabdb(dbfile):
+    """ Get data from IDTAB database"""
+    data = querydb(dbfile,table='idtab',cols='*')
     # Put in catalog
-    dtype_idstr = np.dtype([('measid',np.str,200),('exposure',np.str,200),('objectid',np.str,200),('objectindex',int)])
-    cat = np.zeros(len(data),dtype=dtype_idstr)
+    dtype_idtab = np.dtype([('measid',str,200),('exposure',str,200),('objectid',str,200),('objectindex',int)])
+    cat = np.zeros(len(data),dtype=dtype_idtab)
     cat[...] = data
     del data    
     return cat
@@ -248,7 +252,7 @@ def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=Non
         return np.array([])
 
     # Convert to numpy structured array
-    dtype_hicat = np.dtype([('ROWID',int),('MEASID',np.str,30),('OBJLABEL',int),('EXPOSURE',np.str,40),('CCDNUM',int),('FILTER',np.str,3),
+    dtype_hicat = np.dtype([('ROWID',int),('MEASID',str,30),('OBJLABEL',int),('EXPOSURE',str,40),('CCDNUM',int),('FILTER',str,3),
                             ('MJD',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
                             ('MAG_AUTO',float),('MAGERR_AUTO',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),
                             ('THETA',float),('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
@@ -274,28 +278,28 @@ def getradecrangedb(dbfile):
 
     return data[0]
 
-def add_elements(cat,nnew=300000):
+def add_elements(meas,nnew=300000):
     """ Add more elements to a catalog"""
-    ncat = len(cat)
-    old = cat.copy()
-    nnew = dln.gt(nnew,ncat)
-    cat = np.zeros(ncat+nnew,dtype=old.dtype)
-    cat[0:ncat] = old
+    nmeas = len(meas)
+    old = meas.copy()
+    nnew = dln.gt(nnew,nmeas)
+    meas = np.zeros(nmeas+nnew,dtype=old.dtype)
+    meas[0:nmeas] = old
     del old
-    return cat    
+    return meas    
 
-def seqcluster(cat,dcr=0.5,iter=False,inpobj=None,trim=False):
+def seqcluster(meas,dcr=0.5,iter=False,inpobj=None,trim=False):
     """ Sequential clustering of measurements in exposures.  This was the old method."""
 
-    ncat = len(cat)
-    labels = np.zeros(ncat)-1
+    nmeas = len(meas)
+    labels = np.zeros(nmeas)-1
 
     # Iterate
     if iter is not False:
         done = False
         niter = 1
         maxiter = 10
-        lastlabels = np.zeros(ncat)-1
+        lastlabels = np.zeros(nmeas)-1
         while (done is False):
             # First time
             if niter==1:
@@ -305,10 +309,10 @@ def seqcluster(cat,dcr=0.5,iter=False,inpobj=None,trim=False):
                 del labels1, obj1
                 inpobj = obj2
             # Cluster
-            labels1,obj1 = seqcluster(cat,dcr=dcr,iter=False,inpobj=inpobj)
+            labels1,obj1 = seqcluster(meas,dcr=dcr,iter=False,inpobj=inpobj)
             print('Iter='+str(niter)+' '+str(int(np.max(labels1)))+' clusters')
             # Calculate average ra/dec
-            obj2 = propermotion(cat,labels1)
+            obj2 = propermotion(meas,labels1)
             #print(labels1-lastlabels)
             # Are we done?
             if (niter==maxiter) | (np.sum(labels1-lastlabels)==0): done=True
@@ -317,7 +321,7 @@ def seqcluster(cat,dcr=0.5,iter=False,inpobj=None,trim=False):
         return labels1, obj2
 
     # Create exposures index
-    index = dln.create_index(cat['EXPOSURE'])
+    index = dln.create_index(meas['exposure'])
     nexp = len(index['value'])
 
     # Create object catalog
@@ -327,7 +331,7 @@ def seqcluster(cat,dcr=0.5,iter=False,inpobj=None,trim=False):
         obj = inpobj
         cnt = len(obj)
     else:
-        obj = np.zeros(np.min([500000,ncat]),dtype=dtype_obj)
+        obj = np.zeros(np.min([500000,nmeas]),dtype=dtype_obj)
         cnt = 0
     nobj = len(obj)
 
@@ -335,8 +339,8 @@ def seqcluster(cat,dcr=0.5,iter=False,inpobj=None,trim=False):
     for i in range(nexp):
         #print(str(i)+' '+index['value'][i])
         indx = index['index'][index['lo'][i]:index['hi'][i]+1]
-        cat1 = cat[indx]
-        ncat1 = len(cat1)
+        meas1 = meas[indx]
+        nmeas1 = len(meas1)
         if dln.size(dcr)>1:
             dcr1 = dcr[indx]
         else:
@@ -344,47 +348,47 @@ def seqcluster(cat,dcr=0.5,iter=False,inpobj=None,trim=False):
         
         # First exposure
         if cnt==0:
-            ind1 = np.arange(ncat1)
+            ind1 = np.arange(nmeas1)
             obj['label'][ind1] = ind1
-            obj['ra'][ind1] = cat1['RA']
-            obj['dec'][ind1] = cat1['DEC']
+            obj['ra'][ind1] = meas1['ra']
+            obj['dec'][ind1] = meas1['dec']
             obj['ndet'][ind1] = 1
             labels[indx] = ind1
-            cnt += ncat1
+            cnt += nmeas1
 
         # Second and up
         else:
             #  Match new sources to the objects
-            #ind1,ind2,dist = coords.xmatch(obj[0:cnt]['ra'],obj[0:cnt]['dec'],cat1['RA'],cat1['DEC'],dcr,unique=True)
-            ind2,ind1,dist = coords.xmatch(cat1['RA'],cat1['DEC'],obj[0:cnt]['ra'],obj[0:cnt]['dec'],dcr1,unique=True)            
+            #ind1,ind2,dist = coords.xmatch(obj[0:cnt]['ra'],obj[0:cnt]['dec'],meas1['RA'],meas1['DEC'],dcr,unique=True)
+            ind2,ind1,dist = coords.xmatch(meas1['ra'],meas1['dec'],obj[0:cnt]['ra'],obj[0:cnt]['dec'],dcr1,unique=True)            
             nmatch = dln.size(ind1)
             #  Some matches, add data to existing record for these sources
             if nmatch>0:
                 obj['ndet'][ind1] += 1
                 labels[indx[ind2]] = ind1
-                if nmatch<ncat1:
+                if nmatch<nmeas1:
                     indx0 = indx.copy()
                     indx = np.delete(indx,ind2)
-                    cat1 = np.delete(cat1,ind2)
-                    ncat1 = dln.size(cat1)
+                    meas1 = np.delete(meas1,ind2)
+                    nmeas1 = dln.size(meas1)
                 else:
-                    cat1 = np.array([])
-                    ncat1 = 0
+                    meas1 = np.array([])
+                    nmeas1 = 0
 
             # Some left, add records for these sources
-            if ncat1>0:
+            if nmeas1>0:
                 # Add new elements
-                if (cnt+ncat1)>nobj:
+                if (cnt+nmeas1)>nobj:
                     obj = add_elements(obj)
                     nobj = len(obj)
-                ind1 = np.arange(ncat1)+cnt
+                ind1 = np.arange(nmeas1)+cnt
                 obj['label'][ind1] = ind1
-                obj['ra'][ind1] = cat1['RA']
-                obj['dec'][ind1] = cat1['DEC']
+                obj['ra'][ind1] = meas1['ra']
+                obj['dec'][ind1] = meas1['dec']
                 obj['ndet'][ind1] = 1
                 labels[indx] = ind1
 
-                cnt += ncat1
+                cnt += nmeas1
     # Trim off the excess elements
     obj = obj[0:cnt]
     # Trim off any objects that do not have any detections
@@ -404,134 +408,327 @@ def seqpms(obj):
     """
 
     ndet = obj['ndet']
-    sumra = obj['sumra']
-    sumdec = obj['sumdec']
+    sumx = obj['sumx']
+    sumy = obj['sumy']
     sumt = obj['sumt']
     sumt2 = obj['sumt2']
-    sumtra = obj['sumtra']
-    sumtdec = obj['sumtdec']
+    sumtx = obj['sumtx']
+    sumty = obj['sumty']
     
     # Calculate mean coordinates
-    mnra = sumra/ndet
-    mndec = sumdec/ndet
+    mnx = sumx/ndet
+    mny = sumy/ndet
     mnt = sumt/ndet
     # Calculate proper motions
-    slpra = np.zeros(nmatch,float)
-    slpdec = np.zeros(nmatch,float)
+    nobj = len(obj)
+    slpx = np.zeros(nobj,float)
+    slpy = np.zeros(nobj,float)
     twodet = (ndet > 1)
     denom = (sumt2[twodet]/ndet[twodet]-mnt[twodet]**2)
-    slpra[twodet] = (sumtra[twodet]/ndet[twodet]-mnra[twodet]*mnt[twodet]) / denom
-    slpdec[twodet] = (sumtdec[twodet]/ndet[twodet]-mndec[twodet]*mnt[twodet]) / denom
+    slpx[twodet] = (sumtx[twodet]/ndet[twodet]-mnx[twodet]*mnt[twodet]) / denom
+    slpy[twodet] = (sumty[twodet]/ndet[twodet]-mny[twodet]*mnt[twodet]) / denom
+    # weighted mean and slope
+    # mnx = np.sum(wt*x)/totwt
+    # mny = np.sum(wt*y)/totwt
+    # mnxerr = np.sqrt( np.sum( ((x-mnx)**2)*wt)*n / ((n-1)*np.sum(wt))) / np.sqrt(n)
+    #        ~ stddev/sqrt(n)
+    #        = np.sqrt( np.sum(wt*(x**2-2*x*mnx+mnx**2))*n / ((n-1)*np.sum(wt))) / np.sqrt(n)
+    #        = np.sqrt( np.sum(wt*x**2)-2*mnx*np.sum(wt*x)+np.sum(wt*mnx**2) ) *
+    #                 sqrt(n/((n-1)*np.sum(wt))) / np.sqrt(n)
+    #        = np.sqrt( np.sum(wt*x**2)-2*mnx*np.sum(wt*x)+np.sum(wt)*mnx**2 ) *
+    #                 sqrt(1/((n-1)*np.sum(wt))
+    # wtx = (np.sum(wt*x*y)/totwt-mnx*mny)/(np.sum(wt*x**2)/totwt-mnx**2)
+    # wtxerr = 1.0/np.sqrt( np.sum(wt*x**2)-mnx**2 * np.sum(wt))
+
+    wmnt = obj['sumwt']/obj['sumw']
+    wmnx = obj['sumwx']/obj['sumw']
+    wmny = obj['sumwy']/obj['sumw']
+    denom = (obj['sumwt2']/obj['sumw']-wmnt**2)
+    bd = (denom == 0.0)
+    denom[bd] = 1
+    wslpx = np.zeros(nobj,float)
+    wslpy = np.zeros(nobj,float)
+    wslpx[twodet] = (obj['sumwtx'][twodet]/obj['sumw'][twodet]-wmnt[twodet]*wmnx[twodet])/denom[twodet]
+    wslpy[twodet] = (obj['sumwty'][twodet]/obj['sumw'][twodet]-wmnt[twodet]*wmny[twodet])/denom[twodet]
+
+    # uncertainty in weighted mean
+    wmnxerr = 1/np.sqrt(obj['sumw'])  # same for yerr
+    # uncertainty in weighted slope
+    wslpxerr = 1.0/np.sqrt( obj['sumwt2']-wmnt**2 * obj['sumw'])
     
-    return mnra,mndec,slpra,slpdec
-    
-def seqclusterpm(tab,dcr=0.5,doiter=False,inpobj=None,trim=False):
+    return (mnt,mnx,mny,slpx,slpy,
+            wmnt,wmnx,wmny,wslpx,wslpy,
+            wmnxerr,wslpxerr)
+
+def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,minmeaspm=5):
     """
     Sequential clustering of measurements in exposures with proper motion.
+    If you are rerunning with a previous object table and do NOT want to
+    to recalculate the proper motions (as we go), then set calcpm=False
     """
 
-    ntab = len(tab)
-    labels = np.zeros(ntab)-1
+    mjd0 = 55000  # use this as the mjd reference so times stay small
+    
+    nmeas = len(meas)
+    labels = np.zeros(nmeas)-1   # object label (also its index) for all the measurements
 
     # Create exposures index
-    index = dln.create_index(tab['EXPOSURE'])
+    index = dln.create_index(meas['exposure'])
     nexp = len(index['value'])
-
+    print('seqclusterpm: {:d} exposures'.format(nexp))
+    
     # Create object catalog
-    dtype_obj = np.dtype([('label',int),('ra',np.float64),('dec',np.float64),('ndet',int),
-                          ('sumt',float),('sumt2',float),('sumra',float),('sumdec',float),
-                          ('sumtra',float),('sumtdec',float)])
+    dtype_obj = np.dtype([('label',int),('x',np.float64),('y',np.float64),('ndet',int),
+                          ('mint',float),('maxt',float),('dt',float),('sumt',float),('sumt2',float),
+                          ('sumx',float),('sumy',float),
+                          ('sumtx',float),('sumty',float),('slpx',float),('slpy',float),('mnt',float),
+                          ('sumw',float),('sumwt',float),('sumwt2',float),
+                          ('sumwx',float),('sumwy',float),('sumwtx',float),('sumwty',float),
+                          ('sumwx2',float),('sumwy2',float),('slperr',float),
+                          ('ra',float),('dec',float),('mjd',float),('pmra',float),('pmdec',float),('pmerr',float)])
+
+    # weighted slope
+    # mnx = np.sum(wt*x)/totwt
+    # mny = np.sum(wt*y)/totwt
+    # wtx = (np.sum(wt*x*y)/totwt-mnx*mny)/(np.sum(wt*x**2)/totwt-mnx**2)
+
     # Is there an input object catalog that we are starting with?
     if inpobj is not None:
-        obj = inpobj
+        obj = inpobj.copy()
         cnt = len(obj)
     else:
-        obj = np.zeros(np.min([500000,ntab]),dtype=dtype_obj)
+        obj = np.zeros(np.min([500000,nmeas]),dtype=dtype_obj)
         cnt = 0
     nobj = len(obj)
 
+    # matching radius
+    #err = np.sqrt(meas['raerr']**2+meas['decerr']**2)
+    #eps = np.maximum(3*np.median(err),0.3)
+    #dcr = np.maximum(3*err,eps)
+    
+    racol = 'ra'
+    deccol = 'dec'
+    measra = meas[racol]
+    measdec = meas[deccol]
+    cootype = np.ones(nmeas,int)
+    if 'rapsf' in meas.dtype.names:
+        racol = 'rapsf'
+        deccol = 'decpsf'
+        gdpsf, = np.where(np.isfinite(meas[racol]) & np.isfinite(meas[deccol]))
+        if len(gdpsf)>0:
+            measra[gdpsf] = meas[racol][gdpsf]
+            measdec[gdpsf] = meas[deccol][gdpsf]
+            cootype[gdpsf] = 2
+
+    # Use gnomic projection
+    cenra = np.median(measra)
+    cendec = np.median(measdec)
+    if np.max(measra)-np.min(measra) > 180:
+        temp = measra.copy()
+        temp[temp > 180] -= 360
+        cenra = np.median(temp)
+        if cenra<0:
+            cenra += 360
+    x,y = coords.rotsphcen(measra,measdec,cenra,cendec,gnomic=True)
+    x *= 3600
+    y *= 3600
+    # convert to arcsec
+    xerr = meas['raerr'].astype(float)  # already in arcsec
+    
     # Loop over exposures
     for i in range(nexp):
         #print(str(i)+' '+index['value'][i])
         indx = index['index'][index['lo'][i]:index['hi'][i]+1]
-        tab1 = tab[indx]
-        ntab1 = len(tab1)
+        meas1 = meas[indx]
+        print('{:d} {:s} {:d}'.format(i+1,index['value'][i],len(meas1)))
+        #measra1 = measra[indx]
+        #measdec1 = measdec[indx]
+        x1 = x[indx]
+        y1 = y[indx]
+        xerr1 = xerr[indx]
+        nmeas1 = len(meas1)
+        measmjd1 = meas1['mjd'][0]
+        t1 = measmjd1-mjd0
         if dln.size(dcr)>1:
             dcr1 = dcr[indx]
         else:
             dcr1 = dcr
-        
+            
         # First exposure
         if cnt==0:
-            ind1 = np.arange(ntab1)
-            obj['label'][ind1] = ind1
-            obj['ra'][ind1] = tab1['RA']
-            obj['dec'][ind1] = tab1['DEC']
-            obj['ndet'][ind1] = 1
-            obj['sumt'][ind1] = tab1['MJD']
-            obj['sumt2'][ind1] = tab1['MJD']
-            obj['sumra'][ind1] = tab1['RA']
-            obj['sumdec'][ind1] = tab1['DEC']
-            obj['sumtra'][ind1] = tab1['MJD']*tab1['RA']
-            obj['sumtdec'][ind1] = tab1['MJD']*tab1['DEC']
-            labels[indx] = ind1
-            cnt += ntab1
+            oind = np.arange(nmeas1)
+            obj['label'][oind] = oind
+            obj['x'][oind] = x1
+            obj['y'][oind] = y1
+            obj['ndet'][oind] = 1
+            obj['mint'][oind] = t1
+            obj['maxt'][oind] = t1
+            obj['dt'][oind] = 0.0
+            obj['sumt'][oind] = t1
+            obj['sumt2'][oind] = t1**2
+            obj['sumx'][oind] = x1
+            obj['sumy'][oind] = y1
+            obj['sumtx'][oind] = t1*x1
+            obj['sumty'][oind] = t1*y1
+            obj['slpx'][oind] = 0.0
+            obj['slpy'][oind] = 0.0
+            obj['mnt'][oind] = t1
+            # weighted values
+            wt = 1.0/xerr1**2
+            obj['sumw'][oind] = wt
+            obj['sumwt'][oind] = wt*t1
+            obj['sumwt2'][oind] = wt*t1**2
+            obj['sumwx'][oind] = wt*x1
+            obj['sumwy'][oind] = wt*y1
+            obj['sumwx2'][oind] = wt*x1**2
+            obj['sumwy2'][oind] = wt*y1**2
+            obj['sumwtx'][oind] = wt*t1*x1
+            obj['sumwty'][oind] = wt*t1*y1
+
+            labels[indx] = oind
+            cnt += nmeas1
 
         # Second and up, or object catalog input
         else:
-            ind2,ind1,dist = coords.xmatch(tab1['RA'],tab1['DEC'],obj[0:cnt]['ra'],
-                                           obj[0:cnt]['dec'],dcr1,unique=True)            
-            nmatch = dln.size(ind1)
+            # Predict current coordinates with linear fit
+            # this is helpful if there is a big temporal gap between
+            # two exposures
+            predx = obj['x'][:cnt]
+            predy = obj['y'][:cnt]
+            if calcpm:
+                pm = np.sqrt(obj['slpx'][:cnt]**2+obj['slpy'][:cnt]**2)
+                pmerr = np.sqrt(2)*obj['slperr'][:cnt]
+                # Limit pm mesurements to good ones
+                # and longer baselines
+                dtthresh = 10    # days
+                gd, = np.where((obj['ndet'][:cnt]>minmeaspm) &
+                                   (pm/pmerr > 3) & (obj['dt'][:cnt] > dtthresh))
+                if len(gd)>0:
+                    deltat = (t1-obj['mnt'][:cnt])
+                    predx[gd] += obj['slpx'][:cnt][gd]*deltat[gd]
+                    predy[gd] += obj['slpy'][:cnt][gd]*deltat[gd]
+
+                    maxslpx = np.max(np.abs(obj['slpx'][:cnt][gd]))
+                    maxslpy = np.max(np.abs(obj['slpy'][:cnt][gd]))
+                    maxslp = np.max([maxslpx,maxslpy])
+                    xshift = obj['slpx'][:cnt][gd]*deltat[gd]
+                    maxxshift = np.max(np.abs(xshift))
+                    yshift = obj['slpy'][:cnt][gd]*deltat[gd]
+                    maxyshift = np.max(np.abs(yshift))
+                    maxshift = np.max([maxxshift,maxyshift])
+                    print('  max slp = {:.5f} arcsec/day'.format(maxslp))
+                    print('  max pm shift = {:.5f} arcsec'.format(maxshift))
+                    #if maxshift > 50:
+                    #    import pdb; pdb.set_trace()
+                    
+                #import pdb; pdb.set_trace()
+
+                    
+            mind,oind,dist = coords.xmatch(x1,y1,predx,
+                                           predy,dcr1,sphere=False,unique=True)
+            nmatch = dln.size(oind)
+            print('  {:d} objects, {:d} matches'.format(cnt,nmatch))
             #  Some matches, add data to existing records for these measurements
             if nmatch>0:
-                obj['ndet'][ind1] += 1
-                obj['sumt'][ind1] += tab1['MJD'][ind2]
-                obj['sumt2'][ind1] += tab1['MJD'][ind2]
-                obj['sumra'][ind1] += tab1['RA'][ind2]
-                obj['sumdec'][ind1] += tab1['DEC'][ind2]
-                obj['sumtra'][ind1] += tab1['MJD'][ind2]*tab1['RA'][ind2]
-                obj['sumtdec'][ind1] += tab1['MJD'][ind2]*tab1['DEC'][ind2]
-                mnra,mndec,slpra,slpdec = seqpms(obj[ind1])
-                # Predict current coordinates with linear fit
-                thismjd = tab1['MJD'][ind2[0]]
-                predra = mnra+slpra*(thismjd-mnt)
-                preddec = mndec+slpdec*(thismjd-mnt)    
-                obj['ra'][ind1] = predra    # update coordinates
-                obj['dec'][ind1] = preddec
-                labels[indx[ind2]] = ind1
-                if nmatch<ntab1:
+                obj['ndet'][oind] += 1
+                obj['mint'][oind] = np.minimum(obj['mint'][oind],t1)
+                obj['maxt'][oind] = np.maximum(obj['maxt'][oind],t1)
+                obj['dt'][oind] = obj['maxt'][oind]-obj['mint'][oind]
+                obj['sumt'][oind] += t1
+                obj['sumt2'][oind] += t1**2
+                obj['sumx'][oind] += x1[mind]
+                obj['sumy'][oind] += y1[mind]
+                obj['sumtx'][oind] += t1*x1[mind]
+                obj['sumty'][oind] += t1*y1[mind]
+                # weighted values
+                wt = 1.0/xerr1[mind]**2
+                obj['sumw'][oind] += wt
+                obj['sumwt'][oind] += wt*t1
+                obj['sumwt2'][oind] += wt*t1**2
+                obj['sumwx'][oind] += wt*x1[mind]
+                obj['sumwy'][oind] += wt*y1[mind]
+                obj['sumwx2'][oind] += wt*x1[mind]**2
+                obj['sumwy2'][oind] += wt*y1[mind]**2
+                obj['sumwtx'][oind] += wt*t1*x1[mind]
+                obj['sumwty'][oind] += wt*t1*y1[mind]
+                # Calculate mean coordinates and proper motions
+                pmout = seqpms(obj[oind])
+                (mnt,mnx,mny,slpx,slpy,wmnt,wmnx,wmny,wslpx,wslpy,wmnxerr,wslpxerr) = pmout
+                obj['x'][oind] = mnx
+                obj['y'][oind] = mny
+                obj['mnt'][oind] = mnt
+                if calcpm:
+                    obj['slpx'][oind] = slpx
+                    obj['slpy'][oind] = slpy
+                    obj['slperr'][oind] = wslpxerr
+                    pm = np.sqrt(slpx**2+slpy**2)
+                    pmerr = np.sqrt(2)*wslpxerr
+                    # Limit pm mesurements to good ones
+                    # and longer baselines
+                    dtthresh = 10    # days
+                    gd, = np.where((obj['ndet'][oind]>minmeaspm) &
+                                   (pm/pmerr > 3) & (obj['dt'][oind] > dtthresh))
+                    print('  {:d} objects have good pms'.format(len(gd)))
+                    if len(gd)>0:
+                        obj['slpx'][oind][gd] = slpx[gd]
+                        obj['slpy'][oind][gd] = slpy[gd]
+                        obj['slperr'][oind][gd] = wslpxerr[gd]
+
+                labels[indx[mind]] = oind
+                if nmatch<nmeas1:
                     indx0 = indx.copy()
-                    indx = np.delete(indx,ind2)
-                    tab1 = np.delete(tab1,ind2)
-                    ntab1 = dln.size(tab1)
+                    indx = np.delete(indx,mind)
+                    meas1 = np.delete(meas1,mind)
+                    nmeas1 = dln.size(meas1)
+                    x1 = np.delete(x1,mind)
+                    y1 = np.delete(y1,mind)
+                    xerr1 = np.delete(xerr1,mind)
                 else:
-                    tab1 = np.array([])
-                    ntab1 = 0
+                    meas1 = np.array([])
+                    nmeas1 = 0
 
             # Some left, add records for these sources
-            if ntab1>0:
+            if nmeas1>0:
                 # Add new elements
-                if (cnt+ntab1)>nobj:
+                if (cnt+nmeas1)>nobj:
                     obj = add_elements(obj)
                     nobj = len(obj)
-                ind1 = np.arange(ntab1)+cnt
-                obj['label'][ind1] = ind1
-                obj['ra'][ind1] = tab1['RA']
-                obj['dec'][ind1] = tab1['DEC']
-                obj['sumt'][ind1] = tab1['MJD']
-                obj['sumt2'][ind1] = tab1['MJD']
-                obj['sumra'][ind1] = tab1['RA']
-                obj['sumdec'][ind1] = tab1['DEC']
-                obj['sumtra'][ind1] = tab1['MJD']*tab1['RA']
-                obj['sumtdec'][ind1] = tab1['MJD']*tab1['DEC']
-                obj['ndet'][ind1] = 1
-                labels[indx] = ind1
+                oind = np.arange(nmeas1)+cnt
+                obj['label'][oind] = oind
+                obj['mint'][oind] = t1
+                obj['maxt'][oind] = t1
+                obj['dt'][oind] = 0.0
+                obj['x'][oind] = x1
+                obj['y'][oind] = y1
+                obj['sumt'][oind] = t1
+                obj['sumt2'][oind] = t1
+                obj['sumx'][oind] = x1
+                obj['sumy'][oind] = y1
+                obj['sumtx'][oind] = t1*x1
+                obj['sumty'][oind] = t1*y1
+                obj['ndet'][oind] = 1
+                obj['slpx'][oind] = 0.0
+                obj['slpy'][oind] = 0.0
+                obj['mnt'][oind] = t1
+                # weighted values
+                wt = 1.0/xerr1**2
+                obj['sumw'][oind] = wt
+                obj['sumwt'][oind] = wt*t1
+                obj['sumwt2'][oind] = wt*t1**2
+                obj['sumwx'][oind] = wt*x1
+                obj['sumwy'][oind] = wt*y1
+                obj['sumwx2'][oind] = wt*x1**2
+                obj['sumwy2'][oind] = wt*y1**2
+                obj['sumwtx'][oind] = wt*t1*x1
+                obj['sumwty'][oind] = wt*t1*y1
 
-                cnt += ntab1
+                labels[indx] = oind
+
+                cnt += nmeas1
     # Trim off the excess elements
-    obj = obj[0:cnt]
+    obj = obj[:cnt]
     # Trim off any objects that do not have any detections
-    #  could happen if an object catalog was input
+    #   could happen if an object catalog was input
     if trim is True:
         bd, nbd = dln.where(obj['ndet']<1)
         if nbd>0: obj = np.delete(obj,bd)
@@ -539,9 +736,22 @@ def seqclusterpm(tab,dcr=0.5,doiter=False,inpobj=None,trim=False):
     # Maybe iterate
     # -measure mean ra/dec for each object and go through the process again
 
+
+    # Now get ra/dec values
+    mnra,mndec = coords.rotsphcen(obj['x']/3600,obj['y']/3600,cenra,cendec,gnomic=True,reverse=True)
+    obj['ra'] = mnra
+    obj['dec'] = mndec
+    obj['mjd'] = obj['mnt']+mjd0
+    # IS THIS RIGHT???
+    # slpx/y are in arcsec/day
+    # convert to mas/year
+    obj['pmra'] = obj['slpx'] * (1e3/365.2425)
+    obj['pmdec'] = obj['slpy'] * (1e3/365.2425)
+    obj['pmerr'] = obj['slperr'] * (1e3/365.2425)
+    
     return labels, obj
 
-def meancoords(cat,labels):
+def meancoords(meas,labels):
     """ Measure mean RA/DEC."""
 
     # Make object index
@@ -550,47 +760,48 @@ def meancoords(cat,labels):
     radeg = np.float64(180.00) / np.pi
     
     dtype_obj = np.dtype([('label',int),('ndet',int),('ra',np.float64),('dec',np.float64),('raerr',np.float32),
-                          ('decerr',np.float32),('asemi',np.float32),('bsemi',np.float32),('theta',np.float32),('fwhm',np.float32)])
+                          ('decerr',np.float32),('asemi',np.float32),('bsemi',np.float32),
+                          ('theta',np.float32),('fwhm',np.float32)])
     obj = np.zeros(nobj,dtype=dtype_obj)
 
     # Loop over the objects
     for i in range(nobj):
         indx = index['index'][index['lo'][i]:index['hi'][i]+1]
-        ncat1 = dln.size(indx)
+        nmeas1 = dln.size(indx)
         obj['label'][i] = index['value'][i]
-        obj['ndet'][i] = ncat1
+        obj['ndet'][i] = nmeas1
         
         # Computing quantities
         # Mean RA/DEC, RAERR/DECERR
-        if ncat1>1:
-            wt_ra = 1.0/cat['RAERR'][indx]**2
-            wt_dec = 1.0/cat['DECERR'][indx]**2
-            obj['ra'][i] = np.sum(cat['RA'][indx]*wt_ra)/np.sum(wt_ra)
+        if nmeas1>1:
+            wt_ra = 1.0/meas['raerr'][indx]**2
+            wt_dec = 1.0/meas['decerr'][indx]**2
+            obj['ra'][i] = np.sum(meas['ra'][indx]*wt_ra)/np.sum(wt_ra)
             obj['raerr'][i] = np.sqrt(1.0/np.sum(wt_ra))
-            obj['dec'][i] = np.sum(cat['DEC'][indx]*wt_dec)/np.sum(wt_dec)
+            obj['dec'][i] = np.sum(meas['dec'][indx]*wt_dec)/np.sum(wt_dec)
             obj['decerr'][i] = np.sqrt(1.0/np.sum(wt_dec))
         else:
-            obj['ra'][i] = cat['RA'][indx]
-            obj['dec'][i] = cat['DEC'][indx]
-            obj['raerr'][i] = cat['RAERR'][indx]
-            obj['decerr'][i] = cat['DECERR'][indx]
+            obj['ra'][i] = meas['ra'][indx]
+            obj['dec'][i] = meas['dec'][indx]
+            obj['raerr'][i] = meas['raerr'][indx]
+            obj['decerr'][i] = meas['decerr'][indx]
 
         # Compute median FWHM
-        if ncat1>1:
-            obj['asemi'][i] = np.median(cat['ASEMI'][indx])
-            obj['bsemi'][i] = np.median(cat['BSEMI'][indx])
-            obj['theta'][i] = np.median(cat['THETA'][indx])
-            obj['fwhm'][i] = np.median(cat['FWHM'][indx])
+        if nmeas1>1:
+            obj['asemi'][i] = np.median(meas['asemi'][indx])
+            obj['bsemi'][i] = np.median(meas['bsemi'][indx])
+            obj['theta'][i] = np.median(meas['theta'][indx])
+            obj['fwhm'][i] = np.median(meas['fwhm'][indx])
         else:
-            obj['asemi'][i] = cat['ASEMI'][indx]
-            obj['bsemi'][i] = cat['BSEMI'][indx]
-            obj['theta'][i] = cat['THETA'][indx]
-            obj['fwhm'][i] = cat['FWHM'][indx]
+            obj['asemi'][i] = meas['asemi'][indx]
+            obj['bsemi'][i] = meas['bsemi'][indx]
+            obj['theta'][i] = meas['theta'][indx]
+            obj['fwhm'][i] = meas['fwhm'][indx]
 
     return obj
             
     
-def propermotion(cat,labels):
+def propermotion(meas,labels):
     """ Measure proper motions."""
     
     # Make object index
@@ -598,22 +809,23 @@ def propermotion(cat,labels):
     nobj = len(index['value'])
     radeg = np.float64(180.00) / np.pi
 
-    obj = meancoords(cat,labels)
-    dtype_pm = np.dtype([('pmra',np.float32),('pmdec',np.float32),('pmraerr',np.float32),('pmdecerr',np.float32),('mjd',np.float64)])
+    obj = meancoords(meas,labels)
+    dtype_pm = np.dtype([('pmra',np.float32),('pmdec',np.float32),('pmraerr',np.float32),
+                         ('pmdecerr',np.float32),('mjd',np.float64)])
     obj = dln.addcatcols(obj,dtype_pm)
 
     # Loop over the objects
     for i in range(nobj):
         indx = index['index'][index['lo'][i]:index['hi'][i]+1]
-        ncat1 = dln.size(indx)
+        nmeas1 = dln.size(indx)
 
         # Mean proper motion and errors
-        if ncat1>1:
-            raerr = np.array(cat['RAERR'][indx]*1e3,np.float64)    # milli arcsec
-            ra = np.array(cat['RA'][indx],np.float64)
+        if nmeas1>1:
+            raerr = np.array(meas['raerr'][indx]*1e3,np.float64)    # milli arcsec
+            ra = np.array(meas['ra'][indx],np.float64)
             ra -= np.mean(ra)
             ra *= 3600*1e3 * np.cos(obj['dec'][i]/radeg)     # convert to true angle, milli arcsec
-            t = cat['MJD'][indx].copy()
+            t = meas['mjd'][indx].copy()
             t -= np.mean(t)
             t /= 365.2425                          # convert to year
             # Calculate robust slope
@@ -621,8 +833,8 @@ def propermotion(cat,labels):
             obj['pmra'][i] = pmra                 # mas/yr
             obj['pmraerr'][i] = pmraerr           # mas/yr
 
-            decerr = np.array(cat['DECERR'][indx]*1e3,np.float64)   # milli arcsec
-            dec = np.array(cat['DEC'][indx],np.float64)
+            decerr = np.array(meas['DECERR'][indx]*1e3,np.float64)   # milli arcsec
+            dec = np.array(meas['DEC'][indx],np.float64)
             dec -= np.mean(dec)
             dec *= 3600*1e3                         # convert to milli arcsec
             # Calculate robust slope
@@ -632,7 +844,7 @@ def propermotion(cat,labels):
 
     return obj
 
-def moments(cat,labels):
+def moments(meas,labels):
     # Measure XX, YY, XY comments of multiple measurements of an object:
 
     # Make object index
@@ -640,21 +852,22 @@ def moments(cat,labels):
     nobj = len(index['value'])
     radeg = np.float64(180.00) / np.pi
 
-    obj = meancoords(cat,labels)
-    dtype_mom = np.dtype([('x2',np.float32),('y2',np.float32),('xy',np.float32),('asemi',np.float32),('bsemi',np.float32),('theta',np.float32)])
+    obj = meancoords(meas,labels)
+    dtype_mom = np.dtype([('x2',np.float32),('y2',np.float32),('xy',np.float32),
+                          ('asemi',np.float32),('bsemi',np.float32),('theta',np.float32)])
     obj = dln.addcatcols(obj,dtype_mom)
 
     # Loop over the objects
     for i in range(nobj):
         indx = index['index'][index['lo'][i]:index['hi'][i]+1]
-        ncat1 = dln.size(indx)
+        nmeas1 = dln.size(indx)
         
         # Measure moments
-        if ncat1>1:
+        if nmeas1>1:
             # See sextractor.pdf pg. 30
-            x2 = np.sum( ((cat['RA'][indx]-obj['ra'][i])*np.cos(np.deg2rad(obj['dec'][i])))**2 ) / (ncat1-1) * 3600**2
-            y2 = np.sum( (cat['DEC'][indx]-obj['dec'][i])**2 ) / (ncat1-1) * 3600**2
-            xy = np.sum( (cat['RA'][indx]-obj['ra'][i])*np.cos(np.deg2rad(obj['dec'][i])) * (cat['DEC'][indx]-obj['dec'][i]) ) / (ncat1-1) * 3600**2
+            x2 = np.sum( ((meas['ra'][indx]-obj['ra'][i])*np.cos(np.deg2rad(obj['dec'][i])))**2 ) / (nmeas1-1) * 3600**2
+            y2 = np.sum( (meas['DEC'][indx]-obj['dec'][i])**2 ) / (nmeas1-1) * 3600**2
+            xy = np.sum( (meas['ra'][indx]-obj['ra'][i])*np.cos(np.deg2rad(obj['dec'][i])) * (meas['DEC'][indx]-obj['dec'][i]) ) / (nmeas1-1) * 3600**2
             obj['x2'][i] = x2
             obj['y2'][i] = y2
             obj['xy'][i] = xy
@@ -698,8 +911,8 @@ def checkboundaryoverlap(metafiles,buffdict,verbose=False):
     """ Check a list of fits files against a buffer and return metadata of overlapping exposures."""
 
     # New meta-data format
-    dtype_meta = np.dtype([('file',np.str,500),('base',np.str,200),('instrument',np.str,3),('expnum',int),('ra',np.float64),
-                           ('dec',np.float64),('dateobs',np.str,100),('mjd',np.float64),('filter',np.str,50),
+    dtype_meta = np.dtype([('file',str,500),('base',str,200),('instrument',str,3),('expnum',int),('ra',np.float64),
+                           ('dec',np.float64),('dateobs',str,100),('mjd',np.float64),('filter',str,50),
                            ('exptime',float),('airmass',float),('nsources',int),('fwhm',float),
                            ('nchips',int),('badchip31',bool),('rarms',float),('decrms',float),
                            ('ebv',float),('gaianmatch',int),('zpterm',float),('zptermerr',float),
@@ -708,10 +921,13 @@ def checkboundaryoverlap(metafiles,buffdict,verbose=False):
     allmeta = None
     for m,mfile in enumerate(np.atleast_1d(metafiles)):
         noverlap = 0
-        if os.path.exists(mfile) is False:
+        if os.path.exists(mfile) is False and os.path.exists(mfile+'.gz') is False:
             if verbose: print(mfile+' NOT FOUND')
             continue
-        meta = fits.getdata(mfile,1)
+        if os.path.exists(mfile):
+            meta = fits.getdata(mfile,1)
+        else:
+            meta = fits.getdata(mfile+'.gz',1)
         if verbose: print(str(m+1)+' Loading '+mfile)
         t = Time(meta['dateobs'], format='isot', scale='utc')
         meta['mjd'] = t.mjd                    # recompute because some MJD are bad
@@ -720,8 +936,8 @@ def checkboundaryoverlap(metafiles,buffdict,verbose=False):
         # Convert META to new format
         newmeta = np.zeros(1,dtype=dtype_meta)
         # Copy over the meta information
-        for n in newmeta.dtype.names:
-            if n.upper() in meta.dtype.names: newmeta[n]=meta[n]
+        for c in newmeta.dtype.names:
+            if c in meta.dtype.names: newmeta[c]=meta[c]
 
         # Get the name
         fdir = os.path.dirname(mfile)
@@ -810,12 +1026,13 @@ def find_obj_parent(obj):
             lon2,lat2 = coords.rotsphcen(obj['ra'][ind2],obj['dec'][ind2],cenra,cendec,gnomic=True)
             pars = [lon1*3600,lon1*3600,obj['asemi'][ind1],obj['bsemi'][ind1],obj['theta'][ind1]]
             ll,bb = ellipsecoords(pars,npoints=10)
-            obj['parent'][ind1] = coords.doPolygonsOverlap(ll,bb,np.atleast_1d(lon2*3600),np.atleast_1d(lat2*3600))
+            obj['parent'][ind1] = coords.isPointInPolygon(ll,bb,np.atleast_1d(lon2*3600),np.atleast_1d(lat2*3600))
+            #obj['parent'][ind1] = coords.doPolygonsOverlap(ll,bb,np.atleast_1d(lon2*3600),np.atleast_1d(lat2*3600))
     
     return obj
 
 
-def hybridcluster(cat):
+def hybridcluster(meas):
     """ use both DBSCAN and sequential clustering to cluster the data"""
 
     # Hybrid clustering algorithm
@@ -823,38 +1040,39 @@ def hybridcluster(cat):
     # 2) Do sequential clustering using the object centers on the leftover measurements.
 
     # Empty catalog input
-    if len(cat)==0:
+    if len(meas)==0:
         return np.array([]), np.array([])
 
     # Only one exposure, don't cluster
-    expindex = dln.create_index(cat['EXPOSURE'])
+    expindex = dln.create_index(meas['exposure'])
     nexp = len(expindex['value'])
     if nexp==1:
         print('Only one exposure. Do not need to cluster')
-        labels = np.arange(len(cat))
-        obj = np.zeros(len(cat),dtype=np.dtype([('label',int),('ndet',int),('ra',np.float64),('dec',np.float64),('raerr',np.float32),
-                         ('decerr',np.float32),('asemi',np.float32),('bsemi',np.float32),('theta',np.float32),('fwhm',np.float32)]))
+        labels = np.arange(len(meas))
+        obj = np.zeros(len(meas),dtype=np.dtype([('label',int),('ndet',int),('ra',np.float64),('dec',np.float64),
+                                                ('raerr',np.float32),('decerr',np.float32),('asemi',np.float32),
+                                                ('bsemi',np.float32),('theta',np.float32),('fwhm',np.float32)]))
         obj['label'] = labels
         obj['ndet'] = 1
-        for n in ['ra','dec','raerr','decerr','asemi','bsemi','theta','fwhm']: obj[n]=cat[n.upper()]
+        for n in ['ra','dec','raerr','decerr','asemi','bsemi','theta','fwhm']: obj[n]=meas[n.upper()]
         return labels, obj
 
     
     # Step 1: Find object centers using DBSCAN with a small eps
     t0 = time.time()
     # DBSCAN does not deal with cos(dec), convert to a different projection
-    cenra = np.mean(cat['RA'])
-    cendec = np.mean(cat['DEC'])
+    cenra = np.mean(meas['ra'])
+    cendec = np.mean(meas['dec'])
     # Deal with RA=0 wrap
-    if (np.max(cat['RA'])-np.min(cat['RA']))>100:
-        rr = cat['RA']
+    if (np.max(meas['ra'])-np.min(meas['ra']))>100:
+        rr = meas['ra']
         bb,nbb = dln.where(rr>180)
         if nbb>0: rr[bb]-=360
         cenra = np.mean(rr)
         if cenra<0: cenra+=360
-    lon,lat = coords.rotsphcen(cat['RA'],cat['DEC'],cenra,cendec,gnomic=True)
+    lon,lat = coords.rotsphcen(meas['ra'],meas['dec'],cenra,cendec,gnomic=True)
     X1 = np.column_stack((lon,lat))
-    err = np.sqrt(cat['RAERR']**2+cat['DECERR']**2)
+    err = np.sqrt(meas['raerr']**2+meas['decerr']**2)
     eps = np.maximum(3*np.median(err),0.3)
     print('DBSCAN eps=%4.2f' % eps)
     # Minimum number of measurements needed to define a cluster/object
@@ -872,7 +1090,7 @@ def hybridcluster(cat):
 
     # Get mean coordinates for each object
     #   only use the measurements that were clustered
-    obj1 = meancoords(cat[gdb],dbs1.labels_[gdb])
+    obj1 = meancoords(meas[gdb],dbs1.labels_[gdb])
     inpobj = obj1
     print(str(ngdb)+' measurements clustered into '+str(len(obj1))+' objects. '+str(nbdb)+' remaining.')
     
@@ -882,13 +1100,13 @@ def hybridcluster(cat):
     if (nbdb>0):
         print('Sequential Clustering the remaining measurements')
         dcr = np.maximum(3*err[bdb],eps)
-        catrem = cat[bdb]
-        labels2, obj2 = seqcluster(catrem,dcr=dcr,inpobj=inpobj)
+        measrem = meas[bdb]
+        labels2, obj2 = seqcluster(measrem,dcr=dcr,inpobj=inpobj)
         # Add these new labels to the original list
         #  offset the numbers so they don't overlap
         labels = dbs1.labels_
         labels[bdb] = labels2+np.max(labels)+1
-        obj = meancoords(cat,labels)    # Get mean coordinates again
+        obj = meancoords(meas,labels)    # Get mean coordinates again
     else:
         obj = obj1
         labels = dbs1.labels_
@@ -896,6 +1114,204 @@ def hybridcluster(cat):
     print(str(len(obj))+' final objects')
     
     return labels, obj
+
+def calibmeas(meas1,chmeta1,meta,version='v4',verbose=False):
+    """ Apply astrometric and photometric calibrations to raw measurement data """
+    
+    nmeas1 = len(meas1)
+    mdt = [('measid',(str,100)),('objectid',(str,100)),('exposure',(str,50)),
+           ('ccdnum',np.int8),('filter',(str,50)),('mjd',float),('x',np.float32),('y',np.float32),
+           ('ra',float),('raerr',np.float32),('dec',float),('decerr',np.float32),('mag_auto',np.float32),
+           ('magerr_auto',np.float32),('mag_aper1',np.float32),('magerr_aper1',np.float32),('mag_aper2',np.float32),
+           ('magerr_aper2',np.float32),('mag_aper4',np.float32),('magerr_aper4',np.float32),
+           ('mag_aper6',np.float32),('magerr_aper6',np.float32),('mag_aper8',np.float32),
+           ('magerr_aper8',np.float32),('mag_iso',np.float32),('magerr_iso',np.float32),
+           ('kron_radius',np.float32),('background',np.float32),('threshold',np.float32),('isoarea_image',np.float32),
+           ('isoarea_world',np.float32),('x2_world',np.float32),('y2_world',np.float32),('xy_world',np.float32),
+           ('asemi',np.float32),('asemierr',np.float32),('bsemi',np.float32),('bsemierr',np.float32),
+           ('theta',np.float32),('thetaerr',np.float32),('ellipticity',np.float32),
+           ('errx2_world',np.float32),('erry2_world',np.float32),('errxy_world',np.float32),
+           ('fwhm',np.float32),('flags',np.int16),('imaflags_iso',np.int32),('nimaflags_iso',np.int32),
+           ('class_star',np.float32),
+           ('ndet_iter',int),('repeat',int),('xpsf',float),('ypsf',float),('magpsf',float),
+           ('errpsf',float),('skypsf',float),('iter',int),('chi',float),('sharp',float),
+           ('rapsf',float),('decpsf',float),('ebv',np.float32),('haspsf',bool),('snr',np.float32),
+           ('badflag',int)]
+    final = np.zeros(nmeas1,dtype=np.dtype(mdt))
+    final = Table(final)
+    # Add units
+    for c in ['ra','dec','rapsf','decpsf','theta','thetaerr']:
+        final[c].unit = 'degree'
+    for c in ['raerr','decerr','fwhm','asemi','asemierr','bsemi','bsemierr','kron_radius']:
+        final[c].unit = 'arcsec'
+    for c in ['mag_auto','magerr_auto','mag_aper1','magerr_aper1','mag_aper2','magerr_aper2',
+              'mag_aper4','magerr_aper4','mag_aper6','magerr_aper6','mag_aper8','magerr_aper8',
+              'mag_iso','magerr_iso','magpsf','errpsf','ebv']:
+        final[c].unit = 'magnitude'
+    for c in ['x','y','xpsf','ypsf']:
+        final[c].unit = 'pixel'
+    for c in ['background','skypsf']:
+        final[c].unit = 'ADU'
+    final['mjd'].unit = 'day'
+    # Copy over all columns in common
+    for n in final.colnames:
+        if n in meas1.colnames:
+            final[n][:] = meas1[n]
+    # Special handling of some columns
+    final['exposure'][:] = meta['base'][0]
+    final['x'][:] = meas1['x_image']
+    final['y'][:] = meas1['y_image']
+    # Calibrate the photometry
+    #  only calibrate good photometric measurements
+    zpoff = 2.5*np.log10(meta['exptime'][0]) + chmeta1['zpterm'][0]
+    for c in ['mag_auto','mag_aper1','mag_aper2','mag_aper4','mag_aper6','mag_aper8','magpsf']:
+        if c[:8]=='mag_aper':
+            indx = {'1':0,'2':1,'4':2,'6':3,'8':4}[c[-1]]
+            mag = meas1['mag_aper'][:,indx]
+        else:
+            mag = meas1[c]
+        gdmag = ((mag < 50) & np.isfinite(mag))
+        final[c][:] = np.nan   # bad by default
+        final[c][gdmag] = mag[gdmag]+zpoff
+    final['magerr_auto'][:] = meas1['magerr_auto']
+    final['magerr_aper1'][:] = meas1['magerr_aper'][:,0] 
+    final['magerr_aper2'][:] = meas1['magerr_aper'][:,1] 
+    final['magerr_aper4'][:] = meas1['magerr_aper'][:,2]
+    final['magerr_aper6'][:] = meas1['magerr_aper'][:,3] 
+    final['magerr_aper8'][:] = meas1['magerr_aper'][:,4]
+    final['asemi'][:] = meas1['a_world'] * 3600.         # convert to arcsec 
+    final['asemierr'][:] = meas1['erra_world'] * 3600.   # convert to arcsec 
+    final['bsemi'][:] = meas1['b_world'] * 3600.         # convert to arcsec 
+    final['bsemierr'][:] = meas1['errb_world'] * 3600.   # convert to arcsec 
+    final['theta'][:] = 90-meas1['theta_world']          # make CCW E of N 
+    final['thetaerr'][:] = meas1['errtheta_world'] 
+    final['fwhm'][:] = meas1['fwhm_world'] * 3600.       # convert to arcsec 
+    final['skypsf'][:] = meas1['sky']
+    final['haspsf'][:] = meas1['magpsf'] < 50
+    final['snr'][:] = 1.087/meas1['magerr_auto']
+
+    # measid, objectid, ccdnum, filter, mjd
+    
+    # Set some catalog values
+    filt = meta['filter'][0]
+    mjd = meta['mjd'][0]
+    instrument = meta['instrument'][0]
+    expnum = meta['expnum'][0]
+    ccdnum = chmeta1['ccdnum'][0]
+    final['ccdnum'] = ccdnum
+    final['filter'] = filt
+    final['mjd'] = mjd 
+    final['measid'] = instrument+'.'+str(expnum)+'.'+np.char.array(final['ccdnum'].astype(str))+'.'+np.char.array(meas1['number'].astype(str))
+    
+    if version < 'v4':
+        racol = 'alpha_j2000'
+        deccol = 'delta_j2000'
+        xcol = 'x_image'
+        ycol = 'y_image'
+    else:
+        racol = 'rapsf'
+        deccol = 'decpsf'
+        xcol = 'xpsf'
+        ycol = 'ypsf'
+        
+    meas1['ccdnum'] = chmeta1['ccdnum'][0]
+        
+    # Apply QA cuts 
+    #---------------- 
+    badflag = np.zeros(len(meas1),int)
+
+    # Mask bad chip data 
+    # Half of chip 31 for MJD>56660 
+    #  c4d_131123_025436_ooi_r_v2 with MJD=56619 has problems too 
+    #  if the background b/w the left and right half is large then BAD
+    lft31, = np.where((meas1[xcol] < 1024) & (meas1['ccdnum'] == 31))
+    rt31, = np.where((meas1[xcol] >= 1024) & (meas1['ccdnum'] == 31))
+    if len(lft31) > 10 and len(rt31) > 10: 
+        lftback = np.median(meas1['background'][lft31]) 
+        rtback = np.median(meas1['background'][rt31]) 
+        mnback = 0.5*(lftback+rtback) 
+        sigback = dln.mad(meas1['background']) 
+        if np.abs(lftback-rtback) > (np.sqrt(mnback)>sigback): 
+            jump31 = True
+        else: 
+            jump31 = False
+        #logger.info('  Big jump in CCDNUM 31 background levels' 
+    else:
+        jump31 = False 
+    if meta['mjd'] > 56600 or jump31 == 1: 
+        badchip31 = True 
+        # Remove bad measurements 
+        # X: 1-1024 okay 
+        # X: 1025-2049 bad 
+        # use 1000 as the boundary since sometimes there's a sharp drop 
+        # at the boundary that causes problem sources with SExtractor 
+        bdind, = np.where((meas1[xcol] > 1000) & (meas1['ccdnum'] == 31))
+        ngdind = len(meas1)-len(bdind)
+        if len(bdind) > 0:  # some bad ones found
+            if verbose: print('  '+str(len(bdind))+' bad chip 31 measurements')
+            badflag[bdind] += 1
+        else:
+            badchip31 = False  # chip 31 
+                         
+    # Mask sources with bad quality mask flag (IMAFLAGS_ISO) 
+    bdmeas, = np.where(meas1['imaflags_iso'] > 0)
+    if len(bdmeas) > 0: 
+        if verbose: print('  '+str(len(bdmeas))+' sources with bad CP flags.')
+        badflag[bdmeas] += 2 
+            
+    # Mask sources with bad SE FLAGS 
+    #   this masks problematic truncatd sources near chip edges 
+    bdseflags, = np.where( ((meas1['flags'] & 8) > 0) |   # object truncated 
+                           ((meas1['flags'] & 16) > 0))   # aperture truncate 
+    if len(bdseflags) > 0: 
+        if verbose: print('  '+str(len(bdseflags))+' truncated sources')
+        badflag[bdseflags] += 4
+            
+    # Mask low-S/N sources 
+    #  snr = 1.087/err 
+    snrcut = 5.0 
+    bdsnr, = np.where(1.087/meas1['magerr_auto'] < snrcut) 
+    if len(bdsnr) > 0: 
+        if verbose: print('  '+str(len(bdsnr))+' sources with S/N<'+str(snrcut))
+        badflag[bdsnr] += 8
+    
+    final['badflag'][:] = badflag
+    # Other columns we are keeping in case we need to recreate the original measurement file
+    # already copied over in for loop above
+
+    # Calibrate coordinates
+    racoef = chmeta1['racoef'][0]
+    deccoef = chmeta1['deccoef'][0]
+    rarms = chmeta1['rarms'][0]
+    decrms = chmeta1['decrms'][0]
+    lon,lat = coords.rotsphcen(meas1['alpha_j2000'],meas1['delta_j2000'],
+                               chmeta1['cenra'][0],chmeta1['cendec'][0],gnomic=True)
+    lon2 = lon + utils.func_poly2d(lon,lat,*racoef)
+    lat2 = lat + utils.func_poly2d(lon,lat,*deccoef) 
+    ra2,dec2 = coords.rotsphcen(lon2,lat2,chmeta1['cenra'][0],chmeta1['cendec'][0],reverse=True,gnomic=True)
+    final['ra'] = ra2 
+    final['dec'] = dec2
+    if version >= 'v4':
+        gdmeas, = np.where(np.isfinite(meas1['rapsf']) & np.isfinite(meas1['decpsf']))
+        lon,lat = coords.rotsphcen(meas1['rapsf'][gdmeas],meas1['decpsf'][gdmeas],
+                                   chmeta1['cenra'][0],chmeta1['cendec'][0],gnomic=True)
+        lon2 = lon + utils.func_poly2d(lon,lat,*racoef)
+        lat2 = lat + utils.func_poly2d(lon,lat,*deccoef) 
+        ra2,dec2 = coords.rotsphcen(lon2,lat2,chmeta1['cenra'][0],chmeta1['cendec'][0],reverse=True,gnomic=True)
+        final['rapsf'][gdmeas] = ra2 
+        final['decpsf'][gdmeas] = dec2
+        
+    # Add to astrometric errors 
+    final['raerr'] = np.sqrt(final['raerr']**2 + rarms**2) 
+    final['decerr'] = np.sqrt(final['decerr']**2 + decrms**2) 
+
+    # Get reddening
+    coo = SkyCoord(ra=final['ra'],dec=final['dec'],unit='deg')
+    sfd = SFDQuery()
+    ebv = sfd(coo)                
+    final['ebv'] = ebv 
+    
+    return final
     
 
 def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
@@ -907,47 +1323,47 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
         return np.array([]), np.array([])
 
     # New meta-data format
-    dtype_meta = np.dtype([('file',np.str,500),('base',np.str,200),('expnum',int),('ra',np.float64),
-                           ('dec',np.float64),('dateobs',np.str,100),('mjd',np.float64),('filter',np.str,50),
+    dtype_meta = np.dtype([('file',str,500),('base',str,200),('expnum',int),('ra',np.float64),
+                           ('dec',np.float64),('dateobs',str,100),('mjd',np.float64),('filter',str,50),
                            ('exptime',float),('airmass',float),('nsources',int),('fwhm',float),
                            ('nchips',int),('badchip31',bool),('rarms',float),('decrms',float),
                            ('ebv',float),('gaianmatch',int),('zpterm',float),('zptermerr',float),
                            ('zptermsig',float),('refmatch',int)])
 
     # All columns in MEAS catalogs (32)
-    #dtype_cat = np.dtype([('MEASID',np.str,200),('OBJECTID',np.str,200),('EXPOSURE',np.str,200),('CCDNUM',int),('FILTER',np.str,10),
-    #                      ('MJD',float),('X',float),('Y',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
-    #                      ('MAG_AUTO',float),('MAGERR_AUTO',float),('MAG_APER1',float),('MAGERR_APER1',float),('MAG_APER2',float),
-    #                      ('MAGERR_APER2',float),('MAG_APER4',float),('MAGERR_APER4',float),('MAG_APER8',float),('MAGERR_APER8',float),
-    #                      ('KRON_RADIUS',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),('THETA',float),
-    #                      ('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
-    # All the columns that we need (20)
-    #dtype_cat = np.dtype([('MEASID',np.str,30),('EXPOSURE',np.str,40),('CCDNUM',int),('FILTER',np.str,3),
-    #                      ('MJD',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
-    #                      ('MAG_AUTO',float),('MAGERR_AUTO',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),
-    #                      ('THETA',float),('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
-    dtype_cat = np.dtype([('MEASID',np.str,30),('EXPOSURE',np.str,40),('CCDNUM',np.int8),('FILTER',np.str,3),
-                          ('MJD',float),('RA',float),('RAERR',np.float16),('DEC',float),('DECERR',np.float16),
-                          ('MAG_AUTO',np.float16),('MAGERR_AUTO',np.float16),('ASEMI',np.float16),('ASEMIERR',np.float16),
-                          ('BSEMI',np.float16),('BSEMIERR',np.float16),('THETA',np.float16),('THETAERR',np.float16),
-                          ('FWHM',np.float16),('FLAGS',np.int16),('CLASS_STAR',np.float16)])
-
+    dtype_meas = np.dtype([('measid',str,30),('objectid',str,50),('exposure',str,40),('ccdnum',np.int8),('filter',str,3),
+                           ('mjd',float),('ra',float),('raerr',np.float32),('dec',float),('decerr',np.float32),
+                           ('mag_auto',np.float32),('magerr_auto',np.float32),('asemi',np.float32),('asemierr',np.float32),
+                           ('bsemi',np.float32),('bsemierr',np.float32),('theta',np.float32),('thetaerr',np.float32),
+                           ('fwhm',np.float32),('flags',np.int16),('class_star',np.float32),('magpsf',np.float32),
+                           ('errpsf',np.float32),('skypsf',np.float32),('chi',np.float32),('sharp',np.float32),
+                           ('rapsf',np.float64),('decpsf',np.float64),('haspsf',bool),('snr',np.float32),('badflag',bool)])
+    
     #  Loop over exposures
-    cat = None
-    ncat = 0
+    meas = None
+    nmeas = 0
     allmeta = None
-    catcount = 0
+    meascount = 0
     metafile = np.atleast_1d(metafile)
     for m,mfile in enumerate(metafile):
-        expcatcount = 0
-        if os.path.exists(mfile) is False:
+        expmeascount = 0
+        if os.path.exists(mfile)==False and os.path.exists(mfile+'.gz')==False:
             print(mfile+' NOT FOUND')
             continue
-        meta = fits.getdata(mfile,1)
+        if os.path.exists(mfile):
+            mhdu = fits.open(mfile)
+        else:
+            mhdu = fits.open(mfile+'.gz')
         print(str(m+1)+' Loading '+mfile)
+        meta = mhdu[1].data
         t = Time(meta['dateobs'], format='isot', scale='utc')
         meta['mjd'] = t.mjd                    # recompute because some MJD are bad
-        chmeta = fits.getdata(mfile,2)      # chip-level meta-data structure
+
+        chmeta = []
+        for k in range(2,len(mhdu)):
+            chmeta.append(np.array(mhdu[k].data))
+        chmeta = Table(np.array(chmeta))
+        #chmeta = fits.getdata(mfile,2)      # chip-level meta-data table
         print('  FILTER='+meta['filter'][0]+'  EXPTIME='+str(meta['exptime'][0])+' sec')
 
         v = psutil.virtual_memory()
@@ -957,13 +1373,24 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
         # Convert META to new format
         newmeta = np.zeros(1,dtype=dtype_meta)
         # Copy over the meta information
-        for n in newmeta.dtype.names:
-            if n.upper() in meta.dtype.names: newmeta[n]=meta[n]
+        for c in newmeta.dtype.names:
+            if c in meta.dtype.names: newmeta[c]=meta[c]
 
         # Get the name
         fdir = os.path.dirname(mfile)
         fbase, ext = os.path.splitext(os.path.basename(mfile))
         fbase = fbase[:-5]   # remove _meta at end
+
+        measfile = os.path.join(fdir,fbase+'_meas.fits')
+        if os.path.exists(measfile)==False:
+            measfile += '.gz'
+        if os.path.exists(measfile)==False:
+            print(measfile,'NOT FOUND')
+            import pdb; pdb.set_trace()
+        hdu = fits.open(measfile)
+        expmeta = meta[0]
+
+        version = mfile.split('/')[-6]
         
         # Loop over the chip files
         for j in range(len(chmeta)):
@@ -974,125 +1401,136 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
             if (chmeta['ngaiamatch'][j] == 0) | (np.max(np.abs(chmeta['racoef'][j]))>1) | (np.max(np.abs(chmeta['deccoef'][j]))>1):
                 if verbose: print('This chip was not astrometrically calibrated or has astrometric issues')
                 astokay = False
-
+                
             # Check that this overlaps the healpix region
             inside = True
             if buffdict is not None:
-                vra = chmeta['vra'][j]
-                vdec = chmeta['vdec'][j]
+                vra = chmeta['vra'][j].flatten()
+                vdec = chmeta['vdec'][j].flatten()
                 vlon, vlat = coords.rotsphcen(vra,vdec,buffdict['cenra'],buffdict['cendec'],gnomic=True)
                 if coords.doPolygonsOverlap(buffdict['lon'],buffdict['lat'],vlon,vlat) is False:
                     if verbose: print('This chip does NOT overlap the HEALPix region+buffer')
                     inside = False
 
             # Check if the chip-level file exists
-            chfile = fdir+'/'+fbase+'_'+str(chmeta['ccdnum'][j])+'_meas.fits'
-            chfile_exists = os.path.exists(chfile)
-            if chfile_exists is False:
-                print(chfile+' NOT FOUND')
+            #chfile = fdir+'/'+fbase+'_'+str(chmeta['ccdnum'][j])+'_meas.fits'
+            #chfile_exists = os.path.exists(chfile)
+            #if chfile_exists is False:
+            #    print(chfile+' NOT FOUND')
 
             # Load this one
-            if (chfile_exists is True) and (inside is True) and (astokay is True):
+            #if (chfile_exists is True) and (inside is True) and (astokay is True):
+            if (inside is True) and (astokay is True):
                 # Load the chip-level catalog
-                cat1 = fits.getdata(chfile,1)
-                ncat1 = len(cat1)
-                #print('  chip '+str(chmeta[j]['ccdnum'])+'  '+str(ncat1)+' sources')
-
+                #meas1 = fits.getdata(chfile,1)
+                meas1 = Table(hdu[j+1].data)
+                for c in meas1.colnames: meas1[c].name = c.lower()
+                nmeas1 = len(meas1)
+                chmeta1 = chmeta[j]
+                #print('  chip '+str(chmeta[j]['ccdnum'])+'  '+str(nmeas1)+' sources')
+                
+                # Calibrate the data, if necessary
+                if 'measid' not in meas1.colnames:
+                    print('calibrating chip '+str(chmeta1['ccdnum'][0]))
+                    meas1 = calibmeas(meas1,chmeta1,meta,version=version,verbose=False)
+                    
                 # Fix negative FWHM values
                 #  use A_WORLD and B_WORLD which are never negative
-                bd,nbd = dln.where(cat1['FWHM']<0.1)
+                bd,nbd = dln.where(meas1['fwhm']<0.1)
                 if nbd>0:
-                    cat1['FWHM'][bd] = np.sqrt(cat1['ASEMI'][bd]**2+cat1['BSEMI'][bd]**2)*2.35
+                    meas1['fwhm'][bd] = np.sqrt(meas1['asemi'][bd]**2+meas1['bsemi'][bd]**2)*2.35
                 # Fix RAERR=DECERR=0
-                bd,nbd = dln.where(cat1['RAERR']<0.0001)
+                bd,nbd = dln.where(meas1['raerr']<0.0001)
                 if nbd>0:
-                    snr = 1.087/cat1['MAGERR_AUTO'][bd]
-                    coorderr = 0.664*cat1['FWHM'][bd]/snr
-                    cat1['RAERR'][bd] = coorderr
-                    cat1['DECERR'][bd] = coorderr
+                    snr = 1.087/meas1['magerr_auto'][bd]
+                    coorderr = 0.664*meas1['fwhm'][bd]/snr
+                    meas1['raerr'][bd] = coorderr
+                    meas1['decerr'][bd] = coorderr
 
                 # Make sure it's in the right format
-                if len(cat1.dtype.fields) != 32:
+                #if len(meas1.dtype.fields) != 32:    # v3
+                if len(meas1.dtype.fields) != 65:     # v4
                     if verbose: print('  This catalog does not have the right format. Skipping')
-                    del cat1
-                    ncat1 = 0
+                    del meas1
+                    nmeas1 = 0
 
                 # Only include sources inside Boundary+Buffer zone
                 #  -use ROI_CUT
                 #  -reproject to tangent plane first so we don't have to deal
-                #     with RA=0 wrapping or pol issues
+                #     with RA=0 wrapping or pole issues
                 if buffdict is not None:
-                    lon, lat = coords.rotsphcen(cat1['ra'],cat1['dec'],buffdict['cenra'],buffdict['cendec'],gnomic=True)
+                    lon, lat = coords.rotsphcen(meas1['ra'],meas1['dec'],buffdict['cenra'],buffdict['cendec'],gnomic=True)
                     ind_out, ind_in = dln.roi_cut(buffdict['lon'],buffdict['lat'],lon,lat)
                     nmatch = dln.size(ind_in)
                     # Only want source inside this pixel
                     if nmatch>0:
-                        cat1 = cat1[ind_in]
-                        ncat1 = len(cat1)
+                        meas1 = meas1[ind_in]
+                        nmeas1 = len(meas1)
                     else:
-                        cat1 = None
-                        ncat1 = 0
+                        meas1 = None
+                        nmeas1 = 0
                     #if verbose: print('  '+str(nmatch)+' sources are inside this pixel')
-
+                    
                 # Combine the catalogs
-                if ncat1 > 0:
+                if nmeas1 > 0:
                     # Keep it all in memory
                     if dbfile is None:
-                        if cat is None:
-                            #dtype_cat = cat1.dtype
-                            #ncat_init = np.sum(chmeta['nsources'])*dln.size(metafile)
-                            ncat_init = np.maximum(100000,ncat1)
-                            cat = np.zeros(ncat_init,dtype=dtype_cat)
-                            catcount = 0
+                        if meas is None:
+                            #dtype_meas = meas1.dtype
+                            #nmeas_init = np.sum(chmeta['nsources'])*dln.size(metafile)
+                            nmeas_init = np.maximum(100000,nmeas1)
+                            meas = np.zeros(nmeas_init,dtype=dtype_meas)
+                            meascount = 0
                         # Add more elements if necessary
-                        if (catcount+ncat1)>ncat:
-                            cat = add_elements(cat,np.maximum(100000,ncat1))
-                            ncat = len(cat)
+                        if (meascount+nmeas1)>nmeas:
+                            meas = add_elements(meas,np.maximum(100000,nmeas1))
+                            nmeas = len(meas)
 
-                        # Add it to the main CAT catalog
-                        for n in dtype_cat.names: cat[n][catcount:catcount+ncat1] = cat1[n.upper()]
+                        # Add it to the main MEAS measalog
+                        for c in dtype_meas.names: meas[c][meascount:meascount+nmeas1] = meas1[c]
                     # Use the database
                     else:
-                        writecat2db(cat1,dbfile)
+                        writecat2db(meas1,dbfile)
 
-                    if verbose: print('  chip '+str(chmeta['ccdnum'][j])+'  '+str(ncat1)+' measurements')
+                    if verbose: print('  chip '+str(chmeta['ccdnum'][j])+'  '+str(nmeas1)+' measurements')
 
-                    catcount += ncat1
-                    expcatcount += ncat1
+                    meascount += nmeas1
+                    expmeascount += nmeas1
+
 
         # Add metadata to ALLMETA, only if some measurements overlap
-        if expcatcount>0:
+        if expmeascount>0:
             if allmeta is None:
                 allmeta = newmeta
             else:
                 allmeta = np.hstack((allmeta,newmeta))
         # Total measurements for this exposure
-        print('  '+str(expcatcount)+' measurements')
-        print(str(catcount)+' measurements total so far')
-
+        print('  '+str(expmeascount)+' measurements')
+        print(str(meascount)+' measurements total so far')
+        
     #print('all exposures loaded. trimming now')
-    if (cat is not None) & (catcount<ncat): cat=cat[0:catcount]   # delete excess elements
-    if cat is None: cat=np.array([])         # empty cat
+    if (meas is not None) & (meascount<nmeas): meas=meas[0:meascount]   # delete excess elements
+    if meas is None: meas=np.array([])         # empty meas
     if allmeta is None: allmeta=np.array([])
 
     print('loading measurements done after '+str(time.time()-t0))
 
-    return cat, catcount, allmeta
+    return meas, meascount, allmeta
 
-def clusterdata(cat,ncat,dbfile=None):
+def clusterdata(meas,nmeas,dbfile=None):
     """ Perform spatial clustering """
 
     t00 = time.time()
     print('Spatial clustering')    
     # Divide into subregions
-    if (ncat>1000000) & (dbfile is not None):
+    if (nmeas>1000000) & (dbfile is not None):
         print('Dividing clustering problem into subregions')
         # Index RA and DEC
         createindexdb(dbfile,'ra',unique=False)
         createindexdb(dbfile,'dec',unique=False)
         db.analyzetable(dbfile,'meas')
         # Subdivide
-        nsub = int(np.ceil(ncat/100000))
+        nsub = int(np.ceil(nmeas/100000))
         print(str(nsub)+' sub regions')
         nx = int(np.ceil(np.sqrt(nsub)))  # divide RA and DEC intro nx regions
         # Get RA/DEC ranges from the database
@@ -1108,8 +1546,8 @@ def clusterdata(cat,ncat,dbfile=None):
         dy = (yr[1]-yr[0])/nx
         buff = 10./3600.0  # buffer in arc seconds
         rabuff = buff/np.cos(np.deg2rad(mndec))  # correct for cos(dec)
-        objstr = np.zeros(100000,dtype=np.dtype([('OBJLABEL',int),('RA',float),('DEC',float),('NMEAS',int)]))
-        nobjstr = len(objstr)
+        objtab = np.zeros(100000,dtype=np.dtype([('OBJLABEL',int),('RA',float),('DEC',float),('NMEAS',int)]))
+        nobjtab = len(objtab)
         # Loop over sub regions
         lastobjlabel = -1
         objcount = 0
@@ -1123,42 +1561,42 @@ def clusterdata(cat,ncat,dbfile=None):
                 d1 = yr[0]+(d+1)*dy
                 print(str(r+1)+' '+str(d+1))
                 print('RA: '+str(r0)+' '+str(r1)+'  DEC: '+str(d0)+' '+str(d1))
-                cat1 = getdatadb(dbfile,rar=[r0-rabuff,r1+rabuff],decr=[d0-buff,d1+buff],verbose=True)
-                ncat1 = len(cat1)
-                if ncat1>0:
-                    gcat1,ngcat1 = dln.where(cat1['OBJLABEL']==-1)  # only want ones that haven't been taken yet
-                    if ngcat1>0:
-                        cat1 = cat1[gcat1]
-                    ncat1 = len(cat1)
-                    print(str(ncat1)+' measurements with no labels')
+                meas1 = getdatadb(dbfile,rar=[r0-rabuff,r1+rabuff],decr=[d0-buff,d1+buff],verbose=True)
+                nmeas1 = len(meas1)
+                if nmeas1>0:
+                    gmeas1,ngmeas1 = dln.where(meas1['OBJLABEL']==-1)  # only want ones that haven't been taken yet
+                    if ngmeas1>0:
+                        meas1 = meas1[gmeas1]
+                    nmeas1 = len(meas1)
+                    print(str(nmeas1)+' measurements with no labels')
 
                 v = psutil.virtual_memory()
                 process = psutil.Process(os.getpid())
                 print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
 
                 # Some measurements to work with
-                if ncat1>0:
+                if nmeas1>0:
                     # Cluster
                     t0 = time.time()
                     # Cluster labels are integers and in ascending order, but there are gaps
-                    objlabels1, initobj1 = hybridcluster(cat1)
+                    objlabels1, initobj1 = hybridcluster(meas1)
                     objlabels1 += lastobjlabel+1                 # add offset to labels
                     labelindex1 = dln.create_index(objlabels1)   # create inex
                     nobj1 = len(labelindex1['value'])
-                    print(str(ncat1)+' measurements for '+str(nobj1)+' objects')
+                    print(str(nmeas1)+' measurements for '+str(nobj1)+' objects')
                     # Compute mean positions
-                    obj1 = np.zeros(nobj1,dtype=np.dtype([('OBJLABEL',int),('RA',float),('DEC',float),('NMEAS',int)]))
-                    obj1['OBJLABEL'] = labelindex1['value']
-                    obj1['NMEAS'] = labelindex1['num']
+                    obj1 = np.zeros(nobj1,dtype=np.dtype([('objlabel',int),('ra',float),('dec',float),('nmeas',int)]))
+                    obj1['objlabel'] = labelindex1['value']
+                    obj1['nmeas'] = labelindex1['num']
                     for k in range(nobj1):
                         indx = labelindex1['index'][labelindex1['lo'][k]:labelindex1['hi'][k]+1]
-                        wt_ra = 1.0/cat1['RAERR'][indx]**2
-                        wt_dec = 1.0/cat1['DECERR'][indx]**2
-                        obj1['RA'][k] = np.sum(cat1['RA'][indx]*wt_ra)/np.sum(wt_ra)
-                        obj1['DEC'][k] = np.sum(cat1['DEC'][indx]*wt_dec)/np.sum(wt_dec)
+                        wt_ra = 1.0/meas1['raerr'][indx]**2
+                        wt_dec = 1.0/meas1['decerr'][indx]**2
+                        obj1['ra'][k] = np.sum(meas1['ra'][indx]*wt_ra)/np.sum(wt_ra)
+                        obj1['dec'][k] = np.sum(meas1['dec'][indx]*wt_dec)/np.sum(wt_dec)
                     # Only keep objects (and measurements) inside the box region
                     #  keep objects on LOWER boundary in RA/DEC
-                    gdobj, ngdobj = dln.where((obj1['RA']>=r0) & (obj1['RA']<r1) & (obj1['DEC']>=d0) & (obj1['DEC']<d1))
+                    gdobj, ngdobj = dln.where((obj1['ra']>=r0) & (obj1['ra']<r1) & (obj1['dec']>=d0) & (obj1['dec']<d1))
                     print(str(ngdobj)+' objects are inside the boundary')
                     # Some objects in the region
                     if ngdobj>0:
@@ -1171,7 +1609,7 @@ def clusterdata(cat,ncat,dbfile=None):
                         for k in range(ngdobj):
                             indx = labelindex1['index'][labelindex1['lo'][gdobj[k]]:labelindex1['hi'][gdobj[k]]+1]
                             nmeas1 = labelindex1['num'][gdobj[k]]
-                            add_rowid1[cnt1:cnt1+nmeas1] = cat1['ROWID'][indx]
+                            add_rowid1[cnt1:cnt1+nmeas1] = meas1['rowid'][indx]
                             add_objlabels1[cnt1:cnt1+nmeas1] = labelindex1['value'][gdobj[k]]
                             cnt1 += nmeas1
 
@@ -1180,49 +1618,49 @@ def clusterdata(cat,ncat,dbfile=None):
                         si = np.argsort(add_rowid1)
                         insertobjlabelsdb(add_rowid1[si],add_objlabels1[si],dbfile)
 
-                        # Add OBJ1 to OBJSTR
-                        if (objcount+nobj1>nobjstr):    # add new elements
-                            print('Adding more elements to OBSTR')
+                        # Add OBJ1 to OBJTAB
+                        if (objcount+nobj1>nobjtab):    # add new elements
+                            print('Adding more elements to OBJTAB')
                             t1 = time.time()
-                            objstr = add_elements(objstr,np.max([nobj1,100000]))
-                            nobjstr = len(objstr)
+                            objtab = add_elements(objtab,np.max([nobj1,100000]))
+                            nobjtab = len(objtab)
                             print('more elements added in '+str(time.time()-t1)+' sec.')
-                        objstr[objcount:objcount+nobj1] = obj1
+                        objtab[objcount:objcount+nobj1] = obj1
                         objcount += nobj1
 
                         # Keep track of last label
-                        lastobjlabel = np.max(obj1['OBJLABEL'])
+                        lastobjlabel = np.max(obj1['objlabel'])
 
                         #import pdb; pdb.set_trace()
 
         # Trim extra elements
-        if nobjstr>objcount:
-            objstr = objstr[0:objcount]
+        if nobjtab>objcount:
+            objtab = objtab[0:objcount]
 
     # No subdividing
     else:
         # Get MEASID, RA, DEC from database
         if dbfile is not None:
-            #cat = getdbcoords(dbfile)
-            cat = getdatadb(dbfile,verbose=True)
-        objlabels, initobj = hybridcluster(cat)
+            #meas = getdbcoords(dbfile)
+            meas = getdatadb(dbfile,verbose=True)
+        objlabels, initobj = hybridcluster(meas)
         labelindex = dln.create_index(objlabels)   # create index
         nobj = len(labelindex['value'])
-        print(str(ncat)+' measurements for '+str(nobj)+' objects')
+        print(str(nmeas)+' measurements for '+str(nobj)+' objects')
         # Make structure
-        objstr = np.zeros(nobj,dtype=np.dtype([('OBJLABEL',int),('NMEAS',int),('LO',int),('HI',int)]))
-        objstr['OBJLABEL'] = labelindex['value']
-        objstr['NMEAS'] = labelindex['num']
-        nobjstr = len(objstr)
+        objtab = np.zeros(nobj,dtype=np.dtype([('objlabel',int),('nmeas',int),('lo',int),('hi',int)]))
+        objtab['objlabel'] = labelindex['value']
+        objtab['nmeas'] = labelindex['num']
+        nobjtab = len(objtab)
         # Insert object label into database
         if dbfile is not None:
-            insertobjlabelsdb(cat['ROWID'],objlabels,dbfile)
-        # Resort CAT, and use index LO/HI
-        cat = cat[labelindex['index']]
-        objstr['LO'] = labelindex['lo']
-        objstr['HI'] = labelindex['hi']
+            insertobjlabelsdb(meas['rowid'],objlabels,dbfile)
+        # Resort MEAS, and use index LO/HI
+        meas = meas[labelindex['index']]
+        objtab['lo'] = labelindex['lo']
+        objtab['hi'] = labelindex['hi']
 
-    print(str(len(objstr))+' final objects')
+    print(str(len(objtab))+' final objects')
 
     # Index objlabel in database
     if dbfile is not None:
@@ -1230,18 +1668,26 @@ def clusterdata(cat,ncat,dbfile=None):
 
     print('clustering done after '+str(time.time()-t00)+' sec.')
 
-    return objstr, cat
+    return objtab, meas
 
 
-def breakup_idstr(dbfile):
-    """ Break-up idstr file into separate measid/objectid lists per exposure on /data0."""
+def breakup_idtab(dbfile):
+    """ Break-up idtab file into separate measid/objectid lists per exposure on /data0."""
 
     t00 = time.time()
 
-    outdir = '/data0/dnidever/nsc/instcal/v3/idstr/'
+    #outdir = '/data0/dnidever/nsc/instcal/v3/idtab/'
+    hostname = socket.gethostname()
+    if 'noao' in hostname or 'noirlab' in hostname:
+        outdir = '/net/dl2/dnidever/nsc/instcal/v4/idtab/'
+    else:
+        outdir = '/home/group/davidnidever/nsc/instcal/v4/idtab/'
 
     # Load the exposures table
-    expcat = fits.getdata('/net/dl2/dnidever/nsc/instcal/v3/lists/nsc_v3_exposure_table.fits.gz',1)
+    if 'noao' in hostname or 'noirlab' in hostname:
+        expcat = fits.getdata('/net/dl2/dnidever/nsc/instcal/v4/lists/nsc_instcal_combine_exposure_table.fits',1)
+    else:
+        expcat = fits.getdata('/home/group/davidnidever/nsc/instcal/v4/lists/nsc_instcal_combine_exposures.fits',1)
 
     # Make sure it's a list
     if type(dbfile) is str: dbfile=[dbfile]
@@ -1253,11 +1699,11 @@ def breakup_idstr(dbfile):
         print(str(i+1)+' '+dbfile1)
         if os.path.exists(dbfile1):
             t0 = time.time()
-            dbbase1 = os.path.basename(dbfile1)[0:-9]  # remove _idstr.db ending
+            dbbase1 = os.path.basename(dbfile1)[0:-9]  # remove _idtab.db ending
             # Get existing index names for this database
             d = sqlite3.connect(dbfile1, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
             cur = d.cursor()
-            cmd = 'select measid,exposure,objectid from idstr'
+            cmd = 'select measid,exposure,objectid from idtab'
             t1 = time.time()
             data = cur.execute(cmd).fetchall()
             print('  '+str(len(data))+' rows read in %5.1f sec. ' % (time.time()-t1))
@@ -1268,13 +1714,14 @@ def breakup_idstr(dbfile):
             exposure = np.array(exposure)
             eindex = dln.create_index(exposure)
             # Match exposures to exposure catalog
-            ind1,ind2 = dln.match(expcat['EXPOSURE'],eindex['value'])
+            #ind1,ind2 = dln.match(expcat['EXPOSURE'],eindex['value'])
+            ind1,ind2 = dln.match(expcat['base'],eindex['value'])
             # Loop over exposures and write output files
             nexp = len(eindex['value'])
             print('  '+str(nexp)+' exposures')
             measid_maxlen = np.max(dln.strlen(measid))
             objectid_maxlen = np.max(dln.strlen(objectid))
-            df = np.dtype([('measid',np.str,measid_maxlen+1),('objectid',np.str,objectid_maxlen+1)])
+            df = np.dtype([('measid',str,measid_maxlen+1),('objectid',str,objectid_maxlen+1)])
             # Loop over the exposures and write out the files
             for k in range(nexp):
                 if nexp>100:
@@ -1283,8 +1730,10 @@ def breakup_idstr(dbfile):
                 cat = np.zeros(len(ind),dtype=df)
                 cat['measid'] = measid[ind]
                 cat['objectid'] = objectid[ind]
-                instcode = expcat['INSTRUMENT'][ind1[k]]
-                dateobs = expcat['DATEOBS'][ind1[k]]
+                #instcode = expcat['INSTRUMENT'][ind1[k]]
+                #dateobs = expcat['DATEOBS'][ind1[k]]
+                instcode = expcat['instrument'][ind1[k]]
+                dateobs = expcat['dateobs'][ind1[k]]
                 night = dateobs[0:4]+dateobs[5:7]+dateobs[8:10]
                 if os.path.exists(outdir+instcode+'/'+night+'/'+eindex['value'][k]) is False:
                     # Sometimes this crashes because another process is making the directory at the same time
@@ -1304,7 +1753,8 @@ def breakup_idstr(dbfile):
 
 
 # Combine data for one NSC healpix region
-def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdir=None,nmulti=None):
+def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,multilevel=True,
+            outdir=None,nmulti=None):
 
     t0 = time.time()
     hostname = socket.gethostname()
@@ -1318,12 +1768,19 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
         mssdir = "/mss1/"
         localdir = "/d0/"
         tmproot = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
+        outdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combine/'
+        listfile = '/net/dl2/dnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
     # on gp09 use
     if (host == "gp09") or (host == "gp08") or (host == "gp07") or (host == "gp06") or (host == "gp05"):
         dir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"/"
         mssdir = "/net/mss1/"
         localdir = "/data0/"
         tmproot = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
+        outdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combine/'
+        listfile = '/net/dl2/dnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
+    if (host == 'tempest'):
+        outdir = '/home/group/davidnidever/nsc/instcal/v4/combine/'
+        listfile = '/home/group/davidnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
 
     t0 = time.time()
 
@@ -1332,8 +1789,10 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
         print('Only nside=>128 supported')
         sys.exit()
 
-    print('*** KLUDGE: Forcing output to /net/dl2 ***')
-    outdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combine/'
+    #print('*** KLUDGE: Forcing output to /scratch1 ***')
+    #outdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combine/'
+    #outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/combine/'
+    #outdir = '/home/group/davidnidever/nsc/instcal/v4/combine/'
     if os.path.exists(outdir) is False: os.mkdir(outdir)
 
     # nside>128
@@ -1361,11 +1820,13 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
         print(outfile+' EXISTS already and REDO not set')
         sys.exit()
 
-    print("Combining InstCal SExtractor catalogs for Healpix pixel = "+str(pix))
-
+    print("Combining InstCal catalogs for Healpix pixel = "+str(pix))
 
     # Use the healpix list, nside=128
-    listfile = localdir+'dnidever/nsc/instcal/'+version+'/nsc_instcal_combine_healpix_list.db'
+    #listfile = localdir+'dnidever/nsc/instcal/'+version+'/nsc_instcal_combine_healpix_list.db'
+    #listfile = '/home1/09970/dnidever/scratch1/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
+    #listfile = '/corral/projects/NOIRLab/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
+    #listfile = '/home/group/davidnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
     if os.path.exists(listfile) is False:
         print(listfile+" NOT FOUND")
         sys.exit()
@@ -1410,8 +1871,17 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
                 hlist1 = Table(hlist1)
                 hlist = vstack([hlist,hlist1])
 
+    # Fix filenames for tempest
+    if 'noao' in hostname or 'noirlab' in hostname:
+        hlist['measfile'] = [f.replace('/home1/09970/dnidever/scratch1/','/net/dl2/dnidever/')+'.gz' 
+                             for f in hlist['measfile']]
+    else:
+        hlist['measfile'] = [f.replace('/home1/09970/dnidever/scratch1/','/home/group/davidnidever/')+'.gz' 
+                             for f in hlist['measfile']]
+
+    
     # Rename to be consistent with the FITS file
-    hlist['file'].name = 'FILE'
+    hlist['measfile'].name = 'FILE'
     hlist['base'].name = 'BASE'
     hlist['pix'].name = 'PIX'
 
@@ -1421,7 +1891,6 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
     hlist = hlist[ui]
     nhlist = len(hlist)
     print(str(nhlist)+' exposures that overlap this pixel and neighbors')
-
 
     # Get the boundary coordinates
     #   healpy.boundaries but not sure how to do it in IDL
@@ -1446,46 +1915,51 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
     if (np.max(rabuff)-np.min(rabuff))>100:  # deal with RA=0 wraparound
         bd,nbd = dln.where(rabuff>180)
         if nbd>0:rabuff[bd] -=360.0
-    buffdict = {'cenra':cenra,'cendec':cendec,'rar':dln.minmax(rabuff),'decr':dln.minmax(decbuff),'ra':rabuff,'dec':decbuff,\
-                'lon':lonbuff,'lat':latbuff,'lr':dln.minmax(lonbuff),'br':dln.minmax(latbuff)}
+    buffdict = {'cenra':cenra,'cendec':cendec,'rar':dln.minmax(rabuff),'decr':dln.minmax(decbuff),
+                'ra':rabuff,'dec':decbuff,'lon':lonbuff,'lat':latbuff,
+                'lr':dln.minmax(lonbuff),'br':dln.minmax(latbuff)}
 
-    # IDSTR schema
-    dtype_idstr = np.dtype([('measid',np.str,200),('exposure',np.str,200),('objectid',np.str,200),('objectindex',int)])
+    # IDTAB schema
+    dtype_idtab = np.dtype([('measid',str,200),('exposure',str,200),('objectid',str,200),('objectindex',int)])
 
     # OBJ schema
-    dtype_obj = np.dtype([('objectid',np.str,100),('pix',int),('ra',np.float64),('dec',np.float64),('raerr',np.float32),('decerr',np.float32),
-                          ('pmra',np.float32),('pmdec',np.float32),('pmraerr',np.float32),('pmdecerr',np.float32),('mjd',np.float64),
-                          ('deltamjd',np.float32),('ndet',np.int16),('nphot',np.int16),
-                          ('ndetu',np.int16),('nphotu',np.int16),('umag',np.float32),('urms',np.float32),('uerr',np.float32),
-                             ('uasemi',np.float32),('ubsemi',np.float32),('utheta',np.float32),
-                          ('ndetg',np.int16),('nphotg',np.int16),('gmag',np.float32),('grms',np.float32),('gerr',np.float32),
-                             ('gasemi',np.float32),('gbsemi',np.float32),('gtheta',np.float32),
-                          ('ndetr',np.int16),('nphotr',np.int16),('rmag',np.float32),('rrms',np.float32),('rerr',np.float32),
-                             ('rasemi',np.float32),('rbsemi',np.float32),('rtheta',np.float32),
-                          ('ndeti',np.int16),('nphoti',np.int16),('imag',np.float32),('irms',np.float32),('ierr',np.float32),
-                             ('iasemi',np.float32),('ibsemi',np.float32),('itheta',np.float32),
-                          ('ndetz',np.int16),('nphotz',np.int16),('zmag',np.float32),('zrms',np.float32),('zerr',np.float32),
-                             ('zasemi',np.float32),('zbsemi',np.float32),('ztheta',np.float32),
-                          ('ndety',np.int16),('nphoty',np.int16),('ymag',np.float32),('yrms',np.float32),('yerr',np.float32),
-                             ('yasemi',np.float32),('ybsemi',np.float32),('ytheta',np.float32),
-                          ('ndetvr',np.int16),('nphotvr',np.int16),('vrmag',np.float32),('vrrms',np.float32),('vrerr',np.float32),
-                            ('vrasemi',np.float32),('vrbsemi',np.float32),('vrtheta',np.float32),
-                          ('asemi',np.float32),('asemierr',np.float32),('bsemi',np.float32),('bsemierr',np.float32),
-                          ('theta',np.float32),('thetaerr',np.float32),('fwhm',np.float32),('flags',np.int16),('class_star',np.float32),
-                          ('ebv',np.float32),('rmsvar',np.float32),('madvar',np.float32),('iqrvar',np.float32),('etavar',np.float32),
+    dtype_obj = np.dtype([('objectid',str,100),('pix',int),('ra',np.float64),('dec',np.float64),('raerr',np.float32),
+                          ('decerr',np.float32),('pmra',np.float32),('pmdec',np.float32),('pmraerr',np.float32),
+                          ('pmdecerr',np.float32),('mjd',np.float64),('deltamjd',np.float32),('ndet',np.int16),
+                          ('nphot',np.int16),('ndetu',np.int16),('nphotu',np.int16),('umag',np.float32),
+                          ('urms',np.float32),('uerr',np.float32),('uasemi',np.float32),('ubsemi',np.float32),
+                          ('utheta',np.float32),('ndetg',np.int16),('nphotg',np.int16),('gmag',np.float32),
+                          ('grms',np.float32),('gerr',np.float32),('gasemi',np.float32),('gbsemi',np.float32),
+                          ('gtheta',np.float32),('ndetr',np.int16),('nphotr',np.int16),('rmag',np.float32),
+                          ('rrms',np.float32),('rerr',np.float32),('rasemi',np.float32),('rbsemi',np.float32),
+                          ('rtheta',np.float32),('ndeti',np.int16),('nphoti',np.int16),('imag',np.float32),
+                          ('irms',np.float32),('ierr',np.float32),('iasemi',np.float32),('ibsemi',np.float32),
+                          ('itheta',np.float32),('ndetz',np.int16),('nphotz',np.int16),('zmag',np.float32),
+                          ('zrms',np.float32),('zerr',np.float32),('zasemi',np.float32),('zbsemi',np.float32),
+                          ('ztheta',np.float32),('ndety',np.int16),('nphoty',np.int16),('ymag',np.float32),
+                          ('yrms',np.float32),('yerr',np.float32),('yasemi',np.float32),('ybsemi',np.float32),
+                          ('ytheta',np.float32),('ndetvr',np.int16),('nphotvr',np.int16),('vrmag',np.float32),
+                          ('vrrms',np.float32),('vrerr',np.float32),('vrasemi',np.float32),('vrbsemi',np.float32),
+                          ('vrtheta',np.float32),('asemi',np.float32),('asemierr',np.float32),('bsemi',np.float32),
+                          ('bsemierr',np.float32),('theta',np.float32),('thetaerr',np.float32),('fwhm',np.float32),
+                          ('flags',np.int16),('class_star',np.float32),('ebv',np.float32),('rmsvar',np.float32),
+                          ('madvar',np.float32),('iqrvar',np.float32),('etavar',np.float32),
                           ('jvar',np.float32),('kvar',np.float32),('chivar',np.float32),('romsvar',np.float32),
                           ('variable10sig',np.int16),('nsigvar',np.float32),('overlap',bool)])
 
     # Estimate number of measurements in pixel
-    metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
-    metastr = checkboundaryoverlap(metafiles,buffdict,verbose=False)
-    nmeasperarea = np.zeros(dln.size(metastr),int)
+    #metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
+    metafiles = [m.replace('_meas','_meta').strip() for m in hlist['FILE']]
+    metafiles = [m.replace('.fits.gz','.fits') for m in metafiles]
+    metatab = checkboundaryoverlap(metafiles,buffdict,verbose=True)  # verbose=False
+    nmeasperarea = np.zeros(dln.size(metatab),int)
     areadict = {'c4d':3.0, 'k4m':0.3, 'ksb':1.0}  # total area
-    for j in range(dln.size(metastr)):
-        nmeasperarea[j] = metastr['nsources'][j]/areadict[metastr['instrument'][j]]
+    for j in range(dln.size(metatab)):
+        nmeasperarea[j] = metatab['nsources'][j]/areadict[metatab['instrument'][j]]
     pixarea = hp.nside2pixarea(nside,degrees=True)
     nmeasperpix = nmeasperarea * pixarea
     totmeasest = np.sum(nmeasperpix)
+
 
     # Break into smaller healpix regions
     if (multilevel is True) & (nside == 128):
@@ -1537,7 +2011,7 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
                         cmd1 = os.path.abspath(__file__)+' '+str(dopix[i])+' '+version+' --nside '+str(hinside)
                         if redo: cmd1 = cmd1+' -r'
                         cmd.append(cmd1)
-                    dirs = np.zeros(len(dopix),(np.str,200))
+                    dirs = np.zeros(len(dopix),(str,200))
                     dirs[:] = tmpdir
                     jobs = jd.job_daemon(cmd,dirs,hyperthread=True,prefix='nsccmb',nmulti=nmulti)
 
@@ -1565,11 +2039,11 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
                 nobj1 = len(obj1)
 
                 # Update the objectIDs
-                dbfile_idstr1 = outfile1.replace('.fits.gz','_idstr.db')
+                dbfile_idtab1 = outfile1.replace('.fits.gz','_idtab.db')
                 objectid_orig = obj1['objectid']
-                objectid_new = dln.strjoin( str(parentpix)+'.', ((np.arange(nobj1)+1+totobjects).astype(np.str)) )
+                objectid_new = dln.strjoin( str(parentpix)+'.', ((np.arange(nobj1)+1+totobjects).astype(str)) )
                 #updatecoldb(selcolname,selcoldata,updcolname,updcoldata,table,dbfile):
-                updatecoldb('objectid',objectid_orig,'objectid',objectid_new,'idstr',dbfile_idstr1)
+                updatecoldb('objectid',objectid_orig,'objectid',objectid_new,'idtab',dbfile_idtab1)
                 # Update objectIDs in catalog
                 obj1['objectid'] = objectid_new
 
@@ -1623,13 +2097,13 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
             dt = time.time()-t0
             print('dt = '+str(dt)+' sec.')
 
-            print('Breaking-up IDSTR information')
-            dbfiles_idstr = []
+            print('Breaking-up IDTAB information')
+            dbfiles_idtab = []
             for i in range(len(allpix)):
                 outfile1 = outfiles[i]
-                dbfile_idstr1 = outfile1.replace('.fits.gz','_idstr.db')
-                dbfiles_idstr.append(dbfile_idstr1)
-            breakup_idstr(dbfiles_idstr)            
+                dbfile_idtab1 = outfile1.replace('.fits.gz','_idtab.db')
+                dbfiles_idtab.append(dbfile_idtab1)
+            breakup_idtab(dbfiles_idtab)            
 
             sys.exit()
 
@@ -1647,44 +2121,94 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
 
     #import pdb; pdb.set_trace()
 
-    # IDSTR database file
-    dbfile_idstr = outdir+'/'+subdir+'/'+outbase+'_idstr.db'
-    if os.path.exists(dbfile_idstr): os.remove(dbfile_idstr)
+    # IDTAB database file
+    dbfile_idtab = outdir+'/'+subdir+'/'+outbase+'_idtab.db'
+    if os.path.exists(dbfile_idtab): os.remove(dbfile_idtab)
 
     # Load the measurement catalog
     #  this will contain excess rows at the end, if all in RAM
-    #  if using database, CAT is empty
-    cat, catcount, allmeta = loadmeas(metafiles,buffdict,dbfile=dbfile)
-    ncat = catcount
-    print(str(ncat))
-
+    #  if using database, MEAS is empty
+    meas, meascount, allmeta = loadmeas(metafiles,buffdict,dbfile=dbfile)
+    nmeas = meascount
+    print(str(nmeas))
+    
     # No measurements
-    if ncat==0:
+    if nmeas==0:
         print('No measurements for this healpix')
         if (dbfile is not None):
             if os.path.exists(dbfile): os.remove(dbfile)
-        if os.path.exists(dbfile_idstr): os.remove(dbfile_idstr)
+        if os.path.exists(dbfile_idtab): os.remove(dbfile_idtab)
         print('Writing blank output file to '+outfile)
         fits.PrimaryHDU().writeto(outfile)
         if os.path.exists(outfile+'.gz'): os.remove(outfile+'.gz')
         ret = subprocess.call(['gzip',outfile])    # compress final catalog
         sys.exit()
 
-    # Spatially cluster the measurements with DBSCAN
-    #   this might also resort CAT
-    objstr, cat = clusterdata(cat,ncat,dbfile=dbfile)
-    nobj = dln.size(objstr)
-    meascumcount = np.cumsum(objstr['NMEAS'])
-    print(str(nobj)+' unique objects clustered')
+    # Removing bad measurements
+    bd, = np.where(meas['badflag'] != 0)
+    if len(bd)>0:
+        print('Removing {:d} bad measurements'.format(len(bd)))
+        meas = np.delete(meas,bd)
+        meascount = len(meas)
+
+        
+    # ===== CLUSTERING ======
+    # Hybrid method (DR2)
+    if kind=='hybrid':
+        # Spatially cluster the measurements with DBSCAN
+        #   this might also resort MEAS
+        print('Using HYBRID clustering')
+        objtab, meas = clusterdata(meas,nmeas,dbfile=dbfile)
+        nobj = dln.size(objtab)
+        meascumcount = np.cumsum(objtab['nmeas'])
+        print(str(nobj)+' unique objects clustered')
+
+    # SEQCLUSTERPM
+    elif kind=='seqclusterpm':
+        print('Using SEQCLUSTERPM clustering')
+        ## Spatially cluster the measurements with proper motion clustering
+        objlabels,initobj = seqclusterpm(meas,calcpm=False)
+        nobj = dln.size(initobj)
+        meascumcount = np.cumsum(initobj['ndet'])
+        #  seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,minmeaspm=5)
+        #print(str(nobj)+' unique objects clustered')
+    
+        # Create objtab and sort measurements
+        labelindex = dln.create_index(objlabels)   # create index
+        nobj = len(labelindex['value'])
+        print(str(nmeas)+' measurements for '+str(nobj)+' objects')
+        # Make structure
+        objtab = np.zeros(nobj,dtype=np.dtype([('objlabel',int),('nmeas',int),('lo',int),('hi',int)]))
+        objtab['objlabel'] = labelindex['value']
+        objtab['nmeas'] = labelindex['num']
+        nobjtab = len(objtab)
+        # Insert object label into database
+        #if dbfile is not None:
+        #    insertobjlabelsdb(meas['rowid'],objlabels,dbfile)
+        # Resort MEAS, and use index LO/HI
+        meas = meas[labelindex['index']]
+        objtab['lo'] = labelindex['lo']
+        objtab['hi'] = labelindex['hi']
+
+    else:
+        print(kind,'not supported')
+        return
+        
+    
+    #import pdb; pdb.set_trace()
+
+
+        
+
 
     # Initialize the OBJ structured array
     obj = np.zeros(nobj,dtype=dtype_obj)
     # if nside>128 then we need unique IDs, so use PIX and *not* PARENTPIX
     #  add nside as well to make it truly unique
     if nside>128:
-        obj['objectid'] = dln.strjoin( str(nside)+'.'+str(pix)+'.', ((np.arange(nobj)+1).astype(np.str)) )
+        obj['objectid'] = dln.strjoin( str(nside)+'.'+str(pix)+'.', ((np.arange(nobj)+1).astype(str)) )
     else:
-        obj['objectid'] = dln.strjoin( str(pix)+'.', ((np.arange(nobj)+1).astype(np.str)) )
+        obj['objectid'] = dln.strjoin( str(pix)+'.', ((np.arange(nobj)+1).astype(str)) )
     obj['pix'] = parentpix    # use PARENTPIX
     # all bad to start
     for f in ['pmra','pmraerr','pmdec','pmdecerr','asemi','bsemi','theta','asemierr',
@@ -1699,23 +2223,40 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
         obj[f+'theta'] = np.nan
     obj['variable10sig'] = 0
     obj['nsigvar'] = np.nan
-    #idstr = np.zeros(ncat,dtype=dtype_idstr)
+    #idtab = np.zeros(ncat,dtype=dtype_idtab)
 
-    # Initialize temporary IDSTR structure
-    idstr = np.zeros(100000,dtype=dtype_idstr)
-    nidstr = dln.size(idstr)
+    # Initialize temporary IDTAB structure
+    idtab = np.zeros(100000,dtype=dtype_idtab)
+    nidtab = dln.size(idtab)
 
     # Higher precision catalog
-    dtype_hicat = np.dtype([('MEASID',np.str,30),('EXPOSURE',np.str,40),('CCDNUM',int),('FILTER',np.str,3),
-                            ('MJD',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
-                            ('MAG_AUTO',float),('MAGERR_AUTO',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),
-                            ('THETA',float),('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
+    dtype_himeas = np.dtype([('measid',str,30),('objectid',str,50),('exposure',str,40),('ccdnum',int),('filter',str,3),
+                             ('mjd',float),('ra',float),('raerr',float),('dec',float),('decerr',float),
+                             ('mag_auto',float),('magerr_auto',float),('asemi',float),('asemierr',float),
+                             ('bsemi',float),('bsemierr',float),('theta',float),('thetaerr',float),
+                             ('fwhm',float),('flags',int),('class_star',float),('magpsf',float),
+                             ('errpsf',float),('skypsf',float),('chi',float),('sharp',float),
+                             ('rapsf',float),('decpsf',float),('haspsf',bool),('snr',float),('badflag',bool)])
 
-    # Convert to nump structured array
-    dtype_hicatdb = np.dtype([('MEASID',np.str,30),('OBJLABEL',int),('EXPOSURE',np.str,40),('CCDNUM',int),('FILTER',np.str,3),
-                              ('MJD',float),('RA',float),('RAERR',float),('DEC',float),('DECERR',float),
-                              ('MAG_AUTO',float),('MAGERR_AUTO',float),('ASEMI',float),('ASEMIERR',float),('BSEMI',float),('BSEMIERR',float),
-                              ('THETA',float),('THETAERR',float),('FWHM',float),('FLAGS',int),('CLASS_STAR',float)])
+    # Convert to numpy structured array
+    dtype_himeasdb = np.dtype([('measid',str,30),('objlabel',int),('exposure',str,40),('ccdnum',int),('filter',str,3),
+                               ('mjd',float),('ra',float),('raerr',float),('dec',float),('decerr',float),
+                               ('mag_auto',float),('magerr_auto',float),('asemi',float),('asemierr',float),
+                               ('basemi',float),('bsemierr',float),('theta',float),('thetaerr',float),
+                               ('fwhm',float),('flags',int),('class_star',float),('magpsf',float),
+                               ('errpsf',float),('skypsf',float),('chi',float),('sharp',float),
+                               ('rapsf',float),('decpsf',float),('haspsf',bool),('snr',float),('badflag',bool)])
+
+
+    #dtype_meas = np.dtype([('measid',str,30),('objectid',str,50),('exposure',str,40),('ccdnum',np.int8),('filter',str,3),
+    #                       ('mjd',float),('ra',float),('raerr',np.float32),('dec',float),('decerr',np.float32),
+    #                       ('mag_auto',np.float32),('magerr_auto',np.float32),('asemi',np.float32),('asemierr',np.float32),
+    #                       ('bsemi',np.float32),('bsemierr',np.float32),('theta',np.float32),('thetaerr',np.float32),
+    #                       ('fwhm',np.float32),('flags',np.int16),('class_star',np.float32),('magpsf',np.float32),
+    #                       ('errpsf',np.float32),('skypsf',np.float32),('chi',np.float32),('sharp',np.float32),
+    #                       ('rapsf',np.float64),('decpsf',np.float64),('haspsf',bool),('snr',np.float32),('badflag',bool)])
+
+
 
     t1 = time.time()
 
@@ -1724,12 +2265,12 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
     ngroup = -1
     grpcount = 0
     maxmeasload = 50000
-    ngrpcat = 0
-    ncat1 = 0
-    idstr_count = 0
-    idstr_grpcount = 0
+    ngrpmeas = 0
+    nmeas1 = 0
+    idtab_count = 0
+    idtab_grpcount = 0
     fidmag = np.zeros(nobj,float)+np.nan  # fiducial magnitude
-    for i,lab in enumerate(objstr['OBJLABEL']):
+    for i,lab in enumerate(objtab['objlabel']):
         if (i % 1000)==0: print(i)
 
         if (i % 1000)==0:
@@ -1739,15 +2280,15 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
 
         # Get meas data for this object
         if usedb is False:
-            oindx = np.arange(objstr['LO'][i],objstr['HI'][i]+1)  # this fails if start,stop are the same
-            if objstr['NMEAS'][i]==1: oindx=np.atleast_1d(objstr['LO'][i])
-            ncat1 = dln.size(oindx)
-            cat1_orig = cat[oindx]
+            oindx = np.arange(objtab['lo'][i],objtab['hi'][i]+1)  # this fails if start,stop are the same
+            if objtab['nmeas'][i]==1: oindx=np.atleast_1d(objtab['lo'][i])
+            nmeas1 = dln.size(oindx)
+            meas1_orig = meas[oindx]
             # Upgrade precisions of catalog
-            cat1 = np.zeros(ncat1,dtype=dtype_hicat)
-            cat1[...] = cat1_orig   # stuff in the data
-            #for n in dtype_hicat.names: cat1[n] = cat1_orig[n]
-            del cat1_orig
+            meas1 = np.zeros(nmeas1,dtype=dtype_himeas)
+            meas1[...] = meas1_orig   # stuff in the data
+            #for n in dtype_himeas.names: meas1[n] = meas1_orig[n]
+            del meas1_orig
         # Get from the database
         else:            
             # Get next group of object measurements
@@ -1759,64 +2300,79 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
                     ngroup = np.max(np.where((meascumcount[i:]-meascumcount[i-1])<=maxmeasload)[0])+1
                 ngroup = np.max([1,ngroup])   # need to load at least 1
                 lab0 = lab
-                lab1 = objstr['OBJLABEL'][np.min([i+ngroup-1,nobj-1])]
+                lab1 = objtab['objlabel'][np.min([i+ngroup-1,nobj-1])]
                 #lab1 = labelindex['value'][np.min([i+ngroup-1,nobj-1])]
-                if ngrpcat>0: del grpcat
-                if ncat1>0: del cat1
-                grpcat = getdatadb(dbfile,objlabel=[lab0,lab1])
-                ngrpcat = dln.size(grpcat)
-                grpindex = dln.create_index(grpcat['OBJLABEL'])                
+                if ngrpmeas>0: del grpmeas
+                if nmeas1>0: del meas1
+                grpmeas = getdatadb(dbfile,objlabel=[lab0,lab1])
+                ngrpmeas = dln.size(grpmeas)
+                grpindex = dln.create_index(grpmeas['objlabel'])
                 #ngroup = len(grpindex['value'])
                 grpcount = 0
             # Get the measurement data for this object
             gindx = grpindex['index'][grpindex['lo'][grpcount]:grpindex['hi'][grpcount]+1]
-            cat1 = np.atleast_1d(grpcat[gindx])
-            ncat1 = len(cat1)
+            meas1 = np.atleast_1d(grpmeas[gindx])
+            nmeas1 = len(meas1)
             grpcount += 1
-            oindx = np.arange(ncat1)+meascount
-            meascount += ncat1            
+            oindx = np.arange(nmeas1)+meascount
+            meascount += nmeas1            
 
-        obj['ndet'][i] = ncat1
+        obj['ndet'][i] = nmeas1
 
 
-        # Add IDSTR information to IDSTR structure/database
+        # Add IDTAB information to IDTAB structure/database
         #  update in groups to database so it takes less time
-        if idstr_count+ncat1 > nidstr:
-            print('  Adding more elements to temporary IDSTR structure')
-            idstr = add_elements(idstr,50000)  # add more elements if necessary
-        # Add information to temporary IDSTR structure for this object
-        idstr['measid'][idstr_count:idstr_count+ncat1] = cat1['MEASID']
-        idstr['exposure'][idstr_count:idstr_count+ncat1] = cat1['EXPOSURE']
-        idstr['objectid'][idstr_count:idstr_count+ncat1] = obj['objectid'][i]
-        idstr['objectindex'][idstr_count:idstr_count+ncat1] = i
-        idstr_count += ncat1
-        idstr_grpcount += 1
-        # Write to database and reinitialize the temporary IDSTR structure
-        if (idstr_grpcount>5000) | (idstr_count>30000) |  (i==(nobj-1)):
-            print('  Writing data to IDSTR database')
-            writeidstr2db(idstr[0:idstr_count],dbfile_idstr)
-            idstr = np.zeros(100000,dtype=dtype_idstr)
-            nidstr = dln.size(idstr)
-            idstr_count = 0
-            idstr_grpcount = 0
+        if idtab_count+nmeas1 > nidtab:
+            print('  Adding more elements to temporary IDTAB structure')
+            idtab = add_elements(idtab,50000)  # add more elements if necessary
+        # Add information to temporary IDTAB structure for this object
+        idtab['measid'][idtab_count:idtab_count+nmeas1] = meas1['measid']
+        idtab['exposure'][idtab_count:idtab_count+nmeas1] = meas1['exposure']
+        idtab['objectid'][idtab_count:idtab_count+nmeas1] = obj['objectid'][i]
+        idtab['objectindex'][idtab_count:idtab_count+nmeas1] = i
+        idtab_count += nmeas1
+        idtab_grpcount += 1
+        # Write to database and reinitialize the temporary IDTAB structure
+        if (idtab_grpcount>5000) | (idtab_count>30000) |  (i==(nobj-1)):
+            print('  Writing data to IDTAB database')
+            writeidtab2db(idtab[0:idtab_count],dbfile_idtab)
+            idtab = np.zeros(100000,dtype=dtype_idtab)
+            nidtab = dln.size(idtab)
+            idtab_count = 0
+            idtab_grpcount = 0
 
+
+        racol = 'ra'
+        deccol = 'dec'
+        measra1 = meas1[racol]
+        measdec1 = meas1[deccol]
+        cootype = np.ones(len(meas1),int)
+        if 'rapsf' in meas1.dtype.names:
+            racol = 'rapsf'
+            deccol = 'decpsf'
+            gdpsf, = np.where(np.isfinite(meas1[racol]) & np.isfinite(meas1[deccol]))
+            if len(gdpsf)>0:
+                measra1[gdpsf] = meas1[racol][gdpsf]
+                measdec1[gdpsf] = meas1[deccol][gdpsf]
+                cootype[gdpsf] = 2
+            
         # Computing quantities
         # Mean RA/DEC, RAERR/DECERR
-        if ncat1>1:
-            wt_ra = 1.0/cat1['RAERR']**2
-            wt_dec = 1.0/cat1['DECERR']**2
-            obj['ra'][i] = np.sum(cat1['RA']*wt_ra)/np.sum(wt_ra)
+        if nmeas1>1:
+            wt_ra = 1.0/meas1['raerr']**2
+            wt_dec = 1.0/meas1['decerr']**2
+            obj['ra'][i] = np.sum(measra1*wt_ra)/np.sum(wt_ra)
             obj['raerr'][i] = np.sqrt(1.0/np.sum(wt_ra))
-            obj['dec'][i] = np.sum(cat1['DEC']*wt_dec)/np.sum(wt_dec)
+            obj['dec'][i] = np.sum(measdec1*wt_dec)/np.sum(wt_dec)
             obj['decerr'][i] = np.sqrt(1.0/np.sum(wt_dec))
-            obj['mjd'][i] = np.mean(cat1['MJD'])
-            obj['deltamjd'][i] = np.max(cat1['MJD'])-np.min(cat1['MJD'])
+            obj['mjd'][i] = np.mean(meas1['mjd'])
+            obj['deltamjd'][i] = np.max(meas1['mjd'])-np.min(meas1['mjd'])
         else:
-            obj['ra'][i] = cat1['RA']
-            obj['dec'][i] = cat1['DEC']
-            obj['raerr'][i] = cat1['RAERR']
-            obj['decerr'][i] = cat1['DECERR']
-            obj['mjd'][i] = cat1['MJD']
+            obj['ra'][i] = measra1
+            obj['dec'][i] = measdec1
+            obj['raerr'][i] = meas1['raerr']
+            obj['decerr'][i] = meas1['decerr']
+            obj['mjd'][i] = meas1['mjd']
             obj['deltamjd'][i] = 0
 
         # Check for negative RA values
@@ -1824,12 +2380,12 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
             obj['ra'][i] += 360
 
         # Mean proper motion and errors
-        if ncat1>1:
-            raerr = np.array(cat1['RAERR']*1e3,np.float64)    # milli arcsec
-            ra = np.array(cat1['RA'],np.float64)
+        if nmeas1>1:
+            raerr = np.array(meas1['raerr']*1e3,np.float64)    # milli arcsec
+            ra = np.array(measra1,np.float64)
             ra -= np.mean(ra)
             ra *= 3600*1e3 * np.cos(obj['dec'][i]/radeg)     # convert to true angle, milli arcsec
-            t = cat1['MJD'].copy()
+            t = meas1['mjd'].copy()
             t -= np.mean(t)
             t /= 365.2425                          # convert to year
             # Calculate robust slope
@@ -1837,8 +2393,8 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
             obj['pmra'][i] = pmra                 # mas/yr
             obj['pmraerr'][i] = pmraerr           # mas/yr
 
-            decerr = np.array(cat1['DECERR']*1e3,np.float64)   # milli arcsec
-            dec = np.array(cat1['DEC'],np.float64)
+            decerr = np.array(meas1['decerr']*1e3,np.float64)   # milli arcsec
+            dec = np.array(measdec1,np.float64)
             dec -= np.mean(dec)
             dec *= 3600*1e3                         # convert to milli arcsec
             # Calculate robust slope
@@ -1849,35 +2405,36 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
         # Mean magnitudes
         # Convert totalwt and totalfluxwt to MAG and ERR
         #  and average the morphology parameters PER FILTER
-        filtindex = dln.create_index(cat1['FILTER'].astype(np.str))
+        filtindex = dln.create_index(meas1['filter'].astype(str))
         nfilters = len(filtindex['value'])
-        resid = np.zeros(ncat1)+np.nan     # residual mag
-        relresid = np.zeros(ncat1)+np.nan  # residual mag relative to the uncertainty
+        resid = np.zeros(nmeas1)+np.nan     # residual mag
+        relresid = np.zeros(nmeas1)+np.nan  # residual mag relative to the uncertainty
         for f in range(nfilters):
             filt = filtindex['value'][f].lower()
             findx = filtindex['index'][filtindex['lo'][f]:filtindex['hi'][f]+1]
             obj['ndet'+filt][i] = filtindex['num'][f]
-            gph,ngph = dln.where(cat1['MAG_AUTO'][findx]<50)
+            gph,ngph = dln.where(meas1['mag_auto'][findx]<50)
             obj['nphot'+filt][i] = ngph
             if ngph==1:
-                obj[filt+'mag'][i] = cat1['MAG_AUTO'][findx[gph]]
-                obj[filt+'err'][i] = cat1['MAGERR_AUTO'][findx[gph]]
+                obj[filt+'mag'][i] = meas1['mag_auto'][findx[gph]]
+                obj[filt+'err'][i] = meas1['magerr_auto'][findx[gph]]
             if ngph>1:
-                newmag, newerr = dln.wtmean(cat1['MAG_AUTO'][findx[gph]], cat1['MAGERR_AUTO'][findx[gph]],magnitude=True,reweight=True,error=True)
+                newmag, newerr = dln.wtmean(meas1['mag_auto'][findx[gph]], meas1['magerr_auto'][findx[gph]],
+                                            magnitude=True,reweight=True,error=True)
                 obj[filt+'mag'][i] = newmag
                 obj[filt+'err'][i] = newerr
                 # Calculate RMS
-                obj[filt+'rms'][i] = np.sqrt(np.mean((cat1['MAG_AUTO'][findx[gph]]-newmag)**2))
+                obj[filt+'rms'][i] = np.sqrt(np.mean((meas1['mag_auto'][findx[gph]]-newmag)**2))
                 # Residual mag
-                resid[findx[gph]] = cat1['MAG_AUTO'][findx[gph]]-newmag
+                resid[findx[gph]] = meas1['mag_auto'][findx[gph]]-newmag
                 # Residual mag relative to the uncertainty
                 #  set a lower threshold of 0.02 in the uncertainty
-                relresid[findx[gph]] = np.sqrt(ngph/(ngph-1)) * (cat1['MAG_AUTO'][findx[gph]]-newmag)/np.maximum(cat1['MAGERR_AUTO'][findx[gph]],0.02)
+                relresid[findx[gph]] = np.sqrt(ngph/(ngph-1)) * (meas1['mag_auto'][findx[gph]]-newmag)/np.maximum(meas1['magerr_auto'][findx[gph]],0.02)
 
             # Calculate mean morphology parameters
-            obj[filt+'asemi'][i] = np.mean(cat1['ASEMI'][findx])
-            obj[filt+'bsemi'][i] = np.mean(cat1['BSEMI'][findx])
-            obj[filt+'theta'][i] = np.mean(cat1['THETA'][findx])
+            obj[filt+'asemi'][i] = np.mean(meas1['asemi'][findx])
+            obj[filt+'bsemi'][i] = np.mean(meas1['bsemi'][findx])
+            obj[filt+'theta'][i] = np.mean(meas1['theta'][findx])
 
         # Calculate variability indices
         gdresid = np.isfinite(resid)
@@ -1885,7 +2442,7 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
         if ngdresid>0:
             resid2 = resid[gdresid]
             sumresidsq = np.sum(resid2**2)
-            tsi = np.argsort(cat1['MJD'][gdresid])
+            tsi = np.argsort(meas1['mjd'][gdresid])
             resid2tsi = resid2[tsi]
             quartiles = np.percentile(resid2,[25,50,75])
             # RMS
@@ -1936,25 +2493,26 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
             if ngfid>0: fidmag[i]=magarr[gfid[0]]
 
         # Mean morphology parameters
-        obj['asemi'][i] = np.mean(cat1['ASEMI'])
-        obj['bsemi'][i] = np.mean(cat1['BSEMI'])
-        obj['theta'][i] = np.mean(cat1['THETA'])
-        obj['asemierr'][i] = np.sqrt(np.sum(cat1['ASEMIERR']**2)) / ncat1
-        obj['bsemierr'][i] = np.sqrt(np.sum(cat1['BSEMIERR']**2)) / ncat1
-        obj['thetaerr'][i] = np.sqrt(np.sum(cat1['THETAERR']**2)) / ncat1
-        obj['fwhm'][i] = np.mean(cat1['FWHM'])
-        obj['class_star'][i] = np.mean(cat1['CLASS_STAR'])
-        obj['flags'][i] = np.bitwise_or.reduce(cat1['FLAGS'])  # OR combine
-
+        obj['asemi'][i] = np.mean(meas1['asemi'])
+        obj['bsemi'][i] = np.mean(meas1['bsemi'])
+        obj['theta'][i] = np.mean(meas1['theta'])
+        obj['asemierr'][i] = np.sqrt(np.sum(meas1['asemierr']**2)) / nmeas1
+        obj['bsemierr'][i] = np.sqrt(np.sum(meas1['bsemierr']**2)) / nmeas1
+        obj['thetaerr'][i] = np.sqrt(np.sum(meas1['thetaerr']**2)) / nmeas1
+        obj['fwhm'][i] = np.mean(meas1['fwhm'])
+        obj['class_star'][i] = np.mean(meas1['class_star'])
+        obj['flags'][i] = np.bitwise_or.reduce(meas1['flags'])  # OR combine
+        # add average chi and sharp
+        
 
     v = psutil.virtual_memory()
     process = psutil.Process(os.getpid())
     print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
 
-    # Created OBJECTID index in IDSTR database
-    createindexdb(dbfile_idstr,'objectid',table='idstr',unique=False)
-    createindexdb(dbfile_idstr,'exposure',table='idstr',unique=False)
-    db.analyzetable(dbfile_idstr,'idstr')
+    # Created OBJECTID index in IDTAB database
+    createindexdb(dbfile_idtab,'objectid',table='idtab',unique=False)
+    createindexdb(dbfile_idtab,'exposure',table='idtab',unique=False)
+    db.analyzetable(dbfile_idtab,'idtab')
 
 
     # Select Variables
@@ -2046,7 +2604,7 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
         print('None of the final objects fall inside the pixel')
         if (dbfile is not None):
             if os.path.exists(dbfile): os.remove(dbfile)
-        if os.path.exists(dbfile_idstr): os.remove(dbfile_idstr)
+        if os.path.exists(dbfile_idtab): os.remove(dbfile_idtab)
         print('Writing blank output file to '+outfile)
         fits.PrimaryHDU().writeto(outfile)
         if os.path.exists(outfile+'.gz'): os.remove(outfile+'.gz')
@@ -2067,19 +2625,19 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
 
     #import pdb; pdb.set_trace()
 
-    # Remove trimmed objects from IDSTR database
+    # Remove trimmed objects from IDTAB database
     if nmatch<nobj:
         # Delete measurements for the objects that we are trimming
-        deleterowsdb('objectid',trimobj['objectid'],'idstr',dbfile_idstr)
+        deleterowsdb('objectid',trimobj['objectid'],'idtab',dbfile_idtab)
         # Update OBJECTINDEX for the objects that we are keeping
-        updatecoldb('objectid',obj['objectid'],'objectindex',np.arange(nmatch),'idstr',dbfile_idstr)
+        updatecoldb('objectid',obj['objectid'],'objectindex',np.arange(nmatch),'idtab',dbfile_idtab)
 
     v = psutil.virtual_memory()
     process = psutil.Process(os.getpid())
     print('%6.1f Percent of memory used. %6.1f GB available.  Process is using %6.2f GB of memory.' % (v.percent,v.available/1e9,process.memory_info()[0]/1e9))
 
-    # Get unique exposures in IDSTR database
-    uexposure = executedb(dbfile_idstr,'SELECT DISTINCT exposure from idstr')
+    # Get unique exposures in IDTAB database
+    uexposure = executedb(dbfile_idtab,'SELECT DISTINCT exposure from idtab')
     # this returns a list of tuples, unpack
     uexposure = [i[0] for i in uexposure]
     # create sumstr for these using allmeta
@@ -2087,14 +2645,14 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
     ind1,ind2 = dln.match(allmeta['base'],uexposure)
     nmatch = len(ind1)
     sumstr = Table(allmeta[ind1])
-    col_nobj = Column(name='nobjects', dtype=np.int, length=len(sumstr))
-    col_healpix = Column(name='healpix', dtype=np.int, length=len(sumstr))
+    col_nobj = Column(name='nobjects', dtype=int, length=len(sumstr))
+    col_healpix = Column(name='healpix', dtype=int, length=len(sumstr))
     sumstr.add_columns([col_nobj, col_healpix])
     sumstr['nobjects'] = 0
     sumstr['healpix'] = parentpix   # use PARENTPIX
     # get number of objects per exposure
-    data = executedb(dbfile_idstr,'SELECT exposure, count(DISTINCT objectid) from idstr GROUP BY exposure')
-    out = np.zeros(len(data),dtype=np.dtype([('exposure',np.str,40),('nobjects',int)]))
+    data = executedb(dbfile_idtab,'SELECT exposure, count(DISTINCT objectid) from idtab GROUP BY exposure')
+    out = np.zeros(len(data),dtype=np.dtype([('exposure',str,40),('nobjects',int)]))
     out[...] = data
     ind1,ind2 = dln.match(sumstr['base'],out['exposure'])
     sumstr['nobjects'][ind1] = out['nobjects'][ind2]
@@ -2117,8 +2675,8 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
     hdulist = fits.open(outfile)
     hdu = fits.table_to_hdu(Table(obj))        # second, catalog
     hdulist.append(hdu)
-    # The IDSTR table is now in a stand-alone sqlite3 database called PIX_idstr.db
-    #hdu = fits.table_to_hdu(Table(idstr))      # third, ID table
+    # The IDTAB table is now in a stand-alone sqlite3 database called PIX_idtab.db
+    #hdu = fits.table_to_hdu(Table(idtab))      # third, ID table
     #hdulist.append(hdu)    
     hdulist.writeto(outfile,overwrite=True)
     hdulist.close()
@@ -2139,7 +2697,7 @@ def combine(pix,version,nside=128,redo=False,verbose=False,multilevel=True,outdi
     # garbage collection
     gc.collect()
 
-    # Breaking up idstr information
+    # Breaking up idtab information
     if nside==128:
-        print('Breaking-up IDSTR information')
-        breakup_idstr(dbfile_idstr)
+        print('Breaking-up IDTAB information')
+        breakup_idtab(dbfile_idtab)

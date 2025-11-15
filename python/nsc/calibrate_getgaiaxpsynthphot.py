@@ -6,7 +6,7 @@ import numpy as np
 from glob import glob
 import healpy as hp
 from astropy.io import fits,ascii
-from astropy.table import Table
+from astropy.table import Table,vstack,hstack
 from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
@@ -17,13 +17,7 @@ from scipy import stats
 import subprocess
 import traceback
 import shutil
-import warnings
 from . import utils,query,modelmag
-
-from astropy.wcs import FITSFixedWarning
-warnings.filterwarnings('ignore', category=FITSFixedWarning)
-from astropy.units import UnitsWarning
-warnings.filterwarnings('ignore', category=UnitsWarning)
 
 # Load the gaia synthetic photometry standardization table
 temp = ascii.read(utils.datadir()+'../config/gaiasynth_standardize.txt')
@@ -35,6 +29,438 @@ for i in range(len(temp)):
           'colrange':eval(temp['COLRANGE'][i]), 'magcoef':eval(temp['MAGCOEF'][i]),
           'magrange':eval(temp['MAGRANGE'][i]), 'magoffset':float(temp['MAGOFFSET'][i])}
     GSYNCALTAB[instfilt] = tt
+
+def runexposures(filt,clobber=False):
+    files = dln.readlines('/corral/projects/NOIRLab/nsc/instcal/v4/c4d/allmeas_070425.txt')
+    #files = dln.readlines('/corral/projects/NOIRLab/nsc/instcal/v4/c4d/allmeas_022025.txt')
+    ffiles = [f for f in files if f.find('_'+filt+'_') > -1]
+    # 143313
+    expffiles = ['/corral/projects/NOIRLab/nsc/instcal/v4/c4d/'+os.path.dirname(f)[2:] for f in ffiles]
+    expffiles2 = np.random.choice(expffiles,200)
+
+    outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/gaiaxpsynthphot'
+    for i in range(len(expffiles2)):
+        expdir = expffiles2[i]
+        base = os.path.basename(expdir)
+        print(i+1,expdir)
+        outfile = outdir+'/'+base+'_gaiaxpsynth.fits'
+        if os.path.exists(outfile) and clobber==False:
+            print(outfile,'already exists')
+            continue
+        try:
+            calibrate(expdir)
+        except KeyboardInterrupt:
+            break
+        except:
+            print('problem')
+            traceback.print_exc()
+
+    tab = combinecats(filt)
+
+def combinecats(filt):
+    outfiles = glob('/home1/09970/dnidever/scratch1/nsc/instcal/v4/gaiaxpsynthphot/*_'+filt+'_*_gaiaxpsynth.fits')
+    print(len(outfiles),filt,'files')
+    tab = []
+    ref = []
+    exptab = []
+    for i in range(len(outfiles)):
+        exptab1 = Table.read(outfiles[i],1)
+        tab1 = Table.read(outfiles[i],3)
+        ref1 = Table.read(outfiles[i],4)
+        delcols = ['kron_radius','background','mag_aper','magerr_aper','isoarea_world',
+                   'a_world','b_world','theta_world','ellipticity','erra_world',
+                   'errb_world','errtheta_world','imaflags_iso','nimaflags_iso',
+                   'x_image','y_image','mag_iso','magerr_iso','isoarea_image',
+                   'x2_world','y2_world','xy_world','errx2_world','erry2_world',
+                   'errxy_world','threshold','ra_2','dec_2',
+                   'jmag','hmag','kmag','xpsf','ypsf',
+                   'atlas_gmag','e_atlas_gmag','atlas_gcontrib',
+                   'atlas_rmag','e_atlas_rmag','atlas_rcontrib',
+                   'atlas_imag','e_atlas_imag','atlas_icontrib',
+                   'atlas_zmag','e_atlas_zmag','atlas_zcontrib',
+                   'w1mag','e_w1mag','w2mag','e_w2mag',
+                   'gl_36mag','e_gl_36mag','gl_45mag','e_gl_45mag',
+                   'number','e_ejk','repeat',
+                   'e_gmag','e_bp','e_rp','qflg','flags','measid','filter','mjd',
+                   'ra_error','dec_error','pmra','pmdec','pmra_error','pmdec_error',
+                   'alpha_j2000','delta_j2000','ccdnum','ebv_sfd','ndet_iter',
+                   'rapsf','decpsf',
+                   'e_jmag','e_hmag','e_kmag','raerr','decerr','sky','iter',
+                   'e_gsynth_umag','e_gsynth_gmag','e_gsynth_rmag','e_gsynth_imag',
+                   'e_gsynth_zmag','e_gsynth_ymag','e_gsynth_vrmag']
+        for c in delcols:
+            if c in ref1.colnames:
+                del ref1[c]
+        # change all float64 to float32
+        for c in ref1.colnames:
+            if ref1[c].dtype.type == np.float64:
+                ref1[c] = ref1[c].astype(np.float32)
+        #del ref1[delcols]
+        #import pdb; pdb.set_trace()
+        ref1['expnum'] = exptab1['expnum'][0]
+        gd, = np.where((ref1['gmag']<17.7) & (ref1['errpsf']<0.05) &
+                       np.isfinite(ref1['magpsf']))
+        ref1 = ref1[gd]
+        tab1['resid'] = tab1['mag']-tab1['model']
+        tab1['dresid'] = tab1['resid']-np.nanmedian(tab1['resid'])
+        tab1['ra'] = exptab1['ra'][0]
+        tab1['dec'] = exptab1['dec'][0]
+        tab1['expnum'] = exptab1['expnum'][0]
+        print(i+1,outfiles[i],len(tab1),len(ref1))
+        exptab.append(exptab1)
+        tab.append(tab1)
+        ref.append(ref1)
+    exptab = vstack(exptab)
+    tab = vstack(tab)
+    ref = vstack(ref)
+    print(len(tab),len(ref))
+    #import pdb; pdb.set_trace()
+    outfile = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/gaiaxpsynthphot/gaiaxpsynth_'+filt+'.fits'
+    exptab.write(outfile.replace('.fits','_exposure.fits'),overwrite=True)
+    tab.write(outfile,overwrite=True)
+    ref.write(outfile.replace('.fits','_ref.fits'),overwrite=True)
+    #hdu = fits.HDUList()
+    #hdu.append(fits.table_to_hdu(tab))
+    #hdu.append(fits.table_to_hdu(ref))
+    #hdu.writeto(outfile,overwrite=True)
+    #hdu.close()
+    print('Writing to',outfile)
+    return tab,ref
+
+def standardize(filt,makeplots=False):
+    """ Find color and magnitude terms """
+    # for gaia xp synth phot
+
+    #tabfile = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/gaiaxpsynthphot/gaiaxpsynth_'+filt+'.fits'
+    tabfile = '/Users/nidever/datalab/nsc/v4/calibrate/gaiaxpsynth_'+filt+'.fits'
+    origtab = Table.read(tabfile)
+    ref = Table.read(tabfile.replace('.fits','_ref.fits'))
+    expinfo = Table.read(tabfile.replace('.fits','_exposure.fits'))
+
+    from scipy.stats import binned_statistic
+
+    errlim = 0.01
+    maglim = 17.6
+    maglowlim = 11.0
+    collowlim = 0.3
+    collim = 2.6
+    colmaglim = 16.0
+    colorder = 1
+    magorder = 2
+    colrefpoint = 1.0
+    magrefpoint = 15.0
+    zptermlim = 0.4
+    if filt=='u':
+        collowlim = 0.3
+        collim = 1.8
+        colorder = 4
+        magorder = 4
+        maglowlim = 10.5
+        maglim = 17.6
+    elif filt=='g':
+        maglowlim = 12.0
+        colorder = 4
+        magorder = 3
+        collowlim = 0.0
+        collim = 3.4
+    elif filt=='r':
+        colorder = 2
+        collowlim = 0.0
+        collim = 3.0
+        maglowlim = 13.0
+    elif filt=='i':
+        collowlim = 0.1
+        collim = 3.0
+        maglowlim = 13.0
+        magorder = 3
+    elif filt=='z':
+        colorder = 2
+        magorder = 2
+        collowlim = 0.1
+        collim = 2.8
+        maglim = 17.0
+    elif filt=='Y':
+        collim = 3.0
+        magorder = 3
+        maglim = 17.0
+        colmaglim = 15.5
+    elif filt=='VR':
+        errlim = 0.2
+        collim = 3.4
+        colorder = 2
+        maglowlim = 14.8
+        maglim = 18.0
+
+    # Use the more comprehensive "ref" catalog
+    tab = ref.copy()
+    tab['err'] = tab['errpsf']
+    tab['col'] = tab['bp']-tab['rp']
+    tab['model'] = tab['gsynth_'+filt.lower()+'mag']
+    tab['mag'] = 0.0
+    gd, = np.where((tab['magpsf'] < 50) & (tab['model']>0))
+    tab = tab[gd]
+        
+    # Remove the exposure time from the observed mags
+    expindex = dln.create_index(tab['expnum'])
+    zptermexp = np.zeros(len(expindex['value']),float)
+    zpterm = np.zeros(len(tab),float)
+    airmass = np.zeros(len(tab),float)
+    for i in range(len(expindex['value'])):
+        ind = expindex['index'][expindex['lo'][i]:expindex['hi'][i]+1]
+        nind = len(ind)
+        eind, = np.where(expinfo['expnum']==expindex['value'][i])
+        exptime = expinfo['exptime'][eind[0]]
+        tab['mag'][ind] = tab['magpsf'][ind] + 2.5*np.log10(exptime)
+        zpterm1 = np.nanmedian(tab['mag'][ind]-tab['model'][ind])
+        zpterm[ind] = zpterm1
+        zptermexp[i] = zpterm1
+        airmass[ind] = expinfo['airmass'][eind[0]]
+    tab['resid'] = tab['mag']-tab['model']
+    medzpterm = np.nanmedian(zptermexp)
+    # also remove high airmass exposures
+    gd, = np.where((np.abs(zpterm-medzpterm) < 0.4) & (airmass < 1.5))
+    tab = tab[gd]
+    tab['dresid'] = tab['resid']-np.nanmedian(tab['resid'])
+    
+    # Color-dependence
+    g, = np.where((tab['gmag']>=maglowlim) & (tab['gmag']<=colmaglim) & (tab['err']<errlim))
+    colbins = np.arange(0.0,3.5,0.1)
+    ybins,xedge,binnumber = binned_statistic(tab['col'][g],tab['dresid'][g],
+                                             bins=colbins,statistic='median')
+    xbins = xedge[:-1]+(xedge[1]-xedge[0])*0.5
+    gdb, = np.where(np.isfinite(ybins) & (xbins >= collowlim) & (xbins <= collim))
+    colcoef = np.polyfit(xbins[gdb],ybins[gdb],colorder)
+    # array([-0.03046447,  0.03936253])
+
+    # Magnitude-dependence
+    if filt=='u':
+        g2, = np.where((tab['col']<1.1) & (np.abs(tab['dresid'])<0.3) & (tab['err']<errlim))
+    else:
+        g2, = np.where((tab['err']<errlim) & (np.abs(tab['dresid'])<0.5))
+    magbins = np.arange(maglowlim-0.5,17.8,0.2)
+    ybins2,xedge2,binnumber2 = binned_statistic(tab['gmag'][g2],tab['dresid'][g2],bins=magbins,statistic=np.nanmedian)
+    xbins2 = xedge2[:-1]+(xedge2[1]-xedge2[0])*0.5
+    gdb, = np.where(np.isfinite(ybins2) & (xbins2 <= maglim))
+    magcoef = np.polyfit(xbins2[gdb],ybins2[gdb],magorder)
+
+    # force the corrections to be zero at col=1.0 and gmag=13.0
+    colcoef2 = colcoef.copy()
+    coloff = np.polyval(colcoef,colrefpoint)
+    colcoef2[-1] -= coloff
+    magcoef2 = magcoef.copy()
+    magoff = np.polyval(magcoef,magrefpoint)
+    magcoef2[-1] -= magoff
+    print('col coef = ',colcoef2)
+    print('mag coef = ',magcoef2)
+
+    #import matplotlib.pyplot as plt
+    #from dlnpyutils import plotting as pl
+    #fig = plt.figure(1)
+    #pl.hist2d(ref['bp']-ref['rp'],ref['magpsf']-ref['gsynth_umag'],log=True)
+    
+    #import pdb; pdb.set_trace()
+    
+    # Redetermine the offsets for each exposure
+    #   with the color and magnitude dependence removed
+    expindex = dln.create_index(tab['expnum'])
+    dresid = tab['dresid'].copy()*0.0
+    dresid2 = tab['dresid'].copy()*0.0
+    zptermexp = np.zeros(len(expindex['value']),float)
+    zpterm = np.zeros(len(dresid),float)
+    for i in range(len(expindex['value'])):
+        ind = expindex['index'][expindex['lo'][i]:expindex['hi'][i]+1]
+        nind = len(ind)
+        resid1 = tab['resid'][ind].copy()
+        col1 = tab['col'][ind].copy()
+        mag1 = tab['gmag'][ind].copy()
+        resid1 -= np.polyval(colcoef2,col1)
+        resid1 -= np.polyval(magcoef2,mag1)
+        zpterm1 = np.nanmedian(resid1)
+        zptermexp[i] = zpterm1
+        zpterm[ind] = zpterm1
+        resid1 -= zpterm1
+        dresid[ind] = resid1
+        dresid2[ind] = tab['resid'][ind].copy() - zpterm1
+    medzpterm = np.nanmedian(zptermexp)
+        
+    print('zpterm =',zptermexp)
+    print('median zpterm =',medzpterm)
+
+    #import pdb; pdb.set_trace()
+
+    # --- Second iteration ---
+    
+    # Color-dependence
+    g, = np.where((tab['gmag']>=maglowlim) & (tab['gmag']<=colmaglim) & (dresid2<0.4) &
+                  (tab['err']<errlim) & (np.abs(zpterm-medzpterm) < 0.5))
+    if filt=='u':
+        g, = np.where((tab['gmag']>=maglowlim) & (tab['gmag']<=15.5) & (dresid2<1.0) &
+                      (tab['err']<errlim) & (np.abs(zpterm-medzpterm) < 0.5))
+    ybins,xedge,binnumber = binned_statistic(tab['col'][g],dresid2[g],bins=colbins,statistic='median')
+    xbins = xedge[:-1]+(xedge[1]-xedge[0])*0.5
+    gdb, = np.where(np.isfinite(ybins) & (xbins >= collowlim) & (xbins <= collim))
+    if filt=='u':
+        gdb, = np.where(np.isfinite(ybins) & (xbins >= collowlim) & (xbins <= collim))
+    colcoef = np.polyfit(xbins[gdb],ybins[gdb],colorder)
+    
+    # Magnitude-dependence
+    if filt=='u':
+        g2, = np.where((tab['col']<1.1) & (np.abs(dresid2)<0.3) & (tab['err']<errlim) &
+                       (np.abs(zpterm-medzpterm) < zptermlim))
+    else:
+        g2, = np.where((tab['err']<errlim) & (np.abs(zpterm-medzpterm) < zptermlim) & (dresid2<0.3))
+    magbins = np.arange(maglowlim-0.5,17.8,0.2)
+    ybins2,xedge2,binnumber2 = binned_statistic(tab['gmag'][g2],dresid2[g2],bins=magbins,statistic=np.nanmedian)
+    xbins2 = xedge2[:-1]+(xedge2[1]-xedge2[0])*0.5
+    gdb2, = np.where(np.isfinite(ybins2) & (xbins2 <= maglim))
+    magcoef = np.polyfit(xbins2[gdb2],ybins2[gdb2],magorder)
+
+    # force the corrections to be zero at col=1.0 and gmag=13.0
+    colcoef2 = colcoef.copy()
+    coloff = np.polyval(colcoef,colrefpoint)
+    colcoef2[-1] -= coloff
+    magcoef2 = magcoef.copy()
+    magoff = np.polyval(magcoef,magrefpoint)
+    magcoef2[-1] -= magoff
+
+    print('col coef = ',colcoef2)
+    print('mag coef = ',magcoef2)
+
+    print('copy to gaiasynth_standardize.txt file')
+    strcolcoef = '['
+    for c in colcoef2[::-1]:
+        strcolcoef += '{:.6g},'.format(c)
+    strcolcoef = strcolcoef[:-1]+']'
+    strmagcoef = '['
+    for c in magcoef2[::-1]:
+        strmagcoef += '{:.6g},'.format(c)
+    strmagcoef = strmagcoef[:-1]+']'
+    print('colcoef',strcolcoef)
+    print('magcoef',strmagcoef)
+
+    #import matplotlib.pyplot as plt
+    #plt.hist(zpterm,bins=50)
+    
+    #import pdb; pdb.set_trace()
+
+    # Make plots
+    if makeplots:
+        from dlnpyutils import plotting as pl
+        import matplotlib.pyplot as plt
+        from matplotlib.colors import LogNorm as LN
+        fig = plt.figure(1)
+        plt.close()
+        #plt.clf()
+        fig,ax = plt.subplots(1,2,figsize=(17,8),num=1)
+
+        vmin = 1
+        cbins = np.linspace(-0.5,3.4,101)
+        rbins = np.linspace(-0.2,0.2,101)
+        if filt=='u':
+            cbins = np.linspace(-0.5,2.5,101)
+            rbins = np.linspace(-0.2,0.6,101)
+        o = ax[0].hist2d(tab['col'][g],dresid2[g],bins=(cbins,rbins),norm=LN(vmin=vmin))
+        ax[0].set_xlabel('BP-RP')
+        ax[0].set_ylabel('Residuals (mag)')
+        ax[0].set_title('Color Dependence ('+filt+'-band)')
+        ax[0].scatter(xbins,ybins,s=50,c='orange')
+        ax[0].scatter(xbins[gdb],ybins[gdb],s=50,c='r')
+        ax[0].plot(colbins,np.polyval(colcoef,colbins),c='orange')
+        #o=pl.hist2d(tab['col'][g],dresid2[g],xr=[-0.5,3.0],yr=[-0.2,0.2],log=True,
+        #            xtitle='BP-RP',ytitle='Residuals (mag)',title='Color Dependence ('+filt+'-band)')
+        #plt.scatter(xbins,ybins,s=50,c='r')
+        #plt.plot(colbins,np.polyval(colcoef,colbins),c='orange')
+        #plt.savefig('gaiaxpsynth_standardize_color_'+filt+'.png',bbox_inches='tight')
+
+        mbins = np.linspace(maglowlim,17.6,101)
+        rbins = np.linspace(-0.2,0.2,101)
+        o = ax[1].hist2d(tab['gmag'][g2],dresid2[g2],bins=(mbins,rbins),norm=LN(vmin=vmin))
+        ax[1].set_xlabel('G')
+        ax[1].set_ylabel('Residuals (mag)')
+        ax[1].set_title('G Magnitude Dependence ('+filt+'-band)')
+        ax[1].scatter(xbins2,ybins2,s=50,c='orange')
+        ax[1].scatter(xbins2[gdb2],ybins2[gdb2],s=50,c='r')
+        ax[1].plot(magbins,np.polyval(magcoef,magbins),c='orange')
+        
+        #o=pl.hist2d(tab['gmag'],dresid2,xr=[11,17.6],yr=[-0.2,0.2],log=True,
+        #            xtitle='G',ytitle='Residuals (mag)',title='G Magnitude Dependence ('+filt+'-band)')
+        #plt.scatter(xbins2,ybins2,s=50,c='r')
+        #plt.plot(magbins,np.polyval(magcoef,magbins),c='orange')
+        plt.savefig('gaiaxpsynth_standardize_'+filt+'.png',bbox_inches='tight')
+
+    # Check absolute calibration
+    syncol = 'gsynth_'+filt.lower()+'mag'
+    refcol = 'ps_'+filt.lower()+'mag'
+    if filt == 'u':
+        refcol = 'sm_umag'
+    if filt == 'VR':
+        refcol = 'gmag'
+    gdref, = np.where(np.isfinite(ref[syncol]) & np.isfinite(ref[refcol]) &
+                      (ref[syncol]>0) & (ref['bp']-ref['rp'] > 0.3) & 
+                      (ref['bp']-ref['rp'] < 2.6))
+    # make regular arrays, not masked
+    if type(ref[refcol].data) == np.ma.core.MaskedArray:
+        ref[refcol] = ref[refcol].data.data
+    if type(ref[syncol].data) == np.ma.core.MaskedArray:
+        ref[syncol] = ref[syncol].data.data
+    ref = ref[gdref]
+    gsynmag = ref[syncol]
+    refmag = ref[refcol]
+    color = ref['bp']-ref['rp']
+    gmag = ref['gmag']
+    psfmag = ref['magpsf']
+    # apply the corrections to the gaia synth photometry
+    #gdgaia, = np.where((color > 0.3) & (color < 2.6))
+    gsynmag -= np.polyval(colcoef2,color)
+    gsynmag -= np.polyval(magcoef2,gmag)
+    #resid = psfmag-gsynmag
+    # measure the zpterm for each exposure
+    expindex = dln.create_index(ref['expnum'])
+    zptermexp = np.zeros(len(expindex['value']),float)
+    zpterm = np.zeros(len(gsynmag),float)
+    calibmag = np.zeros(len(gsynmag),float)   # calibrated psf photometry
+    goodind = []
+    for i in range(len(zptermexp)):
+        ind = expindex['index'][expindex['lo'][i]:expindex['hi'][i]+1]
+        nind = len(ind)
+        eind, = np.where(expinfo['expnum']==expindex['value'][i])
+        exptime = expinfo['exptime'][eind[0]]
+        mag2 = ref['magpsf'][ind] + 2.5*np.log10(exptime) 
+        model2 = gsynmag[ind]
+        diff = model2-mag2
+        zptermexp[i] = np.nanmedian(diff)
+        zpterm[ind] = zptermexp[i]
+        calibmag[ind] = mag2 + zptermexp[i]  # apply zero-point
+        #if zpterm[i] > -0.5:
+        #    goodind.append(ind)
+
+    medzpterm = np.nanmedian(zptermexp)
+    if filt == 'u':
+        goodind1, = np.where((np.abs(zpterm-medzpterm) < 0.5) & (ref['errpsf'] < 0.01) &
+                             (ref['gmag'] >= 10.5) & (ref['gmag'] <= 16.0) &
+                             (ref['bp']-ref['rp'] >= 0.3 ) & (ref['bp']-ref['rp'] <= 1.1))
+    else:
+        goodind1, = np.where((np.abs(zpterm-medzpterm) < 0.5) & (ref['errpsf'] < 0.01) &
+                             (ref['gmag'] >= 11) & (ref['gmag'] <= 17.6) &
+                             (ref['bp']-ref['rp'] >= 0.3 ) & (ref['bp']-ref['rp'] <= 2.6))
+    #goodind = np.hstack(goodind)
+
+    # Now compared our calibrated photometry to the PS1 photometry
+    magresid1 = calibmag[goodind1] - ref[refcol][goodind1]
+    magoffset1 = np.nanmedian(magresid1)
+    sigmagoffset1 = dln.mad(magresid1)
+
+    good2, = np.where(np.abs(magresid1-magoffset1) < 3*sigmagoffset1)
+    goodind = goodind1[good2]
+
+    magresid = ref[refcol][goodind] - calibmag[goodind]
+    magoffset = np.nanmedian(magresid)
+    sigmagoffset = dln.mad(magresid)
+    
+    print('absolute magnitude offset = {:.6f} +/- {:.6f} mag'.format(magoffset,sigmagoffset))
+    
+    return colcoef2,magcoef2,magoffset
+
 
 def concatenate(expdir,deletetruncated=False):
     """
@@ -309,7 +735,7 @@ def recreatemeas(calfile,metafile,outfile):
     ohdu.writeto(outfile,overwrite=True)
     ohdu.close()
 
-def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag',logger=None):
+def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag'):
     """
     Obtain the photometric zero-point using matched observed and
     reference catalogs and a specific method.
@@ -346,17 +772,13 @@ def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag',logger=None):
 
     medfwhm = expinfo['fwhm'][0]
     exptime = expinfo['exptime'][0]
-    filt = expinfo['filter'][0]
     instrument = expinfo['instrument'][0]
+    filt = expinfo['filter'][0]
     instfilt = instrument+'-'+filt
-
-    if logger is None:
-        logger = dln.basiclogger()
     
     # Model Magnitudes
     #-----------------
     if kind=='modelmag':
-        
         # Get the good sources 
         gdmeas, = np.where((meas1['imaflags_iso'] == 0) & (~((meas1['flags'] & 8) > 0)) & (~((meas1['flags'] & 16) > 0)) &
                           (meas1['magpsf'] < 50) &  (meas1['magerr_auto'] < 0.05) & (meas1['class_star'] > 0.8) &
@@ -429,21 +851,6 @@ def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag',logger=None):
         # Select sources within the color/mag calibration range
         gd, = np.where((ref2['bp']-ref2['rp'] >= colrange[0]) & (ref2['bp']-ref2['rp'] <= colrange[1]) &
                        (ref2['gmag'] >= magrange[0]) & (ref2['gmag'] <= magrange[1]))
-        # Not enough points, extend mag range by 0.2 mag
-        if len(gd) < 10:
-            logger.info('less than 10 points to measure zeropoint.  Extending faint mag limit by 0.2 mag')
-            gd, = np.where((ref2['bp']-ref2['rp'] >= colrange[0]) & (ref2['bp']-ref2['rp'] <= colrange[1]) &
-                           (ref2['gmag'] >= magrange[0]) & (ref2['gmag'] <= (magrange[1]+0.2)))
-        # Not enough points, extend mag range by 0.4 mag
-        if len(gd) < 10:
-            logger.info('less than 10 points to measure zeropoint.  Extending faint mag limit by 0.4 mag')
-            gd, = np.where((ref2['bp']-ref2['rp'] >= colrange[0]) & (ref2['bp']-ref2['rp'] <= colrange[1]) &
-                           (ref2['gmag'] >= magrange[0]) & (ref2['gmag'] <= (magrange[1]+0.4)))
-        # Not enough points, extend mag range by 0.6 mag
-        if len(gd) < 10:
-            logger.info('less than 10 points to measure zeropoint.  Extending faint mag limit by 0.6 mag')
-            gd, = np.where((ref2['bp']-ref2['rp'] >= colrange[0]) & (ref2['bp']-ref2['rp'] <= colrange[1]) &
-                           (ref2['gmag'] >= magrange[0]) & (ref2['gmag'] <= (magrange[1]+0.6)))
 
         # Matched structure
         mag2 = meas2['magpsf'] + 2.5*np.log10(exptime)   # correct for the exposure time
@@ -453,7 +860,7 @@ def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag',logger=None):
         expinfo,chinfo = fitzpterm(mstr,expinfo,chinfo)
         expinfo['zptype'] = 2
 
-        # Check against PS1, Gaia or skymapper umag
+        # Check against PS1, Gaia or skymapper umag 
         if filt == 'u':
             refmagcol = 'sm_umag'
         elif filt == 'VR':
@@ -469,6 +876,10 @@ def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag',logger=None):
                 sigmeddiff = dln.mad(calibmag[gdref]-refmag[gdref])
                 errmeddiff = sigmeddiff/np.sqrt(len(gdref))
                 print('deviation from PS1/Gaia/Skymapper = {:.5f} +/- {:.5f} mag'.format(meddiff,errmeddiff))
+        
+
+            import pdb; pdb.set_trace()
+
 
     # Self-calibration
     #-----------------
@@ -479,7 +890,7 @@ def getzpterm(meas1,ref1,mmags,expinfo,chinfo,kind='modelmag',logger=None):
     else:
         raise ValueError(kind+' not supported')
 
-    return expinfo,chinfo
+    return expinfo,chinfo,mstr
 
 
 def fitzpterm(mstr,expinfo,chinfo):
@@ -495,7 +906,6 @@ def fitzpterm(mstr,expinfo,chinfo):
     x = np.zeros(n,float)
     zpterm,zptermerr1 = dln.wtmean(diff[gd],err[gd],error=True)
     zptermerr = dln.bootstrap(diff[gd],dln.wtmean,args=err[gd],indexargs=True)
-
     # Save in exposure table
     expinfo['zpterm'] = zpterm 
     expinfo['zptermerr'] = zptermerr 
@@ -812,50 +1222,6 @@ def selfcalzpterm(expdir,cat,expinfo,chinfo,logger=None,silent=False):
      
     return expinfo,chinfo
 
-def getheadfile(expdir):
-    """ Get the header filename """
-    dldir,mssdir,localdir = utils.rootdirs()
-
-    # get version number 
-    base = os.path.basename(expdir)
-    lo = expdir.find('nsc/instcal/') 
-    dum = expdir[lo+12:]
-    version = dum.split('/')[0]
-    instrument = dum.split('/')[1]
-    night = expdir.split('/')[-2]
-
-    if version < 'v4':
-        return ''
-
-    # v4+ use separate header file
-    headfile = os.path.join(expdir,base+'_header.fits')            
-    if os.path.exists(headfile)==False:
-        headfile = os.path.join(expdir,base+'.hdr')
-        if os.path.exists(headfile)==False:
-            #headfile = os.path.join(dldir,'dnidever','nsc','instcal',version,
-            #                    'header',instrument,night,base+'.hdr')
-            headfile = os.path.join(dldir,'instcal',version,
-                                    'header',instrument,night,base+'.hdr')
-    if os.path.exists(headfile)==False:
-        # use instcal files on tacc
-        #/home1/09970/dnidever/scratch1/nsc/instcal/v4/images/c4d/2020/20200130
-        headfile = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/images/'
-        headfile += '/'.join(expdir.split('/')[-4:])+'.fits.fz'
-        #headfile = os.path.dirname(expdir.replace(version,version+'/images'))+'/'+base+'.fits.fz'
-    if os.path.exists(headfile)==False:
-        # sometimes there's a different version, i.e. _d2 instead of _ls11
-        base2 = '_'.join(base.split('_')[:-1])
-        headfile = glob(os.path.join(dldir,'instcal',version,
-                                     'header',instrument,night,base2+'_*.hdr'))
-        if len(headfile)>0:
-            headfile = headfile[0]
-        else:
-            headfile = ''
-    if os.path.exists(headfile)==False:
-        raise ValueError(headfile+' not found')
-
-    return headfile
-
 def loadheader(headfile):
     """
     Load header file
@@ -876,7 +1242,9 @@ def loadheader(headfile):
                     # use the next header which should have filter and other info
                     headdict['main'] = hdu[1].header
             else:
-                ccdnum = head['CCDNUM']
+                ccdnum = head.get('CCDNUM')
+                if ccdnum is None:
+                    import pdb; pdb.set_trace()
                 headdict[ccdnum] = head
         hdu.close()
     # ASCII file
@@ -890,7 +1258,7 @@ def loadheader(headfile):
             endind = np.array(begind)[1:]-1
             endind = np.concatenate((endind,[len(headlines)-1]))
         headdict = {}
-        # Loop over the extendions
+        # Loop over the extensions
         for i in range(len(begind)):
             lines = headlines[begind[i]:endind[i]+1]
             head = fits.Header.fromstring('\n'.join(lines),sep='\n')
@@ -899,10 +1267,12 @@ def loadheader(headfile):
             else:
                 ccdnum = head['CCDNUM']
                 headdict[ccdnum] = head
+            print(i)
+        import pdb; pdb.set_trace()
     return headdict
     
 def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
-              saveref=False,photmethod=None,outdir=None,logger=None):
+              saveref=False,ncpu=1,photmethod=None,logger=None):
     """
     Perform photometry and astrometric calibration of an NSC exposure using
     external catalogs.
@@ -922,8 +1292,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
          Default is False.
     saveref : bool, optional
        Save the reference catalog.  Default is False.
-    outdir : str, boolean
-       Output directory.  Default is to use "expdir".
+    ncpu : int, optional
+       Number of cpus to use.  Default is 1.
     logger : logging object
        A logging object used for logging information.
 
@@ -955,11 +1325,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     base = os.path.basename(expdir) 
     if logger is None:
         logger = dln.basiclogger()
-    if outdir is None:
-        outdir = expdir
-    if os.path.exists(outdir)==False:
-        os.makedirs(outdir,exist_ok=True)
-    outfile = os.path.join(outdir,base+'_meta.fits')
+    outfile = expdir+'/'+base+'_meta.fits' 
     # get version number 
     lo = expdir.find('nsc/instcal/') 
     dum = expdir[lo+12:] 
@@ -1045,10 +1411,6 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     
     if instrument=='c4d' and (nchips<59 or logfiletest==False):
         print('problems with the files')
-        if nchips<59:
-            print('nchips<59')
-        if logfiletest==False:
-            print('no log file')
         return
     
     # Check that this isn't a problematic Mosaic3 exposure 
@@ -1074,21 +1436,17 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
                 #                    'header',instrument,night,base+'.hdr')
                 headfile = os.path.join(dldir,'instcal',version,
                                     'header',instrument,night,base+'.hdr')
+            if os.path.exists(headfile)==False:
+                # sometimes there's a different version, i.e. _d2 instead of _ls11
+                base2 = '_'.join(base.split('_')[:-1])
+                headfile = glob(os.path.join(dldir,'instcal',version,
+                                            'header',instrument,night,base2+'_*.hdr'))
+                if len(headfile)>0:
+                    headfile = headfile[0]
         if os.path.exists(headfile)==False:
             # use instcal files on tacc
             #/home1/09970/dnidever/scratch1/nsc/instcal/v4/images/c4d/2020/20200130
-            headfile = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/images/'
-            headfile += '/'.join(expdir.split('/')[-4:])+'.fits.fz'
-            #headfile = os.path.dirname(expdir.replace(version,version+'/images'))+'/'+base+'.fits.fz'
-        if os.path.exists(headfile)==False:
-            # sometimes there's a different version, i.e. _d2 instead of _ls11
-            base2 = '_'.join(base.split('_')[:-1])
-            headfile = glob(os.path.join(dldir,'instcal',version,
-                                         'header',instrument,night,base2+'_*.hdr'))
-            if len(headfile)>0:
-                headfile = headfile[0]
-            else:
-                headfile = ''
+            headfile = os.path.dirname(expdir.replace(version,version+'/images'))+'/'+base+'.fits.fz'
         if os.path.exists(headfile)==False:
             raise ValueError(headfile+' not found')
         headdict = loadheader(headfile)
@@ -1267,10 +1625,10 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
             cenra += 360 
         # use chip VRA to get RA range 
         vra = chinfo['vra'][gdchip]
-        bdra = np.where(vra > 180) 
+        bdra, = np.where(vra > 180) 
         if len(bdra) > 0: 
             vra[bdra] -= 360 
-        bdra2 = np.where(vra < -180) 
+        bdra2, = np.where(vra < -180) 
         if len(bdra2) > 0: 
             vra[bdra2] += 360 
         rarange = dln.valrange(vra)*np.cos(np.deg2rad(cendec))
@@ -1294,31 +1652,26 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
          
     # Measure median seeing FWHM 
     gdmeas, = np.where((meas['mag_auto'] < 50) & (meas['magerr_auto'] < 0.05) & (meas['class_star'] > 0.8))
-    medfwhm = np.nanmedian(meas['fwhm_world'][gdmeas]*3600.) 
+    medfwhm = np.median(meas['fwhm_world'][gdmeas]*3600.) 
     logger.info('FWHM = %.2f arcsec' % medfwhm)
-
+         
     # Load the logfile and get absolute flux filename
     loglines = dln.readlines(expdir+'/'+base+'.log')
     #ind = dln.grep(loglines,'Step #2: Copying InstCal images from mass store archive',index=True)
     ind = dln.grep(loglines,'Copying InstCal images',index=True)
-    if len(ind)>0:
-        fline = loglines[ind[0]+1] 
-        lo = fline.find('/archive')
-        # make sure the mss1 directory is correct for this server 
-        fluxfile = mssdir+str(fline[lo+1:]) 
-        wline = loglines[ind[0]+2] 
-        lo = wline.find('/archive') 
-        wtfile = mssdir+str(wline[lo+1:]) 
-        mline = loglines[ind[0]+3] 
-        lo = mline.find('/archive') 
-        maskfile = mssdir+str(mline[lo+1:])
-    else:
-        fluxfile = None
-        wtfile = None
-        maskfile = None
+    fline = loglines[ind[0]+1] 
+    lo = fline.find('/archive')
+    # make sure the mss1 directory is correct for this server 
+    fluxfile = mssdir+str(fline[lo+1:]) 
+    wline = loglines[ind[0]+2] 
+    lo = wline.find('/archive') 
+    wtfile = mssdir+str(wline[lo+1:]) 
+    mline = loglines[ind[0]+3] 
+    lo = mline.find('/archive') 
+    maskfile = mssdir+str(mline[lo+1:])
 
     # Load the meta-data from the original header
-    if headdict is None and fluxfile is not None:
+    if headdict is None:
         head = fits.getheader(fluxfile,0)
     else:
         head = headdict['main']
@@ -1354,9 +1707,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
         hd1 = dum['field_header_card']
         exptime = hd1['exptime']
     dateobs = head['date-obs']
-    airmass = head.get('airmass')
-    if airmass is None:
-        airmass = 1/np.cos(np.deg2rad(head['ZD']))
+    airmass = head['airmass']
     t = Time(dateobs, format='fits')
     mjd = t.mjd
     #mjd = date2jd(dateobs,/mjd) 
@@ -1424,25 +1775,21 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     else: 
         logger.info('Reference catalogs input')
         if rawrap == False: 
-            gdref, = np.where((inpref['ra'] >= np.nanmin(meas[racol])-0.01) & 
-                              (inpref['ra'] <= np.nanmax(meas[racol])+0.01) &
-                              (inpref['dec'] >= np.nanmin(meas[deccol])-0.01) & 
-                              (inpref['dec'] <= np.nanmax(meas[deccol])+0.01))
+            gdref, = np.where((inpref['ra'] >= np.min(meas[racol])-0.01) & 
+                              (inpref['ra'] <= np.max(meas[racol])+0.01) &
+                              (inpref['dec'] >= np.min(meas[deccol])-0.01) & 
+                              (inpref['dec'] <= np.max(meas[deccol])+0.01))
         else: 
-            ra = meas[racol].copy()
+            ra = meas[racol]
             bdra, = np.where(ra > 180) 
             if len(bdra) > 0 : 
-                ra[bdra]-=360
-            refra = inpref['ra'].copy()
-            bdrefra, = np.where(refra > 180)
-            if len(bdrefra) > 0:
-                refra[bdrefra] -= 360
-            gdref, = np.where((refra >= np.nanmin(ra)-0.01) &
-                              (refra <= np.nanmax(ra)+0.01) & 
-                              (inpref['dec'] >= np.nanmin(meas[deccol])-0.01) & 
-                              (inpref['dec'] <= np.nanmax(meas[deccol])+0.01))
+                ra[bdra]-=360 
+            gdref, = np.where((inpref['ra'] <= np.max(ra)-0.01) & 
+                              (inpref['ra'] >= np.min(ra+360)-0.01) &
+                              (inpref['dec'] >= np.min(meas[deccol])-0.01) & 
+                              (inpref['dec'] <= np.max(meas[deccol])+0.01))
         ref = inpref[gdref] 
-        logger.info(str(len(gdref))+' reference stars in our region')
+        logger.info(str(ngdref)+' reference stars in our region')
 
     # Step 3. Astrometric calibration 
     #---------------------------------- 
@@ -1481,7 +1828,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
         gaiadist1 = allgaiadist[chind2] 
         gmatch, = np.where((gaiaind1 > -1) & (gaiadist1 <= 0.5))   # get sources with Gaia matches 
         if len(gmatch) == 0: 
-            gmatch, = np.where((gaiaind1 > -1) & (gaiadist1 <= 1.0))
+            gmatch, = np.where(gaiaind1 > -1 and gaiadist1 <= 1.0) 
         if len(gmatch) < 5: 
             logger.info('Not enough Gaia matches')
             # Add threshold to astrometric errors 
@@ -1543,13 +1890,9 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
             err = np.sqrt(gaia2['e_ra_icrs']**2 + meas2['raerr']**2) 
         if err is None:
             err = meas2['raerr']
-        lonmed = np.nanmedian(londiff) 
+        lonmed = np.median(londiff) 
         lonsig = np.maximum(dln.mad(londiff), 1e-5)  # 0.036" 
         gdlon, = np.where(np.abs(londiff-lonmed) < 3.0*lonsig)# remove outliers 
-        if len(gdlon) < 10:
-            gdlon, = np.where(np.abs(londiff-lonmed) < 4.0*lonsig)# remove outliers 
-        if len(gdlon) < 10:
-            gdlon, = np.where(np.abs(londiff-lonmed) < 5.0*lonsig)# remove outliers 
         if len(gdlon) > 5:   # use constant if not enough stars 
             npars = 4 
         else: 
@@ -1580,13 +1923,9 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
             err = np.sqrt(gaia2['e_de_icrs']**2 + meas2['decerr']**2) 
         if err is None: 
             err = meas2['decerr']
-        latmed = np.nanmedian(latdiff) 
+        latmed = np.median(latdiff) 
         latsig = np.maximum(dln.mad(latdiff), 1e-5)   # 0.036" 
         gdlat, = np.where(np.abs(latdiff-latmed) < 3.0*latsig)  # remove outliers 
-        if len(gdlat) < 10:
-            gdlat, = np.where(np.abs(latdiff-latmed) < 4.0*latsig)  # remove outliers 
-        if len(gdlat) < 10:
-            gdlat, = np.where(np.abs(latdiff-latmed) < 5.0*latsig)  # remove outliers 
         if len(gdlat) > 5:     # use constant if not enough stars 
             npars = 4 
         else: 
@@ -1651,7 +1990,6 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     #expinfo['gaianmatch'] = median(chinfo['gaianmatch']) 
     expinfo['ngaiamatch'] = np.sum(chinfo['ngaiamatch']) 
     expinfo['ngoodgaiamatch'] = np.sum(chinfo['ngoodgaiamatch']) 
-
     
     # Step 4. Photometric calibration 
     #-------------------------------- 
@@ -1673,15 +2011,36 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     meas1 = meas[gdmeas[ind2]]
     # Use Gaia XP synthetic photometry
     # Get the model magnitudes 
-    #mmags = modelmag.modelmag(ref1,instfilt,cendec,eqnfile) 
-    #if len(mmags) == 1 and mmags[0] < -1000: 
-    #    print('No good model mags')
-    #    return
-    mmags = None
+    mmags = modelmag.modelmag(ref1,instfilt,cendec,eqnfile) 
+    if len(mmags) == 1 and mmags[0] < -1000: 
+        print('No good model mags')
+        return
 
     # Get the zero-points
-    #mmexpinfo,mmchinfo = getzpterm(meas1,ref1,mmags,expinfo.copy(),chinfo.copy(),kind='modelmag')
-    gexpinfo,gchinfo = getzpterm(meas1,ref1,mmags,expinfo.copy(),chinfo.copy(),kind='gaiaxpsynth',logger=logger)    
+    #mmexpinfo,mmchinfo,mmstr = getzpterm(meas1,ref1,mmags,expinfo.copy(),chinfo.copy(),kind='modelmag')
+    gexpinfo,gchinfo,gmstr = getzpterm(meas1,ref1,mmags,expinfo.copy(),chinfo.copy(),kind='gaiaxpsynth')    
+
+
+    outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/gaiaxpsynthphot'
+    #expdir = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/c4d/2020/20200130/c4d_200130_063216_ooi_g_v1'
+    base = os.path.basename(expdir)
+    #gexpinfo,gchinfo,gmstr = calibrate.calibrate(expdir)
+    gmstr = Table(gmstr)
+    hdu = fits.HDUList()
+    hdu.append(fits.table_to_hdu(gexpinfo))
+    hdu.append(fits.table_to_hdu(gchinfo))
+    hdu.append(fits.table_to_hdu(gmstr))
+    hdu.append(fits.table_to_hdu(hstack((ref1,meas1))))
+    outfile = outdir+'/'+base+'_gaiaxpsynth.fits'
+    hdu.writeto(outfile,overwrite=True)
+    hdu.close()
+    print('Writing to',outfile)
+
+    return
+
+    #return gexpinfo,gchinfo,gmstr
+
+    #import pdb; pdb.set_trace()
 
     print('Using Gaia for everything now')
     expinfo = gexpinfo.copy()
@@ -1934,13 +2293,13 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
             mhdu.append(mhdu1)                    # add metadata for this chip
 
     # Write to file 
-    outfile = os.path.join(outdir,base+'_meas.fits')
+    outfile = expdir+'/'+base+'_meas2.fits'
     logger.info('Writing table to '+outfile)    
     hdu.writeto(outfile,overwrite=True)
     hdu.close()
                      
     # Meta-data file 
-    metafile = os.path.join(outdir,base+'_meta.fits')
+    metafile = expdir+'/'+base+'_meta2.fits' 
     logger.info('Writing metadata to '+metafile)
     mhdu.writeto(metafile,overwrite=True)
     mhdu.close()
@@ -1974,9 +2333,9 @@ def calibrate_healpix(pix,version,nside=64,redo=False):
     """
 
     # Main NOAO DECam source catalog
-    dldir,mssdir,localdir = utils.rootdirs()
-    fdir = os.path.join(dldir,'instcal',version)
-    tmpdir = os.path.join(localdir,'instcal',version,'tmp')
+    lsdir,mssdir,localdir = utils.rootdirs()
+    fdir = dldir+'users/dnidever/nsc/instcal/'+version+'/'
+    tmpdir = localdir+'dnidever/nsc/instcal/'+version+'/tmp/'
     if os.path.exists(fdir)==False:
         os.makedirs(fdir+'logs/')
     if os.path.exists(tmpdir)==False:
@@ -1985,17 +2344,16 @@ def calibrate_healpix(pix,version,nside=64,redo=False):
     t00 = time.time()
 
     # Load the list of exposures
-    #listfile = fdir+'/lists/nsc_calibrate_healpix_list.fits'
-    listfile = '/scratch1/09970/dnidever/nsc/instcal/v4/lists/nsc_calibrate_healpix_list_exptime10sec_left_073025.fits'
+    listfile = fdir+'/lists/nsc_calibrate_healpix_list.fits'
     if os.path.exists(listfile)==False:
         print(listfile,' NOT FOUND')
         return
     hplist = Table.read(listfile)
 
     # Get the exposures for this healpix
-    print('Calibrating InstCal catalogs for Healpix pixel = '+str(pix))
-    ind, = np.where(hplist['pix']==pix)
-    nind = len(ind)
+    print('Calibrating InstCal SExtractor catalogs for Healpix pixel = '+str(pix))
+    ind1,ind2 = dln.match(hplist['pix'],pix)
+    nind = len(ind1)
     if nind==0:
         print('No exposures')
         return
@@ -2012,20 +2370,19 @@ def calibrate_healpix(pix,version,nside=64,redo=False):
     cencoo = SkyCoord(ra=cenra,dec=cendec,unit='deg')
     glon = cencoo.galactic.l.degree
     glat = cencoo.galactic.b.degree
-    print('l = %.6f' % glon)
-    print('b = %.6f' % glat)
+    print('L = %.6f' % glon)
+    print('B = %.6f' % glat)
 
     # List of instrument-filters
-    filters = [str(h['instrument'])+'-'+str(h['filter']) for h in hplist1]
-    #filters = np.char.array(hplist1['instrument']).strip()+'-'+np.char.array([f.strip()[0:2] for f in hplist1['filter']]).strip()
+    filters = np.char.array(hplist1['instrument']).strip()+'-'+np.char.array([f.strip()[0:2] for f in hplist1['filter']]).strip()
     filters = np.unique(filters)
 
     # Get required radius
     #  DECam      needs 1.1 deg
     #  Mosaic3    needs 0.43 deg
     #  Bok90prime needs 0.75 deg
-    nc4d = np.sum(np.char.array(hplist1['instrument'].astype(str)).find('c4d') > -1)
-    nksb = np.sum(np.char.array(hplist1['instrument'].astype(str)).find('ksb') > -1)
+    nc4d = np.sum(np.char.array(hplist1['instrument']).find('c4d') > -1)
+    nksb = np.sum(np.char.array(hplist1['instrument']).find('ksb') > -1)
     minradius = 0.43
     if nksb>0:
         minradius = np.maximum(minradius, 0.75)
@@ -2039,7 +2396,7 @@ def calibrate_healpix(pix,version,nside=64,redo=False):
 
     # Get all of the reference data that we need
     print('')
-    ref = query.getrefdata(filters,cenra,cendec,radius)
+    ref = getrefdata(filters,cenra,cendec,radius)
 
     # Loop over the exposures
     for i in range(nind):
@@ -2047,14 +2404,9 @@ def calibrate_healpix(pix,version,nside=64,redo=False):
         print('---- EXPOSURE '+str(i+1)+' OF '+str(nind)+' ----')
         print('')
         expdir = hplist1['expdir'][i]
-        #lo = expdir.find('/d1')
-        #expdir = dldir + expdir[lo+5:]
-        # Put output files in /scratch1 for now
-        outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/' + '/'.join(expdir.split('/')[-5:])
-        try:
-            calibrate(expdir,ref,redo=redo,outdir=outdir)
-        except:
-            traceback.print_exc()
+        lo = expdir.find('/d1')
+        expdir = dldir + expdir[lo+5:]
+        calibrate(expdir,ref,redo=redo)
 
     print('')
     print('Total time = %.2f sec' % (time.time()-t00))

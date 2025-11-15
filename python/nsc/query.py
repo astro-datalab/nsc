@@ -141,6 +141,13 @@ def local_query(cenra,cendec,radius,refcat,server,nside=32,silent=False,logger=N
         ref['_4.5mag'].name = '_4_5mag'
         ref['e_4.5mag'].name = 'e_4_5mag'
 
+    # Fix mag names for SAGE
+    if refname=='sage':
+        ref['__3.6_'].name = '__3_6_'
+        ref['e__3.6_'].name = 'e__3_6_'
+        ref['__4.5_'].name = '__4_5_'
+        ref['e__4.5_'].name = 'e__4_5_'
+
     # Fix masked columns for GSYNTH-PHOT
     if refname=="gsynth-phot":
         for colname in ref.colnames:
@@ -705,88 +712,109 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
         # DECam u-band
         if instfilt=='c4d-u':
             # Use GAIA, 2MASS and GALEX to calibrate
-            refcat += ['2MASS-PSC','II/312/ais']
+            #refcat += ['2MASS-PSC','II/312/ais','GSYNTH-PHOT']
+            refcat += ['2MASS-PSC','GSYNTH-PHOT']
+            #refcat += ['GSYNTH-PHOT']
             if cendec <= 0:
-                refcat += ['Skymapperdr4']
+                refcat += ['Skymapperdr4','2MASS-PSC','GSYNTH-PHOT']
         # DECam g-band
         elif instfilt=='c4d-g':
             # Use PS1 if possible
             if cendec > -29:
                 refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
+                #refcat += ['GSYNTH-PHOT','PS']
             else:
                 # Use 2MASS and Skymapper to calibrate
                 #push,refcat,['2MASS-PSC','Skymapper']
-                refcat += ['2MASS-PSC','GSYNTH-PHOT','ATLAS']
+                #refcat += ['2MASS-PSC','GSYNTH-PHOT','ATLAS']
+                refcat += ['2MASS-PSC','GSYNTH-PHOT']
         # DECam r-band
         elif instfilt=='c4d-r':
             # Use PS1 if possible
             if cendec > -29:
                 refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
+                #refcat += ['GSYNTH-PHOT','PS']
             else:
                 # Use 2MASS and Skymapper to calibrate
                 #push,refcat,['2MASS-PSC','Skymapper']
-                refcat += ['2MASS-PSC','GSYNTH-PHOT','ATLAS']
+                #refcat += ['2MASS-PSC','GSYNTH-PHOT','ATLAS']
+                refcat += ['2MASS-PSC','GSYNTH-PHOT']
         # DECam i-band
         elif instfilt=='c4d-i':
             # Use PS1 if possible
             if cendec > -29:
                 refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
+                #refcat += ['GSYNTH-PHOT','PS']
             else:
                 # Use Skymapper and 2MASS to calibrate
                 #push,refcat,['2MASS-PSC','Skymapper']
-                refcat += ['2MASS-PSC','GSYNTH-PHOT','ATLAS']
+                #refcat += ['2MASS-PSC','GSYNTH-PHOT','ATLAS']
+                refcat += ['2MASS-PSC','GSYNTH-PHOT']
         # DECam z-band
         elif instfilt=='c4d-z':
             # Use PS1 if possible
             if cendec > -29:
                 refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
+                #refcat += ['GSYNTH-PHOT','PS']
             else:
                 # Use Skymapper and 2MASS to calibrate
                 #push,refcat,['2MASS-PSC','Skymapper']
-                refcat += ['2MASS-PSC','GSYNTH-PHOT','ATLAS']
+                #refcat += ['2MASS-PSC','GSYNTH-PHOT','ATLAS']
+                refcat += ['2MASS-PSC','GSYNTH-PHOT']
         # DECam Y-band
         elif instfilt=='c4d-Y':
             # Use PS1 if possible
             if cendec > -29:
                 refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
+                #refcat += ['GSYNTH-PHOT','PS']
             else:
                 # Use 2MASS to calibrate
                 refcat += ['2MASS-PSC','GSYNTH-PHOT']
+                #refcat += ['GSYNTH-PHOT']
         # DECam VR-band
         elif instfilt=='c4d-VR':
             # Use PS1 if possible
             if cendec > -29:
-                refcat += ['2MASS-PSC','PS']
+                refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
+                #refcat += ['GSYNTH-PHOT','PS']
             else:
-                refcat += ['2MASS-PSC','ATLAS']
+                #refcat += ['2MASS-PSC','GSYNTH-PHOT','ATLAS']
+                refcat += ['2MASS-PSC','GSYNTH-PHOT']
         # Bok+90Prime g-band
         elif instfilt=='ksb-g':
             # Use PS1
-            refcat += ['2MASS-PSC','PS']
+            #refcat += ['2MASS-PSC','PS']
+            refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
         # Bok+90Prime r-band
         elif instfilt=='ksb-r':
             # Use PS1
-            refcat += ['2MASS-PSC','PS']
+            #refcat += ['2MASS-PSC','PS']
+            refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
         # Mosaic3 g-band
         elif instfilt=='k4m-g':
             # Use PS1
-            refcat += ['2MASS-PSC','PS']
+            #refcat += ['2MASS-PSC','PS']
+            refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
         # Mosaic3 r-band
         elif instfilt=='k4m-r':
             # Use PS1 
-            refcat += ['2MASS-PSC','PS'] 
+            #refcat += ['2MASS-PSC','PS'] 
+            refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
         # Mosaic3 i-band 
         elif instfilt=='k4m-i':
             # Use PS1 
-            refcat += ['2MASS-PSC','PS'] 
+            #refcat += ['2MASS-PSC','PS'] 
+            refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
         # Mosaic3 z-band 
         elif instfilt=='k4m-z':
             # Use PS1 
-            refcat += ['2MASS-PSC','PS'] 
+            #refcat += ['2MASS-PSC','PS'] 
+            refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
         # Mosaic3 VR-band 
         elif instfilt=='k4m-VR':
             # Use GAIA G-band to calibrate 
-            refcat += ['2MASS-PSC','PS'] 
+            #refcat += ['2MASS-PSC','PS'] 
+            refcat += ['2MASS-PSC','GSYNTH-PHOT','PS']
             #push,refcat,['2MASS-PSC'] 
         else:
             logger.info(filt+' not currently supported')

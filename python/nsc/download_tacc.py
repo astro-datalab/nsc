@@ -105,7 +105,8 @@ def getdata(refcat,minra,redo=False,silent=False,logger=None):
 
 
     #outdir = '/net/dl1/users/dnidever/nsc/refcatalogs/'+refname+'/'
-    outdir = '/net/dl2/dnidever/nsc/refcatalogs/'+refname+'/'
+    #outdir = '/net/dl2/dnidever/nsc/refcatalogs/'+refname+'/'
+    outdir = '/scratch1/09979/kfas/'
     if os.path.exists(outdir)==False:
         os.makedirs(outdir)
     savefile = outdir+'ref_%.6f_%.6f_%s.fits' % (ra0,ra1,refname)

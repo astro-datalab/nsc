@@ -22,8 +22,8 @@ def genkey(n=20):
 def submit(tasks,label,nodes=1,cpus=64,version='v4',account='priority-davidnidever',
            partition='priority',staggertime=60,host='tempest_group',shared=True,
            walltime='12-00:00:00',notification=False,memory=7500,numpy_num_threads=2,
-           precommands=None,nosubmit=False,slurmroot='/tmp',slurmdir=None,
-           verbose=True,logger=None):
+           precommands=None,postcommands=None,nosubmit=False,slurmroot='/tmp',
+           slurmdir=None,verbose=True,logger=None):
     """
     Submit a bunch of jobs
 
@@ -159,9 +159,21 @@ def submit(tasks,label,nodes=1,cpus=64,version='v4',account='priority-davidnidev
     lines += ['export VECLIB_MAXIMUM_THREADS=2']
     lines += ['export NUMEXPR_NUM_THREADS=2']
     lines += ['# ------------------------------------------------------------------------------']
+    lines += ['']
+    # Adding extra command to execute
+    if precommands is not None:
+        if type(precommands) is not list:
+            precommands = [precommands]
+        lines += precommands
     lines += ['SBATCH_NODE=$( printf "%02d']
     lines += ['" "$SLURM_ARRAY_TASK_ID" )']
     lines += ['source '+jobdir+'/node${SBATCH_NODE}.slurm']
+    # Adding extra command to execute at end
+    if postcommands is not None:
+        if type(postcommands) is not list:
+            postcommands = [postcommands]
+        lines += postcommands
+    lines += ['echo "Done"']
     if verbose:
         logger.info('Writing '+os.path.join(jobdir,masterfile))
     dln.writelines(os.path.join(jobdir,masterfile),lines)

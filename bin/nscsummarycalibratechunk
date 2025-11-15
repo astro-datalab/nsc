@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import numpy as np
+from astropy.io import fits
+from astropy.table import Table,vstack
+import time
+from argparse import ArgumentParser
+from dlnpyutils import utils as dln,slurm
+from nsc import summary,utils
+
+if __name__ == "__main__":
+    parser = ArgumentParser(description='NSC calibrate summary chunk')
+    parser.add_argument('listfile', type=str, nargs=1, help='listfile of exposure directory to collate')
+    args = parser.parse_args()
+    listfile = args.listfile[0]
+
+    if os.path.exists(listfile)==False:
+        print(listfile,'not found')
+        sys.exit()
+
+    # load the list file
+    expdirs = utils.readlines(listfile)
+    outfile = listfile.replace('_list','').replace('.lst','.fits')
+    # collate the metafiles
+    summary.calibratedirs(expdirs,outfile)

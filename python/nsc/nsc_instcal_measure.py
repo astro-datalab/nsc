@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
-#AUTHORS: David Nidever (original author)
-#         david.nidever@montana.edu
-#         Katie Fasbender (adapted for analysis on MSU Tempest Research Cluster)
-#         katiefasbender@montana.edu
+# AUTHORS: David Nidever (original author)
+#          david.nidever@montana.edu
+#          Katie Fasbender (adapted for analysis on MSU Tempest Research Cluster)
+#          katiefasbender@montana.edu
 #
 # NSC_INSTCAL_MEAS.PY -- Run SExtractor and DAOPHOT on an exposure from the
 # NOIRLab Astro Data Archive (NOIRLab Source Catalog measurements procedure)
@@ -31,8 +31,9 @@ import subprocess
 import sys
 import time
 import warnings
-import requests
-from dlnpyutils.utils import *
+#import requests
+#from dlnpyutils.utils import *
+#from dlnpyutils.utils import readlines,writelines
 from . import phot,slurm_funcs,utils
 
 # Ignore these warnings, it's a bug
@@ -55,7 +56,7 @@ else:
 class Exposure:
 
     # Initialize Exposure object
-    def __init__(self,fluxfile,wtfile,maskfile,nscversion,host,delete=False):
+    def __init__(self,fluxfile,wtfile,maskfile,nscversion,host,delete=False,dochips=None):
         # Check that the files exist
         if os.path.exists(fluxfile) is False:
             print(fluxfile+" NOT found")
@@ -103,6 +104,12 @@ class Exposure:
         nhdu = len(hdulist)
         hdulist.close()
         self.nexten = nhdu
+
+        # Chips to process
+        self.allchips = np.arange(self.nexten)+1
+        if dochips is not None:
+            self.allchips = list(dochips)
+
         # Get night
         dateobs = head0.get("DATE-OBS")
         night = dateobs[0:4]+dateobs[5:7]+dateobs[8:10]
@@ -257,7 +264,9 @@ class Exposure:
         # LOOP through the HDUs/chips
         #----------------------------
         #for i in [int(sys.argv[6])]: #ktedit:createpsf_test,  only analyze 1 chip!
-        for i in range(1,self.nexten):
+        #for i in [12]:
+        #for i in range(1,self.nexten):
+        for i in self.allchips:
             t0 = time.time()
             self.logger.info(" ")
             self.logger.info("=== Processing subimage "+str(i)+" ===")
@@ -689,7 +698,7 @@ class Chip:
     # Determine FWHM using SE catalog
     #--------------------------------
     def sexfwhm(self):
-        self.seeing = sexfwhm(self.sexcat)
+        self.seeing = phot.sexfwhm(self.sexcat)
         return self.seeing
 
     # Pick PSF candidates using SE catalog
@@ -700,6 +709,8 @@ class Chip:
         fwhm = self.sexfwhm() if self.seeing is None else self.seeing
         psfcat = phot.sexpickpsf(self.sexcat,fwhm,self.meta,base+".lst",
                                  nstars=nstars,logger=self.logger)
+        if os.path.exists('flux_dao.lst'): os.remove('flux_dao.lst')
+        os.link('flux_sex.lst','flux_dao.lst')
 
     # Make DAOPHOT option files
     #--------------------------
@@ -771,7 +782,8 @@ class Chip:
     def createpsf(self,listfile=None,apfile=None,doiter=True,maxiter=5,minstars=6,subneighbors=True,verbose=False):
         daobase = os.path.basename(self.daofile)
         daobase = os.path.splitext(os.path.splitext(daobase)[0])[0]
-        subit = phot.createpsf(daobase+".fits",daobase+".ap",daobase+".lst",meta=self.meta,logger=self.logger)
+        lstfile = daobase+".lst"
+        subit = phot.createpsf(daobase+".fits",daobase+".ap",lstfile,meta=self.meta,logger=self.logger)
         self.subiter=subit
         
     # Run ALLSTAR
@@ -817,10 +829,10 @@ class Chip:
             file1 = daobase+".als"                                      # total ALLSTAR cat stored in this file
             file2 = daobase+str(self.sexiter)+".als"                    # new ALLSTAR cat stored in this file
 
-        cat1 = readlines(file1)
-        cat2 = readlines(file2)
+        cat1 = utils.readlines(file1)
+        cat2 = utils.readlines(file2)
         combined_cat = cat1+cat2[3:]                                    # combine the catalogs 
-        writelines(file1,combined_cat,overwrite=True)
+        utils.writelines(file1,combined_cat,overwrite=True)
 
     # Get aperture correction
     #------------------------
@@ -968,8 +980,16 @@ class Chip:
 
             # For first iteration only, fit PSF 
             if self.sexiter==1:
-                self.daopickpsf()   
+                #self.daopickpsf()
+                self.logger.info('Picking PSF stars with SExtractor information')
+                self.sexpickpsf()
                 self.createpsf()
+                #try:
+                #    self.createpsf()
+                #except:
+                #    self.logger.info('Using sexpickpsf() to get PSF stars')
+                #    self.sexpickpsf()
+                #    self.createpsf()                    
 
             # Combine SE cats, run ALLSTAR, combine ALLSTAR cats
             if self.sexiter>1: self.combine_cats(type="sexcat")           

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# DLNPYUTILS.PY - Utility functions.
+# Utility functions.
 #
 
 from __future__ import print_function
@@ -13,7 +13,7 @@ from astropy.table import Table, Column
 from astropy import modeling
 from astropy.convolution import Gaussian1DKernel, Gaussian2DKernel, convolve
 import astropy.stats
-from dlnpyutils import utils as dln
+#from dlnpyutils import utils as dln
 from glob import glob
 import logging
 import numpy as np
@@ -30,8 +30,8 @@ from scipy.linalg import svd
 import socket
 import sys
 import time
-import requests
-from requests.adapters import HTTPAdapter, Retry
+#import requests
+#from requests.adapters import HTTPAdapter, Retry
 #from astropy.utils.exceptions import AstropyWarning
 #import socket
 #from scipy.signal import convolve2d
@@ -40,6 +40,7 @@ import subprocess
 import warnings
 import traceback
 import shutil
+import hashlib
 
 # Ignore these warnings, it's a bug
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -64,7 +65,7 @@ def rootdirs():
         #dldir = '/dl1/users/'
         dldir = '/net/dl2/'
         mssdir = '/mss1/'
-        localdir = '/d0/'
+        localdir = '/data0/'
     elif host.find('gp09') > -1 or host.find('gp08') > -1 or host.find('gp07') > -1 or \
          host.find('gp06') > -1 or host.find('gp05') > -1:
         #dldir = '/net/dl1/users/'
@@ -80,7 +81,8 @@ def rootdirs():
         mssdir = '/net/mss1/'
         localdir = '/tmp/'
     elif host.find('tacc') > -1 or hostname.find('tac') > -1:
-        dldir = '/corral/projects/NOIRLab/nsc/catalogs/'
+        #dldir = '/corral/projects/NOIRLab/nsc/catalogs/'
+        dldir = '/corral/projects/NOIRLab/nsc/'
         mssdir = '/net/mss1/'
         localdir = '/tmp/'
     else:
@@ -2064,14 +2066,16 @@ def getnscdirs(version=None,host=None):
         host = hostname.split('.')[0].strip()
     print("host = ",host)
     # on gp07 use
-    if (host == "gp09") | (host == "gp08") | (host == "gp07") | (host == "gp06") | (host == "gp05"): 
-        basedir = os.path.join("/net/dl2/kfas/nsc/instcal/",verdir)
-        tpmroot = os.path.join(basedir,"tmp")
+    if ((host == "gp09") | (host == "gp08") | (host == "gp07") | (host == "gp06") | 
+        (host == "gp05") | (host == "hulk") | (host == "thing") | (host == "noirlab")):
+        #basedir = os.path.join("/net/dl2/kfas/nsc/instcal/",verdir)
+        basedir = os.path.join("/net/dl2/dnidever/nsc/instcal/",verdir)
+        tmproot = os.path.join(basedir,"tmp")
     # on tempest use
     elif host=="tempest_katie":
         basedir = os.path.join("/home/x25h971/nsc/instcal/",verdir)
         tmproot = os.path.join(basedir,"tmp/")
-    elif host=="tempest_group":
+    elif host=="tempest_group" or host=='tempest':
         basedir = os.path.join("/home/group/davidnidever/nsc/instcal/",verdir)
         #tmproot = os.path.join(basedir,"tmp")
         tmproot = os.path.join('/tmp',username,'nsc','instcal',verdir)
@@ -2093,6 +2097,8 @@ def download_from_archive(md5sum,outdir='./'):
     Download an image from the NOIRLAB Astro Science Archive
     using it's md5sum string
     """
+    import requests
+    from requests.adapters import HTTPAdapter, Retry
     urlbase = "https://astroarchive.noirlab.edu/api/retrieve/"
     t0 = time.time()
     print('Downloading md5sum =',md5sum)
@@ -2179,3 +2185,280 @@ def fitscheck(filename):
             error.append('HDU '+str(i)+' error - '+str(e))
     hdu.close()
     return okay,error
+
+def readlines(fil=None,comment=None,raw=False,nreadline=None,noblank=False):
+    """
+    Read in all lines of a file.
+    
+    Parameters
+    ----------
+    file : str
+         The name of the file to load.  This can be a gzipped file.
+    comment : str
+         Comment line character to ignore (e.g., "#").
+    raw : bool, optional, default is false
+         Do not trim \n off the ends of the lines.
+    nreadline : int, optional
+         Read only this number of lines.  Default is to read all lines.
+    noblank : boolean, optional
+         Remove blank lines or lines with only whitespace.  Default is False.
+
+    Returns
+    -------
+    lines : list
+          The list of lines from the file
+
+    Example
+    -------
+
+    .. code-block:: python
+
+       lines = readlines("file.txt")
+
+    """
+    if fil is None: raise ValueError("File not input")
+    # Read gzipped file
+    if fil.endswith('.gz'):
+        fp = gzip.open(fil)
+        contents = fp.read() # contents now has the uncompressed bytes of foo.gz
+        fp.close()
+        lines = contents.decode('utf-8') # u_str is now a unicode string
+        lines = lines.split('\n')
+    # Read normal ASCII file
+    else:
+        if nreadline is None:
+            with open(fil,'r') as f:
+                lines = f.readlines()
+        else:
+            with open(fil,'r') as f:
+                lines = []
+                for i in range(nreadline):
+                    lines.append( f.readline() )
+    # Remove blank lines
+    if noblank:
+        lines = [l for l in lines if l.strip()!='']
+    # Strip newline off
+    if raw is False: lines = [l.rstrip('\n') for l in lines]
+    # Check for comment string:
+    if comment is not None:
+        lines = [l for l in lines if l.startswith(comment)==False]
+    return lines
+
+# Write all lines to file
+def writelines(filename=None,lines=None,overwrite=True,raw=False):
+    """
+    Write a list of lines to a file.
+    
+    Parameters
+    ----------
+    filename : str
+        The filename to write the lines to.
+    lines : list
+         The list of lines to write to a file.
+    overwrite : bool, optional, default is True
+        If the output file already exists, then overwrite it.
+    raw : bool, optional, default is False
+        Do not modify the lines. Write out as is.
+
+    Returns
+    -------
+    Nothing is returned.  The lines are written to `fil`.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+       writelines("file.txt",lines)
+
+    """
+    # Not enough inputs
+    if lines is None: raise ValueError("No lines input")
+    if filename is None: raise ValueError("No file name input")
+    # Check if the file exists already
+    if os.path.exists(filename):
+        if overwrite is True:
+            os.remove(filename)
+        else:
+            print(filename+" already exists and overwrite=False")
+            return
+    # Modify the input as needed
+    if raw is False:
+        # List, make sure it ends with \n
+        if type(lines) is list:
+            for i,l in enumerate(lines):
+                if l.endswith('\n') is False:
+                    lines[i] += '\n'
+            # Make sure final element does not end in \n
+            #n = size(lines)
+            #if n>1:
+            #    if lines[-1].endswith('\n'):
+            #        lines[-1] = lines[-1][0:-1]
+            #else:
+            #    if lines[0].endswith('\n'):
+            #        lines = lines[0][0:-1]
+    # Convert string to list
+    if (type(lines) is str): lines=list(lines)
+    # Convert numpy array and numbers to list of strings
+    if type(lines) is not list:
+        if hasattr(lines,'__iter__'):
+            lines = [str(l)+'\n' for l in lines]
+            # Make sure final element does not end in \n        
+            #if lines[-1].endswith('\n'): lines[-1] = lines[-1][0:-1]        
+        else:
+            lines = str(lines)
+    # Write the file
+    f = open(filename,'w')
+    f.writelines(lines)
+    f.close()
+
+# Standard grep function that works on string list
+def grep(lines=None,expr=None,index=False):
+    """
+    Similar to the standard unix "grep" but run on a list of strings.
+    Returns a list of the matching lines unless index=True is set,
+    then it returns the indices.
+
+    Parameters
+    ----------
+    lines : list
+          The list of string lines to check.
+    expr  : str
+          Scalar string expression to search for.
+    index : bool, optional
+          If this is ``True`` then the indices of matching lines will be
+          returned instead of the actual lines.  index is ``False`` by default.
+
+    Returns
+    -------
+    out : list
+        The list of matching lines or indices.
+
+    Example
+    -------
+
+    Search for a string and return the matching lines:
+
+    .. code-block:: python
+
+        mlines = grep(lines,"hello")
+
+    Search for a string and return the indices of the matching lines:
+
+    .. code-block:: python
+
+        index = grep(lines,"hello",index=True)
+
+    """
+    if lines is None: raise ValueError("lines must be input")
+    if expr is None: raise ValueError("expr must be input")
+    out = []
+    cnt = 0
+    for l in np.array(lines,ndmin=1):
+        m = re.search(expr,l)
+        if m != None:
+            if index is False:
+                out.append(l)
+            else:
+                out.append(cnt)
+        cnt = cnt+1
+    return out
+
+# Little function used by numlines
+def blocks(files, size=65536):
+    """
+    This is a small utility function used by numlines()
+    """
+    while True:
+        b = files.read(size)
+        if not b: break
+        yield b
+
+# Read number of lines in a file
+def numlines(fil=None):
+    """
+    This function quickly counts the number of lines in a file.
+
+    Parameters
+    ----------
+    fil : str
+          The filename to check the number of lines.
+
+    Returns
+    -------
+    nlines : int
+           The number of lines in `fil`.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        n = numlines("file.txt")
+
+    """
+    if fil is None: raise ValueError("file must be input")
+    try:
+        with open(fil, "r") as f:
+            return (sum(bl.count("\n") for bl in blocks(f)))
+    except UnicodeDecodeError:
+        with open(fil,"rb") as f:
+            return f.read().count(b'\n')
+    except:
+        traceback.print_exc()
+        
+    # Could also use this
+    #count=0
+    #for line in open(fil): count += 1
+
+# Remove indices from a list
+def remove_indices(lst=None,index=None):
+    """
+    This will remove elements from a list given their indices.
+    Use numpy.delete() for numpy arrays instead.
+
+    Parameters
+    ----------
+    lst : list
+          The list from which to remove elements.
+    index : list or array
+          The list or array of indices to remove.
+
+    Returns
+    -------
+    newlst : list
+           The new list with indices removed.
+
+    Example
+    -------
+
+    Remove indices 1 and 5 from array `arr`.
+
+    .. code-block:: python
+
+        index = [1,5]
+        arr  = range(10)
+        arr2 = remove_indices(arr,index)
+        print(arr)
+          [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+    """
+    if lst is None: raise ValueError("list must be input")
+    if index is None: raise ValueError("index must be input")
+    newlst = []
+    for i in range(len(lst)):
+       if i not in index: newlst.append(lst[i])
+    if type(lst) is np.ndarray: newlst = np.array(newlst)
+    return newlst
+
+def md5sum(fname):
+    """ Compute md5sum of a file """
+    if os.path.exists(fname)==False:
+        raise FileNotFoundError(fname)
+    md5 = hashlib.md5()
+    # handle content in binary form
+    with open(fname, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b''):
+        #while chunk := f.read(4096):
+            md5.update(chunk)
+    return md5.hexdigest()

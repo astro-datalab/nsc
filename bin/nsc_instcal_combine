@@ -15,6 +15,7 @@ import logging
 import socket
 from datetime import datetime
 from argparse import ArgumentParser
+from dlnpyutils import utils as dln
 from nsc import utils,combine
 
 if __name__ == "__main__":
@@ -24,6 +25,7 @@ if __name__ == "__main__":
     parser.add_argument('pix', type=str, nargs=1, help='HEALPix pixel number')
     parser.add_argument('version', type=str, nargs=1, help='Version number')
     parser.add_argument('--nside', type=int, default=128, help='HEALPix Nside')
+    parser.add_argument('--kind', type=str, default='seqclusterpm', help='type of clustering')
     parser.add_argument('-r','--redo', action='store_true', help='Redo this HEALPIX')
     parser.add_argument('-v','--verbose', action='store_true', help='Verbose output')
     parser.add_argument('-m','--multilevel', action='store_true', help='Break into smaller healpix')
@@ -42,6 +44,7 @@ if __name__ == "__main__":
     version = args.version[0]
     verbose = args.verbose
     nside = args.nside
+    kind = args.kind
     redo = args.redo
     multilevel = args.multilevel
     nmulti = dln.first_el(args.nmulti)
@@ -57,24 +60,23 @@ if __name__ == "__main__":
     host = socket.gethostname()
     hostname = host.split('.')[0]
     logtime = datetime.now().strftime("%Y%m%d%H%M%S") 
-    # Set up logging to screen and logfile
-    logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
-    logger = logging.getLogger() 
-    while logger.hasHandlers(): # some existing loggers, remove them   
-        logger.removeHandler(logger.handlers[0]) 
-    logger = logging.getLogger()
-    logtime = datetime.now().strftime("%Y%m%d%H%M%S")
-    logfile = expdir+'/'+base+'_ombine.log'
-    if os.path.exists(logfile): os.remove(logfile)
-    fileHandler = logging.FileHandler(logfile)
-    fileHandler.setFormatter(logFormatter)
-    logger.addHandler(fileHandler)
-    consoleHandler = logging.StreamHandler()
-    consoleHandler.setFormatter(logFormatter)
-    logger.addHandler(consoleHandler)
-    logger.setLevel(logging.NOTSET)
-
+    ## Set up logging to screen and logfile
+    #logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
+    #logger = logging.getLogger() 
+    #while logger.hasHandlers(): # some existing loggers, remove them   
+    #    logger.removeHandler(logger.handlers[0]) 
+    #logger = logging.getLogger()
+    #logtime = datetime.now().strftime("%Y%m%d%H%M%S")
+    #logfile = dldir+'/'+str(pix)+'_combine.log'
+    #if os.path.exists(logfile): os.remove(logfile)
+    #fileHandler = logging.FileHandler(logfile)
+    #fileHandler.setFormatter(logFormatter)
+    #logger.addHandler(fileHandler)
+    #consoleHandler = logging.StreamHandler()
+    #consoleHandler.setFormatter(logFormatter)
+    #logger.addHandler(consoleHandler)
+    #logger.setLevel(logging.NOTSET)
 
     combine.combine(pix,version,nside=nside,redo=args.redo,
                     verbose=args.verbose,multilevel=multilevel,
-                    outdir=outdir,nmulti=args.nmulti)
+                    outdir=outdir,nmulti=args.nmulti,kind=kind)

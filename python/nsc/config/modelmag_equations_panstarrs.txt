@@ -1,0 +1,5 @@
+# BAND INSTRUMENT DECRANGE       COLOREQN           COLORANGE    MODELMAGEQN                                                    QUALITYCUTS
+  g      c4d      [-11,11]   PS_GMAG-PS_IMAG        [0.0,3.0]    PS_GMAG                                                        PS_GMAG<21.0
+  r      c4d      [-11,11]   PS_GMAG-PS_IMAG        [0.0,3.0]    PS_RMAG                                                        PS_RMAG<21.0
+  i      c4d      [-11,11]   PS_GMAG-PS_IMAG        [0.0,3.0]    PS_IMAG                                                        PS_IMAG<21.0
+  z      c4d      [-11,11]   PS_GMAG-PS_IMAG        [0.0,3.0]    PS_ZMAG                                                        PS_ZMAG<21.0

@@ -1,0 +1,26 @@
+#!/bin/csh
+set running=`squeue --me | grep small | grep calib | wc -l`
+if ( $running > 2 ) then
+  echo "3 small calibrate jobs running already.  Will try again when it drops below 3"
+  exit
+endif
+#set running=`squeue --me | grep small | grep measure | wc -l`
+#if ( $running > 5 ) then
+#  echo "6 small measure jobs running already.  Will try again when it drops below 6"
+#  exit
+#endif
+
+setenv PATH "/work2/09970/dnidever/anaconda3/bin:$HOME/bin:$PATH"
+module load TACC
+module load python3/3.9.2
+module load cfitsio/4.2.0
+module list
+which python
+
+/home1/09970/dnidever/projects/nsc/bin/nscjobs calibrate /home1/09970/dnidever/scratch1/nsc/instcal/v4/lists/nsc_calibrate_healpix_list_exptime10sec_left_073025.fits v4 --healpix --host tacc --maxtasks 23500 --partition dev
+
+#/home1/09970/dnidever/projects/nsc/bin/nscjobs calibrate /corral/projects/NOIRLab/nsc/instcal/v4/c4d/allmeas_expdir_left_072825.txt v4 --host tacc --maxtasks 23500 --partition small 
+
+#/home1/09970/dnidever/projects/nsc/bin/nscjobs calibrate /corral/projects/NOIRLab/nsc/instcal/v4/c4d/allmeas_expdir_left_072425.txt v4 --host tacc --maxtasks 60000 --partition small 
+
+#/home1/09970/dnidever/projects/nsc/bin/nscjobs calibrate /scratch1/09970/dnidever/nsc/instcal/v4/lists/decam_instcal_list_exptime10sec_corrupted_fwhm2_20250220_left.fits.gz v4 --host tacc --maxtasks 325 --partition small 
