@@ -102,7 +102,7 @@ def createindexdb(dbfile,col='measid',table='meas',unique=True):
     else:
         c.execute('CREATE INDEX '+index_name+' ON '+table+'('+col+')')
     data = c.fetchall()
-    db.close()
+    sdb.close()
     print('indexing done after '+str(time.time()-t0)+' sec')
 
 def insertobjlabelsdb(rowid,labels,dbfile):
