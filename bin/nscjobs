@@ -670,7 +670,7 @@ if __name__ == "__main__":
     # noirlab
     elif host=='noirlab':
         jobs = jd.job_daemon(tasks['cmd'],tasks['dir'],tasks['name'],nmulti=ppn,
-                             prefix=stage,hyperthread=True,idle=False,staggertime=20)
+                             prefix=stage,hyperthread=True,idle=False,staggertime=0)
     else:
         if host[:7]=='tempest':
             #export LAUNCHER_DIR=/home/x51j468/projects/launcher

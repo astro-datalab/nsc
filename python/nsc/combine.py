@@ -1685,7 +1685,7 @@ def breakup_idtab(dbfile):
 
     # Load the exposures table
     if 'noao' in hostname or 'noirlab' in hostname:
-        expcat = fits.getdata('/net/dl2/dnidever/nsc/instcal/v4/lists/nsc_instcal_combine_exposure_table.fits',1)
+        expcat = fits.getdata('/net/dl2/dnidever/nsc/instcal/v4/lists/nsc_instcal_combine_exposures.fits',1)
     else:
         expcat = fits.getdata('/home/group/davidnidever/nsc/instcal/v4/lists/nsc_instcal_combine_exposures.fits',1)
 
@@ -1766,7 +1766,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
     if (host == "thing") or (host == "hulk"):
         dir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"/"
         mssdir = "/mss1/"
-        localdir = "/d0/"
+        localdir = "/data0/"
         tmproot = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
         outdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combine/'
         listfile = '/net/dl2/dnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'

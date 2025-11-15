@@ -197,7 +197,7 @@ if __name__ == "__main__":
     if (host == "thing") or (host == "hulk"):
         dir = "/dl1/users/dnidever/nsc/instcal/"+version+"/"
         mssdir = "/mss1/"
-        localdir = "/d0/"
+        localdir = "/data0/"
         tmproot = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
     # on gp09 use
     if (host == "gp09") or (host == "gp08") or (host == "gp07") or (host == "gp06") or (host == "gp05"):
