@@ -1677,11 +1677,17 @@ def breakup_idtab(dbfile):
     t00 = time.time()
 
     #outdir = '/data0/dnidever/nsc/instcal/v3/idtab/'
-    outdir = '/home/group/davidnidever/nsc/instcal/v4/idtab/'
+    hostname = socket.gethostname()
+    if 'noao' in hostname or 'noirlab' in hostname:
+        outdir = '/net/dl2/dnidever/nsc/instcal/v4/idtab/'
+    else:
+        outdir = '/home/group/davidnidever/nsc/instcal/v4/idtab/'
 
     # Load the exposures table
-    #expcat = fits.getdata('/net/dl2/dnidever/nsc/instcal/v3/lists/nsc_v3_exposure_table.fits.gz',1)
-    expcat = fits.getdata('/home/group/davidnidever/nsc/instcal/v4/lists/nsc_instcal_combine_exposures.fits',1)
+    if 'noao' in hostname or 'noirlab' in hostname:
+        expcat = fits.getdata('/net/dl2/dnidever/nsc/instcal/v4/lists/nsc_instcal_combine_exposure_table.fits',1)
+    else:
+        expcat = fits.getdata('/home/group/davidnidever/nsc/instcal/v4/lists/nsc_instcal_combine_exposures.fits',1)
 
     # Make sure it's a list
     if type(dbfile) is str: dbfile=[dbfile]
@@ -1762,12 +1768,19 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
         mssdir = "/mss1/"
         localdir = "/d0/"
         tmproot = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
+        outdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combine/'
+        listfile = '/net/dl2/dnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
     # on gp09 use
     if (host == "gp09") or (host == "gp08") or (host == "gp07") or (host == "gp06") or (host == "gp05"):
         dir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"/"
         mssdir = "/net/mss1/"
         localdir = "/data0/"
         tmproot = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
+        outdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combine/'
+        listfile = '/net/dl2/dnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
+    if (host == 'tempest'):
+        outdir = '/home/group/davidnidever/nsc/instcal/v4/combine/'
+        listfile = '/home/group/davidnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
 
     t0 = time.time()
 
@@ -1779,7 +1792,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
     #print('*** KLUDGE: Forcing output to /scratch1 ***')
     #outdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combine/'
     #outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/combine/'
-    outdir = '/home/group/davidnidever/nsc/instcal/v4/combine/'
+    #outdir = '/home/group/davidnidever/nsc/instcal/v4/combine/'
     if os.path.exists(outdir) is False: os.mkdir(outdir)
 
     # nside>128
@@ -1813,7 +1826,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
     #listfile = localdir+'dnidever/nsc/instcal/'+version+'/nsc_instcal_combine_healpix_list.db'
     #listfile = '/home1/09970/dnidever/scratch1/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
     #listfile = '/corral/projects/NOIRLab/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
-    listfile = '/home/group/davidnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
+    #listfile = '/home/group/davidnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
     if os.path.exists(listfile) is False:
         print(listfile+" NOT FOUND")
         sys.exit()
@@ -1859,7 +1872,12 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
                 hlist = vstack([hlist,hlist1])
 
     # Fix filenames for tempest
-    hlist['measfile'] = [f.replace('/home1/09970/dnidever/scratch1/','/home/group/davidnidever/')+'.gz' for f in hlist['measfile']]
+    if 'noao' in hostname or 'noirlab' in hostname:
+        hlist['measfile'] = [f.replace('/home1/09970/dnidever/scratch1/','/net/dl2/dnidever/')+'.gz' 
+                             for f in hlist['measfile']]
+    else:
+        hlist['measfile'] = [f.replace('/home1/09970/dnidever/scratch1/','/home/group/davidnidever/')+'.gz' 
+                             for f in hlist['measfile']]
 
     
     # Rename to be consistent with the FITS file
