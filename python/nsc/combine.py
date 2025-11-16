@@ -1788,7 +1788,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
         tmproot = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
         outdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combine/'
         listfile = '/net/dl2/dnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
-    if (host == 'tempest'):
+    if ('tempest' in host):
         outdir = '/home/group/davidnidever/nsc/instcal/v4/combine/'
         listfile = '/home/group/davidnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
 
