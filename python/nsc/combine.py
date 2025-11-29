@@ -34,33 +34,25 @@ def writecat2db(cat,dbfile):
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
     #db = sqlite3.connect('test.db')
     #db.text_factory = lambda x: str(x, 'latin1')
     #db.row_factory = sqlite3.Row
-    c = sdb.cursor()
+    c = db.cursor()
     # Create the table
     #   the primary key ROWID is automatically generated
     if len(c.execute('SELECT name from sqlite_master where type= "table" and name="meas"').fetchall()) < 1:
         c.execute('''CREATE TABLE meas(measid TEXT, objlabel INTEGER, exposure TEXT, ccdnum INTEGER, filter TEXT, mjd REAL,
                      ra REAL, raerr REAL, dec REAL, decerr REAL, mag_auto REAL, magerr_auto REAL, asemi REAL, asemierr REAL,
-                     bsemi REAL, bsemierr REAL, theta REAL, thetaerr REAL, fwhm REAL, flags INTEGER, class_star REAL,
-                     ndet_iter REAL, repeat REAL, xpsf REAL, ypsf REAL, magpsf REAL, errpsf REAL, skypsf REAL, iter REAL, 
-                     chi REAL, sharp REAL, rapsf REAL, decpsf REAL, ebv REAL, haspsf BOOL, snr REAL, badflag INTEGER)''')
-
+                     bsemi REAL, bsemierr REAL, theta REAL, thetaerr REAL, fwhm REAL, flags INTEGER, class_starREAL)''')
     data = list(zip(cat['measid'],np.zeros(ncat,int)-1,cat['exposure'],cat['ccdnum'],cat['filter'],cat['mjd'],cat['ra'],
                     cat['raerr'],cat['dec'],cat['decerr'],cat['mag_auto'],cat['magerr_auto'],cat['asemi'],cat['asemierr'],
-                    cat['bsemi'],cat['bsemierr'],cat['theta'],cat['thetaerr'],cat['fwhm'],cat['flags'],cat['class_star'],
-                    cat['ndet_iter'],cat['repeat'],cat['xpsf'],cat['ypsf'],cat['magpsf'],cat['errpsf'],cat['skypsf'],
-                    cat['iter'],cat['chi'],cat['sharp'],cat['rapsf'],cat['decpsf'],cat['ebv'],cat['haspsf'],
-                    cat['snr'],cat['badflag']))
-
+                    cat['bsemi'],cat['bsemierr'],cat['theta'],cat['thetaerr'],cat['fwhm'],cat['flags'],cat['class_star']))
     c.executemany('''INSERT INTO meas(measid,objlabel,exposure,ccdnum,filter,mjd,ra,raerr,dec,decerr,mag_auto,magerr_auto,
-                     asemi,asemierr,bsemi,bsemierr,theta,thetaerr,fwhm,flags,class_star,ndet_iter,repeat,xpsf,ypsf,magpsf,
-                     errpsf,skypsf,iter,chi,sharp,rapsf,decpsf,ebv,haspsf,snr,badflag)
-                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', data)
-    sdb.commit()
-    sdb.close()
+                     asemi,asemierr,bsemi,bsemierr,theta,thetaerr,fwhm,flags,class_star)
+                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', data)
+    db.commit()
+    db.close()
 
 def getdbcoords(dbfile):
     """ Get the coordinates and ROWID from the database """
@@ -68,8 +60,8 @@ def getdbcoords(dbfile):
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    c = sdb.cursor()
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = db.cursor()
     c.execute('''SELECT rowid,ra,dec FROM meas''')
     data = c.fetchall()
     db.close()
@@ -85,8 +77,8 @@ def getdbcoords(dbfile):
 def createindexdb(dbfile,col='measid',table='meas',unique=True):
     """ Index a column in the database """
     t0 = time.time()
-    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    c = sdb.cursor()
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = db.cursor()
     index_name = 'idx_'+col+'_'+table
     # Check if the index exists first
     c.execute('select name from sqlite_master')
@@ -102,7 +94,7 @@ def createindexdb(dbfile,col='measid',table='meas',unique=True):
     else:
         c.execute('CREATE INDEX '+index_name+' ON '+table+'('+col+')')
     data = c.fetchall()
-    sdb.close()
+    db.close()
     print('indexing done after '+str(time.time()-t0)+' sec')
 
 def insertobjlabelsdb(rowid,labels,dbfile):
@@ -113,12 +105,12 @@ def insertobjlabelsdb(rowid,labels,dbfile):
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    c = sdb.cursor()
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = db.cursor()
     data = list(zip(labels,rowid))
     c.executemany('''UPDATE meas SET objlabel=? WHERE rowid=?''', data) 
-    sdb.commit() 
-    sdb.close()
+    db.commit() 
+    db.close()
     print('inserting done after '+str(time.time()-t0)+' sec')
 
 def updatecoldb(selcolname,selcoldata,updcolname,updcoldata,table,dbfile):
@@ -129,12 +121,12 @@ def updatecoldb(selcolname,selcoldata,updcolname,updcoldata,table,dbfile):
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    c = sdb.cursor()
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = db.cursor()
     data = list(zip(updcoldata,selcoldata))
     c.executemany('''UPDATE '''+table+''' SET '''+updcolname+'''=? WHERE '''+selcolname+'''=?''', data) 
-    sdb.commit() 
-    sdb.close()
+    db.commit() 
+    db.close()
     print('updating done after '+str(time.time()-t0)+' sec')    
 
 def deleterowsdb(colname,coldata,table,dbfile):
@@ -145,12 +137,12 @@ def deleterowsdb(colname,coldata,table,dbfile):
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    c = sdb.cursor()
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = db.cursor()
     data = list(zip(coldata))
     c.executemany('''DELETE from '''+table+''' WHERE '''+colname+'''=?''', data) 
-    sdb.commit() 
-    sdb.close()
+    db.commit() 
+    db.close()
     print('deleting done after '+str(time.time()-t0)+' sec')
 
     
@@ -161,8 +153,8 @@ def writeidtab2db(cat,dbfile):
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    c = sdb.cursor()
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = db.cursor()
     # Create the table
     #   the primary key ROWID is automatically generated
     if len(c.execute('SELECT name from sqlite_master where type= "table" and name="idtab"').fetchall()) < 1:
@@ -170,8 +162,8 @@ def writeidtab2db(cat,dbfile):
     data = list(zip(cat['measid'],cat['exposure'],cat['objectid'],cat['objectindex']))
     c.executemany('''INSERT INTO idtab(measid,exposure,objectid,objectindex)
                      VALUES(?,?,?,?)''', data)
-    sdb.commit() 
-    sdb.close()
+    db.commit() 
+    db.close()
     #print('inserting done after '+str(time.time()-t0)+' sec')
 
 def readidtabdb(dbfile):
@@ -190,13 +182,13 @@ def querydb(dbfile,table='meas',cols='rowid,*',where=None):
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    cur = sdb.cursor()
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    cur = db.cursor()
     cmd = 'SELECT '+cols+' FROM '+table
     if where is not None: cmd += ' WHERE '+where
     cur.execute(cmd)
     data = cur.fetchall()
-    sdb.close()
+    db.close()
 
     # Return results
     return data
@@ -207,11 +199,11 @@ def executedb(dbfile,cmd):
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    cur = sdb.cursor()
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    cur = db.cursor()
     cur.execute(cmd)
     data = cur.fetchall()
-    sdb.close()
+    db.close()
     return data    
 
 def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=None,verbose=False):
@@ -221,8 +213,8 @@ def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=Non
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    cur = sdb.cursor()
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    cur = db.cursor()
     cmd = 'SELECT '+cols+' FROM '+table
     # OBJLABEL constraints
     if objlabel is not None:
@@ -253,7 +245,7 @@ def getdatadb(dbfile,table='meas',cols='rowid,*',objlabel=None,rar=None,decr=Non
     #print('CMD = '+cmd)
     cur.execute(cmd)
     data = cur.fetchall()
-    sdb.close()
+    db.close()
 
     # No results
     if len(data)==0:
@@ -278,11 +270,11 @@ def getradecrangedb(dbfile):
     sqlite3.register_adapter(np.int64, int)
     sqlite3.register_adapter(np.float64, float)
     sqlite3.register_adapter(np.float32, float)
-    sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-    c = sdb.cursor()
+    db = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+    c = db.cursor()
     c.execute('''SELECT MIN(ra),MAX(ra),MIN(dec),MAX(dec) FROM meas''')
     data = c.fetchall()
-    sdb.close()
+    db.close()
 
     return data[0]
 
@@ -468,7 +460,7 @@ def seqpms(obj):
             wmnt,wmnx,wmny,wslpx,wslpy,
             wmnxerr,wslpxerr)
 
-def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,minmeaspm=5,dbfile=None):
+def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,minmeaspm=5):
     """
     Sequential clustering of measurements in exposures with proper motion.
     If you are rerunning with a previous object table and do NOT want to
@@ -476,9 +468,6 @@ def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,mi
     """
 
     mjd0 = 55000  # use this as the mjd reference so times stay small
-
-    if dbfile is not None:
-        meas = getdatadb(dbfile,verbose=True)
     
     nmeas = len(meas)
     labels = np.zeros(nmeas)-1   # object label (also its index) for all the measurements
@@ -1508,6 +1497,7 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                     meascount += nmeas1
                     expmeascount += nmeas1
 
+
         # Add metadata to ALLMETA, only if some measurements overlap
         if expmeascount>0:
             if allmeta is None:
@@ -1687,17 +1677,11 @@ def breakup_idtab(dbfile):
     t00 = time.time()
 
     #outdir = '/data0/dnidever/nsc/instcal/v3/idtab/'
-    hostname = socket.gethostname()
-    if 'noao' in hostname or 'noirlab' in hostname:
-        outdir = '/net/dl2/dnidever/nsc/instcal/v4/idtab/'
-    else:
-        outdir = '/home/group/davidnidever/nsc/instcal/v4/idtab/'
+    outdir = '/home/group/davidnidever/nsc/instcal/v4/idtab/'
 
     # Load the exposures table
-    if 'noao' in hostname or 'noirlab' in hostname:
-        expcat = fits.getdata('/net/dl2/dnidever/nsc/instcal/v4/lists/nsc_instcal_combine_exposures.fits',1)
-    else:
-        expcat = fits.getdata('/home/group/davidnidever/nsc/instcal/v4/lists/nsc_instcal_combine_exposures.fits',1)
+    #expcat = fits.getdata('/net/dl2/dnidever/nsc/instcal/v3/lists/nsc_v3_exposure_table.fits.gz',1)
+    expcat = fits.getdata('/home/group/davidnidever/nsc/instcal/v4/lists/nsc_instcal_combine_exposures.fits',1)
 
     # Make sure it's a list
     if type(dbfile) is str: dbfile=[dbfile]
@@ -1791,7 +1775,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
     if ('tempest' in host):
         outdir = '/home/group/davidnidever/nsc/instcal/v4/combine/'
         listfile = '/home/group/davidnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
-
+        
     t0 = time.time()
 
     # Only nside>=128 supported right now
@@ -1802,7 +1786,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
     #print('*** KLUDGE: Forcing output to /scratch1 ***')
     #outdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combine/'
     #outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/combine/'
-    #outdir = '/home/group/davidnidever/nsc/instcal/v4/combine/'
+    outdir = '/home/group/davidnidever/nsc/instcal/v4/combine/'
     if os.path.exists(outdir) is False: os.mkdir(outdir)
 
     # nside>128
@@ -1836,7 +1820,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
     #listfile = localdir+'dnidever/nsc/instcal/'+version+'/nsc_instcal_combine_healpix_list.db'
     #listfile = '/home1/09970/dnidever/scratch1/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
     #listfile = '/corral/projects/NOIRLab/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
-    #listfile = '/home/group/davidnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
+    listfile = '/home/group/davidnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
     if os.path.exists(listfile) is False:
         print(listfile+" NOT FOUND")
         sys.exit()
@@ -1882,12 +1866,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
                 hlist = vstack([hlist,hlist1])
 
     # Fix filenames for tempest
-    if 'noao' in hostname or 'noirlab' in hostname:
-        hlist['measfile'] = [f.replace('/home1/09970/dnidever/scratch1/','/net/dl2/dnidever/')+'.gz' 
-                             for f in hlist['measfile']]
-    else:
-        hlist['measfile'] = [f.replace('/home1/09970/dnidever/scratch1/','/home/group/davidnidever/')+'.gz' 
-                             for f in hlist['measfile']]
+    hlist['measfile'] = [f.replace('/home1/09970/dnidever/scratch1/','/home/group/davidnidever/')+'.gz' for f in hlist['measfile']]
 
     
     # Rename to be consistent with the FITS file
@@ -1935,8 +1914,9 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
     # OBJ schema
     dtype_obj = np.dtype([('objectid',str,100),('pix',int),('ra',np.float64),('dec',np.float64),('raerr',np.float32),
                           ('decerr',np.float32),('pmra',np.float32),('pmdec',np.float32),('pmraerr',np.float32),
-                          ('pmdecerr',np.float32),('mjd',np.float64),('deltamjd',np.float32),('ndet',np.int16),
-                          ('nphot',np.int16),('ndetu',np.int16),('nphotu',np.int16),('umag',np.float32),
+                          ('pmdecerr',np.float32),('mjd',np.float64),('deltamjd',np.float32),
+                          ('ndet',np.int16),('nphot',np.int16),
+                          ('ndetu',np.int16),('nphotu',np.int16),('umag',np.float32),
                           ('urms',np.float32),('uerr',np.float32),('uasemi',np.float32),('ubsemi',np.float32),
                           ('utheta',np.float32),('ndetg',np.int16),('nphotg',np.int16),('gmag',np.float32),
                           ('grms',np.float32),('gerr',np.float32),('gasemi',np.float32),('gbsemi',np.float32),
@@ -1952,10 +1932,30 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
                           ('vrrms',np.float32),('vrerr',np.float32),('vrasemi',np.float32),('vrbsemi',np.float32),
                           ('vrtheta',np.float32),('asemi',np.float32),('asemierr',np.float32),('bsemi',np.float32),
                           ('bsemierr',np.float32),('theta',np.float32),('thetaerr',np.float32),('fwhm',np.float32),
-                          ('flags',np.int16),('class_star',np.float32),('ebv',np.float32),('rmsvar',np.float32),
-                          ('madvar',np.float32),('iqrvar',np.float32),('etavar',np.float32),
+                          ('flags',np.int16),
+                          ('ndetpsf',np.int16),('nphotpsf',np.int16),
+                          ('ndetpsfu',np.int16),('nphotpsfu',np.int16),
+                          ('umagpsf',np.float32),('urmspsf',np.float32),('uerrpsf',np.float32),
+                          ('ndetpsfg',np.int16),('nphotpsfg',np.int16),
+                          ('gmagpsf',np.float32),('grmspsf',np.float32),('gerrpsf',np.float32),
+                          ('ndetpsfr',np.int16),('nphotpsfr',np.int16),
+                          ('rmagpsf',np.float32),('rrmspsf',np.float32),('rerrpsf',np.float32),
+                          ('ndetpsfi',np.int16),('nphotpsfi',np.int16),
+                          ('imagpsf',np.float32),('irmspsf',np.float32),('ierrpsf',np.float32),
+                          ('ndetpsfz',np.int16),('nphotpsfz',np.int16),
+                          ('zmagpsf',np.float32),('zrmspsf',np.float32),('zerrpsf',np.float32),
+                          ('ndetpsfy',np.int16),('nphotpsfy',np.int16),
+                          ('ymagpsf',np.float32),('yrmspsf',np.float32),('yerrpsf',np.float32),
+                          ('ndetpsfvr',np.int16),('nphotpsfvr',np.int16),
+                          ('vrmagpsf',np.float32),('vrrmspsf',np.float32),('vrerrpsf',np.float32),
+                          ('chi',np.float32),('sharp',np.float32),('class_star',np.float32),
+                          ('rmsvar',np.float32),('madvar',np.float32),('iqrvar',np.float32),('etavar',np.float32),
                           ('jvar',np.float32),('kvar',np.float32),('chivar',np.float32),('romsvar',np.float32),
-                          ('variable10sig',np.int16),('nsigvar',np.float32),('overlap',bool)])
+                          ('variable10sig',np.int16),('nsigvar',np.float32),
+                          ('rmsvarpsf',np.float32),('madvarpsf',np.float32),('iqrvarpsf',np.float32),('etavarpsf',np.float32),
+                          ('jvarpsf',np.float32),('kvarpsf',np.float32),('chivarpsf',np.float32),('romsvarpsf',np.float32),
+                          ('variable10sigpsf',np.int16),('nsigvarpsf',np.float32),
+                          ('ebv',np.float32),('overlap',bool)])
 
     # Estimate number of measurements in pixel
     #metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]
@@ -2155,23 +2155,12 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
         sys.exit()
 
     # Removing bad measurements
-    if dbfile is None:
-        bd, = np.where(meas['badflag'] != 0)
-        if len(bd)>0:
-            print('Removing {:d} bad measurements'.format(len(bd)))
-            meas = np.delete(meas,bd)
-            meascount = len(meas)
-    else:
-        # Delete bad measurements from the temporary database
-        sdb = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-        c = sdb.cursor()
-        c.execute('SELECT count(*) from meas where badflag>0')
-        d = c.fetchall()
-        nbd = d[0][0]
-        print('Removing {:d} bad measurements'.format(nbd))
-        c.execute('''DELETE from meas WHERE badflag > 0''')
-        sdb.commit() 
-        sdb.close()
+    bd, = np.where(meas['badflag'] != 0)
+    if len(bd)>0:
+        print('Removing {:d} bad measurements'.format(len(bd)))
+        meas = np.delete(meas,bd)
+        meascount = len(meas)
+
         
     # ===== CLUSTERING ======
     # Hybrid method (DR2)
@@ -2188,7 +2177,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
     elif kind=='seqclusterpm':
         print('Using SEQCLUSTERPM clustering')
         ## Spatially cluster the measurements with proper motion clustering
-        objlabels,initobj = seqclusterpm(meas,calcpm=False,dbfile=dbfile)
+        objlabels,initobj = seqclusterpm(meas,calcpm=False)
         nobj = dln.size(initobj)
         meascumcount = np.cumsum(initobj['ndet'])
         #  seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,minmeaspm=5)
@@ -2239,11 +2228,16 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
         obj[f+'mag'] = 99.99
         obj[f+'err'] = 9.99
         obj[f+'rms'] = np.nan
+        obj[f+'magpsf'] = 99.99
+        obj[f+'errpsf'] = 9.99
+        obj[f+'rmspsf'] = np.nan
         obj[f+'asemi'] = np.nan
         obj[f+'bsemi'] = np.nan
         obj[f+'theta'] = np.nan
     obj['variable10sig'] = 0
     obj['nsigvar'] = np.nan
+    obj['variable10sigpsf'] = 0
+    obj['nsigvarpsf'] = np.nan
     #idtab = np.zeros(ncat,dtype=dtype_idtab)
 
     # Initialize temporary IDTAB structure
@@ -2291,6 +2285,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
     idtab_count = 0
     idtab_grpcount = 0
     fidmag = np.zeros(nobj,float)+np.nan  # fiducial magnitude
+    fidmagpsf = np.zeros(nobj,float)+np.nan  # fiducial magnitude
     for i,lab in enumerate(objtab['objlabel']):
         if (i % 1000)==0: print(i)
 
@@ -2376,7 +2371,11 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
                 measra1[gdpsf] = meas1[racol][gdpsf]
                 measdec1[gdpsf] = meas1[deccol][gdpsf]
                 cootype[gdpsf] = 2
-            
+
+        magcol = 'mag_auto'
+        errcol = 'magerr_auto'
+        # magpsf, errpsf
+        
         # Computing quantities
         # Mean RA/DEC, RAERR/DECERR
         if nmeas1>1:
@@ -2423,6 +2422,8 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
             obj['pmdec'][i] = pmdec               # mas/yr
             obj['pmdecerr'][i] = pmdecerr         # mas/yr
 
+        # --- MAG_AUTO QUANTITIES ----
+            
         # Mean magnitudes
         # Convert totalwt and totalfluxwt to MAG and ERR
         #  and average the morphology parameters PER FILTER
@@ -2438,9 +2439,9 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
             obj['nphot'+filt][i] = ngph
             if ngph==1:
                 obj[filt+'mag'][i] = meas1['mag_auto'][findx[gph]]
-                obj[filt+'err'][i] = meas1['magerr_auto'][findx[gph]]
+                obj[filt+'err'][i] = meas1[errcol][findx[gph]]
             if ngph>1:
-                newmag, newerr = dln.wtmean(meas1['mag_auto'][findx[gph]], meas1['magerr_auto'][findx[gph]],
+                newmag, newerr = dln.wtmean(meas1['mag_auto'][findx[gph]], meas1[errcol][findx[gph]],
                                             magnitude=True,reweight=True,error=True)
                 obj[filt+'mag'][i] = newmag
                 obj[filt+'err'][i] = newerr
@@ -2450,7 +2451,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
                 resid[findx[gph]] = meas1['mag_auto'][findx[gph]]-newmag
                 # Residual mag relative to the uncertainty
                 #  set a lower threshold of 0.02 in the uncertainty
-                relresid[findx[gph]] = np.sqrt(ngph/(ngph-1)) * (meas1['mag_auto'][findx[gph]]-newmag)/np.maximum(meas1['magerr_auto'][findx[gph]],0.02)
+                relresid[findx[gph]] = np.sqrt(ngph/(ngph-1)) * (meas1['mag_auto'][findx[gph]]-newmag)/np.maximum(meas1[errcol][findx[gph]],0.02)
 
             # Calculate mean morphology parameters
             obj[filt+'asemi'][i] = np.mean(meas1['asemi'][findx])
@@ -2513,6 +2514,97 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
             gfid,ngfid = dln.where(magarr<50)
             if ngfid>0: fidmag[i]=magarr[gfid[0]]
 
+            
+        # --- MAGPSF QUANTITIES ----
+            
+        # Mean magnitudes
+        # Convert totalwt and totalfluxwt to MAG and ERR
+        #  and average the morphology parameters PER FILTER
+        filtindex = dln.create_index(meas1['filter'].astype(str))
+        nfilters = len(filtindex['value'])
+        residpsf = np.zeros(nmeas1)+np.nan     # residual mag
+        relresidpsf = np.zeros(nmeas1)+np.nan  # residual mag relative to the uncertainty
+        for f in range(nfilters):
+            filt = filtindex['value'][f].lower()
+            findx = filtindex['index'][filtindex['lo'][f]:filtindex['hi'][f]+1]
+            obj['ndetpsf'+filt][i] = filtindex['num'][f]
+            gph,ngph = dln.where(meas1['magpsf'][findx]<50)
+            obj['nphotpsf'+filt][i] = ngph
+            if ngph==1:
+                obj[filt+'magpsf'][i] = meas1['magpsf'][findx[gph]]
+                obj[filt+'errpsf'][i] = meas1['errpsf'][findx[gph]]
+            if ngph>1:
+                newmag, newerr = dln.wtmean(meas1['magpsf'][findx[gph]], meas1['errpsf'][findx[gph]],
+                                            magnitude=True,reweight=True,error=True)
+                obj[filt+'magpsf'][i] = newmag
+                obj[filt+'errpsf'][i] = newerr
+                # Calculate RMS
+                obj[filt+'rmspsf'][i] = np.sqrt(np.mean((meas1['magpsf'][findx[gph]]-newmag)**2))
+                # Residual mag
+                residpsf[findx[gph]] = meas1['magpsf'][findx[gph]]-newmag
+                # Residual mag relative to the uncertainty
+                #  set a lower threshold of 0.02 in the uncertainty
+                relresidpsf[findx[gph]] = np.sqrt(ngph/(ngph-1)) * (meas1['magpsf'][findx[gph]]-newmag)/np.maximum(meas1['errpsf'][findx[gph]],0.02)
+
+        # Calculate variability indices
+        gdresidpsf = np.isfinite(residpsf)
+        ngdresidpsf = np.sum(gdresidpsf)
+        if ngdresidpsf>0:
+            residpsf2 = residpsf[gdresidpsf]
+            sumresidpsfsq = np.sum(residpsf2**2)
+            tsi = np.argsort(meas1['mjd'][gdresidpsf])
+            residpsf2tsi = residpsf2[tsi]
+            quartilespsf = np.percentile(residpsf2,[25,50,75])
+            # RMS
+            rmspsf = np.sqrt(sumresidpsfsq/ngdresidpsf)
+            # MAD
+            madvarpsf = 1.4826*np.median(np.abs(residpsf2-quartilespsf[1]))
+            # IQR
+            iqrvarpsf = 0.741289*(quartilespsf[2]-quartilespsf[0])
+            # 1/eta
+            etavarpsf = sumresidpsfsq / np.sum((residpsf2tsi[1:]-residpsf2tsi[0:-1])**2)
+            obj['rmsvarpsf'][i] = rmspsf
+            obj['madvarpsf'][i] = madvarpsf
+            obj['iqrvarpsf'][i] = iqrvarpsf
+            obj['etavarpsf'][i] = etavarpsf
+
+        # Calculate variability indices wrt to uncertainties
+        gdrelresidpsf = np.isfinite(relresidpsf)
+        ngdrelresidpsf = np.sum(gdrelresidpsf)
+        if ngdrelresidpsf>0:
+            relresidpsf2 = relresidpsf[gdrelresidpsf]
+            pkpsf = relresidpsf2**2-1
+            jvarpsf = np.sum( np.sign(pkpsf)*np.sqrt(np.abs(pkpsf)) )/ngdrelresidpsf
+            #avgrelvarpsf = np.mean(np.abs(relresidpsf2))    # average of absolute relative residuals
+            chivarpsf = np.sqrt(np.sum(relresidpsf2**2))/ngdrelresidpsf
+            kdenompsf = np.sqrt(np.sum(relresidpsf2**2)/ngdrelresidpsf)
+            if kdenom!=0:
+                kvarpsf = (np.sum(np.abs(relresidpsf2))/ngdrelresidpsf) / kdenompsf
+            else:
+                kvarpsf = np.nan
+            # RoMS
+            romsvarpsf = np.sum(np.abs(relresidpsf2))/(ngdrelresidpsf-1)
+            obj['jvarpsf'][i] = jvarpsf
+            obj['kvarpsf'][i] = kvarpsf
+            #obj['avgrelvar'][i] = avgrelvar
+            obj['chivarpsf'][i] = chivarpsf
+            obj['romsvarpsf'][i] = romsvarpsf
+            #if chivar>50: import pdb; pdb.set_trace()
+
+        # Make NPHOTPSF from NPHOTPSFX
+        obj['nphotpsf'][i] = (obj['nphotpsfu'][i]+obj['nphotpsfg'][i]+obj['nphotpsfr'][i]+
+                              obj['nphotpsfi'][i]+obj['nphotpsfz'][i]+obj['nphotpsfy'][i]+obj['nphotpsfvr'][i])
+
+        # Fiducial magnitude, used to select variables below
+        #  order of priority: r,g,i,z,Y,VR,u
+        if obj['nphotpsf'][i]>0:
+            magarrpsf = np.zeros(7,float)
+            for ii,nn in enumerate(['rmagpsf','gmagpsf','imagpsf','zmagpsf','ymagpsf','vrmagpsf','umagpsf']): magarrpsf[ii]=obj[nn][i]
+            gfid,ngfid = dln.where(magarrpsf<50)
+            if ngfid>0: fidmagpsf[i]=magarrpsf[gfid[0]]
+
+
+            
         # Mean morphology parameters
         obj['asemi'][i] = np.mean(meas1['asemi'])
         obj['bsemi'][i] = np.mean(meas1['bsemi'])
@@ -2521,9 +2613,10 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
         obj['bsemierr'][i] = np.sqrt(np.sum(meas1['bsemierr']**2)) / nmeas1
         obj['thetaerr'][i] = np.sqrt(np.sum(meas1['thetaerr']**2)) / nmeas1
         obj['fwhm'][i] = np.mean(meas1['fwhm'])
+        obj['chi'][i] = np.mean(meas1['chi'])
+        obj['sharp'][i] = np.mean(meas1['sharp'])
         obj['class_star'][i] = np.mean(meas1['class_star'])
         obj['flags'][i] = np.bitwise_or.reduce(meas1['flags'])  # OR combine
-        # add average chi and sharp
         
 
     v = psutil.virtual_memory()
@@ -2536,7 +2629,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
     db.analyzetable(dbfile_idtab,'idtab')
 
 
-    # Select Variables
+    # Select Variables  MAG_AUTO
     #  1) Construct fiducial magnitude (done in loop above)
     #  2) Construct median VAR and sigma VAR versus magnitude
     #  3) Find objects that Nsigma above the median VAR line
@@ -2600,6 +2693,73 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
         print(str(nisvar)+' variables detected')
         if nisvar>0:
             obj['variable10sig'][gdvar[isvar]] = 1
+
+
+    # Select Variables  MAGPSF
+    #  1) Construct fiducial magnitude (done in loop above)
+    #  2) Construct median VAR and sigma VAR versus magnitude
+    #  3) Find objects that Nsigma above the median VAR line
+    si = np.argsort(fidmagpsf)   # NaNs are at end
+    varcol = 'madvarpsf'
+    gdvar,ngdvar,bdvar,nbdvar = dln.where(np.isfinite(obj[varcol]) & np.isfinite(fidmagpsf),comp=True)
+    if ngdvar>0:
+        nbins = np.ceil((np.max(fidmagpsf[gdvar])-np.min(fidmagpsf[gdvar]))/0.25)
+        nbins = int(np.max([2,nbins]))
+        fidmagpsfmed, bin_edges1, binnumber1 = bindata.binned_statistic(fidmagpsf[gdvar],fidmagpsf[gdvar],statistic='nanmedian',bins=nbins)
+        numhist, _, _ = bindata.binned_statistic(fidmagpsf[gdvar],fidmagpsf[gdvar],statistic='count',bins=nbins)
+        # Fix NaNs in fidmagpsfmed
+        bdfidmagpsfmed,nbdfidmagpsfmed = dln.where(np.isfinite(fidmagpsfmed)==False)
+        if nbdfidmagpsfmed>0:
+            fidmagpsfmed_bins = 0.5*(bin_edges1[0:-1]+bin_edges1[1:])
+            fidmagpsfmed[bdfidmagpsfmed] = fidmagpsfmed_bins[bdfidmagpsfmed]
+        # Median metric
+        varmed, bin_edges2, binnumber2 = bindata.binned_statistic(fidmagpsf[gdvar],obj[varcol][gdvar],statistic='nanmedian',bins=nbins)
+        # Smooth, it handles NaNs well
+        smlen = 5
+        smvarmed = dln.gsmooth(varmed,smlen)
+        bdsmvarmed,nbdsmvarmed = dln.where(np.isfinite(smvarmed)==False)
+        if nbdsmvarmed>0:
+            smvarmed[bdsmvarmed] = np.nanmedian(smvarmed)
+        # Interpolate to all the objects
+        gv,ngv,bv,nbv = dln.where(np.isfinite(smvarmed),comp=True)
+        fvarmed = interp1d(fidmagpsfmed[gv],smvarmed[gv],kind='linear',bounds_error=False,
+                           fill_value=(smvarmed[0],smvarmed[-1]),assume_sorted=True)
+        objvarmed = np.zeros(nobj,float)
+        objvarmed[gdvar] = fvarmed(fidmagpsf[gdvar])
+        objvarmed[gdvar] = np.maximum(np.min(smvarmed[gv]),objvarmed[gdvar])   # lower limit
+        if nbdvar>0: objvarmed[bdvar]=smvarmed[gv[-1]]   # objects with bad fidmagpsf, set to last value
+        # Scatter in metric around median
+        #  calculate MAD ourselves so that it's around our computed median metric line
+        varsig, bin_edges3, binnumber3 = bindata.binned_statistic(fidmagpsf[gdvar],np.abs(obj[varcol][gdvar]-objvarmed[gdvar]),
+                                                                  statistic='nanmedian',bins=nbins)
+        varsig *= 1.4826   # scale MAD to stddev
+        # Fix values for bins with few points
+        bdhist,nbdhist,gdhist,ngdhist = dln.where(numhist<3,comp=True)
+        if nbdhist>0:
+            if ngdhist>0:
+                varsig[bdhist] = np.nanmedian(varsig[gdhist])
+            else:
+                varsig[:] = 0.02
+            
+        # Smooth
+        smvarsig = dln.gsmooth(varsig,smlen)
+        # Interpolate to all the objects
+        gv,ngv,bv,nbv = dln.where(np.isfinite(smvarsig),comp=True)
+        fvarsig = interp1d(fidmagpsfmed[gv],smvarsig[gv],kind='linear',bounds_error=False,
+                           fill_value=(smvarsig[gv[0]],smvarsig[gv[-1]]),assume_sorted=True)
+        objvarsig = np.zeros(nobj,float)
+        objvarsig[gdvar] = fvarsig(fidmagpsf[gdvar])
+        objvarsig[gdvar] = np.maximum(np.min(smvarsig[gv]),objvarsig[gdvar])   # lower limit
+        if nbdvar>0: objvarsig[bdvar]=smvarsig[gv[-1]]   # objects with bad fidmagpsf, set to last value
+        # Detect positive outliers
+        nsigvarthresh = 10.0
+        nsigvar = (obj[varcol]-objvarmed)/objvarsig
+        obj['nsigvarpsf'][gdvar] = nsigvar[gdvar]
+        isvar,nisvar = dln.where(nsigvar[gdvar]>nsigvarthresh)
+        print(str(nisvar)+' variables detected')
+        if nisvar>0:
+            obj['variable10sigpsf'][gdvar[isvar]] = 1
+            
 
     # Add E(B-V)
     print('Getting E(B-V)')
