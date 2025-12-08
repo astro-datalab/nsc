@@ -2010,10 +2010,12 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
                         outbase1 = str(parentpix)+'_n'+str(int(hinside))+'_'+str(pix1)
                         subdir1 = str(int(parentpix)//1000)    # use the thousands to create subdirectory grouping
                         outfile1 = outdir+'/'+subdir1+'/'+outbase1+'.fits.gz'
-                        if redo is True:
-                            retcode = subprocess.call(['python',os.path.abspath(__file__),str(pix1),version,'--nside',str(hinside),'-r'],shell=False)
-                        else:
-                            retcode = subprocess.call(['python',os.path.abspath(__file__),str(pix1),version,'--nside',str(hinside)],shell=False)
+                        combine(pix1,version,nside=hinside,redo=redo,kind=kind,
+                                verbose=verbose,multilevel=False,outdir=None,nmulti=None)
+                        #if redo is True:
+                        #    retcode = subprocess.call(['python',os.path.abspath(__file__),str(pix1),version,'--nside',str(hinside),'-r'],shell=False)
+                        #else:
+                        #    retcode = subprocess.call(['python',os.path.abspath(__file__),str(pix1),version,'--nside',str(hinside)],shell=False)
                 # Multiple parallel processes, Running job daemon
                 else:
                     cmd = []
