@@ -2071,6 +2071,8 @@ def getnscdirs(version=None,host=None):
         #basedir = os.path.join("/net/dl2/kfas/nsc/instcal/",verdir)
         basedir = os.path.join("/net/dl2/dnidever/nsc/instcal/",verdir)
         tmproot = os.path.join(basedir,"tmp")
+        if (host=='thing') or (host=='hulk'):
+            tmproot = '/data0/dnidever/nsc/instcal/v4/'
     # on tempest use
     elif host=="tempest_katie":
         basedir = os.path.join("/home/x25h971/nsc/instcal/",verdir)

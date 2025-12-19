@@ -134,7 +134,8 @@ if __name__ == "__main__":
 
     # Check that the InstCal files are not corrupted
     print('Checking the InstCal files')
-    res = subprocess.run(['/home1/09970/dnidever/projects/nsc/bin/nsccheck',fluxfile,wtfile,maskfile],
+    #res = subprocess.run(['/home1/09970/dnidever/projects/nsc/bin/nsccheck',fluxfile,wtfile,maskfile],
+    res = subprocess.run(['/home/dnidever/projects/nsc/bin/nsccheck',fluxfile,wtfile,maskfile],
                          shell=False,capture_output=True)
     txt = res.stdout
     if type(txt)==bytes:

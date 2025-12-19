@@ -107,6 +107,8 @@ class Exposure:
 
         # Chips to process
         self.allchips = np.arange(self.nexten)+1
+        if self.instrument=='k4m' or self.instrument=='ksb':
+            self.allchips = np.arange(4)+1
         if dochips is not None:
             self.allchips = list(dochips)
 
