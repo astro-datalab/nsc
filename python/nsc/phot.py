@@ -1237,7 +1237,7 @@ def sexpickpsf(cat=None,fwhm=None,meta=None,outfile=None,nstars=100,logger=None)
     if ngdcat<10:
         logger.info("Too few PSF stars on first try. Loosening cuts")
         gdcat = ((cat['MAG_AUTO']< 50) & (cat['MAGERR_AUTO']<0.15) & 
-                 (cat['FWHM_WORLD']*3600.>0.2*self.seeing) & (cat['FWHM_WORLD']*3600.<1.8*fwhm) &
+                 (cat['FWHM_WORLD']*3600.>0.2*fwhm) & (cat['FWHM_WORLD']*3600.<1.8*fwhm) &
                  (cat['MAG_AUTO']>(minmag+0.5)) & (cat['MAG_AUTO']<(maxmag-0.5)))
         ngdcat = np.sum(gdcat)
     # No candidates
