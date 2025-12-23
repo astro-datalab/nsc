@@ -57,6 +57,7 @@ if __name__ == "__main__":
     parser.add_argument('--stagger',type=int,nargs=1,default=60,help='Stagger time')
     parser.add_argument('--healpix',action='store_true',help='Do calibration in healpix mode')
     parser.add_argument('--delete',action='store_true',help='Delete image files at end')
+    parser.add_argument('--nocheck',action='store_true',help='Do not check for existing output when submitting jobs')
     parser.add_argument('--nowait',action='store_true',help='Do not wait for files to be downloaded')
     parser.add_argument('-r','--redo', action='store_true', help='Redo exposures that were previously processed')
     args = parser.parse_args()
@@ -139,6 +140,7 @@ if __name__ == "__main__":
     if inputfile.endswith('.fits') or inputfile.endswith('.fits.gz'):
         print('Loading',inputfile,' FITS file')
         inputdata = Table.read(inputfile)
+        for c in inputdata.colnames: inputdata[c].name=c.lower()
     else:
         print('Loading',inputfile,' ASCII file')
         inputdata = utils.readlines(inputfile)
@@ -146,9 +148,12 @@ if __name__ == "__main__":
 
     # Make sure the filename columns are long enough
     if hasattr(inputdata,'colnames') and 'fluxfile' in inputdata.colnames:
-        inputdata['fluxfile'] = inputdata['fluxfile'].astype((str,150))
-        inputdata['wtfile'] = inputdata['wtfile'].astype((str,150))
-        inputdata['maskfile'] = inputdata['maskfile'].astype((str,150))
+        #inputdata['fluxfile'] = inputdata['fluxfile'].astype((str,150))
+        inputdata['fluxfile'] = [f.strip() for f in inputdata['fluxfile'].astype(str)]
+        #inputdata['wtfile'] = [inputdata['wtfile'].astype((str,150))
+        inputdata['wtfile'] = [f.strip() for f in inputdata['wtfile'].astype(str)]
+        #inputdata['maskfile'] = [inputdata['maskfile'].astype((str,150))
+        inputdata['maskfile'] = [f.strip() for f in inputdata['maskfile'].astype(str)]
 
     # Processes per node
     if ppn is None:
@@ -317,11 +322,12 @@ if __name__ == "__main__":
             # Check that all three files exist
             else:
                 infiles = [fluxfile,wtfile,maskfile]
-                exists = [os.path.exists(f) for f in infiles]
-                bd, = np.where(np.array(exists)==False)
-                if len(bd)>0:
-                    print('Files not found: '+','.join(np.array(infiles)[bd])+'  SKIPPING')
-                    continue
+                if args.nocheck==False:
+                    exists = [os.path.exists(f) for f in infiles]
+                    bd, = np.where(np.array(exists)==False)
+                    if len(bd)>0:
+                        print('Files not found: '+','.join(np.array(infiles)[bd])+'  SKIPPING')
+                        continue
             #if base[:3] not in ['c4d','ksb','k4m']:
             #    print(base,'NOT in correct format. SKIPPING')
             #    continue
@@ -342,11 +348,17 @@ if __name__ == "__main__":
                 night = '20'+base[4:10]
             else:
                 instrument = 'c4d'  # assume decam for now
-                if host.startswith('tempest'):
+                inst = os.path.basename(fluxfile)[:3]
+                if inst in ['c4d','k4m','ksb']: instrument=inst
+                if host.startswith('tempest') or host.lower()=='hulk' or host.lower()=='thing':
                     dateobs = inputdata['date_obs'][i]
                 else:
-                    head = fits.getheader(fluxfile,0)
-                    dateobs = head['DATE-OBS']
+                    try:
+                        head = fits.getheader(fluxfile,0)
+                        dateobs = head['DATE-OBS']
+                    except:
+                        print('problem with',fluxfile)
+                        continue
                 night = dateobs[:4]+dateobs[5:7]+dateobs[8:10]
             outdir = os.path.join(basedir,instrument,night[:4],night,base)
             logfile = os.path.join(outdir,base+'.'+logtime+'.log')
@@ -667,8 +679,8 @@ if __name__ == "__main__":
     elif stage=='download':
         key,jobid = slurm.submit(tasks,label,nodes=1,cpus=1,partition=partition,
                                  walltime=walltime,slurmroot=slurmroot)
-    # noirlab
-    elif host=='noirlab':
+    # Use job_manager on noirlab
+    elif (host.lower()=='hulk' or host.lower()=='thing' or host.lower()=='gp09' or host.lower()=='noirlab'):
         jobs = jd.job_daemon(tasks['cmd'],tasks['dir'],tasks['name'],nmulti=ppn,
                              prefix=stage,hyperthread=True,idle=False,staggertime=0)
     else:
