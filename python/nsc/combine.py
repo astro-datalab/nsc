@@ -1933,20 +1933,20 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
                           ('vrtheta',np.float32),('asemi',np.float32),('asemierr',np.float32),('bsemi',np.float32),
                           ('bsemierr',np.float32),('theta',np.float32),('thetaerr',np.float32),('fwhm',np.float32),
                           ('flags',np.int16),
-                          ('ndetpsf',np.int16),('nphotpsf',np.int16),
-                          ('ndetpsfu',np.int16),('nphotpsfu',np.int16),
+                          ('npsf',np.int16),
+                          ('npsfu',np.int16),
                           ('umagpsf',np.float32),('urmspsf',np.float32),('uerrpsf',np.float32),
-                          ('ndetpsfg',np.int16),('nphotpsfg',np.int16),
+                          ('npsfg',np.int16),
                           ('gmagpsf',np.float32),('grmspsf',np.float32),('gerrpsf',np.float32),
-                          ('ndetpsfr',np.int16),('nphotpsfr',np.int16),
+                          ('npsfr',np.int16),
                           ('rmagpsf',np.float32),('rrmspsf',np.float32),('rerrpsf',np.float32),
-                          ('ndetpsfi',np.int16),('nphotpsfi',np.int16),
+                          ('npsfi',np.int16),
                           ('imagpsf',np.float32),('irmspsf',np.float32),('ierrpsf',np.float32),
-                          ('ndetpsfz',np.int16),('nphotpsfz',np.int16),
+                          ('npsfz',np.int16),
                           ('zmagpsf',np.float32),('zrmspsf',np.float32),('zerrpsf',np.float32),
-                          ('ndetpsfy',np.int16),('nphotpsfy',np.int16),
+                          ('npsfy',np.int16),
                           ('ymagpsf',np.float32),('yrmspsf',np.float32),('yerrpsf',np.float32),
-                          ('ndetpsfvr',np.int16),('nphotpsfvr',np.int16),
+                          ('npsfvr',np.int16),
                           ('vrmagpsf',np.float32),('vrrmspsf',np.float32),('vrerrpsf',np.float32),
                           ('chi',np.float32),('sharp',np.float32),('class_star',np.float32),
                           ('rmsvar',np.float32),('madvar',np.float32),('iqrvar',np.float32),('etavar',np.float32),
@@ -2529,9 +2529,10 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
         for f in range(nfilters):
             filt = filtindex['value'][f].lower()
             findx = filtindex['index'][filtindex['lo'][f]:filtindex['hi'][f]+1]
-            obj['ndetpsf'+filt][i] = filtindex['num'][f]
+            # WILL NDETPSF and NPHOTPSF always be the SAME ??????
+            #obj['ndetpsf'+filt][i] = filtindex['num'][f]
             gph,ngph = dln.where(meas1['magpsf'][findx]<50)
-            obj['nphotpsf'+filt][i] = ngph
+            obj['npsf'+filt][i] = ngph
             if ngph==1:
                 obj[filt+'magpsf'][i] = meas1['magpsf'][findx[gph]]
                 obj[filt+'errpsf'][i] = meas1['errpsf'][findx[gph]]
@@ -2593,13 +2594,13 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
             obj['romsvarpsf'][i] = romsvarpsf
             #if chivar>50: import pdb; pdb.set_trace()
 
-        # Make NPHOTPSF from NPHOTPSFX
-        obj['nphotpsf'][i] = (obj['nphotpsfu'][i]+obj['nphotpsfg'][i]+obj['nphotpsfr'][i]+
-                              obj['nphotpsfi'][i]+obj['nphotpsfz'][i]+obj['nphotpsfy'][i]+obj['nphotpsfvr'][i])
+        # Make NPSF from NPSFX
+        obj['npsf'][i] = (obj['npsfu'][i]+obj['npsfg'][i]+obj['npsfr'][i]+
+                          obj['npsfi'][i]+obj['npsfz'][i]+obj['npsfy'][i]+obj['npsfvr'][i])
 
         # Fiducial magnitude, used to select variables below
         #  order of priority: r,g,i,z,Y,VR,u
-        if obj['nphotpsf'][i]>0:
+        if obj['npsf'][i]>0:
             magarrpsf = np.zeros(7,float)
             for ii,nn in enumerate(['rmagpsf','gmagpsf','imagpsf','zmagpsf','ymagpsf','vrmagpsf','umagpsf']): magarrpsf[ii]=obj[nn][i]
             gfid,ngfid = dln.where(magarrpsf<50)
