@@ -1955,7 +1955,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
                           ('rmsvarpsf',np.float32),('madvarpsf',np.float32),('iqrvarpsf',np.float32),('etavarpsf',np.float32),
                           ('jvarpsf',np.float32),('kvarpsf',np.float32),('chivarpsf',np.float32),('romsvarpsf',np.float32),
                           ('variable10sigpsf',np.int16),('nsigvarpsf',np.float32),
-                          ('ebv',np.float32),('overlap',bool)])
+                          ('ebv',np.float32)])
 
     # Estimate number of measurements in pixel
     #metafiles = [m.replace('_cat','_meta').strip() for m in hlist['FILE']]

@@ -440,7 +440,8 @@ if __name__ == "__main__":
                 #outdir = exposure
                 # Use /scratch1 for calibration output for now
                 # /home1/09970/dnidever/scratch1/nsc/instcal/v4/c4d/2018/20180502/c4d_180502_092858_ooi_g_v1
-                outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/' + '/'.join(exposure.split('/')[-5:])
+                # outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/' + '/'.join(exposure.split('/')[-5:])
+                outdir = '/net/dl2/dnidever/nsc/instcal/' + '/'.join(exposure.split('/')[-5:])
                 base = os.path.basename(exposure)
                 print('{:} {:}'.format(i+1,base))
                 cmd = script+' '+exposure+' '+version

@@ -135,7 +135,8 @@ if __name__ == "__main__":
     ##logger.setLevel(logging.NOTSET)
 
     # Put output files in /scratch1 for now
-    outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/' + '/'.join(expdir.split('/')[-5:])
+    #outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/' + '/'.join(expdir.split('/')[-5:])
+    outdir = '/net/dl2/dnidever/nsc/instcal/' + '/'.join(expdir.split('/')[-5:])
 
     if kind=="exposure": 
         print("Calibrating Exposure "+str(expdir))

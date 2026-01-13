@@ -987,8 +987,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
     
     # Model magnitude equation file
     if eqnfile is None:
-        #eqnfile = dldir+'dnidever/nsc/instcal/'+version+'/config/modelmag_equations.txt' 
-        eqnfile = dldir+'instcal/'+version+'/config/modelmag_equations.txt' 
+        eqnfile = dldir+'dnidever/nsc/instcal/'+version+'/config/modelmag_equations.txt' 
+        #eqnfile = dldir+'instcal/'+version+'/config/modelmag_equations.txt' 
     logger.info('Using model magnitude equation file '+eqnfile)
     if os.path.exists(eqnfile) == False: 
         raise ValueError(eqnfile+' NOT FOUND')
@@ -1050,13 +1050,22 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
         if logfiletest==False:
             print('no log file')
         return
-    
+
+    # Get the fluxfile
+    loglines = dln.readlines(logfile)
+    dum = dln.grep(loglines,'mss1')
+    fluxfile = dum[0].split()[4]
+
     # Check that this isn't a problematic Mosaic3 exposure 
     if expdir.find('/k4m/') > -1:
-        dum = fits.getdata(catfiles[0],1) 
-        head0 = dum['field_header_card']
+        hdu = fits.open(fluxfile)
+        head0 = hdu[0].header
+        head1 = hdu[1].header
+        hdu.close()
+        #dum = fits.getdata(fluxfile)
+        #head0 = dum['field_header_card']
         pixcnt = head0.get('PIXCNT*')
-        if pixcnt is not None: 
+        if pixcnt is not None and len(pixcnt) > 0: 
             logger.info('This is a Mosaic3 exposure with pixel shift problems')
             return 
         wcscal = head0.get('WCSCAL') 
@@ -1066,7 +1075,7 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
 
     # v4+ use separate header file
     if version >= 'v4':
-        headfile = os.path.join(expdir,base+'_header.fits')            
+        headfile = os.path.join(expdir,base+'_header.fits')
         if os.path.exists(headfile)==False:
             headfile = os.path.join(expdir,base+'.hdr')
             if os.path.exists(headfile)==False:
@@ -1089,6 +1098,8 @@ def calibrate(expdir,inpref=None,eqnfile=None,redo=False,selfcal=False,
                 headfile = headfile[0]
             else:
                 headfile = ''
+        if os.path.exists(headfile)==False and os.path.exists(fluxfile):
+            headfile = fluxfile
         if os.path.exists(headfile)==False:
             raise ValueError(headfile+' not found')
         headdict = loadheader(headfile)

@@ -107,7 +107,12 @@ def local_query(cenra,cendec,radius,refcat,server,nside=32,silent=False,logger=N
             if refname=="gsynth-phot":
                 reffile = '/corral/projects/NOIRLab/nsc/catalogs/gaia_synth_phot/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'
             else:
-                reffile = '/corral/projects/NOIRLab/nsc/catalogs/'+refname+'/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'                
+                reffile = '/corral/projects/NOIRLab/nsc/catalogs/'+refname+'/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'
+        elif server=='hulk' or server=='thing' or server=='noirlab':
+            if refname=="gsynth-phot":
+                reffile = '/net/dl2/dnidever/nsc/catalogs/gaia_synth_phot/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'
+            else:
+                reffile = '/net/dl2/dnidever/nsc/catalogs/'+refname+'/ring'+str(nside)+'/'+str(p//1000)+'/'+str(p)+'.fits'
         if os.path.exists(reffile)==False:
             print(reffile,' NOT FOUND')
             continue
@@ -233,12 +238,17 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
         server = 'tacc'
     else:
         tacc = False
+    if 'hulk' in host.lower() or 'thing' in host.lower() or 'gp' in host.lower():
+        noirlab = True
+        server = 'noirlab'
+    else:
+        noirlab = False
 
     if logger is None:
         logger = dln.basiclogger()
         
     # Run query on local catalogs on disk
-    if tempest or rusty or tacc:
+    if tempest or rusty or tacc or noirlab:
         return local_query(cenra,cendec,radius,refcat,server,nside=nside,silent=silent,logger=logger)
     
     # Check that we have psql installed 
@@ -267,6 +277,8 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
         refname = 'TMASS' 
     elif refname == 'GAIA/GAIA': 
         refname = 'GAIA' 
+    elif refname == 'GAIAEDR3':
+        refname = 'GAIAEDR3'
     elif refname == 'Skymapper': 
         refname = 'SKYMAPPER' 
     elif refname.lower() == 'skymapperdr2': 
@@ -843,7 +855,7 @@ def getrefdata(filt,cenra,cendec,radius,saveref=False,silent=False,
     # Figure out the new columns that need to be added
     newcols = []
     for i in range(nrefcat):
-        if refcat[i]=='GAIADR2' or refcat[i]=='GAIAEDR3':
+        if refcat[i]=='GAIADR2' or refcat[i]=='GAIAEDR3' or refcat[i]=='GAIADR3':
             newcols +=['source','ra','ra_error','dec','dec_error','pmra','pmra_error','pmdec','pmdec_error','gmag','e_gmag','bp','e_bp','rp','e_rp'] 
         elif refcat[i]=='GSYNTH-PHOT':
             newcols +=['gsynth_umag','e_gsynth_umag','gsynth_gmag','e_gsynth_gmag',
