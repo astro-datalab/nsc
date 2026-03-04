@@ -470,7 +470,7 @@ def seqclusterpm(meas,dcr=0.5,doiter=False,inpobj=None,calcpm=True,trim=False,mi
     mjd0 = 55000  # use this as the mjd reference so times stay small
     
     nmeas = len(meas)
-    labels = np.zeros(nmeas)-1   # object label (also its index) for all the measurements
+    labels = np.zeros(nmeas,int)-1   # object label (also its index) for all the measurements
 
     # Create exposures index
     index = dln.create_index(meas['exposure'])
@@ -1260,16 +1260,16 @@ def calibmeas(meas1,chmeta1,meta,version='v4',verbose=False):
         badflag[bdmeas] += 2 
             
     # Mask sources with bad SE FLAGS 
-    #   this masks problematic truncatd sources near chip edges 
+    #   this masks problematic truncated sources near chip edges 
     bdseflags, = np.where( ((meas1['flags'] & 8) > 0) |   # object truncated 
-                           ((meas1['flags'] & 16) > 0))   # aperture truncate 
+                           ((meas1['flags'] & 16) > 0))   # aperture truncated
     if len(bdseflags) > 0: 
         if verbose: print('  '+str(len(bdseflags))+' truncated sources')
         badflag[bdseflags] += 4
             
     # Mask low-S/N sources 
     #  snr = 1.087/err 
-    snrcut = 5.0 
+    snrcut = 5.0  #3.0  # initial S/N cut
     bdsnr, = np.where(1.087/meas1['magerr_auto'] < snrcut) 
     if len(bdsnr) > 0: 
         if verbose: print('  '+str(len(bdsnr))+' sources with S/N<'+str(snrcut))
@@ -1278,7 +1278,7 @@ def calibmeas(meas1,chmeta1,meta,version='v4',verbose=False):
     final['badflag'][:] = badflag
     # Other columns we are keeping in case we need to recreate the original measurement file
     # already copied over in for loop above
-
+    
     # Calibrate coordinates
     racoef = chmeta1['racoef'][0]
     deccoef = chmeta1['deccoef'][0]
@@ -1330,14 +1330,18 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                            ('ebv',float),('gaianmatch',int),('zpterm',float),('zptermerr',float),
                            ('zptermsig',float),('refmatch',int)])
 
-    # All columns in MEAS catalogs (32)
+    # All columns in MEAS catalogs (43)
     dtype_meas = np.dtype([('measid',str,30),('objectid',str,50),('exposure',str,40),('ccdnum',np.int8),('filter',str,3),
-                           ('mjd',float),('ra',float),('raerr',np.float32),('dec',float),('decerr',np.float32),
-                           ('mag_auto',np.float32),('magerr_auto',np.float32),('asemi',np.float32),('asemierr',np.float32),
-                           ('bsemi',np.float32),('bsemierr',np.float32),('theta',np.float32),('thetaerr',np.float32),
-                           ('fwhm',np.float32),('flags',np.int16),('class_star',np.float32),('magpsf',np.float32),
-                           ('errpsf',np.float32),('skypsf',np.float32),('chi',np.float32),('sharp',np.float32),
-                           ('rapsf',np.float64),('decpsf',np.float64),('haspsf',bool),('snr',np.float32),('badflag',bool)])
+                           ('mjd',float),('x',np.float32),('y',np.float32),('ra',float),('raerr',np.float32),
+                           ('dec',float),('decerr',np.float32),('mag_auto',np.float32),('magerr_auto',np.float32),
+                           ('mag_aper1',np.float32),('magerr_aper1',np.float32),('mag_aper2',np.float32),
+                           ('magerr_aper2',np.float32),('mag_aper4',np.float32),('magerr_aper4',np.float32),
+                           ('mag_aper8',np.float32),('magerr_aper8',np.float32),('asemi',np.float32),
+                           ('asemierr',np.float32),('bsemi',np.float32),('bsemierr',np.float32),('theta',np.float32),
+                           ('thetaerr',np.float32),('fwhm',np.float32),('flags',np.int16),('class_star',np.float32),
+                           ('ndet_iter',int),('repeat',int),('magpsf',np.float32),('errpsf',np.float32),
+                           ('skypsf',np.float32),('chi',np.float32),('sharp',np.float32),('rapsf',np.float64),
+                           ('decpsf',np.float64),('haspsf',bool),('snr',np.float32),('badflag',bool)])
     
     #  Loop over exposures
     meas = None
@@ -1453,7 +1457,7 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                     if verbose: print('  This catalog does not have the right format. Skipping')
                     del meas1
                     nmeas1 = 0
-
+    
                 # Only include sources inside Boundary+Buffer zone
                 #  -use ROI_CUT
                 #  -reproject to tangent plane first so we don't have to deal
@@ -1514,7 +1518,7 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
     if allmeta is None: allmeta=np.array([])
 
     print('loading measurements done after '+str(time.time()-t0))
-
+    
     return meas, meascount, allmeta
 
 def clusterdata(meas,nmeas,dbfile=None):
@@ -2155,7 +2159,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
         if os.path.exists(outfile+'.gz'): os.remove(outfile+'.gz')
         ret = subprocess.call(['gzip',outfile])    # compress final catalog
         sys.exit()
-
+        
     # Removing bad measurements
     bd, = np.where(meas['badflag'] != 0)
     if len(bd)>0:
@@ -2202,11 +2206,22 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
         objtab['lo'] = labelindex['lo']
         objtab['hi'] = labelindex['hi']
 
+        meastab = np.zeros(len(meas),dtype=np.dtype([('label',int),('ndet',int)]))
+        for o in range(len(objtab)):
+            meastab['label'][objtab['lo'][o]:objtab['hi'][o]+1] = objtab['objlabel'][o]
+            meastab['ndet'][objtab['lo'][o]:objtab['hi'][o]+1] = objtab['nmeas'][o] 
+        
     else:
         print(kind,'not supported')
         return
-        
-    
+
+    ## meas
+    #Table(meas).write(str(pix)+'_meas.fits',overwrite=True)
+    ## meastab
+    #Table(meastab).write(str(pix)+'_meastab.fits',overwrite=True)
+    ## objtab
+    #Table(objtab).write(str(pix)+'_objtab.fits',overwrite=True)
+
     #import pdb; pdb.set_trace()
 
 
@@ -2246,23 +2261,52 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
     idtab = np.zeros(100000,dtype=dtype_idtab)
     nidtab = dln.size(idtab)
 
+    
     # Higher precision catalog
-    dtype_himeas = np.dtype([('measid',str,30),('objectid',str,50),('exposure',str,40),('ccdnum',int),('filter',str,3),
-                             ('mjd',float),('ra',float),('raerr',float),('dec',float),('decerr',float),
-                             ('mag_auto',float),('magerr_auto',float),('asemi',float),('asemierr',float),
-                             ('bsemi',float),('bsemierr',float),('theta',float),('thetaerr',float),
-                             ('fwhm',float),('flags',int),('class_star',float),('magpsf',float),
-                             ('errpsf',float),('skypsf',float),('chi',float),('sharp',float),
-                             ('rapsf',float),('decpsf',float),('haspsf',bool),('snr',float),('badflag',bool)])
-
+    dtype_himeas = np.dtype([('measid',str,30),('objectid',str,50),('exposure',str,40),('ccdnum',int),
+                             ('filter',str,3),('mjd',float),('x',float),('y',float),('ra',float),
+                             ('raerr',float),('dec',float),('decerr',float),('mag_auto',float),
+                             ('magerr_auto',float),('mag_aper1',float),('magerr_aper1',float),
+                             ('mag_aper2',float),('magerr_aper2',float),('mag_aper4',float),
+                             ('magerr_aper4',float),('mag_aper8',float),('magerr_aper8',float),
+                             ('asemi',float),('asemierr',float),('bsemi',float),
+                             ('bsemierr',float),('theta',float),('thetaerr',float),
+                             ('fwhm',float),('flags',int),('class_star',float),
+                             ('ndet_iter',int),('repeat',int),('magpsf',float),('errpsf',float),
+                             ('skypsf',float),('chi',float),('sharp',float),('rapsf',float),
+                             ('decpsf',float),('haspsf',bool),('snr',float),('badflag',bool)])
+    
     # Convert to numpy structured array
-    dtype_himeasdb = np.dtype([('measid',str,30),('objlabel',int),('exposure',str,40),('ccdnum',int),('filter',str,3),
-                               ('mjd',float),('ra',float),('raerr',float),('dec',float),('decerr',float),
-                               ('mag_auto',float),('magerr_auto',float),('asemi',float),('asemierr',float),
-                               ('basemi',float),('bsemierr',float),('theta',float),('thetaerr',float),
-                               ('fwhm',float),('flags',int),('class_star',float),('magpsf',float),
-                               ('errpsf',float),('skypsf',float),('chi',float),('sharp',float),
-                               ('rapsf',float),('decpsf',float),('haspsf',bool),('snr',float),('badflag',bool)])
+    dtype_himeasdb = np.dtype([('measid',str,30),('objectid',str,50),('exposure',str,40),('ccdnum',int),
+                               ('filter',str,3),('mjd',float),('x',float),('y',float),('ra',float),
+                               ('raerr',float),('dec',float),('decerr',float),('mag_auto',float),
+                               ('magerr_auto',float),('mag_aper1',float),('magerr_aper1',float),
+                               ('mag_aper2',float),('magerr_aper2',float),('mag_aper4',float),
+                               ('magerr_aper4',float),('mag_aper8',float),('magerr_aper8',float),
+                               ('asemi',float),('asemierr',float),('bsemi',float),
+                               ('bsemierr',float),('theta',float),('thetaerr',float),
+                               ('fwhm',float),('flags',int),('class_star',float),
+                               ('ndet_iter',int),('repeat',int),('magpsf',float),('errpsf',float),
+                               ('skypsf',float),('chi',float),('sharp',float),('rapsf',float),
+                               ('decpsf',float),('haspsf',bool),('snr',float),('badflag',bool)])
+    
+    ## Higher precision catalog
+    #dtype_himeas = np.dtype([('measid',str,30),('objectid',str,50),('exposure',str,40),('ccdnum',int),('filter',str,3),
+    #                         ('mjd',float),('ra',float),('raerr',float),('dec',float),('decerr',float),
+    #                         ('mag_auto',float),('magerr_auto',float),('asemi',float),('asemierr',float),
+    #                         ('bsemi',float),('bsemierr',float),('theta',float),('thetaerr',float),
+    #                         ('fwhm',float),('flags',int),('class_star',float),('magpsf',float),
+    #                         ('errpsf',float),('skypsf',float),('chi',float),('sharp',float),
+    #                         ('rapsf',float),('decpsf',float),('haspsf',bool),('snr',float),('badflag',bool)])
+
+    ## Convert to numpy structured array
+    #dtype_himeasdb = np.dtype([('measid',str,30),('objlabel',int),('exposure',str,40),('ccdnum',int),('filter',str,3),
+    #                           ('mjd',float),('ra',float),('raerr',float),('dec',float),('decerr',float),
+    #                           ('mag_auto',float),('magerr_auto',float),('asemi',float),('asemierr',float),
+    #                           ('bsemi',float),('bsemierr',float),('theta',float),('thetaerr',float),
+    #                           ('fwhm',float),('flags',int),('class_star',float),('magpsf',float),
+    #                           ('errpsf',float),('skypsf',float),('chi',float),('sharp',float),
+    #                           ('rapsf',float),('decpsf',float),('haspsf',bool),('snr',float),('badflag',bool)])
 
 
     #dtype_meas = np.dtype([('measid',str,30),('objectid',str,50),('exposure',str,40),('ccdnum',np.int8),('filter',str,3),

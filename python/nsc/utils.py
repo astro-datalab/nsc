@@ -72,7 +72,7 @@ def rootdirs():
         dldir = '/net/dl2/'
         mssdir = '/net/mss1/'
         localdir = '/data0/'
-    elif host.find('tempest') > -1 or hostname.find('tempest') > -1:
+    elif host.find('tempest') > -1 or hostname.find('tempest') > -1 or hostname.find('epyc') > -1:
         dldir = '/home/x25h971/'
         mssdir = '/net/mss1/'
         localdir = '/tmp/'
