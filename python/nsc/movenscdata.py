@@ -98,6 +98,7 @@ def movenscdata():
     # NOTE, some directories were ALREADY moved
 
     # Move the directories to "tomove/"
+    print('Moving exposure directories')
     moved = []
     for i in range(len(dirstomove)):
         indir = dirstomove[i]
