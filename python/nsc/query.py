@@ -202,7 +202,7 @@ def local_query(cenra,cendec,radius,refcat,server,nside=32,silent=False,logger=N
 
 
 def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
-              savefile=None,nside=32,silent=False,logger=None):
+              savefile=None,nside=32,galactic=False,silent=False,logger=None):
     """
     Get reference catalog information from DL database 
  
@@ -222,6 +222,8 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
        Save the output to SAVEFILE or a default filename. Default is False.
     savefile : str, optional
        The file to save to or search for existing catalog. 
+    galactic : bool, optional
+       The input coordinates are galactic glon/glat. Default is False.
     silent : bool, optional
        Don't print anything to the screen. 
     logger : logging object, optional
@@ -270,6 +272,13 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
 
     if logger is None:
         logger = dln.basiclogger()
+
+    if galactic:
+        glon = cenra
+        glat = cendec
+        coo = SkyCoord(glon,glat,unit='degree',frame='galactic')
+        cenra = coo.icrs.ra.degree
+        cendec = coo.icrs.dec.degree
         
     # Run query on local catalogs on disk
     localcats = ['ps','ps1','2mass','tmass','allwise','atlas','gaia','gaiaedr3','galex','glimpse',
