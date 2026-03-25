@@ -13,6 +13,7 @@ from astroquery.vizier import Vizier
 from astropy.coordinates import Angle,SkyCoord
 import healpy as hp
 import astropy.units as u
+from dl import queryClient as qc
 from . import utils,modelmag
 
 Vizier.TIMEOUT = 600
@@ -159,6 +160,7 @@ def local_query(cenra,cendec,radius,refcat,server,nside=32,silent=False,logger=N
     # VVV
     if refname.lower()=='vvv':
         for c in ref.colnames:ref[c].name=c.lower()
+        # We don't need all of the columns
         
     # Fix masked columns for GSYNTH-PHOT
     if refname=="gsynth-phot":
@@ -255,18 +257,21 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
         logger = dln.basiclogger()
         
     # Run query on local catalogs on disk
-    if tempest or rusty or tacc or noirlab:
+    localcats = ['ps','ps1','2mass','tmass','allwise','atlas','gaia','gaiaedr3','galex','glimpse',
+                 'sage','skymapperdr2','skymapperdr4','vvv','gsynth-phot']
+    if (tempest or rusty or tacc or noirlab) and (refcat.lower() in localcats):
         return local_query(cenra,cendec,radius,refcat,server,nside=nside,silent=silent,logger=logger)
     
-    # Check that we have psql installed 
-    out = subprocess.check_output(['which','psql'],shell=False)
-    if type(out) is bytes:
-        out = out.decode()
-    out = out.strip()
-    if dln.size(out)>1:
-        out = out[0]
-    if os.path.exists(out) == 0: 
-        raise ValueError('No PSQL found on this sytem.')
+    # Check that we have psql installed
+    if noirlab:
+        out = subprocess.check_output(['which','psql'],shell=False)
+        if type(out) is bytes:
+            out = out.decode()
+        out = out.strip()
+        if dln.size(out)>1:
+            out = out[0]
+        if os.path.exists(out) == 0: 
+            raise ValueError('No PSQL found on this sytem.')
      
     # Temporary directory 
     # /tmp is often small and get get fille dup
@@ -302,7 +307,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
         refname = 'VVV'
     elif refname.lower() == 'vhs':
         refname = 'VHS'
-    elif rename.lower()=='decaps' or refname.lower=='decaps_dr2':
+    elif refname.lower()=='decaps' or refname.lower=='decaps_dr2':
         refname = 'DECAPS'
     else:
         raise ValueError(str(refname)+' not supported')
@@ -314,7 +319,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
 
     if silent==False:
         logger.info('Querying %s: RA=%.5f DEC=%.5f Radius=%.3f' % (refname,cenra,cendec,radius))
-     
+        
     # Loading previously loaded file 
     if os.path.exists(savefile): 
         if silent==False:
@@ -329,129 +334,140 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
         #---------------------------- 
         if refname in ['TMASS','GAIA','GAIADR2','GAIAEDR3','PS','SKYMAPPER','SKYMAPPERDR2',
                        'SKYMAPPERDR4','ALLWISE','ATLAS','DECAPS','VHS']:
-            if refname == 'TMASS': 
-                tablename = 'twomass.psc' 
-                cols = 'designation,ra as raj2000,dec as dej2000,j_m as jmag,j_cmsig as e_jmag,h_m as hmag,h_cmsig as e_hmag,k_m as kmag,k_cmsig as e_kmag,ph_qual as qflg' 
-                ##server = 'gp04.datalab.noao.edu' 
-                #server = 'gp01.datalab.noirlab.edu' 
-                ##server = 'dldb1.sdm.noao.edu' 
-                server = 'db02.datalab.noirlab.edu'
-                user = 'dlquery'
             racol = 'ra' 
             deccol = 'dec' 
+            if refname == 'TMASS': 
+                tablename = 'twomass.psc' 
+                cols = 'designation,ra as raj2000,dec as dej2000,j_m as jmag,j_cmsig as e_jmag,'
+                cols += 'h_m as hmag,h_cmsig as e_hmag,k_m as kmag,k_cmsig as e_kmag,ph_qual as qflg' 
+                server = 'db02.datalab.noirlab.edu'
+                user = 'dlquery'
+                racol = 'raj2000' 
+                deccol = 'dej2000' 
             elif refname == 'GAIA': 
                 tablename = 'gaia_dr1.gaia_source' 
-                cols = 'source_id as source,ra as ra_icrs,ra_error as e_ra_icrs,dec as de_icrs,dec_error as e_de_icrs,'
-                cols += 'phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,phot_g_mean_mag as gmag' 
-                #server = 'gp04.datalab.noirlab.edu' 
-                ##server = 'gp01.datalab.noao.edu' 
-                ##server = 'dldb1.sdm.noao.edu' 
+                cols = 'source_id as source,ra as ra_icrs,ra_error as e_ra_icrs,dec as de_icrs,'
+                cols += 'dec_error as e_de_icrs,phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,'
+                cols += 'phot_g_mean_mag as gmag' 
                 server = 'db02.datalab.noirlab.edu'
                 user = 'dlquery'
             elif refname == 'GAIADR2': 
                 tablename = 'gaia_dr2.gaia_source' 
-                cols = 'source_id as source,ra,ra_error,dec,dec_error,pmra,pmra_error,pmdec,pmdec_error,phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,'
-                cols += 'phot_g_mean_mag as gmag,phot_bp_mean_mag as bp,phot_bp_mean_flux as fbp,phot_bp_mean_flux_error as e_fbp,'
+                cols = 'source_id as source,ra,ra_error,dec,dec_error,pmra,pmra_error,pmdec,pmdec_error,'
+                cols += 'phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,phot_g_mean_mag as gmag,'
+                cols += 'phot_bp_mean_mag as bp,phot_bp_mean_flux as fbp,phot_bp_mean_flux_error as e_fbp,'
                 cols += 'phot_rp_mean_mag as rp,phot_rp_mean_flux as frp,phot_rp_mean_flux_error as e_frp' 
-                #server = 'gp04.datalab.noirlab.edu' 
-                ##server = 'gp01.datalab.noao.edu' 
                 server = 'db02.datalab.noirlab.edu'
                 user = 'dlquery'
             elif refname == 'GAIAEDR3': 
                 tablename = 'gaia_edr3.gaia_source' 
-                cols = 'source_id as source,ra,ra_error,dec,dec_error,pmra,pmra_error,pmdec,pmdec_error,phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,'
-                cols += 'phot_g_mean_mag as gmag,phot_bp_mean_mag as bp,phot_bp_mean_flux as fbp,phot_bp_mean_flux_error as e_fbp,'
+                cols = 'source_id as source,ra,ra_error,dec,dec_error,pmra,pmra_error,pmdec,pmdec_error,'
+                cols += 'phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,phot_g_mean_mag as gmag,'
+                cols += 'phot_bp_mean_mag as bp,phot_bp_mean_flux as fbp,phot_bp_mean_flux_error as e_fbp,'
                 cols += 'phot_rp_mean_mag as rp,phot_rp_mean_flux as frp,phot_rp_mean_flux_error as e_frp' 
-                #server = 'gp04.datalab.noirlab.edu' 
-                ##server = 'gp01.datalab.noao.edu' 
                 server = 'db02.datalab.noirlab.edu'
                 user = 'dlquery'
             elif refname == 'PS': 
                 #tablename = 'cp_calib.ps1' 
                 tablename = 'public.ps1' 
                 cols = 'ra_ps, dec_ps, g as gmag, r as rmag, i as imag, z as zmag, y as ymag' 
-                ##server = 'gp02.datalab.noirlab.edu' 
-                #server = 'gp01.datalab.noirlab.edu' 
                 server = 'db02.datalab.noirlab.edu'
                 user = 'dlquery'
             elif refname == 'SKYMAPPER': 
                 tablename = 'skymapper_dr1.master' 
-                cols = 'raj2000, dej2000, u_psf as sm_umag, e_u_psf as e_sm_umag, g_psf as sm_gmag, e_g_psf as e_sm_gmag, r_psf as sm_rmag,'
-                cols += 'e_r_psf as e_sm_rmag, i_psf as sm_imag,e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag' 
-                #server = 'gp04.datalab.noirlab.edu' 
-                ##server = 'gp01.datalab.noao.edu' 
+                cols = 'raj2000, dej2000, u_psf as sm_umag, e_u_psf as e_sm_umag, g_psf as sm_gmag,'
+                cols += 'e_g_psf as e_sm_gmag, r_psf as sm_rmag,e_r_psf as e_sm_rmag, i_psf as sm_imag,'
+                cols += 'e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag' 
                 server = 'db02.datalab.noirlab.edu'
                 user = 'dlquery'
                 racol = 'raj2000' 
                 deccol = 'dej2000' 
             elif refname == 'SKYMAPPERDR2': 
                 tablename = 'skymapper_dr2.master' 
-                cols = 'raj2000, dej2000, u_psf as sm_umag, e_u_psf as e_sm_umag, g_psf as sm_gmag, e_g_psf as e_sm_gmag, r_psf as sm_rmag,'
-                cols += 'e_r_psf as e_sm_rmag, i_psf as sm_imag,e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag' 
-                #server = 'gp04.datalab.noirlab.edu' 
-                ##server = 'gp01.datalab.noao.edu' 
+                cols = 'raj2000, dej2000, u_psf as sm_umag, e_u_psf as e_sm_umag, g_psf as sm_gmag,'
+                cols += 'e_g_psf as e_sm_gmag, r_psf as sm_rmag,e_r_psf as e_sm_rmag, i_psf as sm_imag,'
+                cols += 'e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag' 
                 server = 'db02.datalab.noirlab.edu'
                 user = 'dlquery'
                 racol = 'raj2000' 
                 deccol = 'dej2000' 
             elif refname == 'SKYMAPPERDR4': 
                 tablename = 'skymapper_dr4.master' 
-                cols = 'raj2000, dej2000, u_psf as sm_umag, e_u_psf as e_sm_umag, g_psf as sm_gmag, e_g_psf as e_sm_gmag, r_psf as sm_rmag,'
-                cols += 'e_r_psf as e_sm_rmag, i_psf as sm_imag,e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag' 
-                #server = 'gp04.datalab.noirlab.edu' 
-                ##server = 'gp01.datalab.noao.edu' 
+                cols = 'raj2000, dej2000, u_psf as sm_umag, e_u_psf as e_sm_umag, g_psf as sm_gmag,'
+                cols += 'e_g_psf as e_sm_gmag, r_psf as sm_rmag,e_r_psf as e_sm_rmag, i_psf as sm_imag,'
+                cols += 'e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag' 
                 server = 'db02.datalab.noirlab.edu'
                 user = 'dlquery'
                 racol = 'raj2000' 
                 deccol = 'dej2000' 
             elif refname == 'ALLWISE': 
                 tablename = 'allwise.source' 
-                #cols = 'ra, dec, w1mdef as w1mag, w1sigmdef as e_w1mag, w2mdef as w2mag, w2sigmdef as e_w2mag' 
                 cols = 'ra, dec, w1mpro as w1mag, w1sigmpro as e_w1mag, w2mpro as w2mag, w2sigmpro as e_w2mag' 
-                #server = 'gp04.datalab.noao.edu' 
-                #server = 'gp01.datalab.noirlab.edu' 
                 server = 'db02.datalab.noirlab.edu' 
                 user = 'dlquery'
             elif refname == 'ATLAS': 
                 tablename = 'atlasrefcat2' 
-                cols = 'objid,ra,dec,plx as parallax,dplx as parallax_error,pmra,dpmra as pmra_error,pmdec,dpmdec as pmdec_error,gaia,dgaia as gaiaerr,'
-                cols += 'bp,dbp as bperr,rp,drp as rperr,teff,agaia,dupvar,ag,rp1,r1,r10,g as gmag,dg as gerr,gchi,gcontrib,'
-                cols += 'r as rmag, dr as rerr,rchi,rcontrib,i as imag,di as ierr,ichi,icontrib,z as zmag,dz as zerr,zchi,zcontrib,nstat,'
+                cols = 'objid,ra,dec,plx as parallax,dplx as parallax_error,pmra,dpmra as pmra_error,pmdec,'
+                cols += 'dpmdec as pmdec_error,gaia,dgaia as gaiaerr,bp,dbp as bperr,rp,drp as rperr,teff,'
+                cols +- 'agaia,dupvar,ag,rp1,r1,r10,g as gmag,dg as gerr,gchi,gcontrib,'
+                cols += 'r as rmag, dr as rerr,rchi,rcontrib,i as imag,di as ierr,ichi,icontrib,z as zmag,'
+                cols += 'dz as zerr,zchi,zcontrib,nstat,'
                 cols += 'j as jmag,dj as jerr,h as hmag,dh as herr,k as kmag,dk as kerr' 
                 server = 'gp10.datalab.noirlab.edu' 
                 user = 'datalab'
             elif refname == 'VHS': 
-                tablename = 'vhs'
-                cols = 'objid,ra,dec,plx as parallax,dplx as parallax_error,pmra,dpmra as pmra_error,pmdec,dpmdec as pmdec_error,gaia,dgaia as gaiaerr,'
-                cols += 'bp,dbp as bperr,rp,drp as rperr,teff,agaia,dupvar,ag,rp1,r1,r10,g as gmag,dg as gerr,gchi,gcontrib,'
-                cols += 'r as rmag, dr as rerr,rchi,rcontrib,i as imag,di as ierr,ichi,icontrib,z as zmag,dz as zerr,zchi,zcontrib,nstat,'
-                cols += 'j as jmag,dj as jerr,h as hmag,dh as herr,k as kmag,dk as kerr' 
+                tablename = 'vhs_dr5.vhs_cat_v3'
+                cols = 'sourceid,ra2000 as ra,dec2000 as dec,yapermag3,yapermag3err,japermag3,japermag3err,'
+                cols += 'hapermag3,hapermag3err,ksapermag3,ksapermag3err,mergedclass,mergedclassstat,pstar'
                 server = 'db02.datalab.noirlab.edu' 
                 user = 'datalab'
-            # VVV, DECAPS
+                racol = 'ra2000'
+                deccol = 'dec2000'
+            elif refname == 'DECAPS': 
+                tablename = 'decaps_dr2.object'
+                cols = 'obj_id as objid,ra,dec,ndet_cflux as ndet,'
+                cols += 'nmag_cflux_g as ndetg,median_cmag_g as gmag,mean_cflux_g,err_cflux_g,'
+                cols += 'nmag_cflux_r as ndetr,median_cmag_r as rmag,mean_cflux_r,err_cflux_r,'
+                cols += 'nmag_cflux_i as ndeti,median_cmag_i as imag,mean_cflux_i,err_cflux_i,'
+                cols += 'nmag_cflux_z as ndetz,median_cmag_z as zmag,mean_cflux_z,err_cflux_z,'
+                cols += 'nmag_cflux_y as ndety,median_cmag_y as ymag,mean_cflux_y,err_cflux_y'
+                server = 'db02.datalab.noirlab.edu' 
+                user = 'datalab'
+                # err = 1.0857*fluxerr/flux
                 
-            # Use Postgres command with q3c cone search 
-            refcattemp = savefile.replace('.fits','.txt') 
-            cmd = "psql -h "+server+" -U "+user+" -d tapdb -w --pset footer -c 'SELECT "+cols+" FROM "+tablename
-            cmd += " WHERE q3c_radial_query(%s,%s,%.5f,%.5f,%.3f)'" % (racol,deccol,cenra,cendec,radius)
-            cmd += " > "+refcattemp
-            dln.remove(refcattemp,allow=True)
-            dln.remove(savefile,allow=True) 
-            out = subprocess.check_output(cmd,shell=True)
-            # Check for empty query
-            tlines = dln.readlines(refcattemp,nreadline=4)
-            if len(tlines) < 4: 
-                if silent==False:
-                    logger.info('No Results')
-                return []
-            #  Load ASCII file and create the FITS file 
-            ref = ascii.read(refcattemp,data_start=3,delimiter='|')
-            #ref = importascii(refcattemp,/header,delim='|',skipline=2,/silent) 
-            if saveref:
-                logger.info('Saving catalog to file '+savefile)
-                ref.write(savefile,overwrite=True)
-            dln.remove(refcattemp,allow=True)
-             
+            # On NOIRLAB server, Use Postgres command with q3c cone search
+            if noirlab:
+                refcattemp = savefile.replace('.fits','.txt') 
+                cmd = "psql -h "+server+" -U "+user+" -d tapdb -w --pset footer -c 'SELECT "+cols+" FROM "+tablename
+                cmd += " WHERE q3c_radial_query(%s,%s,%.5f,%.5f,%.3f)'" % (racol,deccol,cenra,cendec,radius)
+                cmd += " > "+refcattemp
+                dln.remove(refcattemp,allow=True)
+                dln.remove(savefile,allow=True) 
+                out = subprocess.check_output(cmd,shell=True)
+                # Check for empty query
+                tlines = dln.readlines(refcattemp,nreadline=4)
+                if len(tlines) < 4: 
+                    if silent==False:
+                        logger.info('No Results')
+                    return []
+                #  Load ASCII file and create the FITS file 
+                ref = ascii.read(refcattemp,data_start=3,delimiter='|')
+                #ref = importascii(refcattemp,/header,delim='|',skipline=2,/silent) 
+                if saveref:
+                    logger.info('Saving catalog to file '+savefile)
+                    ref.write(savefile,overwrite=True)
+                dln.remove(refcattemp,allow=True)
+
+            # Elsewhere, use DL queryClient
+            else:
+                cmd = "SELECT "+cols+" FROM "+tablename
+                cmd += " WHERE q3c_radial_query(%s,%s,%.5f,%.5f,%.3f)" % (racol,deccol,cenra,cendec,radius)
+                ref = qc.query(sql=cmd,fmt='table')
+                if saveref:
+                    logger.info('Saving catalog to file '+savefile)
+                    ref.write(savefile,overwrite=True)
+                
+                
             # Fix 0.0 mags/errs in ATLAS 
             if refname == 'ATLAS': 
                 magcols = ['gaia','bp','rp','gmag','rmag','imag','zmag','jmag','hmag','kmag'] 
@@ -469,7 +485,17 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                         bderr = (ref[errcols[j]] <= 0.0)
                         if np.sum(bderr)>0:
                             ref[errcols[j]][bderr] = 9.99
-             
+
+            # Make mag error columns for DECaPS
+            if refname == 'DECAPS':
+                for c in ['g','r','i','z','y']:
+                    ref[c+'magerr'] = np.nan
+                    gd, = np.where(ref['mean_cflux_'+c]>0)
+                    if len(gd)>0:
+                        ref[c+'magerr'][gd] = 1.0857*ref['err_cflux_'+c][gd]/ref['mean_cflux_'+c][gd]
+                    del ref['mean_cflux_'+c]
+                    del ref['err_cflux_'+c]
+                        
         # Use astroquery vizier
         #---------------- 
         #   for low density with 2MASS/GAIA and always for GALEX and APASS 
