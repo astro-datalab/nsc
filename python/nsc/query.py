@@ -159,8 +159,23 @@ def local_query(cenra,cendec,radius,refcat,server,nside=32,silent=False,logger=N
 
     # VVV
     if refname.lower()=='vvv':
-        for c in ref.colnames:ref[c].name=c.lower()
-        # We don't need all of the columns
+        for c in ref.colnames:
+            ref[c].name=c.lower()
+        ref['ra'] = ref['ra'].astype(float)
+        ref['dec'] = ref['dec'].astype(float)
+        # Reduce to minimum columns
+        todel = ['jsky','jniter','jpier','hsky','hniter','hpier','ksky','kniter','kpier',
+                 'flag_kj','flag_kh','flag_hj','flag_hk','flag_jh','flag_jk','glon','glat']
+        for c in todel:
+            del ref[c]
+        ref['chi'] = (ref['jchi']+ref['hchi']+ref['kchi'])/3.0
+        ref['sharp'] = (ref['jsharpness']+ref['hsharpness']+ref['ksharpness'])/3.0
+        for c in ['j','h','k']:
+            ref[c+'mag_2mass'].name = c+'mag'
+            ref['flag_'+c] = ref['flag_'+c].astype(bool)
+            del ref[c+'mag_vista']
+            del ref[c+'chi']
+            del ref[c+'sharpness']
         
     # Fix masked columns for GSYNTH-PHOT
     if refname=="gsynth-phot":
@@ -303,8 +318,6 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
         refname = 'II/305/archive' 
     elif refname == 'ATLASREFCAT2': 
         refname = 'ATLAS'
-    elif refname.lower() == 'vvv':
-        refname = 'VVV'
     elif refname.lower() == 'vhs':
         refname = 'VHS'
     elif refname.lower()=='decaps' or refname.lower=='decaps_dr2':
