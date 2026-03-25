@@ -79,6 +79,9 @@ def local_query(cenra,cendec,radius,refcat,server,nside=32,silent=False,logger=N
         refname = 'skymapperdr2'
     elif refname.lower()=='skymapperdr4':
         refname = 'skymapperdr4'
+    elif refname.lower()=='vvv':
+        refname = 'vvv'
+        nside = 64
     elif refname.lower()=='gsynth-phot':
         refname = 'gsynth-phot'
     else:
@@ -127,7 +130,7 @@ def local_query(cenra,cendec,radius,refcat,server,nside=32,silent=False,logger=N
             ref = tab
         else:
             ref = vstack((ref,tab))
-
+            
     if ref is None:
         return []
 
@@ -153,6 +156,10 @@ def local_query(cenra,cendec,radius,refcat,server,nside=32,silent=False,logger=N
         ref['__4.5_'].name = '__4_5_'
         ref['e__4.5_'].name = 'e__4_5_'
 
+    # VVV
+    if refname.lower()=='vvv':
+        for c in ref.colnames:ref[c].name=c.lower()
+        
     # Fix masked columns for GSYNTH-PHOT
     if refname=="gsynth-phot":
         for colname in ref.colnames:
@@ -290,7 +297,13 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
     elif refname == 'SAGE': 
         refname = 'II/305/archive' 
     elif refname == 'ATLASREFCAT2': 
-        refname = 'ATLAS' 
+        refname = 'ATLAS'
+    elif refname.lower() == 'vvv':
+        refname = 'VVV'
+    elif refname.lower() == 'vhs':
+        refname = 'VHS'
+    elif rename.lower()=='decaps' or refname.lower=='decaps_dr2':
+        refname = 'DECAPS'
     else:
         raise ValueError(str(refname)+' not supported')
 
@@ -314,7 +327,8 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
          
         # Use DataLab database search 
         #---------------------------- 
-        if refname in ['TMASS','GAIA','GAIADR2','GAIAEDR3','PS','SKYMAPPER','SKYMAPPERDR2','SKYMAPPERDR4','ALLWISE','ATLAS']:
+        if refname in ['TMASS','GAIA','GAIADR2','GAIAEDR3','PS','SKYMAPPER','SKYMAPPERDR2',
+                       'SKYMAPPERDR4','ALLWISE','ATLAS','DECAPS','VHS']:
             if refname == 'TMASS': 
                 tablename = 'twomass.psc' 
                 cols = 'designation,ra as raj2000,dec as dej2000,j_m as jmag,j_cmsig as e_jmag,h_m as hmag,h_cmsig as e_hmag,k_m as kmag,k_cmsig as e_kmag,ph_qual as qflg' 
@@ -325,7 +339,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 user = 'dlquery'
             racol = 'ra' 
             deccol = 'dec' 
-            if refname == 'GAIA': 
+            elif refname == 'GAIA': 
                 tablename = 'gaia_dr1.gaia_source' 
                 cols = 'source_id as source,ra as ra_icrs,ra_error as e_ra_icrs,dec as de_icrs,dec_error as e_de_icrs,'
                 cols += 'phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,phot_g_mean_mag as gmag' 
@@ -334,7 +348,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 ##server = 'dldb1.sdm.noao.edu' 
                 server = 'db02.datalab.noirlab.edu'
                 user = 'dlquery'
-            if refname == 'GAIADR2': 
+            elif refname == 'GAIADR2': 
                 tablename = 'gaia_dr2.gaia_source' 
                 cols = 'source_id as source,ra,ra_error,dec,dec_error,pmra,pmra_error,pmdec,pmdec_error,phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,'
                 cols += 'phot_g_mean_mag as gmag,phot_bp_mean_mag as bp,phot_bp_mean_flux as fbp,phot_bp_mean_flux_error as e_fbp,'
@@ -343,7 +357,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 ##server = 'gp01.datalab.noao.edu' 
                 server = 'db02.datalab.noirlab.edu'
                 user = 'dlquery'
-            if refname == 'GAIAEDR3': 
+            elif refname == 'GAIAEDR3': 
                 tablename = 'gaia_edr3.gaia_source' 
                 cols = 'source_id as source,ra,ra_error,dec,dec_error,pmra,pmra_error,pmdec,pmdec_error,phot_g_mean_flux as fg,phot_g_mean_flux_error as e_fg,'
                 cols += 'phot_g_mean_mag as gmag,phot_bp_mean_mag as bp,phot_bp_mean_flux as fbp,phot_bp_mean_flux_error as e_fbp,'
@@ -352,7 +366,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 ##server = 'gp01.datalab.noao.edu' 
                 server = 'db02.datalab.noirlab.edu'
                 user = 'dlquery'
-            if refname == 'PS': 
+            elif refname == 'PS': 
                 #tablename = 'cp_calib.ps1' 
                 tablename = 'public.ps1' 
                 cols = 'ra_ps, dec_ps, g as gmag, r as rmag, i as imag, z as zmag, y as ymag' 
@@ -360,7 +374,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 #server = 'gp01.datalab.noirlab.edu' 
                 server = 'db02.datalab.noirlab.edu'
                 user = 'dlquery'
-            if refname == 'SKYMAPPER': 
+            elif refname == 'SKYMAPPER': 
                 tablename = 'skymapper_dr1.master' 
                 cols = 'raj2000, dej2000, u_psf as sm_umag, e_u_psf as e_sm_umag, g_psf as sm_gmag, e_g_psf as e_sm_gmag, r_psf as sm_rmag,'
                 cols += 'e_r_psf as e_sm_rmag, i_psf as sm_imag,e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag' 
@@ -370,7 +384,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 user = 'dlquery'
                 racol = 'raj2000' 
                 deccol = 'dej2000' 
-            if refname == 'SKYMAPPERDR2': 
+            elif refname == 'SKYMAPPERDR2': 
                 tablename = 'skymapper_dr2.master' 
                 cols = 'raj2000, dej2000, u_psf as sm_umag, e_u_psf as e_sm_umag, g_psf as sm_gmag, e_g_psf as e_sm_gmag, r_psf as sm_rmag,'
                 cols += 'e_r_psf as e_sm_rmag, i_psf as sm_imag,e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag' 
@@ -380,7 +394,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 user = 'dlquery'
                 racol = 'raj2000' 
                 deccol = 'dej2000' 
-            if refname == 'SKYMAPPERDR4': 
+            elif refname == 'SKYMAPPERDR4': 
                 tablename = 'skymapper_dr4.master' 
                 cols = 'raj2000, dej2000, u_psf as sm_umag, e_u_psf as e_sm_umag, g_psf as sm_gmag, e_g_psf as e_sm_gmag, r_psf as sm_rmag,'
                 cols += 'e_r_psf as e_sm_rmag, i_psf as sm_imag,e_i_psf as e_sm_imag, z_psf as sm_zmag, e_z_psf as e_sm_zmag' 
@@ -390,7 +404,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 user = 'dlquery'
                 racol = 'raj2000' 
                 deccol = 'dej2000' 
-            if refname == 'ALLWISE': 
+            elif refname == 'ALLWISE': 
                 tablename = 'allwise.source' 
                 #cols = 'ra, dec, w1mdef as w1mag, w1sigmdef as e_w1mag, w2mdef as w2mag, w2sigmdef as e_w2mag' 
                 cols = 'ra, dec, w1mpro as w1mag, w1sigmpro as e_w1mag, w2mpro as w2mag, w2sigmpro as e_w2mag' 
@@ -398,7 +412,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 #server = 'gp01.datalab.noirlab.edu' 
                 server = 'db02.datalab.noirlab.edu' 
                 user = 'dlquery'
-            if refname == 'ATLAS': 
+            elif refname == 'ATLAS': 
                 tablename = 'atlasrefcat2' 
                 cols = 'objid,ra,dec,plx as parallax,dplx as parallax_error,pmra,dpmra as pmra_error,pmdec,dpmdec as pmdec_error,gaia,dgaia as gaiaerr,'
                 cols += 'bp,dbp as bperr,rp,drp as rperr,teff,agaia,dupvar,ag,rp1,r1,r10,g as gmag,dg as gerr,gchi,gcontrib,'
@@ -406,7 +420,16 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
                 cols += 'j as jmag,dj as jerr,h as hmag,dh as herr,k as kmag,dk as kerr' 
                 server = 'gp10.datalab.noirlab.edu' 
                 user = 'datalab'
-
+            elif refname == 'VHS': 
+                tablename = 'vhs'
+                cols = 'objid,ra,dec,plx as parallax,dplx as parallax_error,pmra,dpmra as pmra_error,pmdec,dpmdec as pmdec_error,gaia,dgaia as gaiaerr,'
+                cols += 'bp,dbp as bperr,rp,drp as rperr,teff,agaia,dupvar,ag,rp1,r1,r10,g as gmag,dg as gerr,gchi,gcontrib,'
+                cols += 'r as rmag, dr as rerr,rchi,rcontrib,i as imag,di as ierr,ichi,icontrib,z as zmag,dz as zerr,zchi,zcontrib,nstat,'
+                cols += 'j as jmag,dj as jerr,h as hmag,dh as herr,k as kmag,dk as kerr' 
+                server = 'db02.datalab.noirlab.edu' 
+                user = 'datalab'
+            # VVV, DECAPS
+                
             # Use Postgres command with q3c cone search 
             refcattemp = savefile.replace('.fits','.txt') 
             cmd = "psql -h "+server+" -U "+user+" -d tapdb -w --pset footer -c 'SELECT "+cols+" FROM "+tablename
