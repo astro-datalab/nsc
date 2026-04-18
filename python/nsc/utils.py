@@ -2077,8 +2077,12 @@ def getnscdirs(version=None,host=None):
     elif host=="tempest_katie":
         basedir = os.path.join("/home/x25h971/nsc/instcal/",verdir)
         tmproot = os.path.join(basedir,"tmp/")
-    elif host=="tempest_group" or host=='tempest':
+    elif host=="tempest_group":
         basedir = os.path.join("/home/group/davidnidever/nsc/instcal/",verdir)
+        #tmproot = os.path.join(basedir,"tmp")
+        tmproot = os.path.join('/tmp',username,'nsc','instcal',verdir)
+    elif host=='tempest':
+        basedir = os.path.join("/mnt/davidnidever/nsc/instcal/",verdir)
         #tmproot = os.path.join(basedir,"tmp")
         tmproot = os.path.join('/tmp',username,'nsc','instcal',verdir)
     elif host=="cca":
