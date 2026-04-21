@@ -626,7 +626,9 @@ if __name__ == "__main__":
 
     # Shuffle the tasks
     if shuffle:
+        tasks = np.array(tasks)
         np.random.shuffle(tasks)
+        tasks = Table(tasks)
         
     # TACC settings
     if host=='tacc':
