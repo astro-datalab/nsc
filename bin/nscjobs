@@ -55,6 +55,7 @@ if __name__ == "__main__":
     parser.add_argument('--nodes',type=int,nargs=1,default=0,help='Number of nodes')
     parser.add_argument('--ppn',type=int,nargs=1,default=0,help='Processes per node')
     parser.add_argument('--stagger',type=int,nargs=1,default=60,help='Stagger time')
+    parser.add_argument('--shuffle',action='store_true',help='Shuffle the tasks')
     parser.add_argument('--healpix',action='store_true',help='Do calibration in healpix mode')
     parser.add_argument('--delete',action='store_true',help='Delete image files at end')
     parser.add_argument('--nocheck',action='store_true',help='Do not check for existing output when submitting jobs')
@@ -95,6 +96,7 @@ if __name__ == "__main__":
         stagger = args.stagger[0]
     else:
         stagger = args.stagger
+    shuffle = args.shuffle
     healpix = args.healpix
     delete = args.delete
     nowait = args.nowait
@@ -621,7 +623,11 @@ if __name__ == "__main__":
     if len(tasks)==0:
         print('No tasks to run')
         sys.exit()
-    
+
+    # Shuffle the tasks
+    if shuffle:
+        np.random.shuffle(tasks)
+        
     # TACC settings
     if host=='tacc':
         # Nodes to request
