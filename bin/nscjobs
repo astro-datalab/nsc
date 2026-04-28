@@ -55,6 +55,7 @@ if __name__ == "__main__":
     parser.add_argument('--nodes',type=int,nargs=1,default=0,help='Number of nodes')
     parser.add_argument('--ppn',type=int,nargs=1,default=0,help='Processes per node')
     parser.add_argument('--stagger',type=int,nargs=1,default=60,help='Stagger time')
+    parser.add_argument('--nodelist',type=str,nargs=1,default=None,help='List of nodes to pick from')
     parser.add_argument('--shuffle',action='store_true',help='Shuffle the tasks')
     parser.add_argument('--healpix',action='store_true',help='Do calibration in healpix mode')
     parser.add_argument('--delete',action='store_true',help='Delete image files at end')
@@ -96,6 +97,10 @@ if __name__ == "__main__":
         stagger = args.stagger[0]
     else:
         stagger = args.stagger
+    if isinstance(args.nodelist,list):
+        nodelist = args.nodelist[0]
+    else:
+        nodelist = args.nodelist
     shuffle = args.shuffle
     healpix = args.healpix
     delete = args.delete
@@ -132,7 +137,9 @@ if __name__ == "__main__":
     print('delete =',delete)
     print('nowait =',nowait)
     print('redo =',redo)
-
+    if nodelist is not None:
+        print('nodelist=',nodelist)
+    
     # Check that the input file exists
     if os.path.exists(inputfile)==False:
         print(inputfile,'NOT FOUND')
@@ -684,10 +691,10 @@ if __name__ == "__main__":
             precommands = ['module load python3/3.9.2']
         out = slurm.submit(tasks,label,nodes=nodes,cpus=ppn,partition=partition,
                            account=account,shared=False,walltime=walltime,slurmroot=slurmroot,
-                           stagger=True,precommands=precommands,verbose=True)
+                           stagger=True,precommands=precommands,nodelist=nodelist,verbose=True)
     elif stage=='download':
         key,jobid = slurm.submit(tasks,label,nodes=1,cpus=1,partition=partition,
-                                 walltime=walltime,slurmroot=slurmroot)
+                                 walltime=walltime,slurmroot=slurmroot,nodelist=nodelist)
     # Use job_manager on noirlab
     elif (host.lower()=='hulk' or host.lower()=='thing' or host.lower()=='gp09' or host.lower()=='noirlab'):
         jobs = jd.job_daemon(tasks['cmd'],tasks['dir'],tasks['name'],nmulti=ppn,
