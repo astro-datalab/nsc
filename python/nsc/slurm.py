@@ -22,7 +22,7 @@ def genkey(n=20):
 def submit(tasks,label,nodes=1,cpus=64,version='v4',account='priority-davidnidever',
            partition='priority',staggertime=60,host='tempest_group',shared=True,
            walltime='12-00:00:00',notification=False,memory=7500,numpy_num_threads=2,
-           precommands=None,postcommands=None,nosubmit=False,slurmroot='/tmp',
+           nodelist=None,precommands=None,postcommands=None,nosubmit=False,slurmroot='/tmp',
            slurmdir=None,verbose=True,logger=None):
     """
     Submit a bunch of jobs
@@ -196,7 +196,10 @@ def submit(tasks,label,nodes=1,cpus=64,version='v4',account='priority-davidnidev
         curdir = os.path.abspath(os.curdir)
         os.chdir(jobdir)
         try:
-            res = subprocess.check_output(['sbatch',os.path.join(jobdir,masterfile)])
+            if nodelist is not None:
+                res = subprocess.check_output(['sbatch','--nodelist='+nodelist,os.path.join(jobdir,masterfile)])
+            else:
+                res = subprocess.check_output(['sbatch',os.path.join(jobdir,masterfile)])
             success = True
 
             if type(res)==bytes: res = res.decode()
