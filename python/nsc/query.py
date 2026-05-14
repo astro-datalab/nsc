@@ -83,6 +83,9 @@ def local_query(cenra,cendec,radius,refcat,server,nside=32,silent=False,logger=N
     elif refname.lower()=='vvv':
         refname = 'vvv'
         nside = 64
+    elif refname.lower()=='virac2':
+        refname = 'virac2'
+        nside = 64
     elif refname.lower()=='gsynth-phot':
         refname = 'gsynth-phot'
     else:
@@ -176,7 +179,11 @@ def local_query(cenra,cendec,radius,refcat,server,nside=32,silent=False,logger=N
             del ref[c+'mag_vista']
             del ref[c+'chi']
             del ref[c+'sharpness']
-        
+    # virac2
+    if refname.lower()=='virac2':
+        for c in ref.colnames:
+            ref[c].name=c.lower()
+            
     # Fix masked columns for GSYNTH-PHOT
     if refname=="gsynth-phot":
         for colname in ref.colnames:
@@ -282,7 +289,7 @@ def getrefcat(cenra,cendec,radius,refcat,version=None,saveref=False,
         
     # Run query on local catalogs on disk
     localcats = ['ps','ps1','2mass','tmass','allwise','atlas','gaia','gaiaedr3','galex','glimpse',
-                 'sage','skymapperdr2','skymapperdr4','vvv','gsynth-phot']
+                 'sage','skymapperdr2','skymapperdr4','vvv','virac2','gsynth-phot']
     if (tempest or rusty or tacc or noirlab) and (refcat.lower() in localcats):
         return local_query(cenra,cendec,radius,refcat,server,nside=nside,silent=silent,logger=logger)
     
