@@ -931,7 +931,13 @@ def checkboundaryoverlap(metafiles,buffdict,verbose=False):
         if verbose: print(str(m+1)+' Loading '+mfile)
         t = Time(meta['dateobs'], format='isot', scale='utc')
         meta['mjd'] = t.mjd                    # recompute because some MJD are bad
-        chmeta = fits.getdata(mfile,2)      # chip-level meta-data structure
+        mhdu = fits.open(mfile)
+        chmeta = []
+        for k in range(2,len(mhdu)):
+            chmeta.append(np.array(mhdu[k].data))
+        chmeta = np.concatenate(chmeta)
+        mhdu.close()
+        #chmeta = fits.getdata(mfile,2)      # chip-level meta-data structure
 
         # Convert META to new format
         newmeta = np.zeros(1,dtype=dtype_meta)
@@ -952,7 +958,7 @@ def checkboundaryoverlap(metafiles,buffdict,verbose=False):
             vdec = chmeta['vdec'][j]
             vlon, vlat = coords.rotsphcen(vra,vdec,buffdict['cenra'],buffdict['cendec'],gnomic=True)
             if coords.doPolygonsOverlap(buffdict['lon'],buffdict['lat'],vlon,vlat) is False:
-                if verbose: print('This chip does NOT overlap the HEALPix region+buffer')
+                #if verbose: print('This chip does NOT overlap the HEALPix region+buffer')
                 inside = False
             if inside is True:
                 #chfile1 = chmeta['FILENAME'][j]
@@ -1474,7 +1480,7 @@ def loadmeas(metafile=None,buffdict=None,dbfile=None,verbose=False):
                         meas1 = None
                         nmeas1 = 0
                     #if verbose: print('  '+str(nmatch)+' sources are inside this pixel')
-                    
+
                 # Combine the catalogs
                 if nmeas1 > 0:
                     # Keep it all in memory
@@ -1680,14 +1686,17 @@ def breakup_idtab(dbfile):
 
     t00 = time.time()
 
+    basedir = '/net/dl2/dnidever/'
     #outdir = '/data0/dnidever/nsc/instcal/v3/idtab/'
     #outdir = '/home/group/davidnidever/nsc/instcal/v4/idtab/'
-    outdir = '/mnt/davidnidever/nsc/instcal/v4/idtab/'
+    #outdir = '/mnt/davidnidever/nsc/instcal/v4/idtab/'
+    outdir = basedir+'nsc/instcal/v4/idtab/'
 
     # Load the exposures table
     #expcat = fits.getdata('/net/dl2/dnidever/nsc/instcal/v3/lists/nsc_v3_exposure_table.fits.gz',1)
     #expcat = fits.getdata('/home/group/davidnidever/nsc/instcal/v4/lists/nsc_instcal_combine_exposures.fits',1)
-    expcat = fits.getdata('/mnt/davidnidever/nsc/instcal/v4/lists/nsc_instcal_combine_exposures.fits',1)
+    #expcat = fits.getdata('/mnt/davidnidever/nsc/instcal/v4/lists/nsc_instcal_combine_exposures.fits',1)
+    expcat = fits.getdata(outdir+'nsc/instcal/v4/lists/nsc_instcal_combine_exposures.fits',1)
 
     # Make sure it's a list
     if type(dbfile) is str: dbfile=[dbfile]
@@ -1764,7 +1773,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
     tmpdir = '/tmp/'  # default
     # on thing/hulk use
     if (host == "thing") or (host == "hulk"):
-        dir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"/"
+        dir = "/net/dl2/dnidever/nsc/instcal/"+version+"/"
         mssdir = "/mss1/"
         localdir = "/data0/"
         tmproot = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
@@ -1772,7 +1781,7 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
         listfile = '/net/dl2/dnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
     # on gp09 use
     if (host == "gp09") or (host == "gp08") or (host == "gp07") or (host == "gp06") or (host == "gp05"):
-        dir = "/net/dl1/users/dnidever/nsc/instcal/"+version+"/"
+        dir = "/net/dl2/dnidever/nsc/instcal/"+version+"/"
         mssdir = "/net/mss1/"
         localdir = "/data0/"
         tmproot = localdir+"dnidever/nsc/instcal/"+version+"/tmp/"
@@ -1795,7 +1804,9 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
     #outdir = '/net/dl2/dnidever/nsc/instcal/'+version+'/combine/'
     #outdir = '/home1/09970/dnidever/scratch1/nsc/instcal/v4/combine/'
     #outdir = '/home/group/davidnidever/nsc/instcal/v4/combine/'
-    outdir = '/mnt/davidnidever/nsc/instcal/v4/combine/'
+    #outdir = '/mnt/davidnidever/nsc/instcal/v4/combine/'
+    basedir = '/net/dl2/dnidever/'
+    outdir = basedir+'nsc/instcal/v4/combine/'
     if os.path.exists(outdir) is False: os.mkdir(outdir)
 
     # nside>128
@@ -1830,7 +1841,8 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
     #listfile = '/home1/09970/dnidever/scratch1/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
     #listfile = '/corral/projects/NOIRLab/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
     #listfile = '/home/group/davidnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
-    listfile = '/mnt/davidnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
+    #listfile = '/mnt/davidnidever/nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
+    listfile = basedir+'nsc/instcal/'+version+'/lists/nsc_instcal_combine_healpix_list.db'
     if os.path.exists(listfile) is False:
         print(listfile+" NOT FOUND")
         sys.exit()
@@ -1877,7 +1889,8 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
 
     # Fix filenames for tempest
     #hlist['measfile'] = [f.replace('/home1/09970/dnidever/scratch1/','/home/group/davidnidever/')+'.gz' for f in hlist['measfile']]
-    hlist['measfile'] = [f.replace('/home1/09970/dnidever/scratch1/','/mnt/davidnidever/')+'.gz' for f in hlist['measfile']]
+    #hlist['measfile'] = [f.replace('/home1/09970/dnidever/scratch1/','/mnt/davidnidever/')+'.gz' for f in hlist['measfile']]
+    hlist['measfile'] = [f.replace('/home1/09970/dnidever/scratch1/','/net/dl2/dnidever/')+'.gz' for f in hlist['measfile']]
 
     
     # Rename to be consistent with the FITS file
@@ -1980,7 +1993,6 @@ def combine(pix,version,nside=128,kind='seqclusterpm',redo=False,verbose=False,m
     pixarea = hp.nside2pixarea(nside,degrees=True)
     nmeasperpix = nmeasperarea * pixarea
     totmeasest = np.sum(nmeasperpix)
-
 
     # Break into smaller healpix regions
     if (multilevel is True) & (nside == 128):
